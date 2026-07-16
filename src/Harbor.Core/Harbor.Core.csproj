@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Core</PackageId>
+    <Description>Harbor core — AgentLoop, EventBus, registries, compaction, system prompt builder.</Description>
+    <PackageTags>harbor;ai;agent;core</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
+    <PackageReference Include="NonBlocking" Version="2.1.2" />
+    <PackageReference Include="ZLinq" Version="1.5.6" />
+    <!--
+      ZLinq.DropInGenerator emits source-generated extension methods that take
+      priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
+      below, this makes every LINQ call site in Harbor.Core resolve to ZLinq's
+      zero-allocation pipeline without rewriting call sites.
+    -->
+    <PackageReference Include="ZLinq.DropInGenerator" Version="1.5.6">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    ZLinq replaces System.Linq throughout Harbor.Core.
+    The implicit "System.Linq" using injected by the SDK is removed here so
+    that all LINQ operators resolve to ZLinq's zero-allocation equivalents
+    without producing ambiguity errors.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Linq" />
+  </ItemGroup>
+
+</Project>

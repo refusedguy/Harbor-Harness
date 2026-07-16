@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.Plain</PackageId>
+    <Description>Harbor TUI renderer for plain text output — no ANSI, no colors. For pipes, CI, and accessibility.</Description>
+    <PackageTags>harbor;tui;plain</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

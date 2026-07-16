@@ -1,0 +1,22 @@
+{
+  "id": "together",
+  "displayName": "Together AI",
+  "description": "Together AI's hosted open-source models.",
+  "baseUrl": "https://api.together.xyz/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "TOGETHER_API_KEY",
+  "modelsUrl": "https://api.together.xyz/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id",
+    "contextWindow": "context_length"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

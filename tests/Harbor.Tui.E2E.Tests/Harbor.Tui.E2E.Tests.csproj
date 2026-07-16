@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!--
+      The AnsiTuiRenderer e2e test deliberately redirects Console.Out to a
+      StringWriter to capture ANSI output (TUnit0055). The original writer
+      is restored in a finally block so TUnit logging is unaffected on the
+      happy path and on failure.
+    -->
+    <NoWarn>$(NoWarn);TUnit0055</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj" />
+    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj" />
+  </ItemGroup>
+
+</Project>

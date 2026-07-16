@@ -1,0 +1,75 @@
+{
+  "$schema": "../schema/provider.schema.json",
+  "id": "anthropic",
+  "displayName": "Anthropic",
+  "description": "Claude models — Opus, Sonnet, Haiku. Native provider.",
+  "baseUrl": "https://api.anthropic.com/v1",
+  "apiType": "anthropic",
+  "apiVersion": "2023-06-01",
+  "authType": "header",
+  "authHeader": "x-api-key",
+  "authEnvVar": "ANTHROPIC_API_KEY",
+  "modelsUrl": null,
+  "models": [
+    {
+      "id": "claude-opus-4-20250514",
+      "providerId": "anthropic",
+      "displayName": "Claude Opus 4",
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "supportsReasoning": true,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 15.0, "outputPerMillion": 75.0, "cacheReadPerMillion": 1.5, "cacheWritePerMillion": 18.75 },
+      "promptTemplate": "anthropic"
+    },
+    {
+      "id": "claude-sonnet-4-20250514",
+      "providerId": "anthropic",
+      "displayName": "Claude Sonnet 4",
+      "contextWindow": 200000,
+      "maxOutputTokens": 16000,
+      "supportsReasoning": true,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 3.0, "outputPerMillion": 15.0, "cacheReadPerMillion": 0.3, "cacheWritePerMillion": 3.75 },
+      "promptTemplate": "anthropic"
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "providerId": "anthropic",
+      "displayName": "Claude 3.5 Haiku",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 0.8, "outputPerMillion": 4.0, "cacheReadPerMillion": 0.08, "cacheWritePerMillion": 1.0 },
+      "promptTemplate": "anthropic"
+    },
+    {
+      "id": "claude-3-5-sonnet-20241022",
+      "providerId": "anthropic",
+      "displayName": "Claude 3.5 Sonnet",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 3.0, "outputPerMillion": 15.0, "cacheReadPerMillion": 0.3, "cacheWritePerMillion": 3.75 },
+      "promptTemplate": "anthropic"
+    }
+  ],
+  "headers": {
+    "anthropic-version": "2023-06-01",
+    "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+  },
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true",
+    "vision": "true",
+    "reasoning": "true",
+    "cacheControl": "true",
+    "systemPrompt": "system"
+  }
+}

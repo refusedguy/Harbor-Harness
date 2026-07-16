@@ -1,0 +1,22 @@
+{
+  "id": "groq",
+  "displayName": "Groq",
+  "description": "Groq's ultra-fast LPU inference. Llama, Mixtral, Gemma models.",
+  "baseUrl": "https://api.groq.com/openai/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "GROQ_API_KEY",
+  "modelsUrl": "https://api.groq.com/openai/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id",
+    "contextWindow": "context_window"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

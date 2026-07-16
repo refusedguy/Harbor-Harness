@@ -1,0 +1,21 @@
+{
+  "id": "deepseek",
+  "displayName": "DeepSeek",
+  "description": "DeepSeek models — V3, R1 (reasoning). OpenAI-compatible.",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "DEEPSEEK_API_KEY",
+  "modelsUrl": "https://api.deepseek.com/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "cerebras",
+  "displayName": "Cerebras",
+  "description": "Cerebras ultra-fast inference.",
+  "baseUrl": "https://api.cerebras.ai/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "CEREBRAS_API_KEY",
+  "modelsUrl": "https://api.cerebras.ai/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

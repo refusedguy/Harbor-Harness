@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!--
+    Directory.Build.targets — applied AFTER SDK targets.
+    Used for: test discovery, runtime-specific config, AOT publish defaults.
+  -->
+
+  <PropertyGroup>
+    <!-- Test projects: use TUnit, generate test artifacts -->
+    <IsTestProject Condition="$(MSBuildProjectName.EndsWith('.Tests'))">true</IsTestProject>
+    <OutputType Condition="$(IsTestProject) == 'true'">Exe</OutputType>
+    <IsPackable Condition="$(IsTestProject) == 'true'">false</IsPackable>
+    <GenerateDocumentationFile Condition="$(IsTestProject) == 'true'">false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Test projects: TUnit + Microsoft Testing Platform -->
+  <ItemGroup Condition="$(IsTestProject) == 'true'">
+    <PackageReference Include="TUnit" Version="0.50.0" />
+  </ItemGroup>
+
+  <!-- Source generators: enable for all projects -->
+  <PropertyGroup>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <!-- NativeAOT publish defaults (per-project opt-in via PublishAot=true) -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <DebuggerSupport>false</DebuggerSupport>
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StripSymbols>true</StripSymbols>
+    <IlcTrimMetadata>true</IlcTrimMetadata>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+  </PropertyGroup>
+
+  <!-- Embed provider JSON configs so they ship with the binary -->
+  <ItemGroup Condition="'$(EmbedProviders)' == 'true'">
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)providers\*.json" />
+  </ItemGroup>
+
+</Project>

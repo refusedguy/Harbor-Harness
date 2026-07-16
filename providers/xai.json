@@ -1,0 +1,21 @@
+{
+  "id": "xai",
+  "displayName": "xAI",
+  "description": "Grok models from xAI.",
+  "baseUrl": "https://api.x.ai/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "XAI_API_KEY",
+  "modelsUrl": "https://api.x.ai/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

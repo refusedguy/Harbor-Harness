@@ -1,0 +1,33 @@
+{
+  "$schema": "../schema/provider.schema.json",
+  "id": "openrouter",
+  "displayName": "OpenRouter",
+  "description": "Multi-provider router with 200+ models from Anthropic, OpenAI, Google, Meta, Mistral, and others.",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "OPENROUTER_API_KEY",
+  "modelsUrl": "https://openrouter.ai/api/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "name",
+    "contextWindow": "context_length",
+    "maxOutputTokens": "top_provider.max_completion_tokens",
+    "supportsVision": "architecture.input_modalities",
+    "supportsToolUse": "supported_parameters"
+  },
+  "headers": {
+    "HTTP-Referer": "https://harbor.sh",
+    "X-Title": "Harbor"
+  },
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true",
+    "vision": "auto",
+    "reasoning": "auto"
+  },
+  "timeout": 120,
+  "retries": 3
+}

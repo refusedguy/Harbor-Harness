@@ -1,0 +1,28 @@
+{
+  "$schema": "../schema/provider.schema.json",
+  "id": "kilocode",
+  "displayName": "Kilo Code Gateway",
+  "description": "Kilo Code's hosted gateway — multi-provider with FREE models. URL: https://kilo.ai/docs/gateway",
+  "baseUrl": "https://api.kilo.ai/api/gateway",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "KILO_API_KEY",
+  "modelsUrl": "https://api.kilo.ai/api/gateway/models",
+  "modelsRefreshHours": 12,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {
+    "HTTP-Referer": "https://harbor.sh",
+    "X-Title": "Harbor"
+  },
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true",
+    "vision": "auto"
+  },
+  "timeout": 120,
+  "retries": 3
+}

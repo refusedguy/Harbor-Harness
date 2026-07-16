@@ -1,0 +1,20 @@
+{
+  "id": "vllm",
+  "displayName": "vLLM (local)",
+  "description": "Local LLM inference via vLLM server. No API key required.",
+  "baseUrl": "http://localhost:8000/v1",
+  "apiType": "openai-compatible",
+  "authType": "none",
+  "modelsUrl": "http://localhost:8000/v1/models",
+  "modelsRefreshHours": 1,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

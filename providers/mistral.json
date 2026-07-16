@@ -1,0 +1,22 @@
+{
+  "id": "mistral",
+  "displayName": "Mistral AI",
+  "description": "Mistral models — Large, Medium, Small, Codestral, Pixtral.",
+  "baseUrl": "https://api.mistral.ai/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "MISTRAL_API_KEY",
+  "modelsUrl": "https://api.mistral.ai/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id",
+    "contextWindow": "context_window"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

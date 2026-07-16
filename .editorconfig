@@ -1,0 +1,417 @@
+# .editorconfig — Harbor .NET project
+# https://editorconfig.org/
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,jsonc,json5,yaml,yml,xml,csproj,props,targets}]
+indent_size = 2
+
+[*.{md,markdown}]
+trim_trailing_whitespace = false
+max_line_length = off
+
+[Makefile]
+indent_style = tab
+
+[*.{cs,csx}]
+# .NET code style settings
+# https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-style-rule-options
+
+# Naming conventions
+dotnet_naming_rule.private_fields.severity = suggestion
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = camel_case_underscore
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.camel_case_underscore.required_prefix = _
+dotnet_naming_style.camel_case_underscore.capitalization = camel_case
+
+# this. qualification
+dotnet_style_qualification_for_field = true:suggestion
+dotnet_style_qualification_for_property = true:suggestion
+dotnet_style_qualification_for_method = true:suggestion
+dotnet_style_qualification_for_event = true:suggestion
+
+# Language keywords vs BCL types
+dotnet_style_predefined_type_for_member_parameters = true:suggestion
+dotnet_style_predefined_type_for_locals_parameters_members = true:suggestion
+
+# Modifiers
+dotnet_style_require_accessibility_modifiers = always:suggestion
+dotnet_style_readonly_field = true:suggestion
+
+# Parentheses preferences
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_operators = never_if_unnecessary:silent
+
+# Expression-level preferences
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_explicit_tuple_names = true:suggestion
+dotnet_style_prefer_inferred_tuple_names = true:suggestion
+dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
+dotnet_style_prefer_auto_properties = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:silent
+dotnet_style_prefer_conditional_expression_over_return = true:silent
+dotnet_style_prefer_compound_assignment = true:suggestion
+dotnet_style_prefer_simplified_interpolation = true:suggestion
+dotnet_style_prefer_simplified_boolean_expressions = true:suggestion
+
+# Null-checking preferences
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+
+# C# preferences
+csharp_style_var_for_built_in_types = false:silent
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_var_elsewhere = true:silent
+
+# Expression-bodied members
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_indexers = true:silent
+csharp_style_expression_bodied_accessors = true:silent
+csharp_style_expression_bodied_operators = when_on_single_line:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_expression_bodied_local_functions = when_on_single_line:silent
+
+# Pattern matching
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:silent
+csharp_style_prefer_not_pattern = true:suggestion
+
+# Expression-level
+csharp_style_inlined_variable_declaration = true:suggestion
+csharp_style_deconstructed_variable_declaration = true:suggestion
+csharp_style_unused_value_assignment_preference = discard_variable:suggestion
+csharp_style_unused_value_expression_statement_preference = discard_variable:silent
+csharp_style_throw_expression = true:suggestion
+csharp_style_conditional_delegate_call = true:suggestion
+
+# File scoped namespaces
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# Using directives
+csharp_using_directive_placement = outside_namespace:suggestion
+
+# Collection expressions (C# 12+)
+csharp_style_prefer_collection_expression = when_types_loosely_match:suggestion
+
+# Newline settings
+csharp_new_lines_before_braces = all
+csharp_new_lines_before_else = true
+csharp_new_lines_before_catch = true
+csharp_new_lines_before_finally = true
+csharp_new_lines_before_members_in_object_initializers = true
+csharp_new_lines_before_members_in_anonymous_types = true
+csharp_new_lines_between_query_expression_clauses = true
+
+# Indentation
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = flush_left
+csharp_indent_block_contents = true
+csharp_indent_braces = false
+csharp_indent_case_contents_when_block = false
+
+# Spacing
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_between_parentheses = false
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+csharp_space_between_method_declaration_empty_parameter_list_parentheses = false
+csharp_space_between_method_call_name_and_opening_parenthesis = false
+csharp_space_between_method_call_empty_parameter_list_parentheses = false
+csharp_space_after_comma = true
+csharp_space_before_comma = false
+csharp_space_after_dot = false
+csharp_space_before_dot = false
+csharp_space_after_semicolon_in_for_statement = true
+csharp_space_before_semicolon_in_for_statement = false
+csharp_space_around_declaration_statements = do_not_ignore
+
+# Wrapping
+csharp_preserve_single_line_statements = false
+csharp_preserve_single_line_blocks = true
+
+# ============================================================================
+# ANALYZER SEVERITIES
+# ============================================================================
+
+# --- Naming ---
+dotnet_diagnostic.CA1707.severity = none  # we use underscores in tests
+dotnet_diagnostic.CA1708.severity = suggestion
+
+# --- Async ---
+dotnet_diagnostic.CA2007.severity = suggestion  # ConfigureAwait
+dotnet_diagnostic.CA2008.severity = suggestion  # don't create tasks without TaskScheduler
+dotnet_diagnostic.CA2012.severity = error  # ValueTask correct usage
+dotnet_diagnostic.CA2247.severity = error  # TaskCT args
+
+# --- Performance ---
+dotnet_diagnostic.CA1825.severity = error  # empty array allocation
+dotnet_diagnostic.CA1827.severity = suggestion  # Any instead of Count
+dotnet_diagnostic.CA1828.severity = suggestion  # CountAsync instead of Count
+dotnet_diagnostic.CA1829.severity = suggestion  # Length instead of Count
+dotnet_diagnostic.CA1830.severity = suggestion  # strongly-typed enum methods
+dotnet_diagnostic.CA1834.severity = suggestion  # StringBuilder.Append(char)
+dotnet_diagnostic.CA1835.severity = suggestion  # ReadAsync(Memory<byte>)
+dotnet_diagnostic.CA1836.severity = suggestion  # IsEmpty instead of Count == 0
+dotnet_diagnostic.CA1837.severity = suggestion  # Environment.ProcessId
+dotnet_diagnostic.CA1838.severity = suggestion  # avoid StringBuilder.Append(char) for single chars
+dotnet_diagnostic.CA1841.severity = suggestion  # Dictionary.Contains(Key)
+dotnet_diagnostic.CA1842.severity = suggestion  # DoNotUseSkipWithAny
+dotnet_diagnostic.CA1845.severity = suggestion  # span-based string methods
+dotnet_diagnostic.CA1846.severity = suggestion  # AsSpan instead of substring
+dotnet_diagnostic.CA1847.severity = suggestion  # Math.Clamp
+dotnet_diagnostic.CA1852.severity = suggestion  # seal internal types
+dotnet_diagnostic.CA1854.severity = suggestion  # TryGetValue instead of ContainsKey + indexer
+dotnet_diagnostic.CA1855.severity = suggestion  # UseSpanClearInsteadOfFill
+dotnet_diagnostic.CA1856.severity = suggestion  # ConstantExpected
+dotnet_diagnostic.CA1859.severity = suggestion  # use concrete types for perf
+dotnet_diagnostic.CA1860.severity = suggestion  # avoid LINQ Any for empty check
+dotnet_diagnostic.CA1861.severity = none  # params arrays (we use them in tests)
+dotnet_diagnostic.CA1862.severity = suggestion  # StringComparison
+dotnet_diagnostic.CA1863.severity = suggestion  # CompositeFormat
+dotnet_diagnostic.CA1864.severity = suggestion  # use niche
+dotnet_diagnostic.CA1865.severity = suggestion  # char-based methods
+dotnet_diagnostic.CA1866.severity = suggestion  # char-based methods
+dotnet_diagnostic.CA1867.severity = suggestion  # StringComparison
+dotnet_diagnostic.CA1868.severity = suggestion  # guard clauses
+dotnet_diagnostic.CA1869.severity = suggestion  # cache static regex
+dotnet_diagnostic.CA1870.severity = suggestion  # coerce to concrete type
+dotnet_diagnostic.CA1871.severity = none  # DoNotPassNullableStructToArgumentNullExceptionThrowIfNull
+dotnet_diagnostic.CA1872.severity = suggestion  # Use ArrayEmpty
+
+# --- Sonar ---
+dotnet_diagnostic.SA1101.severity = none  # prefix local calls with this
+dotnet_diagnostic.S1694.severity = none  # abstract record for discriminated unions is OK
+dotnet_diagnostic.S101.severity = none  # allow LlmEvent-style acronyms in PascalCase
+dotnet_diagnostic.S3237.severity = none  # value appenders
+dotnet_diagnostic.S4136.severity = none  # method overloads adjacent (ergonomics > rule)
+dotnet_diagnostic.S1144.severity = none  # unused private fields (often intentional scaffolding)
+dotnet_diagnostic.S2325.severity = none  # make static (sometimes breaks DI)
+dotnet_diagnostic.S3242.severity = none  # use more general type
+dotnet_diagnostic.S4487.severity = none  # unread private field (DI often requires them)
+dotnet_diagnostic.S2933.severity = none  # make readonly (sometimes reassigned by design)
+dotnet_diagnostic.S1450.severity = none  # remove unused private field (DI)
+dotnet_diagnostic.S1066.severity = none  # merge if statements (readability)
+dotnet_diagnostic.S3358.severity = none  # nested ternary (sometimes clear)
+dotnet_diagnostic.S1172.severity = none  # unused parameter (interface compliance)
+dotnet_diagnostic.CA2024.severity = none  # reader.EndOfStream async (we use ReadLineAsync)
+dotnet_diagnostic.S6966.severity = none  # await Console.WriteLineAsync (we use sync Console)
+dotnet_diagnostic.S6608.severity = none  # indexing at 0 vs First()
+dotnet_diagnostic.S5445.severity = none  # GetTempFileName in tests
+dotnet_diagnostic.S3011.severity = none  # reflection in tests
+dotnet_diagnostic.S1075.severity = none  # hardcoded absolute paths (defaults)
+dotnet_diagnostic.S6580.severity = none  # format provider in date parsing
+dotnet_diagnostic.S1481.severity = none  # unused local var (sometimes helpful)
+dotnet_diagnostic.S1135.severity = none  # TODO comments (we use them intentionally)
+dotnet_diagnostic.S3881.severity = none  # IDisposable pattern (we use simple Dispose)
+dotnet_diagnostic.MA0008.severity = none  # StructLayout on structs (not always needed)
+dotnet_diagnostic.S4144.severity = none  # identical method implementations (sometimes intentional)
+dotnet_diagnostic.S3427.severity = suggestion  # constructor signature overlap (intentional for MemoryPack dual-ctor pattern)
+
+# --- Meziantou ---
+dotnet_diagnostic.MA0001.severity = suggestion  # use StringComparison
+dotnet_diagnostic.MA0002.severity = suggestion  # use string.Compare
+dotnet_diagnostic.MA0004.severity = suggestion  # use Task.ConfigureAwait
+dotnet_diagnostic.MA0006.severity = suggestion  # use String.Equals instead of ==
+dotnet_diagnostic.MA0007.severity = none  # pad after comma
+dotnet_diagnostic.MA0009.severity = suggestion  # assign once
+dotnet_diagnostic.MA0010.severity = suggestion  # mark attributes with AttributeUsage
+dotnet_diagnostic.MA0011.severity = suggestion  # IFormatProvider
+dotnet_diagnostic.MA0012.severity = suggestion  # do not raise reserved exception
+dotnet_diagnostic.MA0013.severity = suggestion  # Types should not extend SystemException
+dotnet_diagnostic.MA0014.severity = suggestion  # do not raise System.ApplicationException
+dotnet_diagnostic.MA0015.severity = suggestion  # FileName should not contain path
+dotnet_diagnostic.MA0016.severity = suggestion  # use PredefinedTypes
+dotnet_diagnostic.MA0017.severity = suggestion  # Abstract types should not have constructors
+dotnet_diagnostic.MA0018.severity = suggestion  # do not declare static members on generic types
+dotnet_diagnostic.MA0019.severity = suggestion  # use EventArgs.Empty
+dotnet_diagnostic.MA0020.severity = suggestion  # use object initializer
+dotnet_diagnostic.MA0021.severity = suggestion  # use string.Equals
+dotnet_diagnostic.MA0022.severity = suggestion  # return Task.FromResult
+dotnet_diagnostic.MA0023.severity = suggestion  # use StringComparison
+dotnet_diagnostic.MA0025.severity = suggestion  # implement IComparable
+dotnet_diagnostic.MA0026.severity = suggestion  # do not remove SecurityCritical
+dotnet_diagnostic.MA0028.severity = suggestion  # optimize StringBuilder usage
+dotnet_diagnostic.MA0029.severity = suggestion  # combine LINQ
+dotnet_diagnostic.MA0030.severity = suggestion  # use missing nuget package
+dotnet_diagnostic.MA0031.severity = suggestion  # optimize Enumerable.OrderBy
+dotnet_diagnostic.MA0032.severity = suggestion  # use member access pattern
+dotnet_diagnostic.MA0033.severity = suggestion  # check argument compatibility
+dotnet_diagnostic.MA0035.severity = suggestion  # do not use dangerous methods
+dotnet_diagnostic.MA0036.severity = suggestion  # make class static
+dotnet_diagnostic.MA0037.severity = suggestion  # remove empty statement
+dotnet_diagnostic.MA0038.severity = suggestion  # Make method static
+dotnet_diagnostic.MA0039.severity = suggestion  # do not write methods that violate ownership
+dotnet_diagnostic.MA0040.severity = suggestion  # flow cancellation tokens
+dotnet_diagnostic.MA0041.severity = suggestion  # make property static
+dotnet_diagnostic.MA0042.severity = suggestion  # do not use blocking calls in async
+dotnet_diagnostic.MA0043.severity = suggestion  # use nameof
+dotnet_diagnostic.MA0044.severity = suggestion  # remove dead code
+dotnet_diagnostic.MA0045.severity = suggestion  # do not use unsafe code (we want this!)
+dotnet_diagnostic.MA0046.severity = error        # unsafe forbidden in Harbor
+dotnet_diagnostic.MA0048.severity = suggestion  # use File.AppendText
+dotnet_diagnostic.MA0049.severity = suggestion  # type name matches namespace
+dotnet_diagnostic.MA0050.severity = suggestion  # validate arguments
+dotnet_diagnostic.MA0051.severity = suggestion  # method is too long
+dotnet_diagnostic.MA0052.severity = suggestion  # replace computed fields with expression
+dotnet_diagnostic.MA0053.severity = suggestion  # make class sealed
+dotnet_diagnostic.MA0054.severity = suggestion  # embed catch object
+dotnet_diagnostic.MA0055.severity = suggestion  # do not use destructor
+dotnet_diagnostic.MA0056.severity = suggestion  # do not call virtual methods in constructor
+dotnet_diagnostic.MA0057.severity = suggestion  # use named argument for parameter
+dotnet_diagnostic.MA0058.severity = suggestion  # use span-based string methods
+dotnet_diagnostic.MA0059.severity = suggestion  # remove null propagation
+dotnet_diagnostic.MA0060.severity = suggestion  # value type equals
+dotnet_diagnostic.MA0061.severity = suggestion  # use nameof for exception argument
+dotnet_diagnostic.MA0062.severity = suggestion  # non-flags enum
+dotnet_diagnostic.MA0063.severity = suggestion  # use compound assignment
+dotnet_diagnostic.MA0064.severity = suggestion  # avoid lambda in loops
+dotnet_diagnostic.MA0065.severity = suggestion  # use Action<T> instead of ref
+dotnet_diagnostic.MA0066.severity = suggestion  # hash code
+dotnet_diagnostic.MA0067.severity = suggestion  # use GUID
+dotnet_diagnostic.MA0068.severity = suggestion  # validate argument
+dotnet_diagnostic.MA0069.severity = suggestion  # use exception
+dotnet_diagnostic.MA0070.severity = suggestion  # do not raise SystemException
+dotnet_diagnostic.MA0071.severity = suggestion  # avoid static variable
+dotnet_diagnostic.MA0072.severity = suggestion  # do not throw from finally
+dotnet_diagnostic.MA0073.severity = suggestion  # avoid comparing with typeof
+dotnet_diagnostic.MA0074.severity = suggestion  # use StringComparison.Ordinal
+dotnet_diagnostic.MA0076.severity = suggestion  # do not use string concatenation in loops
+dotnet_diagnostic.MA0077.severity = suggestion  # use overload with StringComparison
+dotnet_diagnostic.MA0078.severity = suggestion  # use EventArgs<T>
+dotnet_diagnostic.MA0079.severity = suggestion  # use overload with Span
+dotnet_diagnostic.MA0080.severity = suggestion  # use IEqualityComparer
+dotnet_diagnostic.MA0081.severity = suggestion  # use overload with StringComparison
+dotnet_diagnostic.MA0082.severity = suggestion  # use overload with IEqualityComparer
+dotnet_diagnostic.MA0083.severity = suggestion  # use StringComparison
+dotnet_diagnostic.MA0084.severity = suggestion  # use static local function
+dotnet_diagnostic.MA0085.severity = suggestion  # use parameterless constructor
+dotnet_diagnostic.MA0086.severity = suggestion  # useIEquatable
+dotnet_diagnostic.MA0087.severity = suggestion  # use ref modifiers
+dotnet_diagnostic.MA0088.severity = suggestion  # use pattern matching
+dotnet_diagnostic.MA0089.severity = suggestion  # use StringComparison
+dotnet_diagnostic.MA0090.severity = suggestion  # remove empty block
+dotnet_diagnostic.MA0091.severity = suggestion  # use builder pattern
+dotnet_diagnostic.MA0092.severity = suggestion  # use thread-safe Random
+dotnet_diagnostic.MA0093.severity = suggestion  # do not use unsafe code
+dotnet_diagnostic.MA0094.severity = suggestion  # use exception filter
+dotnet_diagnostic.MA0095.severity = suggestion  # do not use unsafe code
+dotnet_diagnostic.MA0096.severity = suggestion  # use async overload
+dotnet_diagnostic.MA0097.severity = suggestion  # use async overload
+dotnet_diagnostic.MA0098.severity = suggestion  # use indexer instead of LINQ
+dotnet_diagnostic.MA0099.severity = suggestion  # use CoVariant interface
+dotnet_diagnostic.MA0100.severity = suggestion  # use async overload
+dotnet_diagnostic.MA0101.severity = suggestion  # use string.Contains with StringComparison
+dotnet_diagnostic.MA0102.severity = suggestion  # use dependable file
+dotnet_diagnostic.MA0103.severity = suggestion  # use StringComparison
+dotnet_diagnostic.MA0104.severity = suggestion  # use HashSet
+dotnet_diagnostic.MA0105.severity = suggestion  # use async overload
+dotnet_diagnostic.MA0106.severity = suggestion  # use value type
+dotnet_diagnostic.MA0107.severity = suggestion  # use model
+dotnet_diagnostic.MA0108.severity = suggestion  # use IEqualityComparer
+dotnet_diagnostic.MA0109.severity = suggestion  # use HashSet
+dotnet_diagnostic.MA0110.severity = suggestion  # use StringBuilder.Append
+dotnet_diagnostic.MA0111.severity = suggestion  # use overload with char
+dotnet_diagnostic.MA0112.severity = suggestion  # use singular
+dotnet_diagnostic.MA0113.severity = suggestion  # use EventArgs<T>
+dotnet_diagnostic.MA0114.severity = suggestion  # use IDispatch
+dotnet_diagnostic.MA0115.severity = suggestion  # use Span
+dotnet_diagnostic.MA0116.severity = suggestion  # use params array
+dotnet_diagnostic.MA0117.severity = suggestion  # use implicit conversions
+dotnet_diagnostic.MA0118.severity = suggestion  # use Task.WaitAsync
+dotnet_diagnostic.MA0119.severity = suggestion  # use Stopwatch
+dotnet_diagnostic.MA0120.severity = suggestion  # use Activator.CreateInstance
+dotnet_diagnostic.MA0121.severity = suggestion  # use nameof
+dotnet_diagnostic.MA0122.severity = suggestion  # use HashSet
+dotnet_diagnostic.MA0123.severity = suggestion  # use Task.WaitAsync
+dotnet_diagnostic.MA0124.severity = suggestion  # use ConfigureAwait
+dotnet_diagnostic.MA0125.severity = suggestion  # use ternary
+dotnet_diagnostic.MA0126.severity = suggestion  # use StringComparer.Ordinal
+dotnet_diagnostic.MA0127.severity = suggestion  # use IsAssignableFrom
+dotnet_diagnostic.MA0128.severity = suggestion  # use pattern matching
+dotnet_diagnostic.MA0129.severity = suggestion  # use Range
+dotnet_diagnostic.MA0130.severity = suggestion  # use static
+dotnet_diagnostic.MA0131.severity = suggestion  # use is pattern
+dotnet_diagnostic.MA0132.severity = suggestion  # use decrement
+dotnet_diagnostic.MA0133.severity = suggestion  # use channel
+dotnet_diagnostic.MA0134.severity = suggestion  # use ObsoleteAttribute
+dotnet_diagnostic.MA0135.severity = suggestion  # use async
+dotnet_diagnostic.MA0136.severity = suggestion  # use RawStrings
+dotnet_diagnostic.MA0137.severity = suggestion  # use Task.WhenAll
+dotnet_diagnostic.MA0138.severity = suggestion  # use StringCreate
+dotnet_diagnostic.MA0139.severity = suggestion  # use Task.WaitAsync
+dotnet_diagnostic.MA0140.severity = suggestion  # use discard
+dotnet_diagnostic.MA0141.severity = suggestion  # use switch
+dotnet_diagnostic.MA0142.severity = suggestion  # use static class
+dotnet_diagnostic.MA0143.severity = suggestion  # use constructor
+dotnet_diagnostic.MA0144.severity = suggestion  # use const
+dotnet_diagnostic.MA0145.severity = suggestion  # use member access pattern
+dotnet_diagnostic.MA0146.severity = suggestion  # use indexer
+dotnet_diagnostic.MA0147.severity = suggestion  # use conditional access pattern
+dotnet_diagnostic.MA0148.severity = suggestion  # use overload with span
+dotnet_diagnostic.MA0149.severity = suggestion  # use Default
+dotnet_diagnostic.MA0150.severity = suggestion  # use nameof
+dotnet_diagnostic.MA0151.severity = suggestion  # use overload with StringComparison
+dotnet_diagnostic.MA0152.severity = suggestion  # use overload with Span
+dotnet_diagnostic.MA0153.severity = suggestion  # use pattern matching
+dotnet_diagnostic.MA0154.severity = suggestion  # use TimeSpan
+dotnet_diagnostic.MA0155.severity = suggestion  # use MemoryExtensions.Split
+dotnet_diagnostic.MA0156.severity = suggestion  # use MemoryExtensions.Contains
+dotnet_diagnostic.MA0157.severity = suggestion  # use MemoryExtensions.AsSpan
+dotnet_diagnostic.MA0158.severity = suggestion  # use MemoryExtensions
+dotnet_diagnostic.MA0159.severity = suggestion  # use overload
+dotnet_diagnostic.MA0160.severity = suggestion  # use Stopwatch
+dotnet_diagnostic.MA0161.severity = suggestion  # use Channel
+dotnet_diagnostic.MA0162.severity = suggestion  # use MemoryMarshal
+dotnet_diagnostic.MA0163.severity = suggestion  # use CollectionsMarshal
+dotnet_diagnostic.MA0164.severity = suggestion  # use ConfigureAwaitOptions
+dotnet_diagnostic.MA0165.severity = suggestion  # use WaitAsync
+dotnet_diagnostic.MA0166.severity = suggestion  # use WaitAsync
+dotnet_diagnostic.MA0167.severity = suggestion  # use AsyncLocal
+dotnet_diagnostic.MA0168.severity = suggestion  # use TaskCreationOptions
+dotnet_diagnostic.MA0169.severity = suggestion  # use Channel.CreateUnbounded
+dotnet_diagnostic.MA0170.severity = suggestion  # use Dictionary
+dotnet_diagnostic.MA0171.severity = suggestion  # use HashSet
+dotnet_diagnostic.MA0172.severity = suggestion  # use SortedSet
+dotnet_diagnostic.MA0173.severity = suggestion  # use ConcurrentDictionary
+dotnet_diagnostic.MA0174.severity = suggestion  # use ConcurrentQueue
+dotnet_diagnostic.MA0175.severity = suggestion  # use ConcurrentBag
+dotnet_diagnostic.MA0176.severity = suggestion  # use IEqualityComparer
+dotnet_diagnostic.MA0177.severity = suggestion  # use IEquatable
+dotnet_diagnostic.MA0178.severity = suggestion  # use ReadOnlyDictionary
+dotnet_diagnostic.MA0179.severity = suggestion  # use ReadOnlyCollection
+dotnet_diagnostic.MA0180.severity = suggestion  # use ReadOnlySpan
+dotnet_diagnostic.MA0181.severity = suggestion  # use ReadOnlyMemory
+dotnet_diagnostic.MA0182.severity = suggestion  # use FrozenSet
+dotnet_diagnostic.MA0183.severity = suggestion  # use FrozenDictionary
+
+# --- AsyncFixer ---
+dotnet_diagnostic.AsyncFixer01.severity = suggestion  # Unnecessary async/await
+dotnet_diagnostic.AsyncFixer02.severity = suggestion  # Long-running operation
+dotnet_diagnostic.AsyncFixer03.severity = suggestion  # Not used Async method
+dotnet_diagnostic.AsyncFixer04.severity = suggestion  # Fire-and-forget async void
+dotnet_diagnostic.AsyncFixer05.severity = suggestion  # Not used CancellationToken
+
+# --- Reflection ---
+dotnet_diagnostic.REL0001.severity = suggestion  # Use overload with Type
+dotnet_diagnostic.REL0002.severity = suggestion  # Use overload

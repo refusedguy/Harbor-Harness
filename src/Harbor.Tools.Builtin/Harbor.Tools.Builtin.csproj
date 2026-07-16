@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tools.Builtin</PackageId>
+    <Description>Harbor builtin tools — read, write, edit, bash, glob, grep, ls.</Description>
+    <PackageTags>harbor;tools;builtin</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,106 @@
+# .gitignore — Harbor .NET project
+
+## .NET artifacts
+bin/
+obj/
+artifacts/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+*.cache
+*.log
+*.tlog
+
+## Visual Studio / Rider / VSCode
+.vs/
+.vscode/
+.idea/
+*.userprefs
+*.swp
+*~
+
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+
+## Test results
+[Tt]est[Rr]esult*/
+TestResults/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+coverage/
+coverage*.xml
+coverage*.json
+*.trx
+*.scratom
+
+## AOT / publish artifacts
+publish/
+native/
+*.so
+*.dylib
+*.a
+
+## OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Secrets / credentials
+*.env
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+credentials.json
+appsettings.Local.json
+config.local.json
+
+## Harbor runtime
+.harbor/
+~/.harbor/
+*.session.jsonl
+*.harbor-cache
+runtime/
+
+## Build scripts / temp
+*.tmp
+*.bak
+*.old
+*.orig
+
+## IDE-specific
+*.iml
+*.ipr
+*.iws
+.idea/
+*.swp
+*.swo
+
+## Docs build
+_site/
+api/

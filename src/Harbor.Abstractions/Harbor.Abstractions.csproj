@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Abstractions</PackageId>
+    <Description>Harbor abstractions — interfaces, models, events. Zero-dependency contract package.</Description>
+    <PackageTags>harbor;ai;agent;abstractions</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CSharpFunctionalExtensions" Version="3.7.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
+    <PackageReference Include="MemoryPack" Version="1.10.0" />
+    <PackageReference Include="ZLinq" Version="1.5.6" />
+    <!--
+      ZLinq.DropInGenerator emits source-generated extension methods that take
+      priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
+      below, this makes every LINQ call site in Harbor.Abstractions resolve to
+      ZLinq's zero-allocation pipeline without rewriting call sites.
+    -->
+    <PackageReference Include="ZLinq.DropInGenerator" Version="1.5.6">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    ZLinq replaces System.Linq throughout Harbor.Abstractions.
+    The implicit "System.Linq" using injected by the SDK is removed here so
+    that all LINQ operators resolve to ZLinq's zero-allocation equivalents
+    without producing ambiguity errors.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Linq" />
+  </ItemGroup>
+
+</Project>

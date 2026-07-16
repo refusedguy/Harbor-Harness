@@ -1,0 +1,31 @@
+# Banned APIs — Harbor project
+# https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-banned-api-analyzer
+
+# Ban Newtonsoft.Json — use System.Text.Json only
+T:System.Web.Script.Serialization.JavaScriptSerializer
+T:System.Runtime.Serialization.Json.DataContractJsonSerializer
+T:Newtonsoft.Json.JsonConvert
+T:Newtonsoft.Json.JsonSerializer
+T:Newtonsoft.Json.JsonSerializerSettings
+N:Newtonsoft.Json
+
+# Ban reflection-based serializers in AOT scenarios
+T:System.Xml.Serialization.XmlSerializer;Use System.Text.Json or source-gen instead.
+
+# Ban Microsoft.Win32.Registry on non-Windows (avoid platform issues)
+T:Microsoft.Win32.Registry;Use cross-platform alternatives.
+
+# Ban BlockingCollection<T>.Add (use TryAdd)
+M:System.Collections.Concurrent.BlockingCollection`1.Add(`0)
+
+# Ban legacy async patterns
+T:System.ComponentModel.BackgroundWorker;Use Task.Run instead.
+M:System.Threading.Thread.Start;Use Task.Run instead.
+M:System.Threading.ThreadPool.QueueUserWorkItem(System.Threading.WaitCallback);Use Task.Run instead.
+
+# Ban Thread.Sleep in async contexts (use Task.Delay)
+M:System.Threading.Thread.Sleep(System.Int32);Use Task.Delay in async methods.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Use Task.Delay in async methods.
+
+# Ban Console.Write in libraries (only in CLI/TUI projects)
+# (Libraries should use ILogger<T>)

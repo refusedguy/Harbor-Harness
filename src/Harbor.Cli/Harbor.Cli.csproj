@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>harbor</ToolCommandName>
+    <PackageId>Harbor.Cli</PackageId>
+    <Description>Harbor CLI — modular AI coding agent.</Description>
+    <PackageTags>harbor;cli;ai;agent</PackageTags>
+    <EmbedProviders>true</EmbedProviders>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj" />
+    <ProjectReference Include="..\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj" />
+    <ProjectReference Include="..\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj" />
+    <ProjectReference Include="..\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj" />
+    <ProjectReference Include="..\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj" />
+    <ProjectReference Include="..\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj" />
+    <ProjectReference Include="..\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj" />
+    <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj" />
+    <ProjectReference Include="..\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj" />
+    <ProjectReference Include="..\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj" />
+    <ProjectReference Include="..\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj" />
+    <ProjectReference Include="..\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

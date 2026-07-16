@@ -1,0 +1,94 @@
+{
+  "$schema": "../schema/provider.schema.json",
+  "id": "openai",
+  "displayName": "OpenAI",
+  "description": "GPT models — GPT-4o, GPT-4.1, o1, o3, o4-mini. Native provider.",
+  "baseUrl": "https://api.openai.com/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "OPENAI_API_KEY",
+  "modelsUrl": null,
+  "models": [
+    {
+      "id": "gpt-4o",
+      "providerId": "openai",
+      "displayName": "GPT-4o",
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 2.5, "outputPerMillion": 10.0, "cacheReadPerMillion": 1.25 },
+      "promptTemplate": "openai"
+    },
+    {
+      "id": "gpt-4o-mini",
+      "providerId": "openai",
+      "displayName": "GPT-4o mini",
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.6, "cacheReadPerMillion": 0.075 },
+      "promptTemplate": "openai"
+    },
+    {
+      "id": "gpt-4.1",
+      "providerId": "openai",
+      "displayName": "GPT-4.1",
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 2.0, "outputPerMillion": 8.0, "cacheReadPerMillion": 0.5 },
+      "promptTemplate": "openai"
+    },
+    {
+      "id": "gpt-4.1-mini",
+      "providerId": "openai",
+      "displayName": "GPT-4.1 mini",
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "supportsReasoning": false,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 0.4, "outputPerMillion": 1.6, "cacheReadPerMillion": 0.1 },
+      "promptTemplate": "openai"
+    },
+    {
+      "id": "o3",
+      "providerId": "openai",
+      "displayName": "o3",
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "supportsReasoning": true,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 10.0, "outputPerMillion": 40.0, "cacheReadPerMillion": 2.5 },
+      "promptTemplate": "openai"
+    },
+    {
+      "id": "o4-mini",
+      "providerId": "openai",
+      "displayName": "o4-mini",
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "supportsReasoning": true,
+      "supportsVision": true,
+      "supportsToolUse": true,
+      "pricing": { "inputPerMillion": 1.1, "outputPerMillion": 4.4, "cacheReadPerMillion": 0.275 },
+      "promptTemplate": "openai"
+    }
+  ],
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true",
+    "vision": "true",
+    "reasoning": "true",
+    "cacheControl": "false",
+    "maxTokensField": "max_completion_tokens"
+  }
+}

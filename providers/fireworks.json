@@ -1,0 +1,21 @@
+{
+  "id": "fireworks",
+  "displayName": "Fireworks AI",
+  "description": "Fireworks AI's fast inference for open-source models.",
+  "baseUrl": "https://api.fireworks.ai/inference/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "FIREWORKS_API_KEY",
+  "modelsUrl": "https://api.fireworks.ai/inference/v1/models",
+  "modelsRefreshHours": 24,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "true"
+  }
+}

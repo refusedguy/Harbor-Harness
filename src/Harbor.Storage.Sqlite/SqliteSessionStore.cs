@@ -1,0 +1,394 @@
+using System.Text.Json;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Sessions;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+
+namespace Harbor.Storage.Sqlite;
+
+/// <summary>
+/// SQLite-backed session storage.
+/// Implements Repository pattern (GOF) via ISessionStore.
+///
+/// Use for: long-running deployments, many sessions, efficient queries.
+/// Note: pulls in native e_sqlite3 (~1.5 MB) — use JsonlSessionStore if you want zero native deps.
+/// </summary>
+public sealed class SqliteSessionStore : ISessionStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly string _connectionString;
+    private readonly ILogger<SqliteSessionStore> _logger;
+    private readonly object _lock = new();
+    private bool _initialized;
+
+    public SqliteSessionStore(string dbPath, ILogger<SqliteSessionStore> logger)
+    {
+        _connectionString = $"Data Source={dbPath}";
+        _logger = logger;
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath) ?? ".");
+        Initialize();
+    }
+
+    private void Initialize()
+    {
+        if (_initialized) return;
+        lock (_lock)
+        {
+            if (_initialized) return;
+
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = Schema;
+            cmd.ExecuteNonQuery();
+
+            _initialized = true;
+        }
+    }
+
+    private SqliteConnection OpenConnection()
+    {
+        var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+
+        // Recommended PRAGMAs for performance and concurrency
+        using (var pragma = conn.CreateCommand())
+        {
+            pragma.CommandText = """
+                PRAGMA journal_mode = WAL;
+                PRAGMA synchronous = NORMAL;
+                PRAGMA busy_timeout = 5000;
+                PRAGMA cache_size = -8000;  -- 8 MB (default 2 MB)
+                PRAGMA foreign_keys = ON;
+                """;
+            pragma.ExecuteNonQuery();
+        }
+
+        return conn;
+    }
+
+    public Task<Result<Session>> CreateAsync(
+        string directory, string agentName, string providerId, string modelId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var session = Session.Create(directory, agentName, providerId, modelId);
+
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
+                    VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
+                    """;
+                cmd.Parameters.AddWithValue("@id", session.Id);
+                cmd.Parameters.AddWithValue("@pid", session.ProjectId);
+                cmd.Parameters.AddWithValue("@dir", session.Directory);
+                cmd.Parameters.AddWithValue("@title", session.Title);
+                cmd.Parameters.AddWithValue("@agent", session.Agent);
+                cmd.Parameters.AddWithValue("@model", session.Model);
+                cmd.Parameters.AddWithValue("@provider", session.ProviderId);
+                cmd.Parameters.AddWithValue("@ver", "0.2.0");
+                cmd.Parameters.AddWithValue("@created", session.CreatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@updated", session.UpdatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(session.Metadata, JsonOptions));
+                cmd.ExecuteNonQuery();
+            }
+
+            return Task.FromResult(Result.Success(session));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create session");
+            return Task.FromResult(Result.Failure<Session>(ex.Message));
+        }
+    }
+
+    public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT * FROM sessions WHERE id = @id";
+            cmd.Parameters.AddWithValue("@id", sessionId);
+
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+                return Result.Failure<Session>($"Session '{sessionId}' not found.");
+
+            return Result.Success(ReadSession(reader));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<Session>(ex.Message);
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+
+            if (string.IsNullOrEmpty(projectId))
+            {
+                cmd.CommandText = "SELECT * FROM sessions ORDER BY updated_at DESC";
+            }
+            else
+            {
+                cmd.CommandText = "SELECT * FROM sessions WHERE project_id = @pid ORDER BY updated_at DESC";
+                cmd.Parameters.AddWithValue("@pid", projectId);
+            }
+
+            var result = new List<Session>();
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                result.Add(ReadSession(reader));
+            }
+            return Result.Success<IReadOnlyList<Session>>(result);
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<Session>>(ex.Message);
+        }
+    }
+
+    public async Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var tx = conn.BeginTransaction();
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
+                    VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
+                    """;
+                cmd.Parameters.AddWithValue("@id", message.Id);
+                cmd.Parameters.AddWithValue("@sid", sessionId);
+                cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("@role", message.Role);
+                cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : (object)DBNull.Value);
+                cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : (message is AssistantMessage a ? a.Model : (object)DBNull.Value));
+                cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
+                cmd.ExecuteNonQuery();
+
+                // Update session.updated_at
+                using var upd = conn.CreateCommand();
+                upd.Transaction = tx;
+                upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
+                upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                upd.Parameters.AddWithValue("@sid", sessionId);
+                upd.ExecuteNonQuery();
+
+                tx.Commit();
+            }
+
+            return await Task.FromResult(Result.Success());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to append message");
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    {
+        // For SQLite we replace by id
+        try
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    UPDATE messages SET payload = @payload, role = @role, created_at = @created
+                    WHERE id = @id AND session_id = @sid
+                    """;
+                cmd.Parameters.AddWithValue("@id", message.Id);
+                cmd.Parameters.AddWithValue("@sid", sessionId);
+                cmd.Parameters.AddWithValue("@role", message.Role);
+                cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
+                cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
+                cmd.ExecuteNonQuery();
+            }
+            return Task.FromResult(Result.Success());
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(Result.Failure(ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT role, payload FROM messages WHERE session_id = @sid ORDER BY created_at ASC";
+            cmd.Parameters.AddWithValue("@sid", sessionId);
+
+            var result = new List<AgentMessage>();
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var role = reader.GetString(0);
+                var payload = reader.GetString(1);
+                // AgentMessage is abstract and has no [JsonDerivedType] discriminator,
+                // so we have to pick the concrete type from the role column ourselves.
+                var msg = DeserializeMessage(role, payload);
+                if (msg is not null) result.Add(msg);
+            }
+            return Result.Success<IReadOnlyList<AgentMessage>>(result);
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
+        }
+    }
+
+    private static AgentMessage? DeserializeMessage(string role, string payload)
+    {
+        return role switch
+        {
+            "user" => JsonSerializer.Deserialize<UserMessage>(payload, JsonOptions),
+            "assistant" => JsonSerializer.Deserialize<AssistantMessage>(payload, JsonOptions),
+            "tool_result" => JsonSerializer.Deserialize<ToolResultMessage>(payload, JsonOptions),
+            _ => null,
+        };
+    }
+
+    public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "DELETE FROM sessions WHERE id = @id; DELETE FROM messages WHERE session_id = @id;";
+                cmd.Parameters.AddWithValue("@id", sessionId);
+                cmd.ExecuteNonQuery();
+            }
+            return Task.FromResult(Result.Success());
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(Result.Failure(ex.Message));
+        }
+    }
+
+    public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
+            cmd.Parameters.AddWithValue("@id", sessionId);
+
+            var meta = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            if (meta is null or DBNull)
+                return Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.");
+
+            return Result.Success(JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions) ?? SessionMetadata.Empty);
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<SessionMetadata>(ex.Message);
+        }
+    }
+
+    public async Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "UPDATE sessions SET metadata = @meta WHERE id = @id";
+                cmd.Parameters.AddWithValue("@id", sessionId);
+                cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, JsonOptions));
+                cmd.ExecuteNonQuery();
+            }
+            await Task.CompletedTask.ConfigureAwait(false);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    private static Session ReadSession(System.Data.Common.DbDataReader reader)
+    {
+        var id = reader.GetString(reader.GetOrdinal("id"));
+        var projectId = reader.GetString(reader.GetOrdinal("project_id"));
+        var directory = reader.GetString(reader.GetOrdinal("directory"));
+        var title = reader.GetString(reader.GetOrdinal("title"));
+        var agent = reader.GetString(reader.GetOrdinal("agent"));
+        var model = reader.GetString(reader.GetOrdinal("model"));
+        var providerId = reader.GetString(reader.GetOrdinal("provider_id"));
+        var createdAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("created_at")));
+        var updatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("updated_at")));
+        var metaJson = reader.GetString(reader.GetOrdinal("metadata"));
+        var meta = JsonSerializer.Deserialize<SessionMetadata>(metaJson, JsonOptions) ?? SessionMetadata.Empty;
+
+        return new Session(
+            Id: id,
+            ProjectId: projectId,
+            Directory: directory,
+            Title: title,
+            Agent: agent,
+            Model: model,
+            ProviderId: providerId,
+            CreatedAt: createdAt,
+            UpdatedAt: updatedAt,
+            Metadata: meta);
+    }
+
+    private const string Schema = """
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            directory TEXT NOT NULL,
+            title TEXT NOT NULL,
+            agent TEXT NOT NULL,
+            model TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            version TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            metadata TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            parent_id TEXT,
+            role TEXT NOT NULL,
+            agent TEXT,
+            model TEXT,
+            created_at TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+        """;
+}

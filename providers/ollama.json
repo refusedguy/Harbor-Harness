@@ -1,0 +1,21 @@
+{
+  "id": "ollama",
+  "displayName": "Ollama (local)",
+  "description": "Local LLM inference via Ollama. No API key required.",
+  "baseUrl": "http://localhost:11434/v1",
+  "apiType": "openai-compatible",
+  "authType": "none",
+  "authEnvVar": null,
+  "modelsUrl": "http://localhost:11434/v1/models",
+  "modelsRefreshHours": 1,
+  "modelsPath": "data",
+  "modelMapping": {
+    "id": "id",
+    "displayName": "id"
+  },
+  "headers": {},
+  "capabilities": {
+    "streaming": "true",
+    "toolUse": "auto"
+  }
+}

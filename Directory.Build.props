@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CS1591</WarningsNotAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Versioning -->
+    <Version>0.2.0-alpha</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
+    <Authors>Harbor Contributors</Authors>
+    <Company>Harbor</Company>
+    <Product>Harbor</Product>
+    <Copyright>MIT</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/harbor-sh/harbor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/harbor-sh/harbor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- Build features -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+
+    <!-- Debugging -->
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+
+    <!-- Performance: enable optimizations always (even in Debug for lib code) -->
+    <Optimize Condition="'$(Configuration)' == 'Release'">true</Optimize>
+
+    <!-- Allow unsafe: NEVER. Project rule. -->
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- NativeAOT opt-in per project; default off -->
+  <PropertyGroup>
+    <PublishAot>false</PublishAot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <StripSymbols>true</StripSymbols>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);NU1603</NoWarn>
+    <!--
+      XML doc comment warnings are noisy and not actionable in the hot loop of
+      authoring interfaces — many cref references intentionally span to
+      Harbor.Core implementations (e.g. ProviderRegistry.Freeze) that cannot be
+      referenced from Harbor.Abstractions without breaking the dependency
+      inversion. CS1570 (malformed XML), CS1571 (duplicate param tag),
+      CS1574 (unresolved cref), and CS0419 (ambiguous cref) are suppressed so
+      documentation improvements can land incrementally without blocking the
+      build.
+    -->
+    <NoWarn>$(NoWarn);CS1570;CS1571;CS1574;CS0419</NoWarn>
+  </PropertyGroup>
+
+  <!-- Analyzers: comprehensive static analysis -->
+  <ItemGroup>
+    <!-- Code style + quality -->
+    <PackageReference Include="Roslynator.Analyzers" Version="4.14.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.8.0.113526">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Microsoft official analyzers -->
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Async best practices -->
+    <PackageReference Include="AsyncFixer" Version="1.6.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Reflection detection (AOT-friendliness) -->
+    <PackageReference Include="ReflectionAnalyzers" Version="0.3.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Banned API analyzer (configure in .bannedapi.txt) -->
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.11.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Performance-focused analyzer -->
+    <PackageReference Include="Meziantou.Analyzer" Version="2.0.182">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
