@@ -5,6 +5,7 @@
     <PackageId>Harbor.Tui.TerminalGui</PackageId>
     <Description>Experimental Harbor TUI renderer using Terminal.Gui v2 (mainstream .NET TUI framework).</Description>
     <PackageTags>harbor;tui;terminal.gui;experimental</PackageTags>
+    <NoWarn>CS0618;NU1603</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />

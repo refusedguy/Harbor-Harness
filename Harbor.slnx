@@ -21,12 +21,13 @@
         <Project Path="src/Harbor.Tui.Abstractions/Harbor.Tui.Abstractions.csproj" />
         <Project Path="src/Harbor.Tui.Ansi/Harbor.Tui.Ansi.csproj" />
         <Project Path="src/Harbor.Tui.Plain/Harbor.Tui.Plain.csproj" />
-        <Project Path="src/Harbor.Tui.RazorConsole/Harbor.Tui.RazorConsole.csproj" />
+
         <Project Path="src/Harbor.Tui.Spectre.Fullscreen/Harbor.Tui.Spectre.Fullscreen.csproj" />
         <Project Path="src/Harbor.Tui.Spectre/Harbor.Tui.Spectre.csproj" />
         <Project Path="src/Harbor.Tui.SpectreTui/Harbor.Tui.SpectreTui.csproj" />
         <Project Path="src/Harbor.Tui.Termina/Harbor.Tui.Termina.csproj" />
         <Project Path="src/Harbor.Tui.TerminalGui/Harbor.Tui.TerminalGui.csproj" />
+        <Project Path="src/Harbor.Tui.RazorConsole/Harbor.Tui.RazorConsole.csproj" />
     </Folder>
     <Folder Name="/tests/">
         <Project Path="tests/Harbor.Abstractions.Tests/Harbor.Abstractions.Tests.csproj" />

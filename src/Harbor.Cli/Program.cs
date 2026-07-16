@@ -13,6 +13,10 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        try
+        {
+
+
         if (args.Length == 0)
             return await RunInteractiveAsync(args);
 
@@ -32,6 +36,12 @@ public static class Program
             "version" or "--version" or "-v" => PrintVersion(),
             _ => await RunInteractiveAsync()
         };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
     }
 
     private static async Task<int> RunInteractiveAsync(params string[] args)

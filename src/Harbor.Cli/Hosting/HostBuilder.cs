@@ -30,9 +30,10 @@ using Harbor.Tui.Spectre.Fullscreen;
 using System.Reflection;
 using System.Text.Json;
 using System.Threading.Channels;
+using Harbor.Tui.Termina;
+using Termina.Hosting;
 
 namespace Harbor.Cli.Hosting;
-
 /// <summary>
 /// DI host configuration — single responsibility: wire services.
 /// Extracted from Program.cs to reduce god object.
@@ -68,7 +69,11 @@ internal static class HostBuilder
         builder.Logging.AddProvider(new FileLoggerProvider(logLevel));
         if (logLevel <= LogLevel.Information)
         {
-            builder.Logging.AddSimpleConsole(o => { o.SingleLine = true; o.TimestampFormat = "HH:mm:ss "; });
+            builder.Logging.AddSimpleConsole(o =>
+            {
+                o.SingleLine = true;
+                o.TimestampFormat = "HH:mm:ss ";
+            });
         }
         builder.Logging.SetMinimumLevel(logLevel);
     }
@@ -187,7 +192,15 @@ internal static class HostBuilder
 
     private static void RegisterTui(HostApplicationBuilder builder)
     {
-        string tui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "ansi";
+        var configStore = new JsonConfigStore(logger: builder.Services.BuildServiceProvider().GetRequiredService<ILogger<JsonConfigStore>>());
+        var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
+
+        string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "ansi";
+        if (tui.ToLowerInvariant() is "termina")
+        {
+            builder.Services.AddSingleton<ChatBridge>();
+            builder.Services.AddTermina("/chat", termina => termina.RegisterRoute<ChatPage, ChatViewModel>("/chat"));
+        }
         builder.Services.AddSingleton<ITuiRenderer>(sp => tui.ToLowerInvariant() switch
         {
             "plain" => new PlainTuiRenderer(),

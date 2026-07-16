@@ -1,0 +1,49 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using global::RazorConsole.Components
+@using Spectre.Console
+@inject ChatBridge Harbor
+@implements IDisposable
+
+<Rows>
+    <Panel Title="@($"Harbor - {Harbor.AgentName} - {Harbor.Provider}/{Harbor.Model} - {Harbor.Status}")"
+           BorderColor="@Color.Grey">
+        <ViewHeightScrollable LinesToRender="20">
+            <Rows>
+                @foreach (var m in Harbor.Messages)
+                {
+                    <Markup Content="@m.Text" Foreground="@(m.IsUser ? Color.Green : Color.Blue)" />
+                }
+            </Rows>
+        </ViewHeightScrollable>
+    </Panel>
+
+    <TextInput @bind-Value="_input"
+               Placeholder="Message Harbor... (exit to quit)"
+               OnSubmit="Submit"
+               Expand="true" />
+</Rows>
+
+@code {
+    private string _input = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        Harbor.StateChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+
+    private async Task Submit()
+    {
+        var value = _input;
+        _input = string.Empty;
+        StateHasChanged();
+        await Harbor.SendAsync(value);
+    }
+
+    public void Dispose()
+    {
+        Harbor.StateChanged -= OnStateChanged;
+    }
+}
