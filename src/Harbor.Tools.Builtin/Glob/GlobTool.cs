@@ -39,9 +39,15 @@ public sealed class GlobTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        string pattern = args.GetProperty("pattern").GetString()!;
-        string basePath = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : Environment.CurrentDirectory;
-        bool ignoreGitignore = args.TryGetProperty("ignoreGitignore", out var ig) && ig.GetBoolean();
+        string pattern = args.TryGetProperty("pattern", out var p) && p.ValueKind == JsonValueKind.String
+            ? p.GetString()!
+            : string.Empty;
+
+        if (string.IsNullOrWhiteSpace(pattern))
+            return Task.FromResult(ToolResult.Error("Missing required argument 'pattern'."));
+
+        string basePath = args.TryGetProperty("path", out var bp) && bp.ValueKind == JsonValueKind.String ? bp.GetString()! : Environment.CurrentDirectory;
+        bool ignoreGitignore = args.TryGetProperty("ignoreGitignore", out var ig) && ig.ValueKind == JsonValueKind.True;
 
         if (!Directory.Exists(basePath))
             return Task.FromResult(ToolResult.Error($"Directory not found: {basePath}"));

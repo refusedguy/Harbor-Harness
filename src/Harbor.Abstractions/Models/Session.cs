@@ -205,8 +205,53 @@ public enum StopReason
     Aborted
 }
 
-internal sealed class StopReasonJsonConverter : JsonStringConverter<StopReason>
+public sealed class StopReasonJsonConverter : JsonStringConverter<StopReason>
 {
+    /// <summary>
+    ///     Parse a provider-supplied finish_reason string into a <see cref="StopReason" />,
+    ///     normalizing OpenAI/Anthropic/Ollama variants. Returns <see cref="StopReason.Stop" />
+    ///     when the string is null/unknown.
+    /// </summary>
+    public static StopReason Parse(string? finishReason)
+    {
+        if (finishReason is null)
+            return default;
+
+        switch (finishReason.ToLowerInvariant())
+        {
+            case "tool_calls":
+            case "tool_use":
+            case "function_call":
+                return StopReason.ToolUse;
+            case "length":
+            case "max_tokens":
+            case "max_tokens_length":
+                return StopReason.Length;
+            case "content_filter":
+            case "content_filtering":
+                return StopReason.ContentFilter;
+            case "abort":
+            case "aborted":
+            case "cancelled":
+                return StopReason.Aborted;
+            case "error":
+            case "failed":
+                return StopReason.Error;
+            case "stop":
+            case "end_turn":
+            case "finish":
+                return StopReason.Stop;
+            default:
+                return Enum.TryParse<StopReason>(finishReason, true, out var v) ? v : default;
+        }
+    }
+
+    /// <inheritdoc />
+    public override StopReason Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        string? s = reader.GetString();
+        return Parse(s);
+    }
 }
 
 /// <summary>

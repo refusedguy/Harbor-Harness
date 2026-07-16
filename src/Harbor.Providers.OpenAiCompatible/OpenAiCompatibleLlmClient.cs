@@ -178,6 +178,10 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         ApplyCompatFlags(payload, request);
 
         string json = JsonSerializer.Serialize(payload, JsonOptions);
+
+        _logger.LogDebug("BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}",
+            request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
+        _logger.LogDebug("BuildRequest payload:\n{Payload}", json);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")

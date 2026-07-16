@@ -1,5 +1,7 @@
+using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Models;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Agents;
@@ -81,6 +83,7 @@ public sealed class AgentLoop : IAgentLoop
             while (!ct.IsCancellationRequested)
             {
                 turn++;
+                _logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
                 await _eventBus.PublishAsync(new TurnStartEvent(turn), ct).ConfigureAwait(false);
 
                 // 1. Resolve model — Railway Oriented Programming style:
@@ -174,10 +177,14 @@ public sealed class AgentLoop : IAgentLoop
                 bool hasPendingText = false;
                 bool hasPendingThinking = false;
 
+                // Accumulator for tool calls streamed as Start + Delta fragments
+                // (OpenAI-compatible providers never emit ToolCallEndEvent).
+                var pendingToolCalls = new Dictionary<string, (string Name, StringBuilder Args)>();
                 try
                 {
                     await foreach (var evt in client.StreamAsync(request, ct).ConfigureAwait(false))
                     {
+                        _logger.LogTrace("Stream event: {EventType}", evt.GetType().Name);
                         switch (evt)
                         {
                             case TextDeltaEvent td:
@@ -206,8 +213,8 @@ public sealed class AgentLoop : IAgentLoop
                                 await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
                                 break;
 
-                            case ToolCallEndEvent tce:
-                                // Flush any pending text/thinking before attaching the tool call.
+                            case ToolCallStartEvent tcs:
+                                // Flush any pending text/thinking before tracking the tool call.
                                 if (hasPendingText)
                                 {
                                     partial = partial.AppendText(textBuffer.ToString());
@@ -220,11 +227,16 @@ public sealed class AgentLoop : IAgentLoop
                                     thinkingBuffer.Builder.Clear();
                                     hasPendingThinking = false;
                                 }
-                                // Intern the tool name via StringPool — tool names are highly repeated.
-                                string internedName = StringPool.Shared.GetOrAdd(tce.ToolName);
-                                var newToolCall = new ToolCallPart(tce.Id, internedName, tce.Args);
-                                partial = partial.AppendToolCall(newToolCall);
-                                toolCalls.Add(newToolCall);
+                                pendingToolCalls[tcs.Id] = (tcs.ToolName, new StringBuilder());
+                                await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
+                                break;
+
+                            case ToolCallDeltaEvent tcd:
+                                if (pendingToolCalls.TryGetValue(tcd.Id, out var acc))
+                                {
+                                    acc.Args.Append(tcd.ArgsDelta);
+                                    pendingToolCalls[tcd.Id] = acc;
+                                }
                                 await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
                                 break;
 
@@ -242,11 +254,32 @@ public sealed class AgentLoop : IAgentLoop
                                     thinkingBuffer.Builder.Clear();
                                     hasPendingThinking = false;
                                 }
-                                finalUsage = sf.Usage;
-                                if (Enum.TryParse<StopReason>(sf.FinishReason, true, out var sr))
+
+                                // Materialize any tool calls accumulated from Start/Delta fragments.
+                                foreach (var (id, (name, args)) in pendingToolCalls)
                                 {
-                                    stopReason = sr;
+                                    JsonElement parsedArgs;
+                                    try
+                                    {
+                                        using var doc = JsonDocument.Parse(
+                                            args.Length == 0 ? "{}" : args.ToString());
+                                        parsedArgs = doc.RootElement.Clone();
+                                    }
+                                    catch (JsonException)
+                                    {
+                                        parsedArgs = JsonDocument.Parse("{}").RootElement.Clone();
+                                    }
+
+                                    // Intern the tool name via StringPool — tool names are highly repeated.
+                                    string internedName = StringPool.Shared.GetOrAdd(name);
+                                    var newToolCall = new ToolCallPart(id, internedName, parsedArgs);
+                                    partial = partial.AppendToolCall(newToolCall);
+                                    toolCalls.Add(newToolCall);
                                 }
+                                pendingToolCalls.Clear();
+
+                                finalUsage = sf.Usage;
+                                stopReason = StopReasonJsonConverter.Parse(sf.FinishReason);
                                 partial = partial.WithFinish(stopReason, finalUsage ?? new Usage(0, 0));
                                 break;
 
@@ -280,6 +313,7 @@ public sealed class AgentLoop : IAgentLoop
                 }
 
                 // 7. No tool calls? done
+                _logger.LogDebug("Turn {Turn}: toolCalls={ToolCalls} stopReason={StopReason}", turn, toolCalls.Count, stopReason);
                 if (toolCalls.Count == 0 || stopReason is StopReason.Stop or StopReason.Length or StopReason.Aborted)
                 {
                     await _eventBus.PublishAsync(
@@ -290,6 +324,11 @@ public sealed class AgentLoop : IAgentLoop
                 // 8. Execute tool calls
                 var toolResults = await ExecuteToolCallsAsync(
                     toolCalls, session, partial, agent, ct).ConfigureAwait(false);
+
+                // Persist the tool results so the next turn can feed them back
+                // to the model (OpenAI requires a `tool` role message after a
+                // tool_call, otherwise the model loops calling the same tool).
+                await session.AppendMessageAsync(toolResults, ct).ConfigureAwait(false);
 
                 await _eventBus.PublishAsync(
                     new TurnEndEvent(partial, new[] { toolResults }), ct).ConfigureAwait(false);
@@ -456,6 +495,17 @@ public sealed class AgentLoop : IAgentLoop
         {
             var tool = toolResult.Value;
 
+            // Argument validation — returns a tool error instead of letting the
+            // tool throw (e.g. KeyNotFoundException on a missing required prop).
+            var validation = tool.ValidateArguments(toolCall.Args);
+            if (validation.IsFailure)
+            {
+                var invalid = ToolResult.Error(validation.Error);
+                await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+                    toolCall.Id, invalid, true), ct).ConfigureAwait(false);
+                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
+            }
+
             // Permission check
             var permResponse = await _permissions.CheckAsync(
                 agent.Name.Value, toolCall.ToolName, toolCall.Args, ct).ConfigureAwait(false);
@@ -469,6 +519,7 @@ public sealed class AgentLoop : IAgentLoop
             }
 
             // Execute
+            _logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
             var ctx = new ToolContext(
                 session.Session.Id,
                 partial.Id,

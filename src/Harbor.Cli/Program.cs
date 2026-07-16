@@ -32,14 +32,64 @@ using Harbor.Tui.Spectre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Harbor.Cli.Logging;
 namespace Harbor.Cli;
 public static class Program
 {
+    /// <summary>
+    ///     Resolve the minimum log level from the <c>--loglevel &lt;level&gt;</c> CLI flag or the
+    ///     <c>HARBOR_LOGLEVEL</c> environment variable. Defaults to <see cref="LogLevel.Warning" />.
+    /// </summary>
+    /// <summary>
+    ///     Strip <c>--loglevel/-ll</c> and its value from the argument list so they don't leak
+    ///     into the user prompt (e.g. for the <c>ask</c> command).
+    /// </summary>
+    private static string[] StripLogArgs(string[] args)
+    {
+        var result = new List<string>(args.Length);
+        var i = 0;
+        while (i < args.Length)
+        {
+            if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
+                args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
+            {
+                i += 2; // skip the flag and its following value
+                continue;
+            }
+
+            result.Add(args[i]);
+            i++;
+        }
+        return result.ToArray();
+    }
+
+    private static LogLevel ResolveLogLevel(string[] args)
+    {
+        string? raw = null;
+
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
+                args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
+            {
+                raw = args[i + 1];
+                break;
+            }
+        }
+
+        raw ??= Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL");
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return LogLevel.Warning;
+
+        return Enum.TryParse<LogLevel>(raw, true, out var level) ? level : LogLevel.Warning;
+    }
+
     public static async Task<int> Main(string[] args)
     {
         if (args.Length == 0)
         {
-            return await RunInteractiveAsync();
+            return await RunInteractiveAsync(args);
         }
 
         string command = args[0].ToLowerInvariant();
@@ -60,7 +110,7 @@ public static class Program
         };
     }
 
-    private static IHost BuildHost()
+    private static IHost BuildHost(params string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string harborDir = Path.Combine(homeDir, ".harbor");
@@ -75,12 +125,26 @@ public static class Program
         var builder = Host.CreateApplicationBuilder();
 
         builder.Logging.ClearProviders();
-        builder.Logging.AddSimpleConsole(o =>
+
+        // Default to Warning to keep the TUI output clean. Override via the
+        // HARBOR_LOGLEVEL env var or the --loglevel <level> CLI flag (e.g.
+        // "debug", "information", "trace") for debugging the agent pipeline.
+        var logLevel = ResolveLogLevel(args);
+
+        // File logger — always on (dated file in <exe>/logs) so the full
+        // startup→completion pipeline is captured regardless of TUI noise.
+        var fileLogger = new FileLoggerProvider(logLevel);
+        builder.Logging.AddProvider(fileLogger);
+
+        if (logLevel <= LogLevel.Information)
         {
-            o.SingleLine = true;
-            o.TimestampFormat = "HH:mm:ss ";
-        });
-        builder.Logging.SetMinimumLevel(LogLevel.Warning);
+            builder.Logging.AddSimpleConsole(o =>
+            {
+                o.SingleLine = true;
+                o.TimestampFormat = "HH:mm:ss ";
+            });
+        }
+        builder.Logging.SetMinimumLevel(logLevel);
 
         // Configuration
         builder.Services.AddSingleton<IConfigStore>(sp => new JsonConfigStore(
@@ -329,9 +393,9 @@ public static class Program
         }
     }
 
-    private static async Task<int> RunInteractiveAsync()
+    private static async Task<int> RunInteractiveAsync(params string[] args)
     {
-        using var host = BuildHost();
+        using var host = BuildHost(args);
         var sp = host.Services;
 
         var configStore = sp.GetRequiredService<IConfigStore>();
@@ -543,7 +607,7 @@ public static class Program
 
     private static async Task<int> RunAuthAsync(string[] args)
     {
-        using var host = BuildHost();
+        using var host = BuildHost(args);
         var authStore = host.Services.GetRequiredService<AuthStore>();
 
         var writer = (Action<string>)Console.WriteLine;
@@ -555,7 +619,7 @@ public static class Program
 
     private static async Task<int> RunConfigAsync(string[] args)
     {
-        using var host = BuildHost();
+        using var host = BuildHost(args);
         var configStore = host.Services.GetRequiredService<IConfigStore>();
         var writer = (Action<string>)Console.WriteLine;
         var cmd = new ConfigCommand(configStore, writer);
@@ -572,8 +636,8 @@ public static class Program
             return 1;
         }
 
-        string prompt = string.Join(' ', args);
-        using var host = BuildHost();
+        string prompt = string.Join(' ', StripLogArgs(args));
+        using var host = BuildHost(args);
         var sp = host.Services;
 
         var renderer = sp.GetRequiredService<ITuiRenderer>();
