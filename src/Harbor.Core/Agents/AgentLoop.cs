@@ -232,6 +232,7 @@ public sealed class AgentLoop : IAgentLoop
                                 break;
 
                             case ToolCallDeltaEvent tcd:
+                                _logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
                                 if (pendingToolCalls.TryGetValue(tcd.Id, out var acc))
                                 {
                                     acc.Args.Append(tcd.ArgsDelta);

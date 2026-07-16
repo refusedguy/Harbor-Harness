@@ -22,6 +22,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
     private readonly IModelCatalog _modelCatalog;
 
+    // State carried across streaming chunks for a single StreamAsync call:
+    // OpenAI sends tool_call id/name only in the first delta of a given index,
+    // while arguments arrive as fragments across subsequent deltas. We map by
+    // the stable `index` so all fragments of one tool call share one id.
+    private readonly Dictionary<int, string> _toolCallIndexToId = new();
+
     public OpenAiCompatibleLlmClient(
         HttpClient http,
         ProviderConfig config,
@@ -87,6 +93,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
                     await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                     using var reader = new StreamReader(stream);
+
+                    // Reset per-stream tool-call accumulation state.
+                    _toolCallIndexToId.Clear();
 
                     string? line;
                     while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
@@ -304,14 +313,29 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 foreach (var tc in tcs.EnumerateArray())
                 {
-                    string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                    // OpenAI streams tool calls as an array; each entry carries a stable
+                    // `index` for the duration of the call. The `id` (and `name`) arrive only
+                    // in the first delta for that index; argument fragments follow in later
+                    // deltas with the same index but no id. Map by index so every fragment
+                    // shares one stable id.
+                    int index = tc.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number
+                        ? idxEl.GetInt32()
+                        : 0;
+
+                    string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
+                        ? idEl.GetString()!
+                        : _toolCallIndexToId.GetValueOrDefault(index) ?? $"tc{index}";
+                    _toolCallIndexToId[index] = id;
+
                     var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                     if (fn.ValueKind == JsonValueKind.Object)
                     {
                         string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
                         if (!string.IsNullOrEmpty(name))
+                        {
                             yield return new ToolCallStartEvent(id, name!);
+                        }
 
                         if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
                         {
