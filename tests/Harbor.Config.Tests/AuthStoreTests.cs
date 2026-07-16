@@ -1,13 +1,9 @@
 using Harbor.Core.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Config.Tests;
-
 /// <summary>
-/// Tests for AuthStore — manages per-provider API keys in HarborConfig
-/// with env-var fallback.
+///     Tests for AuthStore — manages per-provider API keys in HarborConfig
+///     with env-var fallback.
 /// </summary>
 public class AuthStoreTests
 {
@@ -16,7 +12,7 @@ public class AuthStoreTests
 
     private static (AuthStore auth, JsonConfigStore store, string path) CreateAuthStore()
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
         return (auth, store, path);
@@ -25,7 +21,7 @@ public class AuthStoreTests
     [Test]
     public async Task GetApiKeyAsync_ReturnsFromConfig_WhenSet()
     {
-        var (auth, store, path) = CreateAuthStore();
+        (var auth, var store, string path) = CreateAuthStore();
         try
         {
             await auth.SetApiKeyAsync("anthropic", "sk-ant-from-config");
@@ -38,7 +34,7 @@ public class AuthStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -46,8 +42,8 @@ public class AuthStoreTests
     [Test]
     public async Task GetApiKeyAsync_FallsBackToEnvVar()
     {
-        var (auth, _, path) = CreateAuthStore();
-        var envName = "ACMEPROVIDER_API_KEY";
+        (var auth, _, string path) = CreateAuthStore();
+        string envName = "ACMEPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, "env-value-xyz");
         try
         {
@@ -60,7 +56,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable(envName, null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -68,8 +64,8 @@ public class AuthStoreTests
     [Test]
     public async Task GetApiKeyAsync_ConfigTakesPriorityOverEnvVar()
     {
-        var (auth, _, path) = CreateAuthStore();
-        var envName = "DUALPROVIDER_API_KEY";
+        (var auth, _, string path) = CreateAuthStore();
+        string envName = "DUALPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, "env-value");
         try
         {
@@ -84,7 +80,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable(envName, null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -92,7 +88,7 @@ public class AuthStoreTests
     [Test]
     public async Task GetApiKeyAsync_FailsWhenNeitherConfigNorEnvVar()
     {
-        var (auth, _, path) = CreateAuthStore();
+        (var auth, _, string path) = CreateAuthStore();
         // Clear any env var that might exist for this provider id.
         Environment.SetEnvironmentVariable("UNKNOWNPROVIDER_API_KEY", null);
         try
@@ -105,7 +101,7 @@ public class AuthStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -113,7 +109,7 @@ public class AuthStoreTests
     [Test]
     public async Task SetApiKeyAsync_PersistsAcrossReload()
     {
-        var (auth, store, path) = CreateAuthStore();
+        (var auth, var store, string path) = CreateAuthStore();
         try
         {
             await auth.SetApiKeyAsync("openai", "sk-openai-abc");
@@ -129,7 +125,7 @@ public class AuthStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -137,7 +133,7 @@ public class AuthStoreTests
     [Test]
     public async Task RemoveApiKeyAsync_DeletesFromConfig()
     {
-        var (auth, store, path) = CreateAuthStore();
+        (var auth, var store, string path) = CreateAuthStore();
         try
         {
             await auth.SetApiKeyAsync("anthropic", "sk-ant");
@@ -157,7 +153,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -165,7 +161,7 @@ public class AuthStoreTests
     [Test]
     public async Task ListApiKeysAsync_ShowsConfiguredKeys()
     {
-        var (auth, _, path) = CreateAuthStore();
+        (var auth, _, string path) = CreateAuthStore();
         // Clean env var that might interfere.
         Environment.SetEnvironmentVariable("LISTTESTPROVIDER_API_KEY", null);
         try
@@ -182,7 +178,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable("LISTTESTPROVIDER_API_KEY", null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -190,8 +186,8 @@ public class AuthStoreTests
     [Test]
     public async Task ListApiKeysAsync_ShowsEnvVarKeys()
     {
-        var (auth, _, path) = CreateAuthStore();
-        var envName = "ENVLISTPROVIDER_API_KEY";
+        (var auth, _, string path) = CreateAuthStore();
+        string envName = "ENVLISTPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, "from-env");
         try
         {
@@ -205,7 +201,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable(envName, null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -213,7 +209,7 @@ public class AuthStoreTests
     [Test]
     public async Task SetApiKeyAsync_OverwritesPreviousValue()
     {
-        var (auth, _, path) = CreateAuthStore();
+        (var auth, _, string path) = CreateAuthStore();
         try
         {
             await auth.SetApiKeyAsync("anthropic", "first-key");
@@ -229,7 +225,7 @@ public class AuthStoreTests
         {
             Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }

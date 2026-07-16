@@ -1,7 +1,7 @@
-using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -9,20 +9,17 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.Anthropic;
-
 /// <summary>
-/// Native Anthropic Messages API client.
-/// Implements Strategy pattern (GOF) via ILlmClient.
-///
-/// Special features beyond OpenAI-compat:
-/// - cache_control (ephemeral, 1h TTL)
-/// - extended thinking (budget_tokens)
-/// - fine-grained tool streaming beta
-/// - interleaved thinking beta
-/// - tool_result as content block in user message
-/// - system as separate field (not message)
+///     Native Anthropic Messages API client.
+///     Implements Strategy pattern (GOF) via ILlmClient.
+///     Special features beyond OpenAI-compat:
+///     - cache_control (ephemeral, 1h TTL)
+///     - extended thinking (budget_tokens)
+///     - fine-grained tool streaming beta
+///     - interleaved thinking beta
+///     - tool_result as content block in user message
+///     - system as separate field (not message)
 /// </summary>
 public sealed class AnthropicLlmClient : ILlmClient
 {
@@ -33,15 +30,13 @@ public sealed class AnthropicLlmClient : ILlmClient
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private readonly IAnthropicAuthResolver _auth;
+    private readonly AnthropicConfig _config;
 
     private readonly HttpClient _http;
-    private readonly AnthropicConfig _config;
-    private readonly IAnthropicAuthResolver _auth;
     private readonly ILogger<AnthropicLlmClient> _logger;
-
-    public ProviderId ProviderId { get; } = ProviderId.Create("anthropic");
 
     public AnthropicLlmClient(
         HttpClient http,
@@ -55,6 +50,8 @@ public sealed class AnthropicLlmClient : ILlmClient
         _logger = logger;
     }
 
+    public ProviderId ProviderId { get; } = ProviderId.Create("anthropic");
+
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -62,7 +59,7 @@ public sealed class AnthropicLlmClient : ILlmClient
         var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
-            SingleWriter = false,
+            SingleWriter = false
         });
 
         var writer = channel.Writer;
@@ -96,7 +93,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         await writer.WriteAsync(new ErrorEvent($"Anthropic API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -112,7 +109,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                         // Anthropic SSE format: "event: type\ndata: {...}"
                         if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
 
-                        var data = line.Substring(6);
+                        string data = line.Substring(6);
                         foreach (var evt in MapAnthropicEvent(data))
                         {
                             await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
@@ -145,21 +142,21 @@ public sealed class AnthropicLlmClient : ILlmClient
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
     {
         // Anthropic doesn't have a /models endpoint — return hardcoded catalog
-        IReadOnlyList<ModelInfo> models = AnthropicModels.All;
+        var models = AnthropicModels.All;
         return Task.FromResult(Result.Success(models));
     }
 
     private HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
-        var baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-        var url = $"{baseUrl}/messages";
+        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        string url = $"{baseUrl}/messages";
 
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["messages"] = BuildMessages(request),
             ["stream"] = true,
-            ["max_tokens"] = request.MaxOutputTokens ?? 8192,
+            ["max_tokens"] = request.MaxOutputTokens ?? 8192
         };
 
         // System prompt as separate field with optional cache_control
@@ -173,8 +170,8 @@ public sealed class AnthropicLlmClient : ILlmClient
                     {
                         type = "text",
                         text = request.SystemPrompt,
-                        cache_control = new { type = "ephemeral" },
-                    },
+                        cache_control = new { type = "ephemeral" }
+                    }
                 };
             }
             else
@@ -190,13 +187,13 @@ public sealed class AnthropicLlmClient : ILlmClient
         // Extended thinking
         if (request.ReasoningEffort.HasValue)
         {
-            var budget = request.ReasoningEffort.Value switch
+            int budget = request.ReasoningEffort.Value switch
             {
                 ReasoningEffort.Low => 5000,
                 ReasoningEffort.Medium => 10000,
                 ReasoningEffort.High => 20000,
                 ReasoningEffort.Max => 32000,
-                _ => 10000,
+                _ => 10000
             };
             payload["thinking"] = new { type = "enabled", budget_tokens = budget };
         }
@@ -207,7 +204,7 @@ public sealed class AnthropicLlmClient : ILlmClient
             {
                 name = t.Name,
                 description = t.Description,
-                input_schema = t.InputSchema,
+                input_schema = t.InputSchema
             });
         }
 
@@ -219,14 +216,14 @@ public sealed class AnthropicLlmClient : ILlmClient
                 ToolChoice.None => new { type = "none" },
                 ToolChoice.Required => new { type = "any" },
                 ToolChoice.Specific s => new { type = "tool", name = s.ToolName },
-                _ => new { type = "auto" },
+                _ => new { type = "auto" }
             };
         }
 
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        string json = JsonSerializer.Serialize(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
         // Auth: x-api-key header
@@ -249,7 +246,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                     result.Add(new
                     {
                         role = "user",
-                        content = ConvertContentBlocks(u.Content),
+                        content = ConvertContentBlocks(u.Content)
                     });
                     break;
 
@@ -257,7 +254,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                     result.Add(new
                     {
                         role = "assistant",
-                        content = ConvertContentBlocks(a.Content),
+                        content = ConvertContentBlocks(a.Content)
                     });
                     break;
 
@@ -273,9 +270,9 @@ public sealed class AnthropicLlmClient : ILlmClient
                                 type = "tool_result",
                                 tool_use_id = tr.ToolCallId,
                                 content = tr.Output,
-                                is_error = tr.IsError,
-                            },
-                        },
+                                is_error = tr.IsError
+                            }
+                        }
                     });
                     break;
             }
@@ -290,8 +287,8 @@ public sealed class AnthropicLlmClient : ILlmClient
         if (blocks.Count == 1 && blocks[0] is LlmTextBlock text)
             return text.Text;
 
-        var converted = new object[blocks.Count];
-        for (var i = 0; i < blocks.Count; i++)
+        object[] converted = new object[blocks.Count];
+        for (int i = 0; i < blocks.Count; i++)
         {
             converted[i] = blocks[i] switch
             {
@@ -303,29 +300,29 @@ public sealed class AnthropicLlmClient : ILlmClient
                     {
                         type = "base64",
                         media_type = img.MimeType,
-                        data = Convert.ToBase64String(img.Data),
-                    },
+                        data = Convert.ToBase64String(img.Data)
+                    }
                 },
                 LlmToolCallBlock tc => new
                 {
                     type = "tool_use",
                     id = tc.Id,
                     name = tc.Name,
-                    input = tc.Arguments.Deserialize<JsonElement>(),
+                    input = tc.Arguments.Deserialize<JsonElement>()
                 },
                 LlmToolResultBlock tr => new
                 {
                     type = "tool_result",
                     tool_use_id = tr.ToolUseId,
                     content = tr.Content,
-                    is_error = tr.IsError,
+                    is_error = tr.IsError
                 },
                 LlmThinkingBlock th => new
                 {
                     type = "thinking",
-                    thinking = th.Text,
+                    thinking = th.Text
                 },
-                _ => new { type = "text", text = "" },
+                _ => new { type = "text", text = "" }
             };
         }
         return converted;
@@ -347,7 +344,7 @@ public sealed class AnthropicLlmClient : ILlmClient
 
     private IEnumerable<LlmEvent> MapAnthropicEventFromDocument(JsonElement root)
     {
-        var type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+        string? type = root.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
 
         switch (type)
         {
@@ -359,8 +356,8 @@ public sealed class AnthropicLlmClient : ILlmClient
                 if (root.TryGetProperty("content_block", out var block) &&
                     block.TryGetProperty("type", out var blockType))
                 {
-                    var id = block.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "0" : "0";
-                    var blockTypeStr = blockType.GetString();
+                    string id = block.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "0" : "0";
+                    string? blockTypeStr = blockType.GetString();
 
                     if (blockTypeStr == "text")
                         yield return new TextStartEvent(id);
@@ -368,7 +365,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                         yield return new ThinkingStartEvent(id);
                     else if (blockTypeStr == "tool_use")
                     {
-                        var name = block.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
+                        string name = block.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
                         yield return new ToolCallStartEvent(id, name);
                     }
                 }
@@ -377,15 +374,15 @@ public sealed class AnthropicLlmClient : ILlmClient
             case "content_block_delta":
                 if (root.TryGetProperty("delta", out var delta))
                 {
-                    var deltaType = delta.TryGetProperty("type", out var dt) ? dt.GetString() : null;
-                    var id = "0"; // Anthropic doesn't include id in deltas; track via index
+                    string? deltaType = delta.TryGetProperty("type", out var dt) ? dt.GetString() : null;
+                    string id = "0"; // Anthropic doesn't include id in deltas; track via index
 
                     switch (deltaType)
                     {
                         case "text_delta":
                             if (delta.TryGetProperty("text", out var textEl))
                             {
-                                var text = textEl.GetString();
+                                string? text = textEl.GetString();
                                 if (!string.IsNullOrEmpty(text))
                                     yield return new TextDeltaEvent(id, text);
                             }
@@ -394,7 +391,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                         case "thinking_delta":
                             if (delta.TryGetProperty("thinking", out var thEl))
                             {
-                                var text = thEl.GetString();
+                                string? text = thEl.GetString();
                                 if (!string.IsNullOrEmpty(text))
                                     yield return new ThinkingDeltaEvent(id, text);
                             }
@@ -403,7 +400,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                         case "input_json_delta":
                             if (delta.TryGetProperty("partial_json", out var pjEl))
                             {
-                                var text = pjEl.GetString();
+                                string? text = pjEl.GetString();
                                 if (!string.IsNullOrEmpty(text))
                                     yield return new ToolCallDeltaEvent(id, text);
                             }
@@ -416,14 +413,14 @@ public sealed class AnthropicLlmClient : ILlmClient
                 if (root.TryGetProperty("delta", out var msgDelta) &&
                     msgDelta.TryGetProperty("stop_reason", out var stopEl))
                 {
-                    var stopReason = stopEl.GetString();
+                    string? stopReason = stopEl.GetString();
                     var usage = root.TryGetProperty("usage", out var usageEl)
                         ? new Usage(
-                            InputTokens: usageEl.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0,
-                            OutputTokens: usageEl.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0,
-                            ReasoningTokens: null,
-                            CacheReadTokens: usageEl.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : null,
-                            CacheWriteTokens: usageEl.TryGetProperty("cache_creation_input_tokens", out var cw) ? cw.GetInt32() : null)
+                            usageEl.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0,
+                            usageEl.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0,
+                            null,
+                            usageEl.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : null,
+                            usageEl.TryGetProperty("cache_creation_input_tokens", out var cw) ? cw.GetInt32() : null)
                         : null;
 
                     yield return new StepFinishEvent(0, stopReason ?? "stop", usage);
@@ -438,7 +435,7 @@ public sealed class AnthropicLlmClient : ILlmClient
 }
 
 /// <summary>
-/// Configuration for AnthropicLlmClient.
+///     Configuration for AnthropicLlmClient.
 /// </summary>
 public sealed class AnthropicConfig
 {
@@ -448,15 +445,15 @@ public sealed class AnthropicConfig
 }
 
 /// <summary>
-/// Auth resolver specifically for Anthropic.
+///     Auth resolver specifically for Anthropic.
 /// </summary>
 public interface IAnthropicAuthResolver
 {
-    Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
+    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
 }
 
 /// <summary>
-/// Default env-var based auth resolver for Anthropic.
+///     Default env-var based auth resolver for Anthropic.
 /// </summary>
 public sealed class EnvVarAnthropicAuthResolver : IAnthropicAuthResolver
 {
@@ -473,7 +470,7 @@ public sealed class EnvVarAnthropicAuthResolver : IAnthropicAuthResolver
         if (!string.IsNullOrEmpty(_override))
             return Task.FromResult(Result.Success(_override));
 
-        var envValue = Environment.GetEnvironmentVariable(EnvVarName);
+        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
         if (string.IsNullOrEmpty(envValue))
             return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --anthropic-api-key."));
 
@@ -482,63 +479,63 @@ public sealed class EnvVarAnthropicAuthResolver : IAnthropicAuthResolver
 }
 
 /// <summary>
-/// Hardcoded catalog of Anthropic models (no /models endpoint).
+///     Hardcoded catalog of Anthropic models (no /models endpoint).
 /// </summary>
 public static class AnthropicModels
 {
     public static readonly ModelInfo ClaudeOpus4 = new(
-        Id: "claude-opus-4-20250514",
-        ProviderId: "anthropic",
-        DisplayName: "Claude Opus 4",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 32_000,
-        SupportsReasoning: true,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(15m, 75m, 1.5m, 18.75m),
-        PromptTemplate: "anthropic");
+        "claude-opus-4-20250514",
+        "anthropic",
+        "Claude Opus 4",
+        200_000,
+        32_000,
+        true,
+        true,
+        true,
+        new Pricing(15m, 75m, 1.5m, 18.75m),
+        "anthropic");
 
     public static readonly ModelInfo ClaudeSonnet4 = new(
-        Id: "claude-sonnet-4-20250514",
-        ProviderId: "anthropic",
-        DisplayName: "Claude Sonnet 4",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 16_000,
-        SupportsReasoning: true,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(3m, 15m, 0.3m, 3.75m),
-        PromptTemplate: "anthropic");
+        "claude-sonnet-4-20250514",
+        "anthropic",
+        "Claude Sonnet 4",
+        200_000,
+        16_000,
+        true,
+        true,
+        true,
+        new Pricing(3m, 15m, 0.3m, 3.75m),
+        "anthropic");
 
     public static readonly ModelInfo ClaudeSonnet35 = new(
-        Id: "claude-3-5-sonnet-20241022",
-        ProviderId: "anthropic",
-        DisplayName: "Claude 3.5 Sonnet",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 8192,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(3m, 15m, 0.3m, 3.75m),
-        PromptTemplate: "anthropic");
+        "claude-3-5-sonnet-20241022",
+        "anthropic",
+        "Claude 3.5 Sonnet",
+        200_000,
+        8192,
+        false,
+        true,
+        true,
+        new Pricing(3m, 15m, 0.3m, 3.75m),
+        "anthropic");
 
     public static readonly ModelInfo ClaudeHaiku35 = new(
-        Id: "claude-3-5-haiku-20241022",
-        ProviderId: "anthropic",
-        DisplayName: "Claude 3.5 Haiku",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 8192,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(0.8m, 4m, 0.08m, 1m),
-        PromptTemplate: "anthropic");
+        "claude-3-5-haiku-20241022",
+        "anthropic",
+        "Claude 3.5 Haiku",
+        200_000,
+        8192,
+        false,
+        true,
+        true,
+        new Pricing(0.8m, 4m, 0.08m, 1m),
+        "anthropic");
 
     public static readonly IReadOnlyList<ModelInfo> All = new[]
     {
         ClaudeOpus4,
         ClaudeSonnet4,
         ClaudeSonnet35,
-        ClaudeHaiku35,
+        ClaudeHaiku35
     };
 }

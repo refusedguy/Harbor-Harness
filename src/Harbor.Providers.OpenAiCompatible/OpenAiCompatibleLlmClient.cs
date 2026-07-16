@@ -1,35 +1,26 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.OpenAiCompatible;
-
 /// <summary>
-/// Generic OpenAI-compatible LLM client. Implements Strategy pattern (GOF).
-/// Covers OpenRouter, DeepSeek, Groq, Together, Mistral, xAI, Ollama, LM Studio, and dozens of others.
+///     Generic OpenAI-compatible LLM client. Implements Strategy pattern (GOF).
+///     Covers OpenRouter, DeepSeek, Groq, Together, Mistral, xAI, Ollama, LM Studio, and dozens of others.
 /// </summary>
 public sealed class OpenAiCompatibleLlmClient : ILlmClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private readonly IAuthResolver _auth;
+    private readonly ProviderConfig _config;
 
     private readonly HttpClient _http;
-    private readonly ProviderConfig _config;
-    private readonly IAuthResolver _auth;
-    private readonly IModelCatalog _modelCatalog;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
-
-    public ProviderId ProviderId { get; }
+    private readonly IModelCatalog _modelCatalog;
 
     public OpenAiCompatibleLlmClient(
         HttpClient http,
@@ -46,6 +37,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         ProviderId = config.GetProviderId();
     }
 
+    public ProviderId ProviderId { get; }
+
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -53,7 +46,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
-            SingleWriter = false,
+            SingleWriter = false
         });
 
         var writer = channel.Writer;
@@ -87,7 +80,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         await writer.WriteAsync(new ErrorEvent($"API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -102,7 +95,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
                         if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
 
-                        var data = line.Substring(6);
+                        string data = line.Substring(6);
                         if (data == "[DONE]")
                         {
                             await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
@@ -138,26 +131,23 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         }
     }
 
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-    {
-        return await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
-    }
+    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) => await _modelCatalog.GetModelsAsync(_config, cancellationToken).ConfigureAwait(false);
 
     private HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
-        var url = $"{_config.BaseUrl.TrimEnd('/')}/chat/completions";
+        string url = $"{_config.BaseUrl.TrimEnd('/')}/chat/completions";
 
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["messages"] = BuildMessages(request),
             ["stream"] = true,
-            ["stream_options"] = new { include_usage = true },
+            ["stream_options"] = new { include_usage = true }
         };
 
         if (request.MaxOutputTokens.HasValue)
         {
-            var field = _config.Capabilities?.GetValueOrDefault("maxTokensField", "max_tokens") ?? "max_tokens";
+            string field = _config.Capabilities?.GetValueOrDefault("maxTokensField", "max_tokens") ?? "max_tokens";
             payload[field] = request.MaxOutputTokens;
         }
 
@@ -169,7 +159,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             payload["tools"] = request.Tools.Select(t => new
             {
                 type = "function",
-                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema },
+                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema }
             });
         }
 
@@ -181,19 +171,19 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 ToolChoice.None => "none",
                 ToolChoice.Required => "required",
                 ToolChoice.Specific s => new { type = "function", function = new { name = s.ToolName } },
-                _ => "auto",
+                _ => "auto"
             };
         }
 
         ApplyCompatFlags(payload, request);
 
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        string json = JsonSerializer.Serialize(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
-        foreach (var (k, v) in _config.Headers ?? new())
+        foreach ((string k, string v) in _config.Headers ?? new Dictionary<string, string>())
             msg.Headers.TryAddWithoutValidation(k, v);
 
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -235,7 +225,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         LlmUserMessage u => new
         {
             role = "user",
-            content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "",
+            content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
         },
         LlmAssistantMessage a => new
         {
@@ -245,16 +235,16 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 id = tc.Id,
                 type = "function",
-                function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() },
-            }).ToList(),
+                function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() }
+            }).ToList()
         },
         LlmToolResultMessage tr => new
         {
             role = "tool",
             tool_call_id = tr.ToolCallId,
-            content = tr.Output,
+            content = tr.Output
         },
-        _ => new { role = "user", content = "" },
+        _ => new { role = "user", content = "" }
     };
 
     private IEnumerable<LlmEvent> MapChunk(string data)
@@ -274,13 +264,13 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     private IEnumerable<LlmEvent> MapChunkFromDocument(JsonElement root)
     {
-        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new();
+        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new List<JsonElement>();
         if (choices.Count == 0)
         {
             if (root.TryGetProperty("usage", out var usage))
             {
-                var inputTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
-                var outputTokens = usage.TryGetProperty("completion_tokens", out var ct2) ? ct2.GetInt32() : 0;
+                int inputTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
+                int outputTokens = usage.TryGetProperty("completion_tokens", out var ct2) ? ct2.GetInt32() : 0;
                 yield return new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens));
             }
             yield break;
@@ -288,20 +278,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         var choice = choices[0];
         var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        var finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
+        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
 
         if (delta.ValueKind == JsonValueKind.Object)
         {
             if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
             {
-                var text = content.GetString();
+                string? text = content.GetString();
                 if (!string.IsNullOrEmpty(text))
                     yield return new TextDeltaEvent("0", text);
             }
 
             if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
             {
-                var text = reasoning.GetString();
+                string? text = reasoning.GetString();
                 if (!string.IsNullOrEmpty(text))
                     yield return new ThinkingDeltaEvent("0", text);
             }
@@ -310,18 +300,18 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
             {
                 foreach (var tc in tcs.EnumerateArray())
                 {
-                    var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                    string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
                     var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                     if (fn.ValueKind == JsonValueKind.Object)
                     {
-                        var name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
+                        string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
                         if (!string.IsNullOrEmpty(name))
                             yield return new ToolCallStartEvent(id, name!);
 
                         if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
                         {
-                            var argsStr = args.GetString();
+                            string? argsStr = args.GetString();
                             if (!string.IsNullOrEmpty(argsStr))
                                 yield return new ToolCallDeltaEvent(id, argsStr);
                         }

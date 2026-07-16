@@ -20,7 +20,12 @@
       "supportsReasoning": true,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 15.0, "outputPerMillion": 75.0, "cacheReadPerMillion": 1.5, "cacheWritePerMillion": 18.75 },
+      "pricing": {
+        "inputPerMillion": 15.0,
+        "outputPerMillion": 75.0,
+        "cacheReadPerMillion": 1.5,
+        "cacheWritePerMillion": 18.75
+      },
       "promptTemplate": "anthropic"
     },
     {
@@ -32,7 +37,12 @@
       "supportsReasoning": true,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 3.0, "outputPerMillion": 15.0, "cacheReadPerMillion": 0.3, "cacheWritePerMillion": 3.75 },
+      "pricing": {
+        "inputPerMillion": 3.0,
+        "outputPerMillion": 15.0,
+        "cacheReadPerMillion": 0.3,
+        "cacheWritePerMillion": 3.75
+      },
       "promptTemplate": "anthropic"
     },
     {
@@ -44,7 +54,12 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 0.8, "outputPerMillion": 4.0, "cacheReadPerMillion": 0.08, "cacheWritePerMillion": 1.0 },
+      "pricing": {
+        "inputPerMillion": 0.8,
+        "outputPerMillion": 4.0,
+        "cacheReadPerMillion": 0.08,
+        "cacheWritePerMillion": 1.0
+      },
       "promptTemplate": "anthropic"
     },
     {
@@ -56,7 +71,12 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 3.0, "outputPerMillion": 15.0, "cacheReadPerMillion": 0.3, "cacheWritePerMillion": 3.75 },
+      "pricing": {
+        "inputPerMillion": 3.0,
+        "outputPerMillion": 15.0,
+        "cacheReadPerMillion": 0.3,
+        "cacheWritePerMillion": 3.75
+      },
       "promptTemplate": "anthropic"
     }
   ],

@@ -1,26 +1,56 @@
+using System.Data.Common;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Storage.Sqlite;
-
 /// <summary>
-/// SQLite-backed session storage.
-/// Implements Repository pattern (GOF) via ISessionStore.
-///
-/// Use for: long-running deployments, many sessions, efficient queries.
-/// Note: pulls in native e_sqlite3 (~1.5 MB) — use JsonlSessionStore if you want zero native deps.
+///     SQLite-backed session storage.
+///     Implements Repository pattern (GOF) via ISessionStore.
+///     Use for: long-running deployments, many sessions, efficient queries.
+///     Note: pulls in native e_sqlite3 (~1.5 MB) — use JsonlSessionStore if you want zero native deps.
 /// </summary>
 public sealed class SqliteSessionStore : ISessionStore
 {
+
+    private const string Schema = """
+                                  CREATE TABLE IF NOT EXISTS sessions (
+                                      id TEXT PRIMARY KEY,
+                                      project_id TEXT NOT NULL,
+                                      directory TEXT NOT NULL,
+                                      title TEXT NOT NULL,
+                                      agent TEXT NOT NULL,
+                                      model TEXT NOT NULL,
+                                      provider_id TEXT NOT NULL,
+                                      version TEXT NOT NULL,
+                                      created_at TEXT NOT NULL,
+                                      updated_at TEXT NOT NULL,
+                                      metadata TEXT NOT NULL
+                                  );
+                                  CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
+                                  CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
+
+                                  CREATE TABLE IF NOT EXISTS messages (
+                                      id TEXT PRIMARY KEY,
+                                      session_id TEXT NOT NULL,
+                                      parent_id TEXT,
+                                      role TEXT NOT NULL,
+                                      agent TEXT,
+                                      model TEXT,
+                                      created_at TEXT NOT NULL,
+                                      payload TEXT NOT NULL,
+                                      FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                  );
+                                  CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+                                  CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+                                  """;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly string _connectionString;
-    private readonly ILogger<SqliteSessionStore> _logger;
     private readonly object _lock = new();
+    private readonly ILogger<SqliteSessionStore> _logger;
     private bool _initialized;
 
     public SqliteSessionStore(string dbPath, ILogger<SqliteSessionStore> logger)
@@ -29,43 +59,6 @@ public sealed class SqliteSessionStore : ISessionStore
         _logger = logger;
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath) ?? ".");
         Initialize();
-    }
-
-    private void Initialize()
-    {
-        if (_initialized) return;
-        lock (_lock)
-        {
-            if (_initialized) return;
-
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = Schema;
-            cmd.ExecuteNonQuery();
-
-            _initialized = true;
-        }
-    }
-
-    private SqliteConnection OpenConnection()
-    {
-        var conn = new SqliteConnection(_connectionString);
-        conn.Open();
-
-        // Recommended PRAGMAs for performance and concurrency
-        using (var pragma = conn.CreateCommand())
-        {
-            pragma.CommandText = """
-                PRAGMA journal_mode = WAL;
-                PRAGMA synchronous = NORMAL;
-                PRAGMA busy_timeout = 5000;
-                PRAGMA cache_size = -8000;  -- 8 MB (default 2 MB)
-                PRAGMA foreign_keys = ON;
-                """;
-            pragma.ExecuteNonQuery();
-        }
-
-        return conn;
     }
 
     public Task<Result<Session>> CreateAsync(
@@ -81,9 +74,9 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = """
-                    INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
-                    VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
-                    """;
+                                  INSERT INTO sessions (id, project_id, directory, title, agent, model, provider_id, version, created_at, updated_at, metadata)
+                                  VALUES (@id, @pid, @dir, @title, @agent, @model, @provider, @ver, @created, @updated, @meta)
+                                  """;
                 cmd.Parameters.AddWithValue("@id", session.Id);
                 cmd.Parameters.AddWithValue("@pid", session.ProjectId);
                 cmd.Parameters.AddWithValue("@dir", session.Directory);
@@ -170,15 +163,15 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = """
-                    INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
-                    VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
-                    """;
+                                  INSERT INTO messages (id, session_id, parent_id, role, agent, model, created_at, payload)
+                                  VALUES (@id, @sid, @pid, @role, @agent, @model, @created, @payload)
+                                  """;
                 cmd.Parameters.AddWithValue("@id", message.Id);
                 cmd.Parameters.AddWithValue("@sid", sessionId);
                 cmd.Parameters.AddWithValue("@pid", (object?)message.ParentId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@role", message.Role);
-                cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : (object)DBNull.Value);
-                cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : (message is AssistantMessage a ? a.Model : (object)DBNull.Value));
+                cmd.Parameters.AddWithValue("@agent", message is UserMessage u ? u.Agent : DBNull.Value);
+                cmd.Parameters.AddWithValue("@model", message is UserMessage um ? um.Model : message is AssistantMessage a ? a.Model : DBNull.Value);
                 cmd.Parameters.AddWithValue("@created", message.CreatedAt.ToString("O"));
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
                 cmd.ExecuteNonQuery();
@@ -213,9 +206,9 @@ public sealed class SqliteSessionStore : ISessionStore
                 using var conn = OpenConnection();
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = """
-                    UPDATE messages SET payload = @payload, role = @role, created_at = @created
-                    WHERE id = @id AND session_id = @sid
-                    """;
+                                  UPDATE messages SET payload = @payload, role = @role, created_at = @created
+                                  WHERE id = @id AND session_id = @sid
+                                  """;
                 cmd.Parameters.AddWithValue("@id", message.Id);
                 cmd.Parameters.AddWithValue("@sid", sessionId);
                 cmd.Parameters.AddWithValue("@role", message.Role);
@@ -244,8 +237,8 @@ public sealed class SqliteSessionStore : ISessionStore
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                var role = reader.GetString(0);
-                var payload = reader.GetString(1);
+                string role = reader.GetString(0);
+                string payload = reader.GetString(1);
                 // AgentMessage is abstract and has no [JsonDerivedType] discriminator,
                 // so we have to pick the concrete type from the role column ourselves.
                 var msg = DeserializeMessage(role, payload);
@@ -257,17 +250,6 @@ public sealed class SqliteSessionStore : ISessionStore
         {
             return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
         }
-    }
-
-    private static AgentMessage? DeserializeMessage(string role, string payload)
-    {
-        return role switch
-        {
-            "user" => JsonSerializer.Deserialize<UserMessage>(payload, JsonOptions),
-            "assistant" => JsonSerializer.Deserialize<AssistantMessage>(payload, JsonOptions),
-            "tool_result" => JsonSerializer.Deserialize<ToolResultMessage>(payload, JsonOptions),
-            _ => null,
-        };
     }
 
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
@@ -299,7 +281,7 @@ public sealed class SqliteSessionStore : ISessionStore
             cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
             cmd.Parameters.AddWithValue("@id", sessionId);
 
-            var meta = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            object? meta = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
             if (meta is null or DBNull)
                 return Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.");
 
@@ -333,62 +315,78 @@ public sealed class SqliteSessionStore : ISessionStore
         }
     }
 
-    private static Session ReadSession(System.Data.Common.DbDataReader reader)
+    private void Initialize()
     {
-        var id = reader.GetString(reader.GetOrdinal("id"));
-        var projectId = reader.GetString(reader.GetOrdinal("project_id"));
-        var directory = reader.GetString(reader.GetOrdinal("directory"));
-        var title = reader.GetString(reader.GetOrdinal("title"));
-        var agent = reader.GetString(reader.GetOrdinal("agent"));
-        var model = reader.GetString(reader.GetOrdinal("model"));
-        var providerId = reader.GetString(reader.GetOrdinal("provider_id"));
+        if (_initialized) return;
+        lock (_lock)
+        {
+            if (_initialized) return;
+
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = Schema;
+            cmd.ExecuteNonQuery();
+
+            _initialized = true;
+        }
+    }
+
+    private SqliteConnection OpenConnection()
+    {
+        var conn = new SqliteConnection(_connectionString);
+        conn.Open();
+
+        // Recommended PRAGMAs for performance and concurrency
+        using (var pragma = conn.CreateCommand())
+        {
+            pragma.CommandText = """
+                                 PRAGMA journal_mode = WAL;
+                                 PRAGMA synchronous = NORMAL;
+                                 PRAGMA busy_timeout = 5000;
+                                 PRAGMA cache_size = -8000;  -- 8 MB (default 2 MB)
+                                 PRAGMA foreign_keys = ON;
+                                 """;
+            pragma.ExecuteNonQuery();
+        }
+
+        return conn;
+    }
+
+    private static AgentMessage? DeserializeMessage(string role, string payload)
+    {
+        return role switch
+        {
+            "user" => JsonSerializer.Deserialize<UserMessage>(payload, JsonOptions),
+            "assistant" => JsonSerializer.Deserialize<AssistantMessage>(payload, JsonOptions),
+            "tool_result" => JsonSerializer.Deserialize<ToolResultMessage>(payload, JsonOptions),
+            _ => null
+        };
+    }
+
+    private static Session ReadSession(DbDataReader reader)
+    {
+        string id = reader.GetString(reader.GetOrdinal("id"));
+        string projectId = reader.GetString(reader.GetOrdinal("project_id"));
+        string directory = reader.GetString(reader.GetOrdinal("directory"));
+        string title = reader.GetString(reader.GetOrdinal("title"));
+        string agent = reader.GetString(reader.GetOrdinal("agent"));
+        string model = reader.GetString(reader.GetOrdinal("model"));
+        string providerId = reader.GetString(reader.GetOrdinal("provider_id"));
         var createdAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("created_at")));
         var updatedAt = DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("updated_at")));
-        var metaJson = reader.GetString(reader.GetOrdinal("metadata"));
+        string metaJson = reader.GetString(reader.GetOrdinal("metadata"));
         var meta = JsonSerializer.Deserialize<SessionMetadata>(metaJson, JsonOptions) ?? SessionMetadata.Empty;
 
         return new Session(
-            Id: id,
-            ProjectId: projectId,
-            Directory: directory,
-            Title: title,
-            Agent: agent,
-            Model: model,
-            ProviderId: providerId,
-            CreatedAt: createdAt,
-            UpdatedAt: updatedAt,
-            Metadata: meta);
+            id,
+            projectId,
+            directory,
+            title,
+            agent,
+            model,
+            providerId,
+            createdAt,
+            updatedAt,
+            meta);
     }
-
-    private const string Schema = """
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
-            directory TEXT NOT NULL,
-            title TEXT NOT NULL,
-            agent TEXT NOT NULL,
-            model TEXT NOT NULL,
-            provider_id TEXT NOT NULL,
-            version TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            metadata TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
-        CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
-
-        CREATE TABLE IF NOT EXISTS messages (
-            id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            parent_id TEXT,
-            role TEXT NOT NULL,
-            agent TEXT,
-            model TEXT,
-            created_at TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
-        CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
-        """;
 }

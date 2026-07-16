@@ -1,24 +1,17 @@
 using Harbor.Core.Configuration;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Config.Tests;
-
 /// <summary>
-/// Tests for ProviderPresets — the built-in catalog of provider templates.
+///     Tests for ProviderPresets — the built-in catalog of provider templates.
 /// </summary>
 public class ProviderPresetsTests
 {
     [Test]
-    public async Task All_ContainsThirteenPresets()
-    {
-        await Assert.That(ProviderPresets.All.Count).IsEqualTo(13);
-    }
+    public async Task All_ContainsThirteenPresets() => await Assert.That(ProviderPresets.All.Count).IsEqualTo(13);
 
     [Test]
     public async Task All_ContainsExpectedIds()
     {
-        var ids = ProviderPresets.All.Select(p => p.Id).ToArray();
+        string[] ids = ProviderPresets.All.Select(p => p.Id).ToArray();
         await Assert.That(ids).Contains("kilocode");
         await Assert.That(ids).Contains("anthropic");
         await Assert.That(ids).Contains("openai");
@@ -64,7 +57,7 @@ public class ProviderPresetsTests
     public async Task GetNoAuth_ReturnsLocalProviders()
     {
         var noAuth = ProviderPresets.GetNoAuth();
-        var ids = noAuth.Select(p => p.Id).ToArray();
+        string[] ids = noAuth.Select(p => p.Id).ToArray();
 
         // Ollama and vLLM are the two local providers without API keys.
         await Assert.That(noAuth.Count).IsEqualTo(2);

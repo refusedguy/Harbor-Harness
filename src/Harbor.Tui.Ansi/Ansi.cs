@@ -1,7 +1,6 @@
 namespace Harbor.Tui.Ansi;
-
 /// <summary>
-/// ANSI escape code helper. Pure static, AOT-compatible.
+///     ANSI escape code helper. Pure static, AOT-compatible.
 /// </summary>
 public static class Ansi
 {

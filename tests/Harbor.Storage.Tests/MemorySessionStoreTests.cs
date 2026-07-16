@@ -1,13 +1,9 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Storage.Tests;
-
 /// <summary>
-/// Tests for MemorySessionStore covering full CRUD: Create, Get, List, Append, GetMessages, Delete.
-/// MemorySessionStore is in-process and ephemeral — perfect for unit testing.
+///     Tests for MemorySessionStore covering full CRUD: Create, Get, List, Append, GetMessages, Delete.
+///     MemorySessionStore is in-process and ephemeral — perfect for unit testing.
 /// </summary>
 public class MemorySessionStoreTests
 {
@@ -15,12 +11,12 @@ public class MemorySessionStoreTests
 
     private static UserMessage NewUserMessage(string sessionId, string content, string idSuffix = "")
         => new(
-            Id: $"umsg-{idSuffix}{Guid.NewGuid():N}",
-            SessionId: sessionId,
-            CreatedAt: DateTimeOffset.UtcNow,
-            Content: content,
-            Agent: "code",
-            Model: "claude-opus-4");
+            $"umsg-{idSuffix}{Guid.NewGuid():N}",
+            sessionId,
+            DateTimeOffset.UtcNow,
+            content,
+            "code",
+            "claude-opus-4");
 
     [Test]
     public async Task CreateAsync_ReturnsSessionWithValidId()
@@ -118,11 +114,11 @@ public class MemorySessionStoreTests
         var baseTime = DateTimeOffset.UtcNow;
 
         await store.AppendMessageAsync(session.Id, new UserMessage(
-            Id: "m1", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(1), Content: "first", Agent: "code", Model: "claude"));
+            "m1", session.Id, baseTime.AddSeconds(1), "first", "code", "claude"));
         await store.AppendMessageAsync(session.Id, new UserMessage(
-            Id: "m2", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(3), Content: "third", Agent: "code", Model: "claude"));
+            "m2", session.Id, baseTime.AddSeconds(3), "third", "code", "claude"));
         await store.AppendMessageAsync(session.Id, new UserMessage(
-            Id: "m3", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(2), Content: "second", Agent: "code", Model: "claude"));
+            "m3", session.Id, baseTime.AddSeconds(2), "second", "code", "claude"));
 
         var messages = await store.GetMessagesAsync(session.Id);
 
@@ -213,7 +209,7 @@ public class MemorySessionStoreTests
         var store = Create();
         var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
 
-        var newMeta = new SessionMetadata(Cost: 0.42m, TokensInput: 100, TokensOutput: 50, TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0, MessageCount: 2, TimeCompacting: null);
+        var newMeta = new SessionMetadata(0.42m, 100, 50, 0, 0, 0, 2, null);
         var updateResult = await store.UpdateStatsAsync(session.Id, newMeta);
         await Assert.That(updateResult.IsSuccess).IsTrue();
 

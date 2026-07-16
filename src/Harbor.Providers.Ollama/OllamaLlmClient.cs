@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -8,20 +9,17 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.Ollama;
-
 /// <summary>
-/// Native Ollama provider — local LLM inference.
-/// Implements Strategy pattern (GOF) via ILlmClient.
-///
-/// Differences from OpenAI-compat:
-/// - NDJSON (one JSON per line) instead of SSE
-/// - /api/chat endpoint (not /v1/chat/completions)
-/// - role: "model" instead of "assistant" (sometimes)
-/// - tools field format is slightly different
-/// - No API key required
-/// - keep_alive parameter for model persistence
+///     Native Ollama provider — local LLM inference.
+///     Implements Strategy pattern (GOF) via ILlmClient.
+///     Differences from OpenAI-compat:
+///     - NDJSON (one JSON per line) instead of SSE
+///     - /api/chat endpoint (not /v1/chat/completions)
+///     - role: "model" instead of "assistant" (sometimes)
+///     - tools field format is slightly different
+///     - No API key required
+///     - keep_alive parameter for model persistence
 /// </summary>
 public sealed class OllamaLlmClient : ILlmClient
 {
@@ -29,14 +27,12 @@ public sealed class OllamaLlmClient : ILlmClient
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private readonly OllamaConfig _config;
 
     private readonly HttpClient _http;
-    private readonly OllamaConfig _config;
     private readonly ILogger<OllamaLlmClient> _logger;
-
-    public ProviderId ProviderId { get; } = ProviderId.Create("ollama");
 
     public OllamaLlmClient(HttpClient http, OllamaConfig config, ILogger<OllamaLlmClient> logger)
     {
@@ -45,6 +41,8 @@ public sealed class OllamaLlmClient : ILlmClient
         _logger = logger;
     }
 
+    public ProviderId ProviderId { get; } = ProviderId.Create("ollama");
+
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -52,7 +50,7 @@ public sealed class OllamaLlmClient : ILlmClient
         var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
-            SingleWriter = false,
+            SingleWriter = false
         });
 
         var writer = channel.Writer;
@@ -81,7 +79,7 @@ public sealed class OllamaLlmClient : ILlmClient
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         await writer.WriteAsync(new ErrorEvent($"Ollama error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -128,8 +126,8 @@ public sealed class OllamaLlmClient : ILlmClient
     {
         try
         {
-            var baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
-            var response = await _http.GetStringAsync($"{baseUrl}/api/tags", cancellationToken).ConfigureAwait(false);
+            string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+            string response = await _http.GetStringAsync($"{baseUrl}/api/tags", cancellationToken).ConfigureAwait(false);
 
             using var doc = JsonDocument.Parse(response);
             var models = new List<ModelInfo>();
@@ -137,27 +135,27 @@ public sealed class OllamaLlmClient : ILlmClient
             {
                 foreach (var m in modelsArray.EnumerateArray())
                 {
-                    var id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+                    string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
                     if (string.IsNullOrEmpty(id)) continue;
 
-                    var displayName = id;
-                    var ctx = m.TryGetProperty("model_info", out var info) &&
+                    string displayName = id;
+                    int ctx = m.TryGetProperty("model_info", out var info) &&
                               info.TryGetProperty("context_length", out var ctxEl) &&
                               ctxEl.ValueKind == JsonValueKind.Number
                         ? ctxEl.GetInt32()
                         : 4096;
 
                     models.Add(new ModelInfo(
-                        Id: id,
-                        ProviderId: "ollama",
-                        DisplayName: displayName,
-                        ContextWindow: ctx,
-                        MaxOutputTokens: ctx,
-                        SupportsReasoning: false,
-                        SupportsVision: false,
-                        SupportsToolUse: true,
-                        Pricing: Pricing.Unknown,
-                        PromptTemplate: "openai"));
+                        id,
+                        "ollama",
+                        displayName,
+                        ctx,
+                        ctx,
+                        false,
+                        false,
+                        true,
+                        Pricing.Unknown,
+                        "openai"));
                 }
             }
             return Result.Success<IReadOnlyList<ModelInfo>>(models);
@@ -170,15 +168,15 @@ public sealed class OllamaLlmClient : ILlmClient
 
     private HttpRequestMessage BuildRequest(LlmRequest request)
     {
-        var baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
-        var url = $"{baseUrl}/api/chat";
+        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        string url = $"{baseUrl}/api/chat";
 
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["messages"] = BuildMessages(request),
             ["stream"] = true,
-            ["options"] = BuildOptions(request),
+            ["options"] = BuildOptions(request)
         };
 
         // keep_alive for model persistence (5 minutes by default)
@@ -189,14 +187,14 @@ public sealed class OllamaLlmClient : ILlmClient
             payload["tools"] = request.Tools.Select(t => new
             {
                 type = "function",
-                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema },
+                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema }
             });
         }
 
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        string json = JsonSerializer.Serialize(payload, JsonOptions);
         return new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
     }
 
@@ -226,7 +224,7 @@ public sealed class OllamaLlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "",
+                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
                 },
                 LlmAssistantMessage a => new
                 {
@@ -236,15 +234,15 @@ public sealed class OllamaLlmClient : ILlmClient
                     {
                         id = tc.Id,
                         type = "function",
-                        function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() },
-                    }).ToList(),
+                        function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() }
+                    }).ToList()
                 },
                 LlmToolResultMessage tr => new
                 {
                     role = "tool",
-                    content = tr.Output,
+                    content = tr.Output
                 },
-                _ => new { role = "user", content = "" },
+                _ => new { role = "user", content = "" }
             });
         }
 
@@ -274,7 +272,7 @@ public sealed class OllamaLlmClient : ILlmClient
             message.TryGetProperty("content", out var content) &&
             content.ValueKind == JsonValueKind.String)
         {
-            var text = content.GetString();
+            string? text = content.GetString();
             if (!string.IsNullOrEmpty(text))
                 yield return new TextDeltaEvent("0", text);
         }
@@ -286,18 +284,18 @@ public sealed class OllamaLlmClient : ILlmClient
         {
             foreach (var tc in tcs.EnumerateArray())
             {
-                var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
                 var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                 if (fn.ValueKind == JsonValueKind.Object)
                 {
-                    var name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
+                    string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
                     if (!string.IsNullOrEmpty(name))
                         yield return new ToolCallStartEvent(id, name!);
 
                     if (fn.TryGetProperty("arguments", out var args))
                     {
-                        var argsStr = args.ValueKind == JsonValueKind.String
+                        string? argsStr = args.ValueKind == JsonValueKind.String
                             ? args.GetString()
                             : args.GetRawText();
                         if (!string.IsNullOrEmpty(argsStr))
@@ -310,8 +308,8 @@ public sealed class OllamaLlmClient : ILlmClient
         // Done flag
         if (root.TryGetProperty("done", out var doneEl) && doneEl.GetBoolean())
         {
-            var inputTokens = root.TryGetProperty("prompt_eval_count", out var pe) ? pe.GetInt32() : 0;
-            var outputTokens = root.TryGetProperty("eval_count", out var ec) ? ec.GetInt32() : 0;
+            int inputTokens = root.TryGetProperty("prompt_eval_count", out var pe) ? pe.GetInt32() : 0;
+            int outputTokens = root.TryGetProperty("eval_count", out var ec) ? ec.GetInt32() : 0;
 
             yield return new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens));
         }

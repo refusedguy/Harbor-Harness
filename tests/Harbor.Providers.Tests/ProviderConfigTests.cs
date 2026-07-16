@@ -1,22 +1,17 @@
 using System.Net;
 using System.Text;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Providers.Tests;
-
 /// <summary>
-/// Tests for ProviderConfig.LoadFromFile — JSON parsing and validation.
+///     Tests for ProviderConfig.LoadFromFile — JSON parsing and validation.
 /// </summary>
 public class ProviderConfigTests
 {
     private static string WriteTempJson(string content)
     {
-        var path = Path.Combine(Path.GetTempPath(), $"harbor-provider-{Guid.NewGuid():N}.json");
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-provider-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, content);
         return path;
     }
@@ -24,23 +19,23 @@ public class ProviderConfigTests
     [Test]
     public async Task LoadFromFile_ValidJson_ReturnsSuccess()
     {
-        var json = """
-        {
-          "id": "openrouter",
-          "displayName": "OpenRouter",
-          "description": "Multi-provider router",
-          "baseUrl": "https://openrouter.ai/api/v1",
-          "apiType": "openai-compatible",
-          "authType": "bearer",
-          "authEnvVar": "OPENROUTER_API_KEY",
-          "modelsUrl": "https://openrouter.ai/api/v1/models",
-          "modelsRefreshHours": 24,
-          "modelsPath": "data",
-          "timeout": 120,
-          "retries": 3
-        }
-        """;
-        var path = WriteTempJson(json);
+        string json = """
+                      {
+                        "id": "openrouter",
+                        "displayName": "OpenRouter",
+                        "description": "Multi-provider router",
+                        "baseUrl": "https://openrouter.ai/api/v1",
+                        "apiType": "openai-compatible",
+                        "authType": "bearer",
+                        "authEnvVar": "OPENROUTER_API_KEY",
+                        "modelsUrl": "https://openrouter.ai/api/v1/models",
+                        "modelsRefreshHours": 24,
+                        "modelsPath": "data",
+                        "timeout": 120,
+                        "retries": 3
+                      }
+                      """;
+        string path = WriteTempJson(json);
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
@@ -64,16 +59,16 @@ public class ProviderConfigTests
     public async Task LoadFromFile_AllowsCommentsAndTrailingCommas()
     {
         // JsonOptions has AllowTrailingCommas=true and ReadCommentHandling=Skip.
-        var json = """
-        {
-          // This is a comment
-          "id": "deepseek",
-          "displayName": "DeepSeek",
-          "baseUrl": "https://api.deepseek.com/v1",
-          "authEnvVar": "DEEPSEEK_API_KEY",
-        }
-        """;
-        var path = WriteTempJson(json);
+        string json = """
+                      {
+                        // This is a comment
+                        "id": "deepseek",
+                        "displayName": "DeepSeek",
+                        "baseUrl": "https://api.deepseek.com/v1",
+                        "authEnvVar": "DEEPSEEK_API_KEY",
+                      }
+                      """;
+        string path = WriteTempJson(json);
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
@@ -89,7 +84,7 @@ public class ProviderConfigTests
     [Test]
     public async Task LoadFromFile_InvalidJson_ReturnsFailure()
     {
-        var path = WriteTempJson("{ this is not valid json ]");
+        string path = WriteTempJson("{ this is not valid json ]");
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
@@ -106,13 +101,13 @@ public class ProviderConfigTests
     [Test]
     public async Task LoadFromFile_MissingId_ReturnsFailure()
     {
-        var json = """
-        {
-          "displayName": "NoId",
-          "baseUrl": "https://api.example.com"
-        }
-        """;
-        var path = WriteTempJson(json);
+        string json = """
+                      {
+                        "displayName": "NoId",
+                        "baseUrl": "https://api.example.com"
+                      }
+                      """;
+        string path = WriteTempJson(json);
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
@@ -129,13 +124,13 @@ public class ProviderConfigTests
     [Test]
     public async Task LoadFromFile_MissingBaseUrl_ReturnsFailure()
     {
-        var json = """
-        {
-          "id": "test",
-          "displayName": "NoBaseUrl"
-        }
-        """;
-        var path = WriteTempJson(json);
+        string json = """
+                      {
+                        "id": "test",
+                        "displayName": "NoBaseUrl"
+                      }
+                      """;
+        string path = WriteTempJson(json);
         try
         {
             var result = ProviderConfig.LoadFromFile(path);
@@ -152,7 +147,7 @@ public class ProviderConfigTests
     [Test]
     public async Task LoadFromFile_NonexistentPath_ReturnsFailure()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"harbor-nonexistent-{Guid.NewGuid():N}.json");
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-nonexistent-{Guid.NewGuid():N}.json");
         var result = ProviderConfig.LoadFromFile(path);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -165,7 +160,7 @@ public class ProviderConfigTests
         {
             Id = "groq",
             DisplayName = "Groq",
-            BaseUrl = "https://api.groq.com/openai/v1",
+            BaseUrl = "https://api.groq.com/openai/v1"
         };
         var pid = config.GetProviderId();
 
@@ -174,7 +169,7 @@ public class ProviderConfigTests
 }
 
 /// <summary>
-/// Tests for EnvVarAuthResolver — verifies env var lookup, overrides, and provider-id normalization.
+///     Tests for EnvVarAuthResolver — verifies env var lookup, overrides, and provider-id normalization.
 /// </summary>
 public class EnvVarAuthResolverTests
 {
@@ -183,7 +178,7 @@ public class EnvVarAuthResolverTests
     {
         var resolver = new EnvVarAuthResolver(new Dictionary<string, string>
         {
-            ["anthropic"] = "override-key-123",
+            ["anthropic"] = "override-key-123"
         });
 
         var result = await resolver.ResolveApiKeyAsync("anthropic");
@@ -195,7 +190,7 @@ public class EnvVarAuthResolverTests
     [Test]
     public async Task ResolveApiKeyAsync_EnvVarUsedWhenNoOverride()
     {
-        var envName = "TESTPROVIDER_API_KEY";
+        string envName = "TESTPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, "env-key-456");
         try
         {
@@ -215,7 +210,7 @@ public class EnvVarAuthResolverTests
     public async Task ResolveApiKeyAsync_NormalizesDashesToUnderscores()
     {
         // Provider id "kilo-code" should map to env var "KILO_CODE_API_KEY".
-        var envName = "KILO_CODE_API_KEY";
+        string envName = "KILO_CODE_API_KEY";
         Environment.SetEnvironmentVariable(envName, "kilo-key");
         try
         {
@@ -234,7 +229,7 @@ public class EnvVarAuthResolverTests
     [Test]
     public async Task ResolveApiKeyAsync_FailsWhenNeitherOverrideNorEnvVar()
     {
-        var envName = "MISSINGPROVIDER_API_KEY";
+        string envName = "MISSINGPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, null);
         var resolver = new EnvVarAuthResolver();
 
@@ -247,7 +242,7 @@ public class EnvVarAuthResolverTests
     [Test]
     public async Task ResolveApiKeyAsync_EmptyEnvVar_Fails()
     {
-        var envName = "EMPTYPROVIDER_API_KEY";
+        string envName = "EMPTYPROVIDER_API_KEY";
         Environment.SetEnvironmentVariable(envName, "");
         try
         {
@@ -274,8 +269,8 @@ public class EnvVarAuthResolverTests
 }
 
 /// <summary>
-/// Tests for DynamicModelCatalog — verifies parsing of fetched responses
-/// using a stub HttpMessageHandler (no real network).
+///     Tests for DynamicModelCatalog — verifies parsing of fetched responses
+///     using a stub HttpMessageHandler (no real network).
 /// </summary>
 public class DynamicModelCatalogTests
 {
@@ -287,7 +282,7 @@ public class DynamicModelCatalogTests
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -299,8 +294,8 @@ public class DynamicModelCatalogTests
                 Models = new List<ModelInfo>
                 {
                     new("m1", "static", "Model 1", 8192, 4096, false, false, true, Pricing.Unknown, "openai"),
-                    new("m2", "static", "Model 2", 32768, 8192, false, true, true, Pricing.Unknown, "openai"),
-                },
+                    new("m2", "static", "Model 2", 32768, 8192, false, true, true, Pricing.Unknown, "openai")
+                }
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -322,7 +317,7 @@ public class DynamicModelCatalogTests
     public async Task GetModelsAsync_NoUrlNoModels_ReturnsFailure()
     {
         var http = new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)));
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -330,7 +325,7 @@ public class DynamicModelCatalogTests
             {
                 Id = "empty",
                 DisplayName = "Empty",
-                BaseUrl = "https://api.example.com",
+                BaseUrl = "https://api.example.com"
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -348,20 +343,20 @@ public class DynamicModelCatalogTests
     public async Task GetModelsAsync_ParsesDataArray()
     {
         // Standard OpenAI-compatible /v1/models response shape.
-        var json = """
-        {
-          "data": [
-            { "id": "gpt-4o", "name": "GPT-4o", "context_length": 128000 },
-            { "id": "gpt-4o-mini", "name": "GPT-4o mini", "context_length": 128000 }
-          ]
-        }
-        """;
+        string json = """
+                      {
+                        "data": [
+                          { "id": "gpt-4o", "name": "GPT-4o", "context_length": 128000 },
+                          { "id": "gpt-4o-mini", "name": "GPT-4o mini", "context_length": 128000 }
+                        ]
+                      }
+                      """;
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -370,7 +365,7 @@ public class DynamicModelCatalogTests
                 Id = "openrouter",
                 DisplayName = "OpenRouter",
                 BaseUrl = "https://openrouter.ai/api/v1",
-                ModelsUrl = "https://openrouter.ai/api/v1/models",
+                ModelsUrl = "https://openrouter.ai/api/v1/models"
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -391,19 +386,19 @@ public class DynamicModelCatalogTests
     [Test]
     public async Task GetModelsAsync_ParsesModelsArray_WhenNoDataField()
     {
-        var json = """
-        {
-          "models": [
-            { "id": "llama3.2", "name": "Llama 3.2", "context_length": 4096 }
-          ]
-        }
-        """;
+        string json = """
+                      {
+                        "models": [
+                          { "id": "llama3.2", "name": "Llama 3.2", "context_length": 4096 }
+                        ]
+                      }
+                      """;
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -412,7 +407,7 @@ public class DynamicModelCatalogTests
                 Id = "ollama",
                 DisplayName = "Ollama",
                 BaseUrl = "http://localhost:11434",
-                ModelsUrl = "http://localhost:11434/api/tags",
+                ModelsUrl = "http://localhost:11434/api/tags"
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -431,19 +426,19 @@ public class DynamicModelCatalogTests
     public async Task GetModelsAsync_ParsesModelsPath_NestedProperty()
     {
         // ProviderConfig.ModelsPath "data" — like OpenRouter.
-        var json = """
-        {
-          "data": [
-            { "id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "context_length": 200000 }
-          ]
-        }
-        """;
+        string json = """
+                      {
+                        "data": [
+                          { "id": "anthropic/claude-3.5-sonnet", "name": "Claude 3.5 Sonnet", "context_length": 200000 }
+                        ]
+                      }
+                      """;
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -453,7 +448,7 @@ public class DynamicModelCatalogTests
                 DisplayName = "OpenRouter",
                 BaseUrl = "https://openrouter.ai/api/v1",
                 ModelsUrl = "https://openrouter.ai/api/v1/models",
-                ModelsPath = "data",
+                ModelsPath = "data"
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -473,22 +468,22 @@ public class DynamicModelCatalogTests
     public async Task GetModelsAsync_UsesModelMapping_ForCustomFieldNames()
     {
         // Ollama-style: top-level "models" array, name field, context_length.
-        var json = """
-        {
-          "models": [
-            {
-              "name": "llama3.2:latest",
-              "model_info": { "context_length": 4096 }
-            }
-          ]
-        }
-        """;
+        string json = """
+                      {
+                        "models": [
+                          {
+                            "name": "llama3.2:latest",
+                            "model_info": { "context_length": 4096 }
+                          }
+                        ]
+                      }
+                      """;
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -502,8 +497,8 @@ public class DynamicModelCatalogTests
                 {
                     Id = "name",
                     DisplayName = "name",
-                    ContextWindow = "model_info.context_length",
-                },
+                    ContextWindow = "model_info.context_length"
+                }
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -524,10 +519,10 @@ public class DynamicModelCatalogTests
     {
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)
         {
-            Content = new StringContent("server error", Encoding.UTF8),
+            Content = new StringContent("server error", Encoding.UTF8)
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -536,7 +531,7 @@ public class DynamicModelCatalogTests
                 Id = "broken",
                 DisplayName = "Broken",
                 BaseUrl = "https://api.broken.com",
-                ModelsUrl = "https://api.broken.com/v1/models",
+                ModelsUrl = "https://api.broken.com/v1/models"
             };
 
             var result = await catalog.GetModelsAsync(config);
@@ -552,15 +547,15 @@ public class DynamicModelCatalogTests
     [Test]
     public async Task GetModelsAsync_PersistsCacheFile()
     {
-        var json = """
-        { "data": [ { "id": "m1", "name": "M1", "context_length": 8192 } ] }
-        """;
+        string json = """
+                      { "data": [ { "id": "m1", "name": "M1", "context_length": 8192 } ] }
+                      """;
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         });
         var http = new HttpClient(handler);
-        var cacheDir = NewCacheDir();
+        string cacheDir = NewCacheDir();
         try
         {
             var catalog = new DynamicModelCatalog(http, cacheDir, NullLogger<DynamicModelCatalog>.Instance);
@@ -569,13 +564,13 @@ public class DynamicModelCatalogTests
                 Id = "cachedprov",
                 DisplayName = "Cached",
                 BaseUrl = "https://api.example.com",
-                ModelsUrl = "https://api.example.com/models",
+                ModelsUrl = "https://api.example.com/models"
             };
 
             var first = await catalog.GetModelsAsync(config);
             await Assert.That(first.IsSuccess).IsTrue();
 
-            var cacheFile = Path.Combine(cacheDir, "cachedprov.json");
+            string cacheFile = Path.Combine(cacheDir, "cachedprov.json");
             await Assert.That(File.Exists(cacheFile)).IsTrue();
         }
         finally

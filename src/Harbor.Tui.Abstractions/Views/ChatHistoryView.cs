@@ -1,23 +1,21 @@
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
-
 namespace Harbor.Tui.Abstractions.Views;
-
 /// <summary>
-/// Builtin chat history view — renders <see cref="ChatHistoryViewModel"/> state: accumulated
-/// <see cref="ChatEntry"/> records plus optional live streaming text and thinking buffer.
+///     Builtin chat history view — renders <see cref="ChatHistoryViewModel" /> state: accumulated
+///     <see cref="ChatEntry" /> records plus optional live streaming text and thinking buffer.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Each entry is rendered with a role-colored prefix (<c>[user]</c>, <c>[assistant]</c>,
-/// <c>[tool]</c>, <c>[result]</c>). When <see cref="ChatHistoryViewModel.IsStreaming"/> is
-/// active, the in-progress <see cref="ChatHistoryViewModel.StreamingText"/> is appended as a
-/// trailing assistant entry. When <see cref="ChatHistoryViewModel.IsThinking"/> is active,
-/// the thinking buffer is rendered dimmed/italic so users can follow reasoning.
-/// </para>
-/// <para>
-/// This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext"/>.
-/// </para>
+///     <para>
+///         Each entry is rendered with a role-colored prefix (<c>[user]</c>, <c>[assistant]</c>,
+///         <c>[tool]</c>, <c>[result]</c>). When <see cref="ChatHistoryViewModel.IsStreaming" /> is
+///         active, the in-progress <see cref="ChatHistoryViewModel.StreamingText" /> is appended as a
+///         trailing assistant entry. When <see cref="ChatHistoryViewModel.IsThinking" /> is active,
+///         the thinking buffer is rendered dimmed/italic so users can follow reasoning.
+///     </para>
+///     <para>
+///         This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext" />.
+///     </para>
 /// </remarks>
 public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
 {
@@ -33,7 +31,7 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = ViewModel;
+        var vm = this.ViewModel;
         if (vm is null)
         {
             return Task.CompletedTask;
@@ -71,13 +69,13 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
 
     private static void RenderEntry(ITuiRenderContext context, string role, string content)
     {
-        var prefix = role switch
+        string prefix = role switch
         {
             "user" => "[user] ",
             "assistant" => "[assistant] ",
             "tool" => "[tool] ",
             "tool-result" => "[result] ",
-            _ => $"[{role}] ",
+            _ => $"[{role}] "
         };
 
         if (context.SupportsColor)
@@ -88,7 +86,7 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
                 "assistant" => TuiColor.Cyan,
                 "tool" => TuiColor.Blue,
                 "tool-result" => TuiColor.Gray,
-                _ => TuiColor.Default,
+                _ => TuiColor.Default
             };
             context.WriteColored(prefix, color);
         }

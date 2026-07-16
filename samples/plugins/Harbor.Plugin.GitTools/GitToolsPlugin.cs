@@ -1,18 +1,16 @@
-using Microsoft.Extensions.Logging;
-using Harbor.Abstractions.Models.Identifiers;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.GitTools;
-
 /// <summary>
-/// GitTools plugin — adds a `git` tool for common git operations.
-/// Demonstrates wrapping shell commands in a typed tool.
+///     GitTools plugin — adds a `git` tool for common git operations.
+///     Demonstrates wrapping shell commands in a typed tool.
 /// </summary>
 public sealed class GitToolsPlugin : IToolPlugin
 {
@@ -21,15 +19,9 @@ public sealed class GitToolsPlugin : IToolPlugin
     public Version RequiredHarborVersion => new(0, 2, 0);
     public string Description => "Git operations as a tool";
 
-    public void Initialize(PluginContext context)
-    {
-        context.CreateLogger<GitToolsPlugin>().LogInformation("GitTools plugin initialized");
-    }
+    public void Initialize(PluginContext context) => context.CreateLogger<GitToolsPlugin>().LogInformation("GitTools plugin initialized");
 
-    public void RegisterTools(IToolRegistryBuilder builder)
-    {
-        builder.AddTool<GitTool>();
-    }
+    public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<GitTool>();
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
@@ -44,19 +36,19 @@ public sealed class GitTool : ITool
     public IReadOnlyList<string> PromptGuidelines { get; } = new[]
     {
         "Use `git` instead of `bash git ...` for better error handling",
-        "Common subcommands: status, diff, log, branch, add, commit, push, pull",
+        "Common subcommands: status, diff, log, branch, add, commit, push, pull"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "args": { "type": "string", "description": "Git subcommand and arguments (e.g. 'status', 'log --oneline -10')" },
-            "cwd": { "type": "string", "description": "Working directory (default: current)" }
-          },
-          "required": ["args"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "args": { "type": "string", "description": "Git subcommand and arguments (e.g. 'status', 'log --oneline -10')" },
+                                                                          "cwd": { "type": "string", "description": "Working directory (default: current)" }
+                                                                        },
+                                                                        "required": ["args"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -66,8 +58,8 @@ public sealed class GitTool : ITool
             return Result.Failure("'args' cannot be empty.");
 
         // Safety: block obviously dangerous commands
-        var argsStr = a.GetString()!;
-        var lower = argsStr.ToLowerInvariant();
+        string argsStr = a.GetString()!;
+        string lower = argsStr.ToLowerInvariant();
         if (lower.Contains("push --force") && !lower.Contains("--force-with-lease"))
             return Result.Failure("'git push --force' is blocked. Use '--force-with-lease' instead.");
         if (lower.Contains("reset --hard"))
@@ -81,8 +73,8 @@ public sealed class GitTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var gitArgs = args.GetProperty("args").GetString()!;
-        var cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String
+        string gitArgs = args.GetProperty("args").GetString()!;
+        string cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String
             ? c.GetString()!
             : Environment.CurrentDirectory;
 
@@ -93,7 +85,7 @@ public sealed class GitTool : ITool
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-            WorkingDirectory = cwd,
+            WorkingDirectory = cwd
         };
         psi.ArgumentList.Add(gitArgs);
 
@@ -101,8 +93,14 @@ public sealed class GitTool : ITool
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
 
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) stdout.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) stderr.AppendLine(e.Data); };
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) stdout.AppendLine(e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null) stderr.AppendLine(e.Data);
+        };
 
         if (!process.Start())
             return ToolResult.Error("Failed to start git process.");
@@ -116,7 +114,10 @@ public sealed class GitTool : ITool
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            try { process.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
             return ToolResult.Error("Git command was cancelled.");
         }
 

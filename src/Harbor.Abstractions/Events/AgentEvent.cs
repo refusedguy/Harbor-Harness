@@ -1,11 +1,9 @@
 using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
-
 namespace Harbor.Abstractions.Events;
-
 /// <summary>
-/// Discriminated union of all events emitted by the agent loop.
-/// Subscribers receive these events via <see cref="IEventBus"/>.
+///     Discriminated union of all events emitted by the agent loop.
+///     Subscribers receive these events via <see cref="IEventBus" />.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(AgentStartEvent), "agent_start")]
@@ -30,27 +28,27 @@ public abstract record AgentEvent
 public sealed record AgentStartEvent(string SessionId, IReadOnlyList<AgentMessage> Messages) : AgentEvent;
 
 /// <summary>
-/// Emitted at the start of each turn inside a run. <see cref="TurnIndex"/> is 1-based.
+///     Emitted at the start of each turn inside a run. <see cref="TurnIndex" /> is 1-based.
 /// </summary>
 public sealed record TurnStartEvent(int TurnIndex) : AgentEvent;
 
 /// <summary>
-/// Emitted when the assistant starts streaming a new message.
+///     Emitted when the assistant starts streaming a new message.
 /// </summary>
 public sealed record MessageStartEvent(AssistantMessage Message) : AgentEvent;
 
 /// <summary>
-/// Emitted on each LLM streaming delta (text token, tool call delta, etc.).
+///     Emitted on each LLM streaming delta (text token, tool call delta, etc.).
 /// </summary>
 public sealed record MessageUpdateEvent(LlmEvent LlmEvent, AssistantMessage Partial) : AgentEvent;
 
 /// <summary>
-/// Emitted when the assistant message is finalized.
+///     Emitted when the assistant message is finalized.
 /// </summary>
 public sealed record MessageEndEvent(AssistantMessage Message) : AgentEvent;
 
 /// <summary>
-/// Emitted just before a tool call is executed.
+///     Emitted just before a tool call is executed.
 /// </summary>
 public sealed record ToolExecutionStartEvent(
     string ToolCallId,
@@ -58,47 +56,46 @@ public sealed record ToolExecutionStartEvent(
     JsonElement Args) : AgentEvent;
 
 /// <summary>
-/// Emitted on a tool progress update. <see cref="PartialResult"/> is opaque and tool-specific.
+///     Emitted on a tool progress update. <see cref="PartialResult" /> is opaque and tool-specific.
 /// </summary>
 public sealed record ToolExecutionUpdateEvent(
     string ToolCallId,
     object PartialResult) : AgentEvent;
 
 /// <summary>
-/// Emitted when a tool call completes (success or failure).
+///     Emitted when a tool call completes (success or failure).
 /// </summary>
 public sealed record ToolExecutionEndEvent(
     string ToolCallId,
     ToolResult Result,
     bool IsError) : AgentEvent;
 
-
 /// <summary>
-/// Emitted at the end of a turn, with the assistant message and any tool results produced.
+///     Emitted at the end of a turn, with the assistant message and any tool results produced.
 /// </summary>
 public sealed record TurnEndEvent(
     AssistantMessage AssistantMessage,
     IReadOnlyList<ToolResultMessage> ToolResults) : AgentEvent;
 
 /// <summary>
-/// Emitted when the entire agent run completes.
+///     Emitted when the entire agent run completes.
 /// </summary>
 public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages) : AgentEvent;
 
 /// <summary>
-/// Emitted on an unrecoverable agent error.
+///     Emitted on an unrecoverable agent error.
 /// </summary>
 /// <param name="Message">User-facing error message.</param>
 /// <param name="Exception">Optional exception details string for diagnostics.</param>
 public sealed record AgentErrorEvent(string Message, string? Exception = null) : AgentEvent;
 
 /// <summary>
-/// Emitted when compaction starts for the given session.
+///     Emitted when compaction starts for the given session.
 /// </summary>
 public sealed record CompactionStartedEvent(string SessionId) : AgentEvent;
 
 /// <summary>
-/// Emitted when compaction completes for the given session.
+///     Emitted when compaction completes for the given session.
 /// </summary>
 /// <param name="SessionId">The compacted session.</param>
 /// <param name="Summary">The generated summary text.</param>
@@ -113,14 +110,14 @@ public sealed record CompactionCompletedEvent(
     TimeSpan Duration) : AgentEvent;
 
 /// <summary>
-/// Periodic stats snapshot for a session (cost, tokens, message count).
+///     Periodic stats snapshot for a session (cost, tokens, message count).
 /// </summary>
 public sealed record SessionStatsEvent(
     string SessionId,
     SessionMetadata Metadata) : AgentEvent;
 
 /// <summary>
-/// Streaming event from LLM provider. Mapped to <see cref="MessageUpdateEvent"/> by agent loop.
+///     Streaming event from LLM provider. Mapped to <see cref="MessageUpdateEvent" /> by agent loop.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(TextStartEvent), "text_start")]
@@ -141,52 +138,52 @@ public abstract record LlmEvent;
 public sealed record TextStartEvent(string Id) : LlmEvent;
 
 /// <summary>
-/// A text delta — a small chunk of assistant text.
+///     A text delta — a small chunk of assistant text.
 /// </summary>
 public sealed record TextDeltaEvent(string Id, string Delta) : LlmEvent;
 
 /// <summary>
-/// Marks the end of a text run; <see cref="FinalText"/> is the complete text emitted.
+///     Marks the end of a text run; <see cref="FinalText" /> is the complete text emitted.
 /// </summary>
 public sealed record TextEndEvent(string Id, string FinalText) : LlmEvent;
 
 /// <summary>
-/// Marks the start of a thinking/reasoning block.
+///     Marks the start of a thinking/reasoning block.
 /// </summary>
 public sealed record ThinkingStartEvent(string Id) : LlmEvent;
 
 /// <summary>
-/// A thinking delta — a small chunk of reasoning text.
+///     A thinking delta — a small chunk of reasoning text.
 /// </summary>
 public sealed record ThinkingDeltaEvent(string Id, string Delta) : LlmEvent;
 
 /// <summary>
-/// Marks the end of a thinking run.
+///     Marks the end of a thinking run.
 /// </summary>
 public sealed record ThinkingEndEvent(string Id, string FinalText) : LlmEvent;
 
 /// <summary>
-/// Marks the start of a tool call.
+///     Marks the start of a tool call.
 /// </summary>
 public sealed record ToolCallStartEvent(string Id, string ToolName) : LlmEvent;
 
 /// <summary>
-/// A tool-call arguments delta — a small JSON fragment.
+///     A tool-call arguments delta — a small JSON fragment.
 /// </summary>
 public sealed record ToolCallDeltaEvent(string Id, string ArgsDelta) : LlmEvent;
 
 /// <summary>
-/// Marks the end of a tool call; <see cref="Args"/> is the parsed JSON arguments object.
+///     Marks the end of a tool call; <see cref="Args" /> is the parsed JSON arguments object.
 /// </summary>
 public sealed record ToolCallEndEvent(string Id, string ToolName, JsonElement Args) : LlmEvent;
 
 /// <summary>
-/// Marks the start of an inference step (e.g. a reasoning step on Anthropic extended thinking).
+///     Marks the start of an inference step (e.g. a reasoning step on Anthropic extended thinking).
 /// </summary>
 public sealed record StepStartEvent(int Index) : LlmEvent;
 
 /// <summary>
-/// Marks the finish of an inference step. Carries the step's <see cref="Usage"/> if available.
+///     Marks the finish of an inference step. Carries the step's <see cref="Usage" /> if available.
 /// </summary>
 public sealed record StepFinishEvent(
     int Index,
@@ -195,11 +192,11 @@ public sealed record StepFinishEvent(
     string? ProviderModelId = null) : LlmEvent;
 
 /// <summary>
-/// Emitted when the entire generation is finished.
+///     Emitted when the entire generation is finished.
 /// </summary>
-public sealed record FinishEvent() : LlmEvent;
+public sealed record FinishEvent : LlmEvent;
 
 /// <summary>
-/// Emitted on a streaming error.
+///     Emitted on a streaming error.
 /// </summary>
 public sealed record ErrorEvent(string Message, string? Exception = null) : LlmEvent;

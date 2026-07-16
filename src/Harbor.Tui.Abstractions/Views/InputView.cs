@@ -1,23 +1,20 @@
-using System;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
-
 namespace Harbor.Tui.Abstractions.Views;
-
 /// <summary>
-/// Builtin input view — renders <see cref="InputViewModel"/> state: the user prompt line
-/// with a green <c>&gt;</c> prefix, a dim placeholder when empty, and a reverse-video
-/// cursor block at <see cref="InputViewModel.CursorPosition"/>.
+///     Builtin input view — renders <see cref="InputViewModel" /> state: the user prompt line
+///     with a green <c>&gt;</c> prefix, a dim placeholder when empty, and a reverse-video
+///     cursor block at <see cref="InputViewModel.CursorPosition" />.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The view is stateless: it draws the current text + cursor snapshot every time it is
-/// rendered. Full-screen TUIs repaint it on each key press; streaming renderers can opt
-/// out of placement-driven Input repaints and rely on their own readline loop.
-/// </para>
-/// <para>
-/// This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext"/>.
-/// </para>
+///     <para>
+///         The view is stateless: it draws the current text + cursor snapshot every time it is
+///         rendered. Full-screen TUIs repaint it on each key press; streaming renderers can opt
+///         out of placement-driven Input repaints and rely on their own readline loop.
+///     </para>
+///     <para>
+///         This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext" />.
+///     </para>
 /// </remarks>
 public sealed class InputView : TuiViewBase<InputViewModel>
 {
@@ -35,7 +32,7 @@ public sealed class InputView : TuiViewBase<InputViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = ViewModel;
+        var vm = this.ViewModel;
         if (vm is null)
         {
             return Task.CompletedTask;
@@ -74,10 +71,10 @@ public sealed class InputView : TuiViewBase<InputViewModel>
 
     private static void RenderTextWithCursor(ITuiRenderContext context, string text, int cursor)
     {
-        var pos = Math.Clamp(cursor, 0, text.Length);
-        var before = text[..pos];
-        var atCursor = pos < text.Length ? text[pos].ToString() : " ";
-        var after = pos < text.Length ? text[(pos + 1)..] : string.Empty;
+        int pos = Math.Clamp(cursor, 0, text.Length);
+        string before = text[..pos];
+        string atCursor = pos < text.Length ? text[pos].ToString() : " ";
+        string after = pos < text.Length ? text[(pos + 1)..] : string.Empty;
 
         context.Write(before);
         if (context.SupportsColor)

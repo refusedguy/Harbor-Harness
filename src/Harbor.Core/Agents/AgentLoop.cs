@@ -1,47 +1,32 @@
-using System.Buffers;
-using System.Threading.Channels;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
+using CommunityToolkit.HighPerformance.Buffers;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging;
-using CommunityToolkit.HighPerformance;
-using CommunityToolkit.HighPerformance.Buffers;
-
 namespace Harbor.Core.Agents;
-
 /// <summary>
-/// Default agent loop. Implements Chain of Responsibility pattern (GOF):
-/// prompt → LLM stream → tool execution → next turn → (compaction if needed) → repeat.
-///
-/// Performance:
-///  - Streaming deltas are coalesced in a pooled StringBuilder before being attached to the
-///    partial message, reducing per-delta array allocations from O(n²) to O(n) per text run.
-///  - Tool-definition arrays are sized directly instead of via LINQ Select().ToList().
-///  - Tool names are interned via <see cref="StringPool"/> to deduplicate provider/tool strings.
+///     Default agent loop. Implements Chain of Responsibility pattern (GOF):
+///     prompt → LLM stream → tool execution → next turn → (compaction if needed) → repeat.
+///     Performance:
+///     - Streaming deltas are coalesced in a pooled StringBuilder before being attached to the
+///     partial message, reducing per-delta array allocations from O(n²) to O(n) per text run.
+///     - Tool-definition arrays are sized directly instead of via LINQ Select().ToList().
+///     - Tool names are interned via <see cref="StringPool" /> to deduplicate provider/tool strings.
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
-    private readonly IProviderRegistry _providers;
-    private readonly IToolRegistry _tools;
     private readonly IAgentRegistry _agents;
-    private readonly ISystemPromptBuilder _promptBuilder;
     private readonly ICompactionService _compaction;
-    private readonly ITokenEstimator _tokenEstimator;
     private readonly IEventBus _eventBus;
-    private readonly IPermissionService _permissions;
-    private readonly MessageConverter _messageConverter;
     private readonly ILogger<AgentLoop> _logger;
+    private readonly MessageConverter _messageConverter;
+    private readonly IPermissionService _permissions;
+    private readonly ISystemPromptBuilder _promptBuilder;
+    private readonly IProviderRegistry _providers;
+    private readonly ITokenEstimator _tokenEstimator;
+    private readonly IToolRegistry _tools;
 
     /// <summary>
-    /// Construct an <see cref="AgentLoop"/> wired to the supplied services.
+    ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
     /// </summary>
     /// <param name="providers">The provider registry for LLM clients.</param>
     /// <param name="tools">The tool registry for tool lookup and resolution.</param>
@@ -78,9 +63,9 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    /// Run the agent loop to completion: prompt → LLM stream → tool execution → next turn,
-    /// repeating until either no tool calls are emitted or <see cref="AgentDefinition.MaxSteps"/>
-    /// is reached. Compaction runs at the start of each turn if the token estimator says so.
+    ///     Run the agent loop to completion: prompt → LLM stream → tool execution → next turn,
+    ///     repeating until either no tool calls are emitted or <see cref="AgentDefinition.MaxSteps" />
+    ///     is reached. Compaction runs at the start of each turn if the token estimator says so.
     /// </summary>
     /// <param name="session">The session context for this run.</param>
     /// <param name="agent">The agent definition driving the loop.</param>
@@ -92,7 +77,7 @@ public sealed class AgentLoop : IAgentLoop
         {
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
 
-            var turn = 0;
+            int turn = 0;
             while (!ct.IsCancellationRequested)
             {
                 turn++;
@@ -130,7 +115,7 @@ public sealed class AgentLoop : IAgentLoop
                     // happy-path/error-path split structural rather than
                     // control-flow.
                     await compactionResult.Match(
-                        onSuccess: async result =>
+                        async result =>
                         {
                             await session.AppendMessageAsync(result.SummaryMessage, ct).ConfigureAwait(false);
                             await _eventBus.PublishAsync(new CompactionCompletedEvent(
@@ -140,7 +125,7 @@ public sealed class AgentLoop : IAgentLoop
                                 result.TokensSaved,
                                 result.Duration), ct).ConfigureAwait(false);
                         },
-                        onFailure: error =>
+                        error =>
                         {
                             _logger.LogWarning("Compaction failed: {Error}", error);
                             return Task.CompletedTask;
@@ -150,14 +135,14 @@ public sealed class AgentLoop : IAgentLoop
                 // 3. Build system prompt
                 var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
                 var promptContext = new SystemPromptContext(
-                    Agent: agent,
-                    Model: model,
-                    Tools: tools,
-                    ContextFiles: Array.Empty<ContextFile>(),
-                    Skills: Array.Empty<SkillDescriptor>(),
-                    McpInstructions: null,
-                    WorkingDirectory: session.Session.Directory);
-                var systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
+                    agent,
+                    model,
+                    tools,
+                    Array.Empty<ContextFile>(),
+                    Array.Empty<SkillDescriptor>(),
+                    null,
+                    session.Session.Directory);
+                string systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
 
                 // 4. Convert messages
                 var llmMessages = _messageConverter.ToLlmMessages(session.Messages);
@@ -165,10 +150,10 @@ public sealed class AgentLoop : IAgentLoop
                 // 5. Build request — size the ToolDefinition array directly instead of LINQ Select().ToList().
                 var toolDefs = BuildToolDefinitions(tools);
                 var request = new LlmRequest(
-                    Model: agent.Model,
-                    Messages: llmMessages,
-                    SystemPrompt: systemPrompt,
-                    Tools: toolDefs,
+                    agent.Model,
+                    llmMessages,
+                    systemPrompt,
+                    toolDefs,
                     MaxOutputTokens: model.MaxOutputTokens,
                     Temperature: agent.Temperature,
                     ReasoningEffort: agent.ReasoningEffort);
@@ -186,8 +171,8 @@ public sealed class AgentLoop : IAgentLoop
 
                 using var textBuffer = StringBuilderPool.Rent(4096);
                 using var thinkingBuffer = StringBuilderPool.Rent(1024);
-                var hasPendingText = false;
-                var hasPendingThinking = false;
+                bool hasPendingText = false;
+                bool hasPendingThinking = false;
 
                 try
                 {
@@ -236,7 +221,7 @@ public sealed class AgentLoop : IAgentLoop
                                     hasPendingThinking = false;
                                 }
                                 // Intern the tool name via StringPool — tool names are highly repeated.
-                                var internedName = StringPool.Shared.GetOrAdd(tce.ToolName);
+                                string internedName = StringPool.Shared.GetOrAdd(tce.ToolName);
                                 var newToolCall = new ToolCallPart(tce.Id, internedName, tce.Args);
                                 partial = partial.AppendToolCall(newToolCall);
                                 toolCalls.Add(newToolCall);
@@ -258,7 +243,7 @@ public sealed class AgentLoop : IAgentLoop
                                     hasPendingThinking = false;
                                 }
                                 finalUsage = sf.Usage;
-                                if (Enum.TryParse<StopReason>(sf.FinishReason, ignoreCase: true, out var sr))
+                                if (Enum.TryParse<StopReason>(sf.FinishReason, true, out var sr))
                                 {
                                     stopReason = sr;
                                 }
@@ -337,8 +322,8 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    /// Build the ToolDefinition array directly, avoiding the LINQ Select().ToList() allocation
-    /// (which allocates a delegate + iterator + List).
+    ///     Build the ToolDefinition array directly, avoiding the LINQ Select().ToList() allocation
+    ///     (which allocates a delegate + iterator + List).
     /// </summary>
     private static ToolDefinition[] BuildToolDefinitions(IReadOnlyList<ToolDescriptor> tools)
     {
@@ -348,7 +333,7 @@ public sealed class AgentLoop : IAgentLoop
         }
 
         var result = new ToolDefinition[tools.Count];
-        for (var i = 0; i < tools.Count; i++)
+        for (int i = 0; i < tools.Count; i++)
         {
             var t = tools[i];
             result[i] = new ToolDefinition(t.Name.Value, t.Description, t.Schema);
@@ -357,11 +342,11 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    /// Linear scan for the requested model — avoids LINQ FirstOrDefault delegate allocation.
+    ///     Linear scan for the requested model — avoids LINQ FirstOrDefault delegate allocation.
     /// </summary>
     private static ModelInfo? FindModel(IReadOnlyList<ModelInfo> models, string modelId)
     {
-        for (var i = 0; i < models.Count; i++)
+        for (int i = 0; i < models.Count; i++)
         {
             if (models[i].Id == modelId)
             {
@@ -372,12 +357,12 @@ public sealed class AgentLoop : IAgentLoop
     }
 
     /// <summary>
-    /// Materialize a snapshot list of the current session messages for events.
+    ///     Materialize a snapshot list of the current session messages for events.
     /// </summary>
     private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> messages)
     {
         var snapshot = new List<AgentMessage>(messages.Count);
-        for (var i = 0; i < messages.Count; i++)
+        for (int i = 0; i < messages.Count; i++)
         {
             snapshot.Add(messages[i]);
         }
@@ -391,8 +376,8 @@ public sealed class AgentLoop : IAgentLoop
         AgentDefinition agent,
         CancellationToken ct)
     {
-        var hasSequential = false;
-        for (var i = 0; i < toolCalls.Count; i++)
+        bool hasSequential = false;
+        for (int i = 0; i < toolCalls.Count; i++)
         {
             var tc = toolCalls[i];
             var toolNameResult = ToolName.TryCreate(tc.ToolName);
@@ -421,7 +406,7 @@ public sealed class AgentLoop : IAgentLoop
         {
             // Size the task array directly (no LINQ Select).
             var tasks = new Task<ToolResultEntry>[toolCalls.Count];
-            for (var i = 0; i < toolCalls.Count; i++)
+            for (int i = 0; i < toolCalls.Count; i++)
             {
                 tasks[i] = ExecuteSingleToolCallAsync(toolCalls[i], session, partial, agent, ct);
             }
@@ -430,10 +415,10 @@ public sealed class AgentLoop : IAgentLoop
         }
 
         return new ToolResultMessage(
-            Id: Guid.NewGuid().ToString("N"),
-            SessionId: session.Session.Id,
-            CreatedAt: DateTimeOffset.UtcNow,
-            Results: results);
+            Guid.NewGuid().ToString("N"),
+            session.Session.Id,
+            DateTimeOffset.UtcNow,
+            results);
     }
 
     private async Task<ToolResultEntry> ExecuteSingleToolCallAsync(
@@ -450,18 +435,18 @@ public sealed class AgentLoop : IAgentLoop
                 toolCall.Id,
                 toolCall.ToolName,
                 $"Invalid tool name: {toolNameResult.Error}",
-                IsError: true);
+                true);
         }
 
         var toolResult = _tools.GetTool(toolNameResult.Value);
         if (toolResult.IsFailure)
         {
-            var available = _tools.GetAllTools().Select(t => t.Name.Value).JoinToString(", ");
+            string available = _tools.GetAllTools().Select(t => t.Name.Value).JoinToString(", ");
             return new ToolResultEntry(
                 toolCall.Id,
                 toolCall.ToolName,
                 $"Unknown tool: '{toolCall.ToolName}'. Available: {available}",
-                IsError: true);
+                true);
         }
 
         await _eventBus.PublishAsync(new ToolExecutionStartEvent(
@@ -477,27 +462,27 @@ public sealed class AgentLoop : IAgentLoop
 
             if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
             {
-                var denied = ToolResult.Error($"Permission denied");
+                var denied = ToolResult.Error("Permission denied");
                 await _eventBus.PublishAsync(new ToolExecutionEndEvent(
-                    toolCall.Id, denied, IsError: true), ct).ConfigureAwait(false);
+                    toolCall.Id, denied, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
             }
 
             // Execute
             var ctx = new ToolContext(
-                SessionId: session.Session.Id,
-                MessageId: partial.Id,
-                CallId: toolCall.Id,
-                Agent: agent.Name.Value,
-                Abort: ct,
-                Messages: session.Messages,
-                ReportProgress: (update, c) =>
+                session.Session.Id,
+                partial.Id,
+                toolCall.Id,
+                agent.Name.Value,
+                ct,
+                session.Messages,
+                (update, c) =>
                 {
                     _ = _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c);
                     return Task.CompletedTask;
                 },
-                Ask: (req, c) => _permissions.AskUserAsync(req, c).ContinueWith(t => t.Result.Value, c),
-                Services: null!);
+                (req, c) => _permissions.AskUserAsync(req, c).ContinueWith(t => t.Result.Value, c),
+                null!);
 
             var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);
 
@@ -510,7 +495,7 @@ public sealed class AgentLoop : IAgentLoop
         {
             var cancelled = ToolResult.Error("Tool execution was cancelled.");
             await _eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, cancelled, IsError: true), ct).ConfigureAwait(false);
+                toolCall.Id, cancelled, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
         }
         catch (Exception ex)
@@ -518,7 +503,7 @@ public sealed class AgentLoop : IAgentLoop
             _logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             var errored = ToolResult.Error($"Tool execution failed: {ex.Message}");
             await _eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, errored, IsError: true), ct).ConfigureAwait(false);
+                toolCall.Id, errored, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
         }
     }

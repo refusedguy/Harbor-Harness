@@ -9,13 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
-    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj" />
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
   </ItemGroup>
 
 </Project>

@@ -1,22 +1,20 @@
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
-
 namespace Harbor.Tui.Abstractions.Views;
-
 /// <summary>
-/// Builtin diff preview view — renders <see cref="DiffPreviewViewModel"/> state: the
-/// currently selected <see cref="DiffEntry"/> with a "Diff N of M" header and navigation
-/// hints, rendered as an overlay panel.
+///     Builtin diff preview view — renders <see cref="DiffPreviewViewModel" /> state: the
+///     currently selected <see cref="DiffEntry" /> with a "Diff N of M" header and navigation
+///     hints, rendered as an overlay panel.
 /// </summary>
 /// <remarks>
-/// <para>
-/// When the view model has no diffs, the view renders nothing (early return). This keeps
-/// the overlay invisible until the first file change is recorded by
-/// <see cref="DiffPreviewViewModel.UpdateFromEventAsync"/>.
-/// </para>
-/// <para>
-/// This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext"/>.
-/// </para>
+///     <para>
+///         When the view model has no diffs, the view renders nothing (early return). This keeps
+///         the overlay invisible until the first file change is recorded by
+///         <see cref="DiffPreviewViewModel.UpdateFromEventAsync" />.
+///     </para>
+///     <para>
+///         This view is renderer-agnostic and writes only through <see cref="ITuiRenderContext" />.
+///     </para>
 /// </remarks>
 public sealed class DiffPreviewView : TuiViewBase<DiffPreviewViewModel>
 {
@@ -32,14 +30,14 @@ public sealed class DiffPreviewView : TuiViewBase<DiffPreviewViewModel>
     /// <inheritdoc />
     public override Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default)
     {
-        var vm = ViewModel;
+        var vm = this.ViewModel;
         if (vm is null || vm.Diffs.Count == 0)
         {
             return Task.CompletedTask;
         }
 
         context.WriteLine();
-        var header = $"── Diff {vm.CurrentIndex + 1} of {vm.Diffs.Count} ──";
+        string header = $"── Diff {vm.CurrentIndex + 1} of {vm.Diffs.Count} ──";
         if (context.SupportsColor)
         {
             context.WriteColored(header, TuiColor.Yellow);
@@ -67,7 +65,7 @@ public sealed class DiffPreviewView : TuiViewBase<DiffPreviewViewModel>
 
         if (vm.Diffs.Count > 1)
         {
-            var hint = "  (n: next, p: previous)";
+            string hint = "  (n: next, p: previous)";
             if (context.SupportsColor)
             {
                 context.WriteStyled(hint, TuiStyle.Dim);

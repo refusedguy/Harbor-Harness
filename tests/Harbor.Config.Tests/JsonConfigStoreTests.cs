@@ -1,12 +1,8 @@
 using Harbor.Core.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Config.Tests;
-
 /// <summary>
-/// Tests for JsonConfigStore — file-based HarborConfig persistence.
+///     Tests for JsonConfigStore — file-based HarborConfig persistence.
 /// </summary>
 public class JsonConfigStoreTests
 {
@@ -15,7 +11,7 @@ public class JsonConfigStoreTests
 
     private static string WriteTempConfig(string json)
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, json);
         return path;
@@ -24,22 +20,22 @@ public class JsonConfigStoreTests
     [Test]
     public async Task LoadAsync_ExistingFile_ReturnsDeserializedConfig()
     {
-        var json = """
-        {
-          "provider": "anthropic",
-          "model": "anthropic/claude-opus-4",
-          "agent": "code",
-          "tui": "ansi",
-          "storage": "jsonl",
-          "onboarded": true,
-          "apiKeys": {
-            "anthropic": "sk-ant-xxx"
-          },
-          "maxSteps": 30,
-          "costLimit": 5.0
-        }
-        """;
-        var path = WriteTempConfig(json);
+        string json = """
+                      {
+                        "provider": "anthropic",
+                        "model": "anthropic/claude-opus-4",
+                        "agent": "code",
+                        "tui": "ansi",
+                        "storage": "jsonl",
+                        "onboarded": true,
+                        "apiKeys": {
+                          "anthropic": "sk-ant-xxx"
+                        },
+                        "maxSteps": 30,
+                        "costLimit": 5.0
+                      }
+                      """;
+        string path = WriteTempConfig(json);
         try
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
@@ -57,7 +53,7 @@ public class JsonConfigStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -65,7 +61,7 @@ public class JsonConfigStoreTests
     [Test]
     public async Task LoadAsync_NoFile_ReturnsDefault()
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         // Don't create the file — LoadAsync should return Default.
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
 
@@ -83,7 +79,7 @@ public class JsonConfigStoreTests
     [Test]
     public async Task SaveAsync_LoadAsync_Roundtrip()
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         try
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
@@ -97,7 +93,7 @@ public class JsonConfigStoreTests
                 Onboarded = true,
                 MaxSteps = 25,
                 CostLimit = 7.5m,
-                ApiKeys = { ["openai"] = "sk-xxx" },
+                ApiKeys = { ["openai"] = "sk-xxx" }
             };
 
             var saveResult = await store.SaveAsync(config);
@@ -119,7 +115,7 @@ public class JsonConfigStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -127,7 +123,7 @@ public class JsonConfigStoreTests
     [Test]
     public async Task UpdateAsync_ChangesValue()
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         try
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
@@ -150,7 +146,7 @@ public class JsonConfigStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -158,7 +154,7 @@ public class JsonConfigStoreTests
     [Test]
     public async Task UpdateAsync_OnMissingFile_LoadsDefaultThenSaves()
     {
-        var path = NewTempConfigPath();
+        string path = NewTempConfigPath();
         try
         {
             var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
@@ -178,7 +174,7 @@ public class JsonConfigStoreTests
         finally
         {
             if (File.Exists(path)) File.Delete(path);
-            var dir = Path.GetDirectoryName(path);
+            string? dir = Path.GetDirectoryName(path);
             if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
         }
     }
@@ -186,7 +182,7 @@ public class JsonConfigStoreTests
     [Test]
     public async Task GetDefaultPath_ReturnsHarborConfigJson()
     {
-        var path = JsonConfigStore.GetDefaultPath();
+        string path = JsonConfigStore.GetDefaultPath();
         await Assert.That(path).Contains(".harbor");
         await Assert.That(Path.GetFileName(path)).IsEqualTo("config.json");
     }

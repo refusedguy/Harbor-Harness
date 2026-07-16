@@ -1,17 +1,14 @@
-using Microsoft.Extensions.Logging;
-using Harbor.Abstractions.Models.Identifiers;
 using System.Text;
 using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.Plugin.FileTree;
-
 /// <summary>
-/// FileTree plugin — adds a `tree` tool that visualizes directory structure.
-/// Demonstrates a read-only tool with custom output formatting.
+///     FileTree plugin — adds a `tree` tool that visualizes directory structure.
+///     Demonstrates a read-only tool with custom output formatting.
 /// </summary>
 public sealed class FileTreePlugin : IToolPlugin
 {
@@ -20,15 +17,9 @@ public sealed class FileTreePlugin : IToolPlugin
     public Version RequiredHarborVersion => new(0, 2, 0);
     public string Description => "Directory tree visualization tool";
 
-    public void Initialize(PluginContext context)
-    {
-        context.CreateLogger<FileTreePlugin>().LogInformation("FileTree plugin initialized");
-    }
+    public void Initialize(PluginContext context) => context.CreateLogger<FileTreePlugin>().LogInformation("FileTree plugin initialized");
 
-    public void RegisterTools(IToolRegistryBuilder builder)
-    {
-        builder.AddTool<TreeTool>();
-    }
+    public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<TreeTool>();
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
@@ -51,32 +42,32 @@ public sealed class TreeTool : ITool
     {
         "Use `tree` to get an overview of project structure",
         "Set `depth` to limit recursion (default: 3, max: 10)",
-        "Set `all=true` to include hidden files",
+        "Set `all=true` to include hidden files"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "Directory to visualize (default: current)" },
-            "depth": { "type": "integer", "description": "Maximum recursion depth (default: 3, max: 10)" },
-            "all": { "type": "boolean", "description": "Include hidden files (default: false)" }
-          }
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "path": { "type": "string", "description": "Directory to visualize (default: current)" },
+                                                                          "depth": { "type": "integer", "description": "Maximum recursion depth (default: 3, max: 10)" },
+                                                                          "all": { "type": "boolean", "description": "Include hidden files (default: false)" }
+                                                                        }
+                                                                      }
+                                                                      """);
 
     public Task<ToolResult> ExecuteAsync(
         JsonElement args,
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
+        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
             ? p.GetString()!
             : Environment.CurrentDirectory;
-        var depth = args.TryGetProperty("depth", out var d) && d.ValueKind == JsonValueKind.Number
+        int depth = args.TryGetProperty("depth", out var d) && d.ValueKind == JsonValueKind.Number
             ? Math.Min(Math.Max(d.GetInt32(), 1), 10)
             : 3;
-        var all = args.TryGetProperty("all", out var a) && a.GetBoolean();
+        bool all = args.TryGetProperty("all", out var a) && a.GetBoolean();
 
         if (!Directory.Exists(path))
             return Task.FromResult(ToolResult.Error($"Directory not found: {path}"));
@@ -114,26 +105,26 @@ public sealed class TreeTool : ITool
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var allEntries = dirList.Count + fileList.Count;
-        for (var i = 0; i < allEntries; i++)
+        int allEntries = dirList.Count + fileList.Count;
+        for (int i = 0; i < allEntries; i++)
         {
             ct.ThrowIfCancellationRequested();
 
-            var isLast = i == allEntries - 1;
-            var connector = isLast ? "└── " : "├── ";
-            var childPrefix = prefix + (isLast ? "    " : "│   ");
+            bool isLast = i == allEntries - 1;
+            string connector = isLast ? "└── " : "├── ";
+            string childPrefix = prefix + (isLast ? "    " : "│   ");
 
             if (i < dirList.Count)
             {
-                var dir = dirList[i];
+                string dir = dirList[i];
                 sb.AppendLine($"{prefix}{connector}{Path.GetFileName(dir)}/");
                 RenderTree(dir, childPrefix, maxDepth, currentDepth + 1, all, sb, ct);
             }
             else
             {
-                var file = fileList[i - dirList.Count];
+                string file = fileList[i - dirList.Count];
                 var info = new FileInfo(file);
-                var size = FormatSize(info.Length);
+                string size = FormatSize(info.Length);
                 sb.AppendLine($"{prefix}{connector}{Path.GetFileName(file)} ({size})");
             }
         }
@@ -144,6 +135,6 @@ public sealed class TreeTool : ITool
         < 1024 => $"{bytes}B",
         < 1024 * 1024 => $"{bytes / 1024.0:F1}K",
         < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1}M",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):F1}G",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):F1}G"
     };
 }

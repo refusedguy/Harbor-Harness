@@ -1,51 +1,48 @@
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tui;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
-
 namespace Harbor.Tui.Abstractions.Views;
-
 /// <summary>
-/// Base view contract — a visual component rendered by the TUI.
-/// Implements the View part of MVVM. Views are stateless visualizations
-/// of their bound ViewModel state.
+///     Base view contract — a visual component rendered by the TUI.
+///     Implements the View part of MVVM. Views are stateless visualizations
+///     of their bound ViewModel state.
 /// </summary>
 public interface ITuiView : IDisposable
 {
     /// <summary>Unique view identifier (e.g. "status-bar", "chat-history", "diff-preview").</summary>
-    string Id { get; }
+    public string Id { get; }
 
     /// <summary>Display name shown in /views command.</summary>
-    string DisplayName { get; }
+    public string DisplayName { get; }
 
     /// <summary>Where this view appears in the layout.</summary>
-    TuiViewPlacement Placement { get; }
+    public TuiViewPlacement Placement { get; }
 
     /// <summary>Bound view model (if any).</summary>
-    ITuiViewModel? ViewModel { get; set; }
+    public ITuiViewModel? ViewModel { get; set; }
 
     /// <summary>Render the view to the output context.</summary>
-    Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default);
+    public Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default);
 
     /// <summary>Handle a key press when this view has focus. Returns true if handled.</summary>
-    bool HandleKey(KeyPress key) => false;
+    public bool HandleKey(KeyPress key) => false;
 
     /// <summary>Optional: handle an agent event (e.g. update displayed tokens).</summary>
-    Task OnEventAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
+    public Task OnEventAsync(AgentEvent @event, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 /// <summary>
-/// Strongly-typed view base.
+///     Strongly-typed view base.
 /// </summary>
 public abstract class TuiViewBase<TViewModel> : ITuiView
     where TViewModel : class, ITuiViewModel
 {
+
+    public TViewModel? ViewModel { get; set; }
     public abstract string Id { get; }
     public abstract string DisplayName { get; }
     public abstract TuiViewPlacement Placement { get; }
-
-    public TViewModel? ViewModel { get; set; }
     ITuiViewModel? ITuiView.ViewModel
     {
         get => ViewModel;
@@ -61,7 +58,7 @@ public abstract class TuiViewBase<TViewModel> : ITuiView
 }
 
 /// <summary>
-/// Where a view appears in the layout.
+///     Where a view appears in the layout.
 /// </summary>
 public enum TuiViewPlacement
 {
@@ -84,5 +81,5 @@ public enum TuiViewPlacement
     SidebarRight,
 
     /// <summary>Left sidebar.</summary>
-    SidebarLeft,
+    SidebarLeft
 }

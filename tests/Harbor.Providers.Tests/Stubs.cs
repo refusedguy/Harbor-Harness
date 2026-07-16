@@ -3,11 +3,9 @@ using Harbor.Abstractions.Models;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
-
 namespace Harbor.Providers.Tests;
-
 /// <summary>
-/// Stub auth resolver for AnthropicLlmClient — never hits env vars or files.
+///     Stub auth resolver for AnthropicLlmClient — never hits env vars or files.
 /// </summary>
 internal sealed class StubAnthropicAuthResolver : IAnthropicAuthResolver
 {
@@ -17,7 +15,7 @@ internal sealed class StubAnthropicAuthResolver : IAnthropicAuthResolver
 }
 
 /// <summary>
-/// Stub auth resolver for OpenAILlmClient.
+///     Stub auth resolver for OpenAILlmClient.
 /// </summary>
 internal sealed class StubOpenAIAuthResolver : IOpenAIAuthResolver
 {
@@ -27,7 +25,7 @@ internal sealed class StubOpenAIAuthResolver : IOpenAIAuthResolver
 }
 
 /// <summary>
-/// Stub IAuthResolver for OpenAiCompatibleLlmClient — accepts any provider ID.
+///     Stub IAuthResolver for OpenAiCompatibleLlmClient — accepts any provider ID.
 /// </summary>
 internal sealed class StubGenericAuthResolver : IAuthResolver
 {
@@ -37,7 +35,7 @@ internal sealed class StubGenericAuthResolver : IAuthResolver
 }
 
 /// <summary>
-/// Stub IModelCatalog — returns an empty list without HTTP.
+///     Stub IModelCatalog — returns an empty list without HTTP.
 /// </summary>
 internal sealed class StubModelCatalog : IModelCatalog
 {
@@ -47,8 +45,8 @@ internal sealed class StubModelCatalog : IModelCatalog
 }
 
 /// <summary>
-/// Test double for HttpMessageHandler — captures requests and returns a canned response.
-/// Allows tests to exercise HTTP-dependent code without real network calls.
+///     Test double for HttpMessageHandler — captures requests and returns a canned response.
+///     Allows tests to exercise HTTP-dependent code without real network calls.
 /// </summary>
 internal sealed class StubHttpHandler : HttpMessageHandler
 {

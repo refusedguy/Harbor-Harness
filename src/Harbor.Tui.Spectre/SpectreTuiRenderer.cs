@@ -1,25 +1,21 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
-
 namespace Harbor.Tui.Spectre;
-
 /// <summary>
-/// Spectre.Console-based TUI renderer — rich panels, tables, markup.
+///     Spectre.Console-based TUI renderer — rich panels, tables, markup.
 /// </summary>
 public sealed class SpectreTuiRenderer : BaseTuiRenderer
 {
-    public override ITuiRenderContext Context { get; }
 
     public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
     {
         Context = new SpectreRenderContext();
     }
+    public override ITuiRenderContext Context { get; }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -54,15 +50,15 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
                 AnsiConsole.WriteLine();
                 var panel = new Panel(new Markup($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
                 {
-                    Padding = new Padding(1, 0),
+                    Padding = new Padding(1, 0)
                 };
                 AnsiConsole.Write(panel);
                 break;
 
             case ToolExecutionEndEvent tee:
-                var color = tee.IsError ? "red" : "green";
-                var label = tee.IsError ? "✗" : "✓";
-                var output = tee.Result.Output.Length > 500
+                string color = tee.IsError ? "red" : "green";
+                string label = tee.IsError ? "✗" : "✓";
+                string output = tee.Result.Output.Length > 500
                     ? tee.Result.Output[..500] + "..."
                     : tee.Result.Output;
                 AnsiConsole.Write(new Markup($"[{color}]{label}[/] [dim]{Markup.Escape(output)}[/]\n"));
@@ -116,7 +112,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         AnsiConsole.Write(new Markup($"[green]{Markup.Escape(prompt)}[/]"));
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
@@ -157,8 +153,8 @@ internal sealed class SpectreRenderContext : ITuiRenderContext
 
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
     {
-        var fgHex = foreground.ToString();
-        var markup = $"[#{fgHex[1..]}]{Markup.Escape(text)}[/]";
+        string fgHex = foreground.ToString();
+        string markup = $"[#{fgHex[1..]}]{Markup.Escape(text)}[/]";
         AnsiConsole.Write(new Markup(markup));
     }
 
@@ -171,8 +167,8 @@ internal sealed class SpectreRenderContext : ITuiRenderContext
         if (style.HasFlag(TuiStyle.Dim)) parts.Add("dim");
         if (style.HasFlag(TuiStyle.Strike)) parts.Add("strikethrough");
 
-        var tags = string.Join(" ", parts);
-        var markup = parts.Count > 0
+        string tags = string.Join(" ", parts);
+        string markup = parts.Count > 0
             ? $"[{tags}]{Markup.Escape(text)}[/]"
             : Markup.Escape(text);
         AnsiConsole.Write(new Markup(markup));

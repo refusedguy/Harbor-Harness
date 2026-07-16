@@ -1,16 +1,17 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
 using Microsoft.Extensions.Logging;
-
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.OpenAiCompatible;
-
 /// <summary>
-/// Provider configuration loaded from JSON.
+///     Provider configuration loaded from JSON.
 /// </summary>
 public sealed class ProviderConfig
 {
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
     public string Id { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string Description { get; set; } = "";
@@ -36,7 +37,7 @@ public sealed class ProviderConfig
     {
         try
         {
-            var json = File.ReadAllText(path);
+            string json = File.ReadAllText(path);
             var config = JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions) ?? throw new InvalidOperationException("Deserialization returned null");
             if (string.IsNullOrEmpty(config.Id))
                 return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'id'.");
@@ -49,12 +50,6 @@ public sealed class ProviderConfig
             return Result.Failure<ProviderConfig>($"Failed to load provider config '{path}': {ex.Message}");
         }
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-    };
 }
 
 public sealed class ModelMapping
@@ -70,36 +65,36 @@ public sealed class ModelMapping
 }
 
 /// <summary>
-/// Auth resolver — fetches API key from env, file, or OS keychain.
+///     Auth resolver — fetches API key from env, file, or OS keychain.
 /// </summary>
 public interface IAuthResolver
 {
-    Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default);
+    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default);
 }
 
 /// <summary>
-/// Default auth resolver — env var → config file.
+///     Default auth resolver — env var → config file.
 /// </summary>
 public sealed class EnvVarAuthResolver : IAuthResolver
 {
-    private readonly Dictionary<string, string> _overrides;
     private readonly ILogger<EnvVarAuthResolver> _logger;
+    private readonly Dictionary<string, string> _overrides;
 
     public EnvVarAuthResolver(Dictionary<string, string>? overrides = null, ILogger<EnvVarAuthResolver>? logger = null)
     {
-        _overrides = overrides ?? new();
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<EnvVarAuthResolver>.Instance;
+        _overrides = overrides ?? new Dictionary<string, string>();
+        _logger = logger ?? NullLogger<EnvVarAuthResolver>.Instance;
     }
 
     public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default)
     {
         // 1. Override (from CLI flag)
-        if (_overrides.TryGetValue(providerId, out var key) && !string.IsNullOrEmpty(key))
+        if (_overrides.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             return Task.FromResult(Result.Success(key));
 
         // 2. Env var (conventional name)
-        var envName = providerId.ToUpperInvariant().Replace("-", "_") + "_API_KEY";
-        var envValue = Environment.GetEnvironmentVariable(envName);
+        string envName = providerId.ToUpperInvariant().Replace("-", "_") + "_API_KEY";
+        string? envValue = Environment.GetEnvironmentVariable(envName);
         if (!string.IsNullOrEmpty(envValue))
             return Task.FromResult(Result.Success(envValue));
 
@@ -108,17 +103,17 @@ public sealed class EnvVarAuthResolver : IAuthResolver
 }
 
 /// <summary>
-/// Model catalog — fetches and caches models list.
+///     Model catalog — fetches and caches models list.
 /// </summary>
 public interface IModelCatalog
 {
-    Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(ProviderConfig config, CancellationToken ct = default);
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(ProviderConfig config, CancellationToken ct = default);
 }
 
 public sealed class DynamicModelCatalog : IModelCatalog
 {
-    private readonly HttpClient _http;
     private readonly string _cacheDir;
+    private readonly HttpClient _http;
     private readonly ILogger<DynamicModelCatalog> _logger;
 
     public DynamicModelCatalog(HttpClient http, string cacheDir, ILogger<DynamicModelCatalog> logger)
@@ -139,7 +134,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
         if (string.IsNullOrEmpty(config.ModelsUrl))
             return Result.Failure<IReadOnlyList<ModelInfo>>($"Provider '{config.Id}' has no modelsUrl and no hardcoded models.");
 
-        var cachePath = Path.Combine(_cacheDir, $"{config.Id}.json");
+        string cachePath = Path.Combine(_cacheDir, $"{config.Id}.json");
         var cacheAge = GetCacheAge(cachePath);
 
         if (cacheAge < TimeSpan.FromHours(config.ModelsRefreshHours))
@@ -151,7 +146,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
 
         try
         {
-            var response = await _http.GetStringAsync(config.ModelsUrl, ct).ConfigureAwait(false);
+            string response = await _http.GetStringAsync(config.ModelsUrl, ct).ConfigureAwait(false);
             Directory.CreateDirectory(_cacheDir);
             await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
             return ParseModelsResponse(response, config);
@@ -177,7 +172,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
 
         try
         {
-            var json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
             return ParseModelsResponse(json, config);
         }
         catch (Exception ex)
@@ -196,7 +191,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
             var modelsArray = root;
             if (!string.IsNullOrEmpty(config.ModelsPath))
             {
-                foreach (var part in config.ModelsPath.Split('.'))
+                foreach (string part in config.ModelsPath.Split('.'))
                 {
                     if (!modelsArray.TryGetProperty(part, out var next))
                         return Result.Failure<IReadOnlyList<ModelInfo>>($"Path '{config.ModelsPath}' not found in response.");
@@ -242,30 +237,30 @@ public sealed class DynamicModelCatalog : IModelCatalog
 
     private static ModelInfo? ParseModel(JsonElement item, ProviderConfig config, ModelMapping mapping)
     {
-        var id = GetStringField(item, mapping.Id ?? "id");
+        string? id = GetStringField(item, mapping.Id ?? "id");
         if (string.IsNullOrEmpty(id)) return null;
 
-        var displayName = GetStringField(item, mapping.DisplayName ?? "name") ?? id;
-        var contextWindow = GetIntField(item, mapping.ContextWindow ?? "context_length") ?? 4096;
-        var maxOutput = GetIntField(item, mapping.MaxOutputTokens ?? "max_output_tokens") ?? 4096;
+        string displayName = GetStringField(item, mapping.DisplayName ?? "name") ?? id;
+        int contextWindow = GetIntField(item, mapping.ContextWindow ?? "context_length") ?? 4096;
+        int maxOutput = GetIntField(item, mapping.MaxOutputTokens ?? "max_output_tokens") ?? 4096;
 
         return new ModelInfo(
-            Id: id,
-            ProviderId: config.Id,
-            DisplayName: displayName,
-            ContextWindow: contextWindow,
-            MaxOutputTokens: maxOutput,
-            SupportsReasoning: false,
-            SupportsVision: false,
-            SupportsToolUse: true,
-            Pricing: Pricing.Unknown,
-            PromptTemplate: "openai");
+            id,
+            config.Id,
+            displayName,
+            contextWindow,
+            maxOutput,
+            false,
+            false,
+            true,
+            Pricing.Unknown,
+            "openai");
     }
 
     private static string? GetStringField(JsonElement item, string path)
     {
         var current = item;
-        foreach (var part in path.Split('.'))
+        foreach (string part in path.Split('.'))
         {
             if (!current.TryGetProperty(part, out var next)) return null;
             current = next;
@@ -276,7 +271,7 @@ public sealed class DynamicModelCatalog : IModelCatalog
     private static int? GetIntField(JsonElement item, string path)
     {
         var current = item;
-        foreach (var part in path.Split('.'))
+        foreach (string part in path.Split('.'))
         {
             if (!current.TryGetProperty(part, out var next)) return null;
             current = next;
@@ -284,8 +279,8 @@ public sealed class DynamicModelCatalog : IModelCatalog
         return current.ValueKind switch
         {
             JsonValueKind.Number => (int)current.GetInt64(),
-            JsonValueKind.String when int.TryParse(current.GetString(), out var i) => i,
-            _ => null,
+            JsonValueKind.String when int.TryParse(current.GetString(), out int i) => i,
+            _ => null
         };
     }
 }

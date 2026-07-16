@@ -18,7 +18,11 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 2.5, "outputPerMillion": 10.0, "cacheReadPerMillion": 1.25 },
+      "pricing": {
+        "inputPerMillion": 2.5,
+        "outputPerMillion": 10.0,
+        "cacheReadPerMillion": 1.25
+      },
       "promptTemplate": "openai"
     },
     {
@@ -30,7 +34,11 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.6, "cacheReadPerMillion": 0.075 },
+      "pricing": {
+        "inputPerMillion": 0.15,
+        "outputPerMillion": 0.6,
+        "cacheReadPerMillion": 0.075
+      },
       "promptTemplate": "openai"
     },
     {
@@ -42,7 +50,11 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 2.0, "outputPerMillion": 8.0, "cacheReadPerMillion": 0.5 },
+      "pricing": {
+        "inputPerMillion": 2.0,
+        "outputPerMillion": 8.0,
+        "cacheReadPerMillion": 0.5
+      },
       "promptTemplate": "openai"
     },
     {
@@ -54,7 +66,11 @@
       "supportsReasoning": false,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 0.4, "outputPerMillion": 1.6, "cacheReadPerMillion": 0.1 },
+      "pricing": {
+        "inputPerMillion": 0.4,
+        "outputPerMillion": 1.6,
+        "cacheReadPerMillion": 0.1
+      },
       "promptTemplate": "openai"
     },
     {
@@ -66,7 +82,11 @@
       "supportsReasoning": true,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 10.0, "outputPerMillion": 40.0, "cacheReadPerMillion": 2.5 },
+      "pricing": {
+        "inputPerMillion": 10.0,
+        "outputPerMillion": 40.0,
+        "cacheReadPerMillion": 2.5
+      },
       "promptTemplate": "openai"
     },
     {
@@ -78,7 +98,11 @@
       "supportsReasoning": true,
       "supportsVision": true,
       "supportsToolUse": true,
-      "pricing": { "inputPerMillion": 1.1, "outputPerMillion": 4.4, "cacheReadPerMillion": 0.275 },
+      "pricing": {
+        "inputPerMillion": 1.1,
+        "outputPerMillion": 4.4,
+        "cacheReadPerMillion": 0.275
+      },
       "promptTemplate": "openai"
     }
   ],

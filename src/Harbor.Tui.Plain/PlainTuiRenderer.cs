@@ -1,28 +1,26 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
-
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Plain;
-
 /// <summary>
-/// Plain text TUI renderer — no ANSI escape codes, no colors.
-/// Use for: piping to other commands, CI logs, accessibility, files.
+///     Plain text TUI renderer — no ANSI escape codes, no colors.
+///     Use for: piping to other commands, CI logs, accessibility, files.
 /// </summary>
 public sealed class PlainTuiRenderer : BaseTuiRenderer
 {
-    private readonly TextWriter _writer;
     private readonly bool _ownsWriter;
+    private readonly TextWriter _writer;
 
-    public override ITuiRenderContext Context { get; }
-
-    public PlainTuiRenderer(TextWriter? writer = null) : base(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance)
+    public PlainTuiRenderer(TextWriter? writer = null) : base(NullLogger.Instance)
     {
         _writer = writer ?? Console.Out;
         _ownsWriter = writer is not null;
         Context = new PlainRenderContext(_writer);
     }
+
+    public override ITuiRenderContext Context { get; }
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
@@ -47,7 +45,7 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
                 break;
 
             case ToolExecutionEndEvent tee:
-                var label = tee.IsError ? "ERROR" : "OK";
+                string label = tee.IsError ? "ERROR" : "OK";
                 ctx.WriteLine($"  [{label}] {tee.Result.Output}");
                 break;
 
@@ -90,7 +88,7 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
     {
         Context.Write(prompt);
         Context.Flush();
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
@@ -123,11 +121,14 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
 internal sealed class PlainRenderContext : ITuiRenderContext
 {
     private readonly TextWriter _writer;
+
+    public PlainRenderContext(TextWriter writer)
+    {
+        _writer = writer;
+    }
     public int Width => 80;
     public int Height => 24;
     public bool SupportsColor => false;
-
-    public PlainRenderContext(TextWriter writer) => _writer = writer;
 
     public void Write(string text) => _writer.Write(text);
     public void WriteLine(string? text = null) => _writer.WriteLine(text ?? string.Empty);

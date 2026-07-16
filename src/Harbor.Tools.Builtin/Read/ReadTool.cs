@@ -1,13 +1,6 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Reads file contents. Supports text and image files.
+///     Reads file contents. Supports text and image files.
 /// </summary>
 public sealed class ReadTool : ITool
 {
@@ -23,20 +16,20 @@ public sealed class ReadTool : ITool
     {
         "Use `read` to examine file contents before editing",
         "For binary files (images), `read` returns vision-compatible data",
-        "Use `offset` and `limit` for large files to read only the relevant section",
+        "Use `offset` and `limit` for large files to read only the relevant section"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "Absolute or relative file path to read" },
-            "offset": { "type": "integer", "description": "Line number to start reading from (1-indexed). Optional." },
-            "limit": { "type": "integer", "description": "Maximum number of lines to read. Optional." }
-          },
-          "required": ["path"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "path": { "type": "string", "description": "Absolute or relative file path to read" },
+                                                                          "offset": { "type": "integer", "description": "Line number to start reading from (1-indexed). Optional." },
+                                                                          "limit": { "type": "integer", "description": "Maximum number of lines to read. Optional." }
+                                                                        },
+                                                                        "required": ["path"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -54,9 +47,9 @@ public sealed class ReadTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = args.GetProperty("path").GetString()!;
-        var offset = args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number ? (int?)o.GetInt32() : null;
-        var limit = args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number ? (int?)l.GetInt32() : null;
+        string path = args.GetProperty("path").GetString()!;
+        int? offset = args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number ? o.GetInt32() : null;
+        int? limit = args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetInt32() : null;
 
         if (!Path.IsPathRooted(path))
             path = Path.Combine(Environment.CurrentDirectory, path);
@@ -64,23 +57,23 @@ public sealed class ReadTool : ITool
         if (!File.Exists(path))
             return ToolResult.Error($"File not found: {path}");
 
-        var mimeType = DetectMimeType(path);
+        string mimeType = DetectMimeType(path);
 
         // Image file
         if (IsImageMimeType(mimeType))
         {
-            var data = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            byte[] data = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
             return ToolResult.Success($"Image: {path} ({data.Length} bytes, {mimeType})", new { path, mimeType, sizeBytes = data.Length, estimatedTokens = ImageTokenEstimate });
         }
 
         // Text file
-        var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        string content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
 
         if (offset.HasValue || limit.HasValue)
         {
-            var lines = content.Split('\n');
-            var start = (offset ?? 1) - 1;
-            var count = limit ?? lines.Length - start;
+            string[] lines = content.Split('\n');
+            int start = (offset ?? 1) - 1;
+            int count = limit ?? lines.Length - start;
 
             if (start < 0) start = 0;
             if (start >= lines.Length)
@@ -93,7 +86,7 @@ public sealed class ReadTool : ITool
         else
         {
             // Add line numbers for full file
-            var lines = content.Split('\n');
+            string[] lines = content.Split('\n');
             var numbered = lines.Select((line, i) => $"[{i + 1:D4}] {line}");
             content = string.Join('\n', numbered);
         }
@@ -108,7 +101,7 @@ public sealed class ReadTool : ITool
 
     private static string DetectMimeType(string path)
     {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
+        string ext = Path.GetExtension(path).ToLowerInvariant();
         return ext switch
         {
             ".txt" or ".md" or ".markdown" or ".log" => "text/plain",
@@ -138,7 +131,7 @@ public sealed class ReadTool : ITool
             ".webp" => "image/webp",
             ".svg" => "image/svg+xml",
             ".pdf" => "application/pdf",
-            _ => "application/octet-stream",
+            _ => "application/octet-stream"
         };
     }
 

@@ -1,25 +1,19 @@
-using System.Text;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.Ansi;
-
 /// <summary>
-/// ANSI-based TUI renderer with full color/style support.
-/// Implements Strategy pattern (GOF) via BaseTuiRenderer.
+///     ANSI-based TUI renderer with full color/style support.
+///     Implements Strategy pattern (GOF) via BaseTuiRenderer.
 /// </summary>
 public sealed class AnsiTuiRenderer : BaseTuiRenderer
 {
-    public override ITuiRenderContext Context { get; }
 
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger) : base(logger)
     {
         Context = new AnsiRenderContext();
     }
+    public override ITuiRenderContext Context { get; }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -66,7 +60,7 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
             case ToolExecutionStartEvent tes:
                 ctx.WriteLine();
                 ctx.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
-                var args = tes.Args.GetRawText();
+                string args = tes.Args.GetRawText();
                 if (!string.IsNullOrEmpty(args) && args != "{}")
                 {
                     ctx.WriteStyled($" {args}", TuiStyle.Dim);
@@ -76,9 +70,9 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
 
             case ToolExecutionEndEvent tee:
                 var color = tee.IsError ? TuiColor.Red : TuiColor.Gray;
-                var label = tee.IsError ? "✗" : "✓";
+                string label = tee.IsError ? "✗" : "✓";
                 ctx.WriteColored($"  {label} ", color);
-                var preview = tee.Result.Output.Length > 200
+                string preview = tee.Result.Output.Length > 200
                     ? tee.Result.Output[..200] + "..."
                     : tee.Result.Output;
                 ctx.WriteStyled(preview.ReplaceLineEndings("\n  "), TuiStyle.Dim);
@@ -141,7 +135,7 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
     {
         Context.ShowCursor();
         Context.WriteColored(prompt, TuiColor.Green);
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         Context.HideCursor();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
@@ -172,7 +166,7 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
 }
 
 /// <summary>
-/// ANSI-based render context — emits escape codes to Console.
+///     ANSI-based render context — emits escape codes to Console.
 /// </summary>
 internal sealed class AnsiRenderContext : ITuiRenderContext
 {
@@ -186,8 +180,8 @@ internal sealed class AnsiRenderContext : ITuiRenderContext
 
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
     {
-        var fgCode = $"\x1b[38;2;{foreground.R};{foreground.G};{foreground.B}m";
-        var bgCode = background.HasValue
+        string fgCode = $"\x1b[38;2;{foreground.R};{foreground.G};{foreground.B}m";
+        string bgCode = background.HasValue
             ? $"\x1b[48;2;{background.Value.R};{background.Value.G};{background.Value.B}m"
             : string.Empty;
         Console.Write($"{fgCode}{bgCode}{text}\x1b[0m");

@@ -1,9 +1,6 @@
+using System.Text.Json;
 using Harbor.Abstractions.Models;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Abstractions.Tests;
-
 public class SessionTests
 {
     [Test]
@@ -45,14 +42,14 @@ public class SessionTests
     public async Task Pricing_CalculateCost_Correct()
     {
         var pricing = new Pricing(15m, 75m, 1.5m, 18.75m);
-        var cost = pricing.CalculateCost(new Usage(1_000_000, 1_000_000, 0, 1_000_000, 1_000_000));
+        decimal cost = pricing.CalculateCost(new Usage(1_000_000, 1_000_000, 0, 1_000_000, 1_000_000));
         await Assert.That(cost).IsEqualTo(15m + 75m + 1.5m + 18.75m);
     }
 
     [Test]
     public async Task Pricing_Unknown_Has_ZeroCost()
     {
-        var cost = Pricing.Unknown.CalculateCost(new Usage(1000, 1000));
+        decimal cost = Pricing.Unknown.CalculateCost(new Usage(1000, 1000));
         await Assert.That(cost).IsEqualTo(0m);
     }
 }
@@ -86,7 +83,7 @@ public class MessageTests
     public async Task AssistantMessage_AppendToolCall_AddsToolCallPart()
     {
         var msg = AssistantMessage.Empty("session", "claude-opus-4");
-        var args = System.Text.Json.JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse("{}").RootElement;
         var updated = msg.AppendToolCall(new ToolCallPart("call-1", "read", args));
         await Assert.That(updated.Parts.Count).IsEqualTo(1);
         await Assert.That(((ToolCallPart)updated.Parts[0]).ToolName).IsEqualTo("read");

@@ -2,12 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.Tools.Builtin;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tools.Builtin.Tests;
-
 public class ReadToolTests
 {
     [Test]
@@ -42,7 +37,7 @@ public class ReadToolTests
     [Test]
     public async Task ExecuteAsync_ReadsFileContent()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "Hello, World!");
 
         try
@@ -65,7 +60,7 @@ public class ReadToolTests
     [Test]
     public async Task ExecuteAsync_AddsLineNumbers()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "line1\nline2\nline3");
 
         try
@@ -87,15 +82,15 @@ public class ReadToolTests
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }
 
 public class WriteToolTests
@@ -103,7 +98,7 @@ public class WriteToolTests
     [Test]
     public async Task ExecuteAsync_CreatesNewFile()
     {
-        var tempFile = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}.txt");
+        string tempFile = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}.txt");
         try
         {
             var tool = new WriteTool();
@@ -125,8 +120,8 @@ public class WriteToolTests
     [Test]
     public async Task ExecuteAsync_CreatesParentDirectories()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
-        var tempFile = Path.Combine(tempDir, "sub", "dir", "file.txt");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        string tempFile = Path.Combine(tempDir, "sub", "dir", "file.txt");
         try
         {
             var tool = new WriteTool();
@@ -140,20 +135,20 @@ public class WriteToolTests
         }
         finally
         {
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }
 
 public class EditToolTests
@@ -161,7 +156,7 @@ public class EditToolTests
     [Test]
     public async Task ExecuteAsync_ReplacesString()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "Hello, World!");
         try
         {
@@ -183,7 +178,7 @@ public class EditToolTests
     [Test]
     public async Task ExecuteAsync_NotFound_ReturnsError()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "Hello");
         try
         {
@@ -205,7 +200,7 @@ public class EditToolTests
     [Test]
     public async Task ExecuteAsync_MultipleOccurrences_WithoutReplaceAll_ReturnsError()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "ababab");
         try
         {
@@ -226,7 +221,7 @@ public class EditToolTests
     [Test]
     public async Task ExecuteAsync_ReplaceAll_ReplacesAllOccurrences()
     {
-        var tempFile = Path.GetTempFileName();
+        string tempFile = Path.GetTempFileName();
         await File.WriteAllTextAsync(tempFile, "ababab");
         try
         {
@@ -246,15 +241,15 @@ public class EditToolTests
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }
 
 public class GlobToolTests
@@ -262,7 +257,7 @@ public class GlobToolTests
     [Test]
     public async Task ExecuteAsync_FindsMatchingFiles()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"harbor-glob-{Guid.NewGuid():N}");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-glob-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         await File.WriteAllTextAsync(Path.Combine(tempDir, "a.cs"), "");
         await File.WriteAllTextAsync(Path.Combine(tempDir, "b.cs"), "");
@@ -283,20 +278,20 @@ public class GlobToolTests
         }
         finally
         {
-            Directory.Delete(tempDir, recursive: true);
+            Directory.Delete(tempDir, true);
         }
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }
 
 public class GrepToolTests
@@ -304,7 +299,7 @@ public class GrepToolTests
     [Test]
     public async Task ExecuteAsync_FindsMatches()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         await File.WriteAllTextAsync(Path.Combine(tempDir, "a.txt"), "foo\nbar\nbaz");
         await File.WriteAllTextAsync(Path.Combine(tempDir, "b.txt"), "another foo here");
@@ -324,14 +319,14 @@ public class GrepToolTests
         }
         finally
         {
-            Directory.Delete(tempDir, recursive: true);
+            Directory.Delete(tempDir, true);
         }
     }
 
     [Test]
     public async Task ExecuteAsync_NoMatches_ReturnsEmpty()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         await File.WriteAllTextAsync(Path.Combine(tempDir, "a.txt"), "foo");
 
@@ -348,20 +343,20 @@ public class GrepToolTests
         }
         finally
         {
-            Directory.Delete(tempDir, recursive: true);
+            Directory.Delete(tempDir, true);
         }
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }
 
 public class BashToolTests
@@ -392,13 +387,13 @@ public class BashToolTests
     }
 
     private static ToolContext CreateContext() => new(
-        SessionId: "test-session",
-        MessageId: "test-message",
-        CallId: "test-call",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        Services: null!);
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }

@@ -1,15 +1,10 @@
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
 using Harbor.Tui.Abstractions.Views;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tui.Tests;
-
 public class StatusBarViewModelTests
 {
     [Test]
@@ -89,9 +84,9 @@ public class StatusBarViewModelTests
         {
             Model = "claude-opus-4",
             Provider = "anthropic",
-            Status = "running",
+            Status = "running"
         };
-        var formatted = vm.Formatted;
+        string formatted = vm.Formatted;
         await Assert.That(formatted).Contains("claude-opus-4");
         await Assert.That(formatted).Contains("running");
         await Assert.That(formatted).Contains("anthropic");
@@ -199,8 +194,8 @@ public class ChatHistoryViewModelTests
     public async Task ToolExecutionEndEvent_AddsResultEntry()
     {
         var vm = new ChatHistoryViewModel();
-        var result = new ToolResult("output text", IsError: false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, IsError: false));
+        var result = new ToolResult("output text", false);
+        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
 
         await Assert.That(vm.Entries.Count).IsEqualTo(1);
         await Assert.That(vm.Entries[0].Role).IsEqualTo("tool-result");
@@ -305,8 +300,8 @@ public class DiffPreviewViewModelTests
     public async Task ToolExecutionEndEvent_AddsDiffForFileChanges()
     {
         var vm = new DiffPreviewViewModel();
-        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", IsError: false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, IsError: false));
+        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
+        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
         await Assert.That(vm.Diffs.Count).IsEqualTo(1);
     }
 }
@@ -400,7 +395,7 @@ public class ViewRegistryTests
     {
         var registry = new ViewRegistry();
         registry.Register(new TestView("test-view", "Test", TuiViewPlacement.StatusBar));
-        var removed = registry.Unregister("test-view");
+        bool removed = registry.Unregister("test-view");
         await Assert.That(removed).IsTrue();
         await Assert.That(registry.Get("test-view")).IsNull();
     }
@@ -486,7 +481,7 @@ public class ViewModelRegistryTests
     {
         var registry = new ViewModelRegistry();
         registry.Register(new StatusBarViewModel());
-        var removed = registry.Unregister("status-bar");
+        bool removed = registry.Unregister("status-bar");
         await Assert.That(removed).IsTrue();
         await Assert.That(registry.Get("status-bar")).IsNull();
     }
@@ -504,7 +499,7 @@ public class ViewModelRegistryTests
     }
 }
 
-internal sealed class TestView : Harbor.Tui.Abstractions.Views.ITuiView
+internal sealed class TestView : ITuiView
 {
     public TestView(string id, string displayName, TuiViewPlacement placement)
     {
@@ -516,7 +511,7 @@ internal sealed class TestView : Harbor.Tui.Abstractions.Views.ITuiView
     public string Id { get; }
     public string DisplayName { get; }
     public TuiViewPlacement Placement { get; }
-    public Harbor.Tui.Abstractions.ViewModels.ITuiViewModel? ViewModel { get; set; }
+    public ITuiViewModel? ViewModel { get; set; }
 
     public Task RenderAsync(ITuiRenderContext context, CancellationToken ct = default) => Task.CompletedTask;
     public void Dispose() { }

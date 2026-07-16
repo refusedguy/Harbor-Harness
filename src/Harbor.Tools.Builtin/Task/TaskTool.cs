@@ -1,14 +1,8 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Delegates work to a sub-agent. Implements Command pattern (GOF).
-/// Sub-agents run in their own context with limited permissions and tools.
+///     Delegates work to a sub-agent. Implements Command pattern (GOF).
+///     Sub-agents run in their own context with limited permissions and tools.
 /// </summary>
 public sealed class TaskTool : ITool
 {
@@ -30,25 +24,25 @@ public sealed class TaskTool : ITool
         "Use `task` for sub-tasks that should run in isolation",
         "Common sub-agents: `explore` (fast read-only codebase exploration), `plan` (read-only planning)",
         "Sub-agents have their own context window — they don't see this conversation",
-        "Provide a clear, self-contained prompt to the sub-agent",
+        "Provide a clear, self-contained prompt to the sub-agent"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "agent": {
-              "type": "string",
-              "description": "Name of the sub-agent to use (e.g. 'explore', 'plan')"
-            },
-            "prompt": {
-              "type": "string",
-              "description": "Task description for the sub-agent. Should be self-contained."
-            }
-          },
-          "required": ["agent", "prompt"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "agent": {
+                                                                            "type": "string",
+                                                                            "description": "Name of the sub-agent to use (e.g. 'explore', 'plan')"
+                                                                          },
+                                                                          "prompt": {
+                                                                            "type": "string",
+                                                                            "description": "Task description for the sub-agent. Should be self-contained."
+                                                                          }
+                                                                        },
+                                                                        "required": ["agent", "prompt"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -64,8 +58,8 @@ public sealed class TaskTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var agentName = args.GetProperty("agent").GetString()!;
-        var prompt = args.GetProperty("prompt").GetString()!;
+        string agentName = args.GetProperty("agent").GetString()!;
+        string prompt = args.GetProperty("prompt").GetString()!;
 
         var nameResult = AgentName.TryCreate(agentName);
         if (nameResult.IsFailure)
@@ -74,7 +68,7 @@ public sealed class TaskTool : ITool
         var agentDef = _agents.GetAgent(nameResult.Value);
         if (agentDef.IsFailure)
         {
-            var available = string.Join(", ", _agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value));
+            string available = string.Join(", ", _agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value));
             return ToolResult.Error($"Unknown sub-agent: '{agentName}'. Available sub-agents: {available}");
         }
 

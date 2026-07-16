@@ -1,78 +1,76 @@
 using System.Text;
-
 namespace Harbor.Tui.Abstractions.Renderers;
-
 /// <summary>
-/// Render context — abstraction over the actual output device (console, file, buffer).
-/// Views render to this context, not directly to Console. This enables:
-/// - Swapping renderers (ANSI, Plain, Spectre, test buffer)
-/// - Capturing output for tests
-/// - Composing views in a layout
+///     Render context — abstraction over the actual output device (console, file, buffer).
+///     Views render to this context, not directly to Console. This enables:
+///     - Swapping renderers (ANSI, Plain, Spectre, test buffer)
+///     - Capturing output for tests
+///     - Composing views in a layout
 /// </summary>
 /// <remarks>
-/// Implementations MUST be thread-safe for the <c>Write*</c> family of methods. Cursor
-/// management methods (<see cref="SetCursorPosition"/>, <see cref="ClearLine"/>, etc.) may
-/// be no-ops on contexts that don't support absolute positioning (e.g. streaming renderers).
+///     Implementations MUST be thread-safe for the <c>Write*</c> family of methods. Cursor
+///     management methods (<see cref="SetCursorPosition" />, <see cref="ClearLine" />, etc.) may
+///     be no-ops on contexts that don't support absolute positioning (e.g. streaming renderers).
 /// </remarks>
 public interface ITuiRenderContext
 {
     /// <summary>Width in characters (0 = unknown/unlimited).</summary>
-    int Width { get; }
+    public int Width { get; }
 
     /// <summary>Height in characters (0 = unknown/unlimited).</summary>
-    int Height { get; }
+    public int Height { get; }
 
     /// <summary>Whether colors are supported.</summary>
-    bool SupportsColor { get; }
+    public bool SupportsColor { get; }
 
     /// <summary>Write raw text.</summary>
     /// <param name="text">The text to write.</param>
-    void Write(string text);
+    public void Write(string text);
 
     /// <summary>Write a line.</summary>
     /// <param name="text">Optional text to write before the line terminator.</param>
-    void WriteLine(string? text = null);
+    public void WriteLine(string? text = null);
 
     /// <summary>Write colored text. Colors are ANSI codes or named.</summary>
     /// <param name="text">The text to write.</param>
     /// <param name="foreground">Foreground color.</param>
     /// <param name="background">Optional background color.</param>
-    void WriteColored(string text, TuiColor foreground, TuiColor? background = null);
+    public void WriteColored(string text, TuiColor foreground, TuiColor? background = null);
 
     /// <summary>Write styled text (bold, italic, underline, dim).</summary>
     /// <param name="text">The text to write.</param>
     /// <param name="style">Style flags.</param>
-    void WriteStyled(string text, TuiStyle style);
+    public void WriteStyled(string text, TuiStyle style);
 
     /// <summary>Move cursor.</summary>
     /// <param name="row">Target row (0-based).</param>
     /// <param name="col">Target column (0-based).</param>
-    void SetCursorPosition(int row, int col);
+    public void SetCursorPosition(int row, int col);
 
     /// <summary>Clear current line.</summary>
-    void ClearLine();
+    public void ClearLine();
 
     /// <summary>Clear screen.</summary>
-    void Clear();
+    public void Clear();
 
     /// <summary>Hide the cursor.</summary>
-    void HideCursor();
+    public void HideCursor();
 
     /// <summary>Show the cursor.</summary>
-    void ShowCursor();
+    public void ShowCursor();
 
     /// <summary>Enter the alternate screen buffer.</summary>
-    void EnterAlternateScreen();
+    public void EnterAlternateScreen();
 
     /// <summary>Exit the alternate screen buffer.</summary>
-    void ExitAlternateScreen();
+    public void ExitAlternateScreen();
 
     /// <summary>Flush any buffered output.</summary>
-    void Flush();
+    public void Flush();
 }
 
 /// <summary>
-/// Color representation (24-bit RGB).
+///     Color representation (24-bit RGB).
 /// </summary>
 /// <param name="R">Red channel (0–255).</param>
 /// <param name="G">Green channel (0–255).</param>
@@ -113,20 +111,20 @@ public readonly record struct TuiColor(byte R, byte G, byte B)
     public static readonly TuiColor DarkGray = new(64, 64, 64);
 
     /// <summary>
-    /// Construct a <see cref="TuiColor"/> from 0–255 RGB integers.
+    ///     Construct a <see cref="TuiColor" /> from 0–255 RGB integers.
     /// </summary>
     /// <param name="r">Red channel.</param>
     /// <param name="g">Green channel.</param>
     /// <param name="b">Blue channel.</param>
-    /// <returns>A new <see cref="TuiColor"/>.</returns>
+    /// <returns>A new <see cref="TuiColor" />.</returns>
     public static TuiColor FromRgb(int r, int g, int b) => new((byte)r, (byte)g, (byte)b);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override string ToString() => $"#{R:X2}{G:X2}{B:X2}";
 }
 
 /// <summary>
-/// Text style flags.
+///     Text style flags.
 /// </summary>
 [Flags]
 public enum TuiStyle
@@ -150,63 +148,63 @@ public enum TuiStyle
     Strike = 16,
 
     /// <summary>Reverse video (swap foreground/background).</summary>
-    Reverse = 32,
+    Reverse = 32
 }
 
 /// <summary>
-/// Capture-based render context for tests. Collects all output in a StringBuilder.
+///     Capture-based render context for tests. Collects all output in a StringBuilder.
 /// </summary>
 public sealed class CaptureRenderContext : ITuiRenderContext
 {
     private readonly StringBuilder _sb = new();
 
-    /// <inheritdoc/>
-    public int Width => 80;
-
-    /// <inheritdoc/>
-    public int Height => 24;
-
-    /// <inheritdoc/>
-    public bool SupportsColor => false;
-
     /// <summary>
-    /// The captured output so far.
+    ///     The captured output so far.
     /// </summary>
     public string Output => _sb.ToString();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
+    public int Width => 80;
+
+    /// <inheritdoc />
+    public int Height => 24;
+
+    /// <inheritdoc />
+    public bool SupportsColor => false;
+
+    /// <inheritdoc />
     public void Write(string text) => _sb.Append(text);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void WriteLine(string? text = null) => _sb.AppendLine(text ?? string.Empty);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void WriteColored(string text, TuiColor foreground, TuiColor? background = null) => _sb.Append(text);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void WriteStyled(string text, TuiStyle style) => _sb.Append(text);
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void SetCursorPosition(int row, int col) { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void ClearLine() { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Clear() => _sb.Clear();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void HideCursor() { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void ShowCursor() { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void EnterAlternateScreen() { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void ExitAlternateScreen() { }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Flush() { }
 }

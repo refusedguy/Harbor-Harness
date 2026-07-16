@@ -1,13 +1,8 @@
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Executes shell commands. Captures stdout/stderr/exit code.
+///     Executes shell commands. Captures stdout/stderr/exit code.
 /// </summary>
 public sealed class BashTool : ITool
 {
@@ -20,21 +15,21 @@ public sealed class BashTool : ITool
     {
         "Prefer dedicated tools (read, edit, glob, grep) for file operations",
         "Use `bash` for compilation, testing, git, and other shell tasks",
-        "Specify `timeout` for long-running commands (default: 30s)",
+        "Specify `timeout` for long-running commands (default: 30s)"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "command": { "type": "string", "description": "Shell command to execute" },
-            "cwd": { "type": "string", "description": "Working directory (default: current)" },
-            "timeout": { "type": "integer", "description": "Timeout in seconds (default: 30, max: 600)" },
-            "env": { "type": "object", "description": "Additional environment variables" }
-          },
-          "required": ["command"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "command": { "type": "string", "description": "Shell command to execute" },
+                                                                          "cwd": { "type": "string", "description": "Working directory (default: current)" },
+                                                                          "timeout": { "type": "integer", "description": "Timeout in seconds (default: 30, max: 600)" },
+                                                                          "env": { "type": "object", "description": "Additional environment variables" }
+                                                                        },
+                                                                        "required": ["command"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -50,9 +45,9 @@ public sealed class BashTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var command = args.GetProperty("command").GetString()!;
-        var cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
-        var timeout = args.TryGetProperty("timeout", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : 30;
+        string command = args.GetProperty("command").GetString()!;
+        string? cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+        int timeout = args.TryGetProperty("timeout", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : 30;
         var env = args.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Object
             ? e.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? "")
             : null;
@@ -67,7 +62,7 @@ public sealed class BashTool : ITool
             RedirectStandardError = true,
             RedirectStandardInput = false,
             CreateNoWindow = true,
-            WorkingDirectory = cwd ?? Environment.CurrentDirectory,
+            WorkingDirectory = cwd ?? Environment.CurrentDirectory
         };
 
         if (OperatingSystem.IsWindows())
@@ -83,7 +78,7 @@ public sealed class BashTool : ITool
 
         if (env is not null)
         {
-            foreach (var (k, v) in env)
+            foreach ((string k, string v) in env)
                 psi.Environment[k] = v;
         }
 
@@ -116,7 +111,10 @@ public sealed class BashTool : ITool
         {
             if (!process.HasExited)
             {
-                try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+                try { process.Kill(entireProcessTree: true); }
+                catch
+                { /* ignore */
+                }
                 return ToolResult.Error(
                     $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
             }
@@ -130,7 +128,7 @@ public sealed class BashTool : ITool
         if (output.Length > 50_000)
             output.Length = 50_000;
 
-        var isError = process.ExitCode != 0;
+        bool isError = process.ExitCode != 0;
         var result = isError
             ? ToolResult.Error(output.ToString(), new { exitCode = process.ExitCode })
             : ToolResult.Success(output.ToString(), new { exitCode = process.ExitCode });

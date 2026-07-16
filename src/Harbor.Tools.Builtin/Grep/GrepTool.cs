@@ -1,12 +1,7 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Searches file contents with regex. Returns matching lines with file:line:content format.
+///     Searches file contents with regex. Returns matching lines with file:line:content format.
 /// </summary>
 public sealed class GrepTool : ITool
 {
@@ -19,22 +14,22 @@ public sealed class GrepTool : ITool
     {
         "Use `grep` to find code or text by content",
         "Pattern is a regular expression",
-        "Use `include` to limit search to specific file types (e.g. '*.cs')",
+        "Use `include` to limit search to specific file types (e.g. '*.cs')"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "pattern": { "type": "string", "description": "Regular expression pattern" },
-            "path": { "type": "string", "description": "Base directory or file to search (default: current)" },
-            "include": { "type": "string", "description": "File name glob to include (e.g. '*.cs')" },
-            "ignoreCase": { "type": "boolean", "description": "Case-insensitive search (default: false)" },
-            "maxResults": { "type": "integer", "description": "Maximum number of matches to return (default: 100)" }
-          },
-          "required": ["pattern"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "pattern": { "type": "string", "description": "Regular expression pattern" },
+                                                                          "path": { "type": "string", "description": "Base directory or file to search (default: current)" },
+                                                                          "include": { "type": "string", "description": "File name glob to include (e.g. '*.cs')" },
+                                                                          "ignoreCase": { "type": "boolean", "description": "Case-insensitive search (default: false)" },
+                                                                          "maxResults": { "type": "integer", "description": "Maximum number of matches to return (default: 100)" }
+                                                                        },
+                                                                        "required": ["pattern"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
@@ -56,22 +51,22 @@ public sealed class GrepTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var pattern = args.GetProperty("pattern").GetString()!;
-        var path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : Environment.CurrentDirectory;
-        var include = args.TryGetProperty("include", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : null;
-        var ignoreCase = args.TryGetProperty("ignoreCase", out var ic) && ic.GetBoolean();
-        var maxResults = args.TryGetProperty("maxResults", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : 100;
+        string pattern = args.GetProperty("pattern").GetString()!;
+        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : Environment.CurrentDirectory;
+        string? include = args.TryGetProperty("include", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : null;
+        bool ignoreCase = args.TryGetProperty("ignoreCase", out var ic) && ic.GetBoolean();
+        int maxResults = args.TryGetProperty("maxResults", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : 100;
 
         var options = RegexOptions.Compiled | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
         var regex = new Regex(pattern, options);
 
         var results = new List<string>();
-        var totalMatches = 0;
+        int totalMatches = 0;
 
         if (File.Exists(path))
         {
             var matches = await GrepFileAsync(path, regex, cancellationToken).ConfigureAwait(false);
-            foreach (var match in matches)
+            foreach (string match in matches)
             {
                 if (totalMatches >= maxResults) break;
                 results.Add(match);
@@ -81,13 +76,13 @@ public sealed class GrepTool : ITool
         else if (Directory.Exists(path))
         {
             var files = EnumerateFiles(path, include);
-            foreach (var file in files)
+            foreach (string file in files)
             {
                 if (totalMatches >= maxResults) break;
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var matches = await GrepFileAsync(file, regex, cancellationToken).ConfigureAwait(false);
-                foreach (var match in matches)
+                foreach (string match in matches)
                 {
                     if (totalMatches >= maxResults) break;
                     results.Add(match);
@@ -113,7 +108,7 @@ public sealed class GrepTool : ITool
         try
         {
             using var reader = new StreamReader(file);
-            var lineNum = 0;
+            int lineNum = 0;
             while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
             {
                 lineNum++;
@@ -130,7 +125,7 @@ public sealed class GrepTool : ITool
 
     private static IEnumerable<string> EnumerateFiles(string path, string? include)
     {
-        var ignoredDirs = new[] { "node_modules", "bin", "obj", ".git", ".vs", ".idea" };
+        string[] ignoredDirs = new[] { "node_modules", "bin", "obj", ".git", ".vs", ".idea" };
 
         var allFiles = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Where(f => !ignoredDirs.Any(d => f.Contains($"/{d}/") || f.Contains($"\\{d}\\")));
@@ -146,7 +141,7 @@ public sealed class GrepTool : ITool
 
     private static Regex GlobToRegex(string glob)
     {
-        var pattern = "^" + Regex.Escape(glob).Replace("\\*", ".*").Replace("\\?", ".") + "$";
+        string pattern = "^" + Regex.Escape(glob).Replace("\\*", ".*").Replace("\\?", ".") + "$";
         return new Regex(pattern, RegexOptions.IgnoreCase);
     }
 }

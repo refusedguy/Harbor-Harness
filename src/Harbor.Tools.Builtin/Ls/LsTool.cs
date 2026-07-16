@@ -1,11 +1,7 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
-
+using System.Text;
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Lists directory contents. Returns entries with type (file/dir), size, modified date.
+///     Lists directory contents. Returns entries with type (file/dir), size, modified date.
 /// </summary>
 public sealed class LsTool : ITool
 {
@@ -17,37 +13,37 @@ public sealed class LsTool : ITool
     public IReadOnlyList<string> PromptGuidelines { get; } = new[]
     {
         "Use `ls` to explore directory structure",
-        "Set `all=true` to include hidden files (default: false)",
+        "Set `all=true` to include hidden files (default: false)"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "Directory to list (default: current)" },
-            "all": { "type": "boolean", "description": "Include hidden files (default: false)" },
-            "recursive": { "type": "boolean", "description": "List recursively (default: false, max depth: 3)" }
-          }
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "path": { "type": "string", "description": "Directory to list (default: current)" },
+                                                                          "all": { "type": "boolean", "description": "Include hidden files (default: false)" },
+                                                                          "recursive": { "type": "boolean", "description": "List recursively (default: false, max depth: 3)" }
+                                                                        }
+                                                                      }
+                                                                      """);
 
     public Task<ToolResult> ExecuteAsync(
         JsonElement args,
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : Environment.CurrentDirectory;
-        var all = args.TryGetProperty("all", out var a) && a.GetBoolean();
-        var recursive = args.TryGetProperty("recursive", out var r) && r.GetBoolean();
+        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString()! : Environment.CurrentDirectory;
+        bool all = args.TryGetProperty("all", out var a) && a.GetBoolean();
+        bool recursive = args.TryGetProperty("recursive", out var r) && r.GetBoolean();
 
         if (!Directory.Exists(path))
             return Task.FromResult(ToolResult.Error($"Directory not found: {path}"));
 
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         sb.AppendLine($"Contents of {path}:");
         sb.AppendLine();
 
-        var maxDepth = recursive ? 3 : 1;
+        int maxDepth = recursive ? 3 : 1;
         ListDirectory(path, "", all, recursive, maxDepth, 0, sb, cancellationToken);
 
         return Task.FromResult(ToolResult.Success(sb.ToString(), new { path, all, recursive }));
@@ -60,7 +56,7 @@ public sealed class LsTool : ITool
         bool recursive,
         int maxDepth,
         int currentDepth,
-        System.Text.StringBuilder sb,
+        StringBuilder sb,
         CancellationToken ct)
     {
         if (currentDepth >= maxDepth) return;
@@ -76,12 +72,12 @@ public sealed class LsTool : ITool
         catch (UnauthorizedAccessException) { return; }
         catch (DirectoryNotFoundException) { return; }
 
-        var indent = new string(' ', currentDepth * 2);
+        string indent = new(' ', currentDepth * 2);
 
-        foreach (var dir in dirs)
+        foreach (string dir in dirs)
         {
             ct.ThrowIfCancellationRequested();
-            var name = Path.GetFileName(dir);
+            string name = Path.GetFileName(dir);
             if (!all && name.StartsWith('.')) continue;
 
             sb.AppendLine($"{indent}[dir]  {relativePrefix}{name}/");
@@ -90,15 +86,15 @@ public sealed class LsTool : ITool
                 ListDirectory(dir, $"{relativePrefix}{name}/", all, recursive, maxDepth, currentDepth + 1, sb, ct);
         }
 
-        foreach (var file in files)
+        foreach (string file in files)
         {
             ct.ThrowIfCancellationRequested();
-            var name = Path.GetFileName(file);
+            string name = Path.GetFileName(file);
             if (!all && name.StartsWith('.')) continue;
 
             var info = new FileInfo(file);
-            var size = FormatSize(info.Length);
-            var modified = info.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+            string size = FormatSize(info.Length);
+            string modified = info.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
             sb.AppendLine($"{indent}[file] {size,10} {modified} {relativePrefix}{name}");
         }
     }
@@ -108,6 +104,6 @@ public sealed class LsTool : ITool
         < 1024 => $"{bytes}B",
         < 1024 * 1024 => $"{bytes / 1024.0:F1}K",
         < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):F1}M",
-        _ => $"{bytes / (1024.0 * 1024 * 1024):F1}G",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):F1}G"
     };
 }

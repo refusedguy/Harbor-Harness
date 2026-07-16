@@ -1,27 +1,22 @@
-using System.IO;
 using System.Text;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tui.E2E.Tests;
-
 /// <summary>
-/// End-to-end renderer tests: feed a realistic event stream to each concrete
-/// renderer (ANSI, Plain) and assert that the rendered output contains the
-/// streamed text. These tests guard against silent regressions where a
-/// renderer's switch statement is updated to skip a case (or returns early)
-/// and the user sees nothing on the screen.
+///     End-to-end renderer tests: feed a realistic event stream to each concrete
+///     renderer (ANSI, Plain) and assert that the rendered output contains the
+///     streamed text. These tests guard against silent regressions where a
+///     renderer's switch statement is updated to skip a case (or returns early)
+///     and the user sees nothing on the screen.
 /// </summary>
 public class RendererE2ETests
 {
     /// <summary>
-    /// Build the canonical event stream used by the renderer e2e tests:
-    /// AgentStart → MessageStart → TextDelta("Hello") → MessageEnd → AgentEnd.
+    ///     Build the canonical event stream used by the renderer e2e tests:
+    ///     AgentStart → MessageStart → TextDelta("Hello") → MessageEnd → AgentEnd.
     /// </summary>
     private static IEnumerable<AgentEvent> BuildHelloEventStream()
     {
@@ -59,7 +54,7 @@ public class RendererE2ETests
             }
 
             await writer.FlushAsync();
-            var output = sb.ToString();
+            string output = sb.ToString();
 
             // The "[assistant] " prefix is emitted on MessageStartEvent; the
             // delta text "Hello" is emitted on MessageUpdateEvent. Both should
@@ -92,7 +87,7 @@ public class RendererE2ETests
         }
 
         await writer.FlushAsync();
-        var output = sb.ToString();
+        string output = sb.ToString();
 
         await Assert.That(output).Contains("Hello");
         await Assert.That(output).Contains("[assistant]");

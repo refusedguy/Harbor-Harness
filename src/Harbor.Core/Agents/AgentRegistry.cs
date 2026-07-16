@@ -1,30 +1,25 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models.Identifiers;
 using NonBlocking;
-
 namespace Harbor.Abstractions.Agents;
-
 /// <summary>
-/// Thread-safe agent registry.
-/// Implements Registry pattern (GOF).
-/// Backed by <see cref="NonBlocking.ConcurrentDictionary{TKey, TValue}"/> for lock-free scaling.
+///     Thread-safe agent registry.
+///     Implements Registry pattern (GOF).
+///     Backed by <see cref="NonBlocking.ConcurrentDictionary{TKey, TValue}" /> for lock-free scaling.
 /// </summary>
 public sealed class AgentRegistry : IAgentRegistry
 {
-    private readonly NonBlocking.ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
+    private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyList<AgentDefinition> GetAllAgents()
     {
-        var count = _agents.Count;
+        int count = _agents.Count;
         if (count == 0)
         {
             return Array.Empty<AgentDefinition>();
         }
 
         var result = new AgentDefinition[count];
-        var i = 0;
+        int i = 0;
         foreach (var agent in _agents.Values)
         {
             result[i++] = agent;
@@ -32,7 +27,7 @@ public sealed class AgentRegistry : IAgentRegistry
         return result;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public Result<AgentDefinition> GetAgent(AgentName name)
     {
         if (_agents.TryGetValue(name, out var agent))
@@ -41,7 +36,7 @@ public sealed class AgentRegistry : IAgentRegistry
         return Result.Failure<AgentDefinition>($"Agent '{name}' is not registered.");
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public Result Register(AgentDefinition agent)
     {
         if (!_agents.TryAdd(agent.Name, agent))
@@ -50,7 +45,7 @@ public sealed class AgentRegistry : IAgentRegistry
         return Result.Success();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public Result Unregister(AgentName name)
     {
         if (_agents.TryRemove(name, out _))
@@ -61,15 +56,15 @@ public sealed class AgentRegistry : IAgentRegistry
 }
 
 /// <summary>
-/// Builder implementation for <see cref="IAgentRegistryBuilder"/>. Wraps an
-/// <see cref="IAgentRegistry"/> and converts failures to <see cref="InvalidOperationException"/>.
+///     Builder implementation for <see cref="IAgentRegistryBuilder" />. Wraps an
+///     <see cref="IAgentRegistry" /> and converts failures to <see cref="InvalidOperationException" />.
 /// </summary>
 public sealed class AgentRegistryBuilder : IAgentRegistryBuilder
 {
     private readonly IAgentRegistry _registry;
 
     /// <summary>
-    /// Construct a builder backed by the supplied registry.
+    ///     Construct a builder backed by the supplied registry.
     /// </summary>
     /// <param name="registry">The registry to wrap.</param>
     public AgentRegistryBuilder(IAgentRegistry registry)
@@ -77,7 +72,7 @@ public sealed class AgentRegistryBuilder : IAgentRegistryBuilder
         _registry = registry;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void AddAgent(AgentDefinition agent)
     {
         var result = _registry.Register(agent);

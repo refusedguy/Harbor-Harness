@@ -1,21 +1,17 @@
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Config.Tests;
-
 /// <summary>
-/// Tests for OnboardingWizard.RunAsync — exercises the full interactive flow
-/// using stub Func&lt;string, Task&lt;string&gt;&gt; reader and Action&lt;string&gt; writer.
-/// No real stdin/stdout involved.
+///     Tests for OnboardingWizard.RunAsync — exercises the full interactive flow
+///     using stub Func&lt;string, Task&lt;string&gt;&gt; reader and Action&lt;string&gt; writer.
+///     No real stdin/stdout involved.
 /// </summary>
 public class OnboardingWizardTests
 {
     private static (OnboardingWizard wizard, JsonConfigStore store, AuthStore auth, string path) CreateWizard()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
         var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance);
@@ -25,14 +21,14 @@ public class OnboardingWizardTests
     private static void Cleanup(string path)
     {
         if (File.Exists(path)) File.Delete(path);
-        var dir = Path.GetDirectoryName(path);
+        string? dir = Path.GetDirectoryName(path);
         if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
     }
 
     [Test]
     public async Task RunAsync_LocalProvider_NoApiKey_CompletesSuccessfully()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -64,12 +60,12 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_LocalProvider_PickByNumber_Works()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
         // Find ollama preset index (1-based, position in ProviderPresets.All).
-        var ollamaIndex = ProviderPresets.All.ToList().FindIndex(p => p.Id == "ollama") + 1;
+        int ollamaIndex = ProviderPresets.All.ToList().FindIndex(p => p.Id == "ollama") + 1;
         var responses = new Queue<string>(new[] { ollamaIndex.ToString(), "", "2" });
         Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
 
@@ -92,7 +88,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_ApiKeyProvider_PromptsForKey()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -123,7 +119,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_ApiKeyProvider_UsesExistingKey_WhenAlreadySet()
     {
-        var (wizard, store, auth, path) = CreateWizard();
+        (var wizard, var store, var auth, string path) = CreateWizard();
         // Pre-set the API key in config — the wizard should detect it and skip the prompt.
         await auth.SetApiKeyAsync("anthropic", "sk-preconfigured");
 
@@ -144,7 +140,7 @@ public class OnboardingWizardTests
             await Assert.That(loaded.Value.ApiKeys["anthropic"]).IsEqualTo("sk-preconfigured");
 
             // The output should mention "already set".
-            var joined = string.Join("\n", output);
+            string joined = string.Join("\n", output);
             await Assert.That(joined).Contains("already set");
         }
         finally
@@ -157,7 +153,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_ApiKeyProvider_EmptyKey_Fails()
     {
-        var (wizard, _, _, path) = CreateWizard();
+        (var wizard, _, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -183,7 +179,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_CustomModelName_GetsProviderPrefix()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -211,7 +207,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_FullyQualifiedModelName_IsPreserved()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -239,9 +235,9 @@ public class OnboardingWizardTests
     public async Task RunAsync_AgentSelection_Plan_Explored()
     {
         // Exercise all three agent modes by parameterizing.
-        foreach (var (input, expected) in new[] { ("1", "code"), ("2", "plan"), ("3", "explore") })
+        foreach ((string input, string expected) in new[] { ("1", "code"), ("2", "plan"), ("3", "explore") })
         {
-            var (wizard, store, _, path) = CreateWizard();
+            (var wizard, var store, _, string path) = CreateWizard();
             var output = new List<string>();
             Action<string> writer = s => output.Add(s);
 
@@ -266,7 +262,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_ListCommand_PrintsAllPresetDetails()
     {
-        var (wizard, _, _, path) = CreateWizard();
+        (var wizard, _, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -280,7 +276,7 @@ public class OnboardingWizardTests
             var result = await wizard.RunAsync(reader, writer);
 
             await Assert.That(result.IsSuccess).IsTrue();
-            var joined = string.Join("\n", output);
+            string joined = string.Join("\n", output);
             // "list" should print descriptions for every preset.
             foreach (var preset in ProviderPresets.All)
             {
@@ -297,7 +293,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_InvalidThenValidProvider_Retries()
     {
-        var (wizard, store, _, path) = CreateWizard();
+        (var wizard, var store, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -314,7 +310,7 @@ public class OnboardingWizardTests
             var loaded = await store.LoadAsync();
             await Assert.That(loaded.Value.Provider).IsEqualTo("ollama");
             // The wizard should have reported the invalid selection.
-            var joined = string.Join("\n", output);
+            string joined = string.Join("\n", output);
             await Assert.That(joined).Contains("Invalid selection");
         }
         finally
@@ -327,7 +323,7 @@ public class OnboardingWizardTests
     [Test]
     public async Task RunAsync_WritesWelcomeBanner()
     {
-        var (wizard, _, _, path) = CreateWizard();
+        (var wizard, _, _, string path) = CreateWizard();
         var output = new List<string>();
         Action<string> writer = s => output.Add(s);
 
@@ -339,7 +335,7 @@ public class OnboardingWizardTests
         {
             await wizard.RunAsync(reader, writer);
 
-            var joined = string.Join("\n", output);
+            string joined = string.Join("\n", output);
             await Assert.That(joined).Contains("Welcome to Harbor");
         }
         finally

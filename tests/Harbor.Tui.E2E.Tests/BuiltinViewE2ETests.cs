@@ -1,20 +1,14 @@
-using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
 using Harbor.Tui.Abstractions.Views;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Tui.E2E.Tests;
-
 /// <summary>
-/// End-to-end view tests: instantiate each builtin view, bind a populated
-/// view model, render into a <see cref="CaptureRenderContext"/>, and assert
-/// the rendered output contains the expected user-visible text.
-///
-/// These tests guard against regressions where a view silently produces an
-/// empty output (e.g. early-return on a null ViewModel, or a switch case
-/// that fails to write the role prefix).
+///     End-to-end view tests: instantiate each builtin view, bind a populated
+///     view model, render into a <see cref="CaptureRenderContext" />, and assert
+///     the rendered output contains the expected user-visible text.
+///     These tests guard against regressions where a view silently produces an
+///     empty output (e.g. early-return on a null ViewModel, or a switch case
+///     that fails to write the role prefix).
 /// </summary>
 public class BuiltinViewE2ETests
 {
@@ -29,14 +23,14 @@ public class BuiltinViewE2ETests
             Status = "running",
             Cost = 0.0123m,
             TokensIn = 1024,
-            TokensOut = 256,
+            TokensOut = 256
         };
         var view = new StatusBarView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         await Assert.That(output).Contains("claude-opus-4-1");
         await Assert.That(output).Contains("running");
         await Assert.That(output).Contains("anthropic");
@@ -56,7 +50,7 @@ public class BuiltinViewE2ETests
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         await Assert.That(output).Contains("Hello, can you help me with C#?");
         await Assert.That(output).Contains("Of course! What do you need help with?");
         await Assert.That(output).Contains("→ read file.cs");
@@ -74,14 +68,14 @@ public class BuiltinViewE2ETests
         {
             Text = "explain this code",
             CursorPosition = 4,
-            Placeholder = "Type your message...",
+            Placeholder = "Type your message..."
         };
         var view = new InputView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         // The "> " prompt is the InputView's signature — it must appear even
         // when text is non-empty.
         await Assert.That(output).Contains("> ");
@@ -94,14 +88,14 @@ public class BuiltinViewE2ETests
         var vm = new InputViewModel
         {
             Text = "",
-            Placeholder = "Type your message...",
+            Placeholder = "Type your message..."
         };
         var view = new InputView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         await Assert.That(output).Contains("> ");
         await Assert.That(output).Contains("Type your message...");
     }
@@ -111,15 +105,15 @@ public class BuiltinViewE2ETests
     {
         var vm = new DiffPreviewViewModel();
         vm.AddDiff(new DiffEntry(
-            ToolName: "write",
-            Output: "Wrote 142 chars to /tmp/test.cs",
-            Timestamp: DateTimeOffset.UtcNow));
+            "write",
+            "Wrote 142 chars to /tmp/test.cs",
+            DateTimeOffset.UtcNow));
         var view = new DiffPreviewView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         await Assert.That(output).Contains("Diff 1 of 1");
         await Assert.That(output).Contains("[write]");
         await Assert.That(output).Contains("Wrote 142 chars");
@@ -136,7 +130,7 @@ public class BuiltinViewE2ETests
 
         await view.RenderAsync(ctx);
 
-        var output = ctx.Output;
+        string output = ctx.Output;
         await Assert.That(output).Contains("Diff 1 of 2");
         await Assert.That(output).Contains("next");
         await Assert.That(output).Contains("previous");

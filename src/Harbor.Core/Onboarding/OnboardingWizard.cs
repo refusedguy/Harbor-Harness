@@ -1,28 +1,23 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Core.Configuration;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Core.Onboarding;
-
 /// <summary>
-/// First-run onboarding wizard. Walks user through:
-/// 1. Pick a provider (from presets)
-/// 2. Enter API key (if needed)
-/// 3. Pick a model
-/// 4. Pick a default agent (mode)
-/// 5. Save config
-///
-/// No env vars, no JSON authoring. Pure interactive UX.
+///     First-run onboarding wizard. Walks user through:
+///     1. Pick a provider (from presets)
+///     2. Enter API key (if needed)
+///     3. Pick a model
+///     4. Pick a default agent (mode)
+///     5. Save config
+///     No env vars, no JSON authoring. Pure interactive UX.
 /// </summary>
 public sealed class OnboardingWizard
 {
-    private readonly IConfigStore _configStore;
     private readonly AuthStore _authStore;
+    private readonly IConfigStore _configStore;
     private readonly ILogger<OnboardingWizard>? _logger;
 
     /// <summary>
-    /// Construct an <see cref="OnboardingWizard"/> wired to the supplied config and auth stores.
+    ///     Construct an <see cref="OnboardingWizard" /> wired to the supplied config and auth stores.
     /// </summary>
     /// <param name="configStore">The config store to persist the selected provider/model/agent.</param>
     /// <param name="authStore">The auth store to persist the entered API key.</param>
@@ -35,7 +30,7 @@ public sealed class OnboardingWizard
     }
 
     /// <summary>
-    /// Run the wizard. Returns success when config is saved.
+    ///     Run the wizard. Returns success when config is saved.
     /// </summary>
     public async Task<Result> RunAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct = default)
     {
@@ -55,7 +50,7 @@ public sealed class OnboardingWizard
         // 2. API key (if needed)
         if (provider.RequiresApiKey)
         {
-            var key = await PromptApiKeyAsync(reader, writer, provider, ct).ConfigureAwait(false);
+            string? key = await PromptApiKeyAsync(reader, writer, provider, ct).ConfigureAwait(false);
             if (key is null) return Result.Failure("No API key provided.");
 
             var setResult = await _authStore.SetApiKeyAsync(provider.Id, key, ct).ConfigureAwait(false);
@@ -65,10 +60,10 @@ public sealed class OnboardingWizard
         }
 
         // 3. Pick model
-        var model = await PickModelAsync(reader, writer, provider, ct).ConfigureAwait(false);
+        string model = await PickModelAsync(reader, writer, provider, ct).ConfigureAwait(false);
 
         // 4. Pick agent
-        var agent = await PickAgentAsync(reader, writer, ct).ConfigureAwait(false);
+        string agent = await PickAgentAsync(reader, writer, ct).ConfigureAwait(false);
 
         // 5. Save config
         var saveResult = await _configStore.UpdateAsync(c =>
@@ -103,15 +98,15 @@ public sealed class OnboardingWizard
         {
             writer("");
             writer("Pick a provider (recommended: kilocode — has FREE models):");
-            for (var i = 0; i < presets.Count; i++)
+            for (int i = 0; i < presets.Count; i++)
             {
                 var p = presets[i];
-                var marker = p.RequiresApiKey ? "  " : "🔧";
-                var freeHint = p.Id == "kilocode" ? " (FREE models available)" : "";
+                string marker = p.RequiresApiKey ? "  " : "🔧";
+                string freeHint = p.Id == "kilocode" ? " (FREE models available)" : "";
                 writer($"  {marker} [{i + 1}] {p.DisplayName}{freeHint}");
             }
             writer("");
-            var input = await reader("Enter number (or 'list' for details): ").ConfigureAwait(false);
+            string input = await reader("Enter number (or 'list' for details): ").ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(input)) continue;
 
             if (input.Equals("list", StringComparison.OrdinalIgnoreCase))
@@ -124,7 +119,7 @@ public sealed class OnboardingWizard
                 continue;
             }
 
-            if (int.TryParse(input, out var idx) && idx >= 1 && idx <= presets.Count)
+            if (int.TryParse(input, out int idx) && idx >= 1 && idx <= presets.Count)
                 return presets[idx - 1];
 
             // Try as provider ID
@@ -154,7 +149,7 @@ public sealed class OnboardingWizard
         }
 
         writer("");
-        var input = await reader($"Enter API key for {provider.Id}: ").ConfigureAwait(false);
+        string input = await reader($"Enter API key for {provider.Id}: ").ConfigureAwait(false);
         return string.IsNullOrWhiteSpace(input) ? null : input.Trim();
     }
 
@@ -165,11 +160,11 @@ public sealed class OnboardingWizard
         CancellationToken ct)
     {
         // Default to preset's default
-        var defaultModel = $"{provider.Id}/{provider.DefaultModel}";
+        string defaultModel = $"{provider.Id}/{provider.DefaultModel}";
 
         writer("");
         writer($"Default model: {defaultModel}");
-        var input = await reader("Press Enter to use default, or type a model name: ").ConfigureAwait(false);
+        string input = await reader("Press Enter to use default, or type a model name: ").ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(input)) return defaultModel;
 
         // If user typed just a model name without provider/, prepend it
@@ -185,7 +180,7 @@ public sealed class OnboardingWizard
         writer("  [2] plan    — Read-only planning. Cannot modify files.");
         writer("  [3] explore — Fast read-only codebase exploration.");
 
-        var input = await reader("Enter number (default: 1): ").ConfigureAwait(false);
+        string input = await reader("Enter number (default: 1): ").ConfigureAwait(false);
         return input switch
         {
             "" or "1" => "code",

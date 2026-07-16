@@ -1,13 +1,11 @@
 using System.Text.Json.Serialization;
 using MemoryPack;
-
 namespace Harbor.Abstractions.Models;
-
 /// <summary>
-/// Represents a conversation session.
+///     Represents a conversation session.
 /// </summary>
 /// <param name="Id">Stable unique identifier (guid as N-string).</param>
-/// <param name="ProjectId">Hash-based project id derived from <see cref="Directory"/>, used for grouping sessions.</param>
+/// <param name="ProjectId">Hash-based project id derived from <see cref="Directory" />, used for grouping sessions.</param>
 /// <param name="Directory">Absolute working directory of the session.</param>
 /// <param name="Title">Human-readable session title.</param>
 /// <param name="Agent">The agent name bound to this session.</param>
@@ -32,36 +30,36 @@ public sealed partial record Session(
     string? ParentSessionId = null)
 {
     /// <summary>
-    /// Factory for a new session: generates a fresh id, derives the project id from the
-    /// directory, and seeds the metadata with zero usage.
+    ///     Factory for a new session: generates a fresh id, derives the project id from the
+    ///     directory, and seeds the metadata with zero usage.
     /// </summary>
     /// <param name="directory">The working directory of the session.</param>
     /// <param name="agentName">The agent name to bind.</param>
     /// <param name="providerId">The provider id to bind.</param>
     /// <param name="modelId">The model id to bind.</param>
     /// <param name="title">Optional title; defaults to <c>Session yyyy-MM-dd HH:mm</c>.</param>
-    /// <returns>A new <see cref="Session"/> ready to persist.</returns>
+    /// <returns>A new <see cref="Session" /> ready to persist.</returns>
     public static Session Create(string directory, string agentName, string providerId, string modelId, string? title = null)
     {
-        var id = Guid.NewGuid().ToString("N");
-        var projectId = directory.GetHashCode(StringComparison.Ordinal).ToString("x");
+        string id = Guid.NewGuid().ToString("N");
+        string projectId = directory.GetHashCode(StringComparison.Ordinal).ToString("x");
         var now = DateTimeOffset.UtcNow;
         return new Session(
-            Id: id,
-            ProjectId: projectId,
-            Directory: directory,
-            Title: title ?? $"Session {now:yyyy-MM-dd HH:mm}",
-            Agent: agentName,
-            Model: modelId,
-            ProviderId: providerId,
-            CreatedAt: now,
-            UpdatedAt: now,
-            Metadata: SessionMetadata.Empty);
+            id,
+            projectId,
+            directory,
+            title ?? $"Session {now:yyyy-MM-dd HH:mm}",
+            agentName,
+            modelId,
+            providerId,
+            now,
+            now,
+            SessionMetadata.Empty);
     }
 }
 
 /// <summary>
-/// Aggregated metadata about a session.
+///     Aggregated metadata about a session.
 /// </summary>
 /// <param name="Cost">Total estimated cost in USD.</param>
 /// <param name="TokensInput">Total input tokens consumed.</param>
@@ -83,15 +81,15 @@ public sealed partial record SessionMetadata(
     TimeSpan? TimeCompacting)
 {
     /// <summary>
-    /// A zeroed <see cref="SessionMetadata"/> for fresh sessions.
+    ///     A zeroed <see cref="SessionMetadata" /> for fresh sessions.
     /// </summary>
     public static SessionMetadata Empty => new(0m, 0, 0, 0, 0, 0, 0, null);
 
     /// <summary>
-    /// Returns a copy of this metadata with the usage from one LLM call added in.
+    ///     Returns a copy of this metadata with the usage from one LLM call added in.
     /// </summary>
     /// <param name="usage">The usage to add.</param>
-    /// <returns>A new <see cref="SessionMetadata"/> with incremented counters.</returns>
+    /// <returns>A new <see cref="SessionMetadata" /> with incremented counters.</returns>
     public SessionMetadata AddUsage(Usage usage)
     {
         return this with
@@ -101,13 +99,13 @@ public sealed partial record SessionMetadata(
             TokensReasoning = TokensReasoning + (usage.ReasoningTokens ?? 0),
             TokensCacheRead = TokensCacheRead + (usage.CacheReadTokens ?? 0),
             TokensCacheWrite = TokensCacheWrite + (usage.CacheWriteTokens ?? 0),
-            MessageCount = MessageCount + 1,
+            MessageCount = MessageCount + 1
         };
     }
 }
 
 /// <summary>
-/// Token usage returned by LLM provider.
+///     Token usage returned by LLM provider.
 /// </summary>
 /// <param name="InputTokens">Number of input (prompt) tokens consumed.</param>
 /// <param name="OutputTokens">Number of output (generated) tokens consumed.</param>
@@ -123,7 +121,7 @@ public sealed partial record Usage(
     int? CacheWriteTokens = null);
 
 /// <summary>
-/// Pricing for a model (per million tokens, USD).
+///     Pricing for a model (per million tokens, USD).
 /// </summary>
 /// <param name="InputPerMillion">USD per 1M input tokens.</param>
 /// <param name="OutputPerMillion">USD per 1M output tokens.</param>
@@ -137,27 +135,27 @@ public sealed partial record Pricing(
     decimal? CacheWritePerMillion = null)
 {
     /// <summary>
-    /// Sentinel pricing for models with unknown pricing. <see cref="CalculateCost"/> returns 0.
+    ///     Sentinel pricing for models with unknown pricing. <see cref="CalculateCost" /> returns 0.
     /// </summary>
-    public static Pricing Unknown => new(0m, 0m, null, null);
+    public static Pricing Unknown => new(0m, 0m);
 
     /// <summary>
-    /// Calculate the cost in USD for the given <see cref="Usage"/>.
+    ///     Calculate the cost in USD for the given <see cref="Usage" />.
     /// </summary>
     /// <param name="usage">The usage to price.</param>
     /// <returns>The total cost in USD.</returns>
     public decimal CalculateCost(Usage usage)
     {
-        var input = (usage.InputTokens / 1_000_000m) * InputPerMillion;
-        var output = (usage.OutputTokens / 1_000_000m) * OutputPerMillion;
-        var cacheRead = ((usage.CacheReadTokens ?? 0) / 1_000_000m) * (CacheReadPerMillion ?? 0m);
-        var cacheWrite = ((usage.CacheWriteTokens ?? 0) / 1_000_000m) * (CacheWritePerMillion ?? 0m);
+        decimal input = usage.InputTokens / 1_000_000m * InputPerMillion;
+        decimal output = usage.OutputTokens / 1_000_000m * OutputPerMillion;
+        decimal cacheRead = (usage.CacheReadTokens ?? 0) / 1_000_000m * (CacheReadPerMillion ?? 0m);
+        decimal cacheWrite = (usage.CacheWriteTokens ?? 0) / 1_000_000m * (CacheWritePerMillion ?? 0m);
         return input + output + cacheRead + cacheWrite;
     }
 }
 
 /// <summary>
-/// Information about an LLM model.
+///     Information about an LLM model.
 /// </summary>
 /// <param name="Id">Model id (without provider prefix).</param>
 /// <param name="ProviderId">Owning provider id.</param>
@@ -183,7 +181,7 @@ public sealed partial record ModelInfo(
     string PromptTemplate);
 
 /// <summary>
-/// Reason the model stopped generating.
+///     Reason the model stopped generating.
 /// </summary>
 [JsonConverter(typeof(StopReasonJsonConverter))]
 public enum StopReason
@@ -203,14 +201,16 @@ public enum StopReason
     /// <summary>An error occurred during generation.</summary>
     Error,
 
-    /// <summary>The user cancelled the run via <see cref="IAgent.AbortSource"/>.</summary>
-    Aborted,
+    /// <summary>The user cancelled the run via <see cref="IAgent.AbortSource" />.</summary>
+    Aborted
 }
 
-internal sealed class StopReasonJsonConverter : JsonStringConverter<StopReason> { }
+internal sealed class StopReasonJsonConverter : JsonStringConverter<StopReason>
+{
+}
 
 /// <summary>
-/// Reasoning effort for reasoning-aware models.
+///     Reasoning effort for reasoning-aware models.
 /// </summary>
 [JsonConverter(typeof(ReasoningEffortJsonConverter))]
 public enum ReasoningEffort
@@ -225,13 +225,15 @@ public enum ReasoningEffort
     High,
 
     /// <summary>Maximum reasoning effort.</summary>
-    Max,
+    Max
 }
 
-internal sealed class ReasoningEffortJsonConverter : JsonStringConverter<ReasoningEffort> { }
+internal sealed class ReasoningEffortJsonConverter : JsonStringConverter<ReasoningEffort>
+{
+}
 
 /// <summary>
-/// Tool choice strategy.
+///     Tool choice strategy.
 /// </summary>
 public abstract record ToolChoice
 {
@@ -250,7 +252,7 @@ public abstract record ToolChoice
 }
 
 /// <summary>
-/// Cache strategy for prompt caching (Anthropic-style).
+///     Cache strategy for prompt caching (Anthropic-style).
 /// </summary>
 public enum CacheStrategy
 {
@@ -261,25 +263,22 @@ public enum CacheStrategy
     Ephemeral,
 
     /// <summary>Long-lived (1-hour) cache entry.</summary>
-    LongLived,
+    LongLived
 }
 
 /// <summary>
-/// Base class for JSON string enum converters.
+///     Base class for JSON string enum converters.
 /// </summary>
 /// <typeparam name="T">The enum type to convert.</typeparam>
 public abstract class JsonStringConverter<T> : JsonConverter<T> where T : struct, Enum
 {
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        var s = reader.GetString();
-        return s is not null && Enum.TryParse<T>(s, ignoreCase: true, out var v) ? v : default;
+        string? s = reader.GetString();
+        return s is not null && Enum.TryParse<T>(s, true, out var v) ? v : default;
     }
 
-    /// <inheritdoc/>
-    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
-    {
-        writer.WriteStringValue(value.ToString().ToLowerInvariant());
-    }
+    /// <inheritdoc />
+    public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options) => writer.WriteStringValue(value.ToString().ToLowerInvariant());
 }

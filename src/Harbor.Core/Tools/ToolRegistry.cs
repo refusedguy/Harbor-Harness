@@ -1,28 +1,20 @@
 using System.Collections.Frozen;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
 using NonBlocking;
-
 namespace Harbor.Abstractions.Tools;
-
 /// <summary>
-/// Thread-safe tool registry with frozen lookup table for fast resolution.
-/// Implements Registry pattern (GOF).
-///
-/// Hot path: <see cref="ResolveTools"/> / <see cref="GetTool"/> — uses frozen snapshot when available.
-/// Backing storage is <see cref="NonBlocking.ConcurrentDictionary{TKey, TValue}"/> for lock-free
-/// scaling under write-heavy workloads.
+///     Thread-safe tool registry with frozen lookup table for fast resolution.
+///     Implements Registry pattern (GOF).
+///     Hot path: <see cref="ResolveTools" /> / <see cref="GetTool" /> — uses frozen snapshot when available.
+///     Backing storage is <see cref="NonBlocking.ConcurrentDictionary{TKey, TValue}" /> for lock-free
+///     scaling under write-heavy workloads.
 /// </summary>
 public sealed class ToolRegistry : IToolRegistry
 {
-    private readonly NonBlocking.ConcurrentDictionary<ToolName, ITool> _tools = new();
-    private FrozenDictionary<ToolName, ITool>? _frozenTools;
     private readonly object _frozenLock = new();
+    private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
+    private FrozenDictionary<ToolName, ITool>? _frozenTools;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> GetAllTools()
     {
         // Prefer frozen snapshot (lock-free, smaller memory footprint).
@@ -30,7 +22,7 @@ public sealed class ToolRegistry : IToolRegistry
         if (frozen is not null)
         {
             var result = new ToolDescriptor[frozen.Count];
-            var i = 0;
+            int i = 0;
             foreach (var kv in frozen)
             {
                 result[i++] = ToDescriptor(kv.Value);
@@ -39,7 +31,7 @@ public sealed class ToolRegistry : IToolRegistry
         }
 
         // Fallback: iterate concurrent dictionary directly (no intermediate array via ToArray()).
-        var count = _tools.Count;
+        int count = _tools.Count;
         if (count == 0)
         {
             return Array.Empty<ToolDescriptor>();
@@ -53,7 +45,7 @@ public sealed class ToolRegistry : IToolRegistry
         return list;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyList<ToolDescriptor> ResolveTools(string agentName, PermissionRuleset? sessionPermission = null)
     {
         var frozen = _frozenTools;
@@ -88,10 +80,53 @@ public sealed class ToolRegistry : IToolRegistry
         }
     }
 
+    /// <inheritdoc />
+    public Result<ITool> GetTool(ToolName name)
+    {
+        // Try frozen snapshot first (fast path)
+        var frozen = _frozenTools;
+        if (frozen is not null && frozen.TryGetValue(name, out var tool))
+        {
+            return Result.Success(tool);
+        }
+
+        // Fallback to concurrent dictionary
+        if (_tools.TryGetValue(name, out var t))
+        {
+            return Result.Success(t);
+        }
+
+        return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+    }
+
+    /// <inheritdoc />
+    public Result Register(ITool tool)
+    {
+        if (!_tools.TryAdd(tool.Name, tool))
+        {
+            return Result.Failure($"Tool '{tool.Name}' is already registered.");
+        }
+
+        InvalidateFrozenSnapshot();
+        return Result.Success();
+    }
+
+    /// <inheritdoc />
+    public Result Unregister(ToolName name)
+    {
+        if (_tools.TryRemove(name, out _))
+        {
+            InvalidateFrozenSnapshot();
+            return Result.Success();
+        }
+
+        return Result.Failure($"Tool '{name}' is not registered.");
+    }
+
     private static ToolDescriptor[] ResolveAllFromFrozen(FrozenDictionary<ToolName, ITool> frozen)
     {
         var result = new ToolDescriptor[frozen.Count];
-        var i = 0;
+        int i = 0;
         foreach (var kv in frozen)
         {
             result[i++] = ToDescriptor(kv.Value);
@@ -115,52 +150,9 @@ public sealed class ToolRegistry : IToolRegistry
         return result;
     }
 
-    /// <inheritdoc/>
-    public Result<ITool> GetTool(ToolName name)
-    {
-        // Try frozen snapshot first (fast path)
-        var frozen = _frozenTools;
-        if (frozen is not null && frozen.TryGetValue(name, out var tool))
-        {
-            return Result.Success(tool);
-        }
-
-        // Fallback to concurrent dictionary
-        if (_tools.TryGetValue(name, out var t))
-        {
-            return Result.Success(t);
-        }
-
-        return Result.Failure<ITool>($"Tool '{name}' is not registered.");
-    }
-
-    /// <inheritdoc/>
-    public Result Register(ITool tool)
-    {
-        if (!_tools.TryAdd(tool.Name, tool))
-        {
-            return Result.Failure($"Tool '{tool.Name}' is already registered.");
-        }
-
-        InvalidateFrozenSnapshot();
-        return Result.Success();
-    }
-
-    /// <inheritdoc/>
-    public Result Unregister(ToolName name)
-    {
-        if (_tools.TryRemove(name, out _))
-        {
-            InvalidateFrozenSnapshot();
-            return Result.Success();
-        }
-
-        return Result.Failure($"Tool '{name}' is not registered.");
-    }
-
     /// <summary>
-    /// Freeze the current tool set for fast lock-free lookups.
-    /// Call after all tools are registered at startup.
+    ///     Freeze the current tool set for fast lock-free lookups.
+    ///     Call after all tools are registered at startup.
     /// </summary>
     public void Freeze()
     {
@@ -189,14 +181,14 @@ public sealed class ToolRegistry : IToolRegistry
 }
 
 /// <summary>
-/// Builder implementation for <see cref="IToolRegistryBuilder"/>.
+///     Builder implementation for <see cref="IToolRegistryBuilder" />.
 /// </summary>
 public sealed class ToolRegistryBuilder : IToolRegistryBuilder
 {
     private readonly IToolRegistry _registry;
 
     /// <summary>
-    /// Construct a builder backed by the supplied registry.
+    ///     Construct a builder backed by the supplied registry.
     /// </summary>
     /// <param name="registry">The registry to wrap.</param>
     public ToolRegistryBuilder(IToolRegistry registry)
@@ -204,7 +196,7 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
         _registry = registry;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void AddTool(ITool tool)
     {
         var result = _registry.Register(tool);
@@ -214,15 +206,9 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
         }
     }
 
-    /// <inheritdoc/>
-    public void AddTool<T>() where T : ITool, new()
-    {
-        AddTool(new T());
-    }
+    /// <inheritdoc />
+    public void AddTool<T>() where T : ITool, new() => AddTool(new T());
 
-    /// <inheritdoc/>
-    public void AddTool(Func<ITool> factory)
-    {
-        AddTool(factory());
-    }
+    /// <inheritdoc />
+    public void AddTool(Func<ITool> factory) => AddTool(factory());
 }

@@ -1,12 +1,7 @@
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Edits a file by replacing oldString with newString. Supports multi-edit.
+///     Edits a file by replacing oldString with newString. Supports multi-edit.
 /// </summary>
 public sealed class EditTool : ITool
 {
@@ -19,42 +14,42 @@ public sealed class EditTool : ITool
     {
         "Use `edit` for targeted changes; prefer it over `write` for existing files",
         "Make `oldString` specific enough to be unique in the file",
-        "For multiple edits in the same file, use the `edits` array",
+        "For multiple edits in the same file, use the `edits` array"
     };
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "path": { "type": "string", "description": "File path to edit" },
-            "oldString": { "type": "string", "description": "String to find in the file. Must be unique unless replaceAll=true." },
-            "newString": { "type": "string", "description": "Replacement string. Use empty string to delete." },
-            "replaceAll": { "type": "boolean", "description": "Replace all occurrences of oldString (default: false)" },
-            "edits": {
-              "type": "array",
-              "description": "Multiple edits to apply in sequence",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "oldString": { "type": "string" },
-                  "newString": { "type": "string" },
-                  "replaceAll": { "type": "boolean" }
-                },
-                "required": ["oldString", "newString"]
-              }
-            }
-          },
-          "required": ["path"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "path": { "type": "string", "description": "File path to edit" },
+                                                                          "oldString": { "type": "string", "description": "String to find in the file. Must be unique unless replaceAll=true." },
+                                                                          "newString": { "type": "string", "description": "Replacement string. Use empty string to delete." },
+                                                                          "replaceAll": { "type": "boolean", "description": "Replace all occurrences of oldString (default: false)" },
+                                                                          "edits": {
+                                                                            "type": "array",
+                                                                            "description": "Multiple edits to apply in sequence",
+                                                                            "items": {
+                                                                              "type": "object",
+                                                                              "properties": {
+                                                                                "oldString": { "type": "string" },
+                                                                                "newString": { "type": "string" },
+                                                                                "replaceAll": { "type": "boolean" }
+                                                                              },
+                                                                              "required": ["oldString", "newString"]
+                                                                            }
+                                                                          }
+                                                                        },
+                                                                        "required": ["path"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
         if (!args.TryGetProperty("path", out var pathEl) || pathEl.ValueKind != JsonValueKind.String)
             return Result.Failure("Missing required argument 'path'.");
 
-        var hasSingle = args.TryGetProperty("oldString", out _) && args.TryGetProperty("newString", out _);
-        var hasMulti = args.TryGetProperty("edits", out _);
+        bool hasSingle = args.TryGetProperty("oldString", out _) && args.TryGetProperty("newString", out _);
+        bool hasMulti = args.TryGetProperty("edits", out _);
 
         if (!hasSingle && !hasMulti)
             return Result.Failure("Either `edits` or both `oldString`+`newString` required.");
@@ -67,7 +62,7 @@ public sealed class EditTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = args.GetProperty("path").GetString()!;
+        string path = args.GetProperty("path").GetString()!;
 
         if (!Path.IsPathRooted(path))
             path = Path.Combine(Environment.CurrentDirectory, path);
@@ -75,19 +70,19 @@ public sealed class EditTool : ITool
         if (!File.Exists(path))
             return ToolResult.Error($"File not found: {path}");
 
-        var originalContent = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        var newContent = originalContent;
-        var changesCount = 0;
+        string originalContent = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        string newContent = originalContent;
+        int changesCount = 0;
 
         if (args.TryGetProperty("edits", out var editsEl) && editsEl.ValueKind == JsonValueKind.Array)
         {
             foreach (var edit in editsEl.EnumerateArray())
             {
-                var oldStr = edit.GetProperty("oldString").GetString()!;
-                var newStr = edit.GetProperty("newString").GetString()!;
-                var replaceAll = edit.TryGetProperty("replaceAll", out var ra) && ra.GetBoolean();
+                string oldStr = edit.GetProperty("oldString").GetString()!;
+                string newStr = edit.GetProperty("newString").GetString()!;
+                bool replaceAll = edit.TryGetProperty("replaceAll", out var ra) && ra.GetBoolean();
 
-                var (newText, count) = ApplyEdit(newContent, oldStr, newStr, replaceAll);
+                (string newText, int count) = ApplyEdit(newContent, oldStr, newStr, replaceAll);
                 if (count == 0)
                     return ToolResult.Error($"oldString not found: {oldStr[..Math.Min(50, oldStr.Length)]}...");
 
@@ -97,11 +92,11 @@ public sealed class EditTool : ITool
         }
         else
         {
-            var oldStr = args.GetProperty("oldString").GetString()!;
-            var newStr = args.GetProperty("newString").GetString()!;
-            var replaceAll = args.TryGetProperty("replaceAll", out var ra) && ra.GetBoolean();
+            string oldStr = args.GetProperty("oldString").GetString()!;
+            string newStr = args.GetProperty("newString").GetString()!;
+            bool replaceAll = args.TryGetProperty("replaceAll", out var ra) && ra.GetBoolean();
 
-            var (newText, count) = ApplyEdit(newContent, oldStr, newStr, replaceAll);
+            (string newText, int count) = ApplyEdit(newContent, oldStr, newStr, replaceAll);
             if (count == 0)
                 return ToolResult.Error("oldString not found in file.");
             if (count > 1 && !replaceAll)
@@ -113,7 +108,7 @@ public sealed class EditTool : ITool
 
         await File.WriteAllTextAsync(path, newContent, cancellationToken).ConfigureAwait(false);
 
-        var diff = GenerateSimpleDiff(originalContent, newContent);
+        string diff = GenerateSimpleDiff(originalContent, newContent);
 
         return ToolResult.Success($"Edited {path}: {changesCount} replacement(s)\n\nDiff:\n{diff}", new { path, changes = changesCount });
     }
@@ -123,23 +118,23 @@ public sealed class EditTool : ITool
     {
         if (replaceAll)
         {
-            var count = CountOccurrences(content, oldStr);
+            int count = CountOccurrences(content, oldStr);
             return (content.Replace(oldStr, newStr), count);
         }
 
-        var idx = content.IndexOf(oldStr, StringComparison.Ordinal);
+        int idx = content.IndexOf(oldStr, StringComparison.Ordinal);
         if (idx < 0) return (content, 0);
 
-        var nextIdx = content.IndexOf(oldStr, idx + 1, StringComparison.Ordinal);
-        if (nextIdx >= 0) return (content, 2);  // ambiguous
+        int nextIdx = content.IndexOf(oldStr, idx + 1, StringComparison.Ordinal);
+        if (nextIdx >= 0) return (content, 2); // ambiguous
 
         return (content.Remove(idx, oldStr.Length).Insert(idx, newStr), 1);
     }
 
     private static int CountOccurrences(string haystack, string needle)
     {
-        var count = 0;
-        var idx = 0;
+        int count = 0;
+        int idx = 0;
         while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
         {
             count++;
@@ -151,14 +146,14 @@ public sealed class EditTool : ITool
     private static string GenerateSimpleDiff(string oldText, string newText)
     {
         var sb = new StringBuilder();
-        var oldLines = oldText.Split('\n');
-        var newLines = newText.Split('\n');
+        string[] oldLines = oldText.Split('\n');
+        string[] newLines = newText.Split('\n');
 
-        var maxLines = Math.Max(oldLines.Length, newLines.Length);
-        for (var i = 0; i < maxLines; i++)
+        int maxLines = Math.Max(oldLines.Length, newLines.Length);
+        for (int i = 0; i < maxLines; i++)
         {
-            var oldLine = i < oldLines.Length ? oldLines[i] : null;
-            var newLine = i < newLines.Length ? newLines[i] : null;
+            string? oldLine = i < oldLines.Length ? oldLines[i] : null;
+            string? newLine = i < newLines.Length ? newLines[i] : null;
 
             if (oldLine == newLine) continue;
 

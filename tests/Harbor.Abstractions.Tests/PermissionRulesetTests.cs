@@ -1,9 +1,5 @@
 using Harbor.Abstractions.Permissions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Abstractions.Tests;
-
 public class PermissionRulesetTests
 {
     [Test]
@@ -60,7 +56,7 @@ public class PermissionRulesetTests
     {
         var userRules = new PermissionRuleset(new[]
         {
-            new PermissionRule("write", "*", PermissionAction.Allow),
+            new PermissionRule("write", "*", PermissionAction.Allow)
         });
 
         var merged = PermissionRuleset.Default.Merge(userRules);

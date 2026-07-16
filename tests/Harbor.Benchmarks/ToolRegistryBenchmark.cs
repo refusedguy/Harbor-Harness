@@ -1,29 +1,26 @@
+using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using System.Text.Json;
-
 namespace Harbor.Benchmarks;
-
 /// <summary>
-/// Benchmarks <see cref="ToolRegistry"/> hot paths:
-/// - <see cref="ToolRegistry.ResolveTools"/>: builds a list of descriptors
-///   for an agent. With frozen snapshot, returns a sized array directly.
-/// - <see cref="ToolRegistry.GetTool"/>: O(1) lookup by name.
-///
-/// The frozen path uses <c>FrozenDictionary</c>; the unfrozen path falls back
-/// to <c>NonBlocking.ConcurrentDictionary</c>.
+///     Benchmarks <see cref="ToolRegistry" /> hot paths:
+///     - <see cref="ToolRegistry.ResolveTools" />: builds a list of descriptors
+///     for an agent. With frozen snapshot, returns a sized array directly.
+///     - <see cref="ToolRegistry.GetTool" />: O(1) lookup by name.
+///     The frozen path uses <c>FrozenDictionary</c>; the unfrozen path falls back
+///     to <c>NonBlocking.ConcurrentDictionary</c>.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class ToolRegistryBenchmark
 {
     private ToolRegistry _frozenRegistry = null!;
-    private ToolRegistry _unfrozenRegistry = null!;
-    private ToolName _toolName = null!;
     private PermissionRuleset _permission = null!;
+    private ToolName _toolName = null!;
+    private ToolRegistry _unfrozenRegistry = null!;
 
     [Params(4, 8, 16)]
     public int ToolCount { get; set; }
@@ -36,7 +33,7 @@ public class ToolRegistryBenchmark
         _toolName = ToolName.Create("tool-0");
         _permission = PermissionRuleset.Default;
 
-        for (var i = 0; i < ToolCount; i++)
+        for (int i = 0; i < ToolCount; i++)
         {
             var tool = new StubTool($"tool-{i}", $"Tool {i}");
             _frozenRegistry.Register(tool);
@@ -48,7 +45,7 @@ public class ToolRegistryBenchmark
 
     [Benchmark(Description = "ResolveTools (frozen, no permission)", Baseline = true)]
     public IReadOnlyList<ToolDescriptor> ResolveTools_Frozen_NoPermission()
-        => _frozenRegistry.ResolveTools("code", null);
+        => _frozenRegistry.ResolveTools("code");
 
     [Benchmark(Description = "ResolveTools (frozen, with permission)")]
     public IReadOnlyList<ToolDescriptor> ResolveTools_Frozen_WithPermission()
@@ -56,7 +53,7 @@ public class ToolRegistryBenchmark
 
     [Benchmark(Description = "ResolveTools (unfrozen)")]
     public IReadOnlyList<ToolDescriptor> ResolveTools_Unfrozen()
-        => _unfrozenRegistry.ResolveTools("code", null);
+        => _unfrozenRegistry.ResolveTools("code");
 
     [Benchmark(Description = "GetTool (frozen)")]
     public Result<ITool> GetTool_Frozen() => _frozenRegistry.GetTool(_toolName);
@@ -66,7 +63,7 @@ public class ToolRegistryBenchmark
 }
 
 /// <summary>
-/// Minimal stub tool for benchmarking the registry without side effects.
+///     Minimal stub tool for benchmarking the registry without side effects.
 /// </summary>
 internal sealed class StubTool : ITool
 {

@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>
 
 </Project>

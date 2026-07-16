@@ -1,12 +1,7 @@
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Core.Permissions;
-
 /// <summary>
-/// Default permission service. Implements Specification pattern (GOF).
+///     Default permission service. Implements Specification pattern (GOF).
 /// </summary>
 public sealed class PermissionService : IPermissionService
 {
@@ -15,11 +10,11 @@ public sealed class PermissionService : IPermissionService
     private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
 
     /// <summary>
-    /// Construct a <see cref="PermissionService"/> wired to the supplied registry.
+    ///     Construct a <see cref="PermissionService" /> wired to the supplied registry.
     /// </summary>
     /// <param name="agents">The agent registry for ruleset lookup.</param>
     /// <param name="logger">The logger.</param>
-    /// <param name="userAsker">Optional callback for prompting the user on <see cref="PermissionAction.Ask"/> decisions.</param>
+    /// <param name="userAsker">Optional callback for prompting the user on <see cref="PermissionAction.Ask" /> decisions.</param>
     public PermissionService(
         IAgentRegistry agents,
         ILogger<PermissionService> logger,
@@ -30,7 +25,7 @@ public sealed class PermissionService : IPermissionService
         _userAsker = userAsker;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public Task<Result<PermissionResponse>> CheckAsync(
         string agentName,
         string toolName,
@@ -41,34 +36,34 @@ public sealed class PermissionService : IPermissionService
         if (agentResult.IsFailure)
             return Task.FromResult(Result.Failure<PermissionResponse>(agentResult.Error));
 
-        var argPath = ExtractArgPath(toolName, args);
+        string argPath = ExtractArgPath(toolName, args);
         var action = agentResult.Value.Permission.Evaluate(toolName, argPath);
 
         if (action == PermissionAction.Allow)
         {
-            return Task.FromResult(Result.Success(new PermissionResponse(action, PersistDecision: false)));
+            return Task.FromResult(Result.Success(new PermissionResponse(action, false)));
         }
 
         if (action == PermissionAction.Deny)
         {
-            return Task.FromResult(Result.Success(new PermissionResponse(action, PersistDecision: false)));
+            return Task.FromResult(Result.Success(new PermissionResponse(action, false)));
         }
 
         // Ask user
         if (_userAsker is null)
         {
             // No UI configured — default to deny for safety
-            return Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Deny, PersistDecision: false)));
+            return Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Deny, false)));
         }
 
         return AskUserAsync(new PermissionRequest(
-            Permission: toolName,
-            Pattern: argPath,
-            Args: args,
-            AlwaysOptions: new[] { "allow", "deny" }), ct);
+            toolName,
+            argPath,
+            args,
+            new[] { "allow", "deny" }), ct);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public async Task<Result<PermissionResponse>> AskUserAsync(
         PermissionRequest request,
         CancellationToken ct = default)
@@ -88,7 +83,7 @@ public sealed class PermissionService : IPermissionService
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public PermissionRuleset GetRuleset(string agentName)
     {
         var agentResult = _agents.GetAgent(AgentName.TryCreate(agentName).Value);
@@ -106,7 +101,7 @@ public sealed class PermissionService : IPermissionService
                 "glob" => args.TryGetProperty("pattern", out var p) ? p.GetString() ?? "*" : "*",
                 "grep" => args.TryGetProperty("pattern", out var p) ? p.GetString() ?? "*" : "*",
                 "ls" => args.TryGetProperty("path", out var p) ? p.GetString() ?? "*" : "*",
-                _ => "*",
+                _ => "*"
             };
         }
         catch

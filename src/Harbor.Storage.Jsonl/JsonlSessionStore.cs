@@ -1,27 +1,21 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Sessions;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Storage.Jsonl;
-
 /// <summary>
-/// JSONL-based session storage. Append-only, atomic writes, no native deps.
-/// Each session is one .jsonl file under the configured directory.
+///     JSONL-based session storage. Append-only, atomic writes, no native deps.
+///     Each session is one .jsonl file under the configured directory.
 /// </summary>
 public sealed class JsonlSessionStore : ISessionStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private readonly object _lock = new();
+    private readonly ILogger<JsonlSessionStore> _logger;
 
     private readonly string _rootDirectory;
-    private readonly ILogger<JsonlSessionStore> _logger;
-    private readonly object _lock = new();
 
     public JsonlSessionStore(string rootDirectory, ILogger<JsonlSessionStore> logger)
     {
@@ -44,23 +38,23 @@ public sealed class JsonlSessionStore : ISessionStore
         try
         {
             var session = Session.Create(directory, agentName, providerId, modelId);
-            var sessionFile = GetSessionFilePath(session.Id);
+            string sessionFile = GetSessionFilePath(session.Id);
 
             lock (_lock)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
 
                 var header = new SessionHeaderEntry(
-                    Type: "session",
-                    Version: 1,
-                    Id: session.Id,
-                    ProjectId: session.ProjectId,
-                    Directory: session.Directory,
-                    Title: session.Title,
-                    Agent: session.Agent,
-                    Model: session.Model,
-                    ProviderId: session.ProviderId,
-                    CreatedAt: session.CreatedAt);
+                    "session",
+                    1,
+                    session.Id,
+                    session.ProjectId,
+                    session.Directory,
+                    session.Title,
+                    session.Agent,
+                    session.Model,
+                    session.ProviderId,
+                    session.CreatedAt);
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonOptions) + "\n");
             }
@@ -78,7 +72,7 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         try
         {
-            var sessionFile = GetSessionFilePath(sessionId);
+            string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
                 return Result.Failure<Session>($"Session '{sessionId}' not found.");
 
@@ -88,16 +82,16 @@ public sealed class JsonlSessionStore : ISessionStore
 
             var metadata = await GetStatsAsync(sessionId, ct).ConfigureAwait(false);
             var session = new Session(
-                Id: header.Id,
-                ProjectId: header.ProjectId,
-                Directory: header.Directory,
-                Title: header.Title,
-                Agent: header.Agent,
-                Model: header.Model,
-                ProviderId: header.ProviderId,
-                CreatedAt: header.CreatedAt,
-                UpdatedAt: DateTimeOffset.UtcNow,
-                Metadata: metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty);
+                header.Id,
+                header.ProjectId,
+                header.Directory,
+                header.Title,
+                header.Agent,
+                header.Model,
+                header.ProviderId,
+                header.CreatedAt,
+                DateTimeOffset.UtcNow,
+                metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty);
 
             return Result.Success(session);
         }
@@ -112,9 +106,9 @@ public sealed class JsonlSessionStore : ISessionStore
         try
         {
             var sessions = new List<Session>();
-            foreach (var file in Directory.EnumerateFiles(_rootDirectory, "*.jsonl"))
+            foreach (string file in Directory.EnumerateFiles(_rootDirectory, "*.jsonl"))
             {
-                var sessionId = Path.GetFileNameWithoutExtension(file);
+                string sessionId = Path.GetFileNameWithoutExtension(file);
                 var getResult = GetAsync(sessionId, ct).GetAwaiter().GetResult();
                 if (getResult.IsSuccess)
                 {
@@ -136,19 +130,19 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         try
         {
-            var sessionFile = GetSessionFilePath(sessionId);
+            string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
                 return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
 
             lock (_lock)
             {
                 var entry = new MessageEntry(
-                    Type: "message",
-                    Id: message.Id,
-                    ParentId: message.ParentId,
-                    Role: message.Role,
-                    CreatedAt: message.CreatedAt,
-                    Payload: SerializeMessagePayload(message));
+                    "message",
+                    message.Id,
+                    message.ParentId,
+                    message.Role,
+                    message.CreatedAt,
+                    SerializeMessagePayload(message));
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonOptions) + "\n");
             }
@@ -173,7 +167,7 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         try
         {
-            var sessionFile = GetSessionFilePath(sessionId);
+            string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
                 return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
 
@@ -187,13 +181,13 @@ public sealed class JsonlSessionStore : ISessionStore
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
-                    var type = doc.RootElement.GetProperty("type").GetString();
+                    string? type = doc.RootElement.GetProperty("type").GetString();
 
                     if (type == "message")
                     {
                         var msg = DeserializeMessage(doc.RootElement);
                         if (msg is not null)
-                            messages[msg.Id] = msg;  // latest entry wins
+                            messages[msg.Id] = msg; // latest entry wins
                     }
                 }
                 catch (Exception ex)
@@ -215,7 +209,7 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         try
         {
-            var sessionFile = GetSessionFilePath(sessionId);
+            string sessionFile = GetSessionFilePath(sessionId);
             if (File.Exists(sessionFile))
             {
                 File.Delete(sessionFile);
@@ -237,13 +231,13 @@ public sealed class JsonlSessionStore : ISessionStore
                 return Result.Failure<SessionMetadata>(messagesResult.Error);
 
             var messages = messagesResult.Value;
-            var cost = 0m;
-            var inputTokens = 0;
-            var outputTokens = 0;
-            var reasoningTokens = 0;
-            var cacheRead = 0;
-            var cacheWrite = 0;
-            var count = 0;
+            decimal cost = 0m;
+            int inputTokens = 0;
+            int outputTokens = 0;
+            int reasoningTokens = 0;
+            int cacheRead = 0;
+            int cacheWrite = 0;
+            int count = 0;
 
             foreach (var msg in messages)
             {
@@ -259,14 +253,14 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             return Result.Success(new SessionMetadata(
-                Cost: cost,
-                TokensInput: inputTokens,
-                TokensOutput: outputTokens,
-                TokensReasoning: reasoningTokens,
-                TokensCacheRead: cacheRead,
-                TokensCacheWrite: cacheWrite,
-                MessageCount: count,
-                TimeCompacting: null));
+                cost,
+                inputTokens,
+                outputTokens,
+                reasoningTokens,
+                cacheRead,
+                cacheWrite,
+                count,
+                null));
         }
         catch (Exception ex)
         {
@@ -287,7 +281,7 @@ public sealed class JsonlSessionStore : ISessionStore
     private async Task<SessionHeaderEntry?> ReadHeaderAsync(string path, CancellationToken ct)
     {
         using var reader = new StreamReader(path);
-        var firstLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+        string? firstLine = await reader.ReadLineAsync(ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(firstLine)) return null;
 
         try
@@ -312,10 +306,10 @@ public sealed class JsonlSessionStore : ISessionStore
                 usage = a.Usage,
                 model = a.Model,
                 isSummary = a.IsSummary,
-                summaryFirstKeptId = a.SummaryFirstKeptId,
+                summaryFirstKeptId = a.SummaryFirstKeptId
             },
             ToolResultMessage tr => new { results = tr.Results },
-            _ => new { },
+            _ => new { }
         };
     }
 
@@ -325,28 +319,28 @@ public sealed class JsonlSessionStore : ISessionStore
         ThinkingPart th => new { type = "thinking", text = th.Text },
         ToolCallPart tc => new { type = "tool_call", id = tc.Id, toolName = tc.ToolName, args = tc.Args },
         FilePart f => new { type = "file", path = f.Path, mimeType = f.MimeType, sizeBytes = f.SizeBytes },
-        _ => new { type = "unknown" },
+        _ => new { type = "unknown" }
     };
 
     private static AgentMessage? DeserializeMessage(JsonElement element)
     {
-        var id = element.GetProperty("id").GetString()!;
+        string id = element.GetProperty("id").GetString()!;
         var createdAt = element.GetProperty("createdAt").GetDateTimeOffset();
-        var parentId = element.TryGetProperty("parentId", out var p) ? p.GetString() : null;
-        var role = element.GetProperty("role").GetString()!;
+        string? parentId = element.TryGetProperty("parentId", out var p) ? p.GetString() : null;
+        string role = element.GetProperty("role").GetString()!;
         var payload = element.GetProperty("payload");
-        var sessionId = "";  // populated by file context
+        string sessionId = ""; // populated by file context
 
         if (role == "user")
         {
             return new UserMessage(
-                Id: id,
-                SessionId: sessionId,
-                CreatedAt: createdAt,
-                Content: payload.GetProperty("content").GetString()!,
-                Agent: payload.GetProperty("agent").GetString()!,
-                Model: payload.GetProperty("model").GetString()!,
-                ParentId: parentId);
+                id,
+                sessionId,
+                createdAt,
+                payload.GetProperty("content").GetString()!,
+                payload.GetProperty("agent").GetString()!,
+                payload.GetProperty("model").GetString()!,
+                parentId);
         }
 
         if (role == "assistant")
@@ -357,23 +351,23 @@ public sealed class JsonlSessionStore : ISessionStore
                 .Cast<ContentPart>()
                 .ToList();
 
-            var stopReason = Enum.Parse<StopReason>(payload.GetProperty("stopReason").GetString()!, ignoreCase: true);
+            var stopReason = Enum.Parse<StopReason>(payload.GetProperty("stopReason").GetString()!, true);
             var usage = payload.GetProperty("usage").Deserialize<Usage>(JsonOptions) ?? new Usage(0, 0);
-            var model = payload.GetProperty("model").GetString()!;
-            var isSummary = payload.TryGetProperty("isSummary", out var s) && s.GetBoolean();
-            var summaryFirstKeptId = payload.TryGetProperty("summaryFirstKeptId", out var sf) ? sf.GetString() : null;
+            string model = payload.GetProperty("model").GetString()!;
+            bool isSummary = payload.TryGetProperty("isSummary", out var s) && s.GetBoolean();
+            string? summaryFirstKeptId = payload.TryGetProperty("summaryFirstKeptId", out var sf) ? sf.GetString() : null;
 
             return new AssistantMessage(
-                Id: id,
-                SessionId: sessionId,
-                CreatedAt: createdAt,
-                Parts: parts,
-                StopReason: stopReason,
-                Usage: usage,
-                Model: model,
-                ParentId: parentId,
-                IsSummary: isSummary,
-                SummaryFirstKeptId: summaryFirstKeptId);
+                id,
+                sessionId,
+                createdAt,
+                parts,
+                stopReason,
+                usage,
+                model,
+                parentId,
+                isSummary,
+                summaryFirstKeptId);
         }
 
         if (role == "tool_result")
@@ -383,16 +377,15 @@ public sealed class JsonlSessionStore : ISessionStore
                     r.GetProperty("toolCallId").GetString()!,
                     r.GetProperty("toolName").GetString()!,
                     r.GetProperty("output").GetString()!,
-                    r.GetProperty("isError").GetBoolean(),
-                    Metadata: null))
+                    r.GetProperty("isError").GetBoolean()))
                 .ToList();
 
             return new ToolResultMessage(
-                Id: id,
-                SessionId: sessionId,
-                CreatedAt: createdAt,
-                Results: results,
-                ParentId: parentId);
+                id,
+                sessionId,
+                createdAt,
+                results,
+                parentId);
         }
 
         return null;
@@ -400,7 +393,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
     private static ContentPart? DeserializePart(JsonElement element)
     {
-        var type = element.GetProperty("type").GetString();
+        string? type = element.GetProperty("type").GetString();
         return type switch
         {
             "text" => new TextPart(element.GetProperty("text").GetString()!),
@@ -413,27 +406,27 @@ public sealed class JsonlSessionStore : ISessionStore
                 element.GetProperty("path").GetString()!,
                 element.GetProperty("mimeType").GetString()!,
                 element.GetProperty("sizeBytes").GetInt64()),
-            _ => null,
+            _ => null
         };
     }
 }
 
 internal sealed record SessionHeaderEntry(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("version")] int Version,
-    [property: System.Text.Json.Serialization.JsonPropertyName("id")] string Id,
-    [property: System.Text.Json.Serialization.JsonPropertyName("projectId")] string ProjectId,
-    [property: System.Text.Json.Serialization.JsonPropertyName("directory")] string Directory,
-    [property: System.Text.Json.Serialization.JsonPropertyName("title")] string Title,
-    [property: System.Text.Json.Serialization.JsonPropertyName("agent")] string Agent,
-    [property: System.Text.Json.Serialization.JsonPropertyName("model")] string Model,
-    [property: System.Text.Json.Serialization.JsonPropertyName("providerId")] string ProviderId,
-    [property: System.Text.Json.Serialization.JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("projectId")] string ProjectId,
+    [property: JsonPropertyName("directory")] string Directory,
+    [property: JsonPropertyName("title")] string Title,
+    [property: JsonPropertyName("agent")] string Agent,
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("providerId")] string ProviderId,
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
 
 internal sealed record MessageEntry(
-    [property: System.Text.Json.Serialization.JsonPropertyName("type")] string Type,
-    [property: System.Text.Json.Serialization.JsonPropertyName("id")] string Id,
-    [property: System.Text.Json.Serialization.JsonPropertyName("parentId")] string? ParentId,
-    [property: System.Text.Json.Serialization.JsonPropertyName("role")] string Role,
-    [property: System.Text.Json.Serialization.JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
-    [property: System.Text.Json.Serialization.JsonPropertyName("payload")] object Payload);
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("parentId")] string? ParentId,
+    [property: JsonPropertyName("role")] string Role,
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("payload")] object Payload);

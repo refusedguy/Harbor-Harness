@@ -1,16 +1,12 @@
+using System.Reflection;
 using Harbor.Abstractions.Models;
-using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Storage.Jsonl.Tests;
-
 public class JsonlSessionStoreTests
 {
     private static JsonlSessionStore CreateStore()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         return new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
     }
@@ -44,12 +40,12 @@ public class JsonlSessionStoreTests
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
             var userMsg = new UserMessage(
-                Id: "msg-1",
-                SessionId: session.Id,
-                CreatedAt: DateTimeOffset.UtcNow,
-                Content: "Hello",
-                Agent: "code",
-                Model: "claude-opus-4");
+                "msg-1",
+                session.Id,
+                DateTimeOffset.UtcNow,
+                "Hello",
+                "code",
+                "claude-opus-4");
 
             var appendResult = await store.AppendMessageAsync(session.Id, userMsg);
             await Assert.That(appendResult.IsSuccess).IsTrue();
@@ -133,7 +129,7 @@ internal static class JsonlSessionStoreExtensions
 {
     public static string GetRootDirectory(this JsonlSessionStore store)
     {
-        var field = typeof(JsonlSessionStore).GetField("_rootDirectory", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var field = typeof(JsonlSessionStore).GetField("_rootDirectory", BindingFlags.NonPublic | BindingFlags.Instance);
         return (string)field!.GetValue(store)!;
     }
 }

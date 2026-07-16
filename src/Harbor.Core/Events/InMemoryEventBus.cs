@@ -2,34 +2,30 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
-using Harbor.Abstractions.Events;
-
 namespace Harbor.Abstractions.Events;
-
 /// <summary>
-/// In-memory pub/sub event bus. Implements Observer pattern (GOF).
-/// Thread-safe. Bounded scrollback buffer (backed by <see cref="Channel{T}"/>) for late-attaching subscribers.
-///
-/// Performance characteristics:
-///  - PublishAsync: lock-free snapshot read (zero alloc on the common path),
-///    pooled buffer for dead-subscriber collection.
-///  - Subscribe/Unsubscribe: lock-free atomic update of an <see cref="ImmutableArray{T}"/>.
-///  - Scrollback: bounded <see cref="Channel{T}"/> with DropOldest semantics.
+///     In-memory pub/sub event bus. Implements Observer pattern (GOF).
+///     Thread-safe. Bounded scrollback buffer (backed by <see cref="Channel{T}" />) for late-attaching subscribers.
+///     Performance characteristics:
+///     - PublishAsync: lock-free snapshot read (zero alloc on the common path),
+///     pooled buffer for dead-subscriber collection.
+///     - Subscribe/Unsubscribe: lock-free atomic update of an <see cref="ImmutableArray{T}" />.
+///     - Scrollback: bounded <see cref="Channel{T}" /> with DropOldest semantics.
 /// </summary>
 public sealed class InMemoryEventBus : IEventBus
 {
+    private readonly int _maxScrollback;
+    private readonly Channel<AgentEvent> _scrollback;
     /// <summary>
-    /// Subscriptions collection. <see cref="ImmutableArray{T}"/> gives us O(1) lock-free
-    /// snapshot reads with zero allocation; mutations use <see cref="ImmutableInterlocked"/>
-    /// for atomic CAS-based updates.
+    ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
+    ///     snapshot reads with zero allocation; mutations use <see cref="ImmutableInterlocked" />
+    ///     for atomic CAS-based updates.
     /// </summary>
     private ImmutableArray<Subscription> _subscriptions = ImmutableArray<Subscription>.Empty;
-    private readonly Channel<AgentEvent> _scrollback;
-    private readonly int _maxScrollback;
 
     /// <summary>
-    /// Construct an <see cref="InMemoryEventBus"/> with a bounded scrollback buffer of the
-    /// supplied capacity.
+    ///     Construct an <see cref="InMemoryEventBus" /> with a bounded scrollback buffer of the
+    ///     supplied capacity.
     /// </summary>
     /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers.</param>
     public InMemoryEventBus(int maxScrollback = 1000)
@@ -39,11 +35,11 @@ public sealed class InMemoryEventBus : IEventBus
         {
             FullMode = BoundedChannelFullMode.DropOldest,
             SingleReader = false,
-            SingleWriter = false,
+            SingleWriter = false
         });
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
         // 1. Add to scrollback channel (drop oldest if full)
@@ -59,11 +55,11 @@ public sealed class InMemoryEventBus : IEventBus
         // 3. Fan-out to subscribers; collect failures in a pooled array to avoid
         //    allocating a List in the common case where nothing throws.
         Subscription[]? dead = null;
-        var deadCount = 0;
+        int deadCount = 0;
         try
         {
-            var snapshotLength = snapshot.Length;
-            for (var i = 0; i < snapshotLength; i++)
+            int snapshotLength = snapshot.Length;
+            for (int i = 0; i < snapshotLength; i++)
             {
                 var sub = snapshot[i];
                 try
@@ -99,7 +95,7 @@ public sealed class InMemoryEventBus : IEventBus
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler)
     {
         var sub = new Subscription(handler);
@@ -111,7 +107,7 @@ public sealed class InMemoryEventBus : IEventBus
         });
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, ValueTask> handler) where TEvent : AgentEvent
     {
         return Subscribe(async (evt, ct) =>
@@ -123,7 +119,7 @@ public sealed class InMemoryEventBus : IEventBus
         });
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
     {
         var all = _scrollback.Reader.ReadAllAsync(CancellationToken.None)
@@ -143,16 +139,15 @@ public sealed class InMemoryEventBus : IEventBus
         {
             original = _subscriptions;
             updated = original;
-            for (var i = 0; i < deadCount; i++)
+            for (int i = 0; i < deadCount; i++)
             {
                 updated = updated.Remove(dead[i]);
             }
-        }
-        while (ImmutableInterlocked.InterlockedCompareExchange(ref _subscriptions, updated, original) != original);
+        } while (ImmutableInterlocked.InterlockedCompareExchange(ref _subscriptions, updated, original) != original);
     }
 
     /// <summary>
-    /// Internal subscriber record. Sequential layout for cache-friendly iteration.
+    ///     Internal subscriber record. Sequential layout for cache-friendly iteration.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private sealed class Subscription

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -6,11 +5,8 @@ using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.ViewModels;
 using Harbor.Tui.Abstractions.Views;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Tests;
-
 public class StatusBarViewTests
 {
     [Test]
@@ -31,7 +27,7 @@ public class StatusBarViewTests
         {
             Provider = "anthropic",
             Model = "claude-opus-4",
-            Status = "running",
+            Status = "running"
         };
         var view = new StatusBarView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
@@ -124,8 +120,8 @@ public class ChatHistoryViewTests
     public async Task Render_ToolResultEntry_RendersResultPrefix()
     {
         var vm = new ChatHistoryViewModel();
-        var result = new ToolResult("done", IsError: false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, IsError: false));
+        var result = new ToolResult("done", false);
+        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
 
         var view = new ChatHistoryView { ViewModel = vm };
         var ctx = new CaptureRenderContext();
@@ -401,8 +397,8 @@ public class BaseTuiRendererBuiltinViewTests
         await renderer.InitializeAsync();
 
         // Feed a tool end event that adds a diff.
-        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", IsError: false);
-        await renderer.RenderAsync(new ToolExecutionEndEvent("tc1", result, IsError: false));
+        var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
+        await renderer.RenderAsync(new ToolExecutionEndEvent("tc1", result, false));
 
         var ctx = (CaptureRenderContext)renderer.Context;
         // The diff preview overlay should show the diff header.
@@ -413,7 +409,7 @@ public class BaseTuiRendererBuiltinViewTests
 
 internal sealed class TestTuiRenderer : BaseTuiRenderer
 {
-    public TestTuiRenderer() : base(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance)
+    public TestTuiRenderer() : base(NullLogger.Instance)
     {
         Context = new CaptureRenderContext();
     }

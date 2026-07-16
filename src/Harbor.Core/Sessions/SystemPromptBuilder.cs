@@ -1,36 +1,30 @@
 using System.Text;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Core.Sessions;
-
 /// <summary>
-/// Default system prompt builder. Implements Builder pattern (GOF).
-/// Assembles prompt from: base template + env + tools + skills + MCP + context files.
-/// Uses a pooled <see cref="StringBuilder"/> to avoid per-call allocation.
+///     Default system prompt builder. Implements Builder pattern (GOF).
+///     Assembles prompt from: base template + env + tools + skills + MCP + context files.
+///     Uses a pooled <see cref="StringBuilder" /> to avoid per-call allocation.
 /// </summary>
 public sealed class SystemPromptBuilder : ISystemPromptBuilder
 {
     private const string DefaultBasePrompt = """
-        You are Harbor, an AI coding assistant. You help users with coding tasks by using available tools.
+                                             You are Harbor, an AI coding assistant. You help users with coding tasks by using available tools.
 
-        Available tools are listed below. Use them as needed to accomplish tasks.
-        Always be precise, efficient, and respectful of the user's time.
+                                             Available tools are listed below. Use them as needed to accomplish tasks.
+                                             Always be precise, efficient, and respectful of the user's time.
 
-        Guidelines:
-        - Read files before editing to understand existing structure
-        - Make minimal, targeted edits
-        - Verify changes after editing
-        - Use bash sparingly; prefer dedicated tools when available
-        - Show file paths clearly when working with files
+                                             Guidelines:
+                                             - Read files before editing to understand existing structure
+                                             - Make minimal, targeted edits
+                                             - Verify changes after editing
+                                             - Use bash sparingly; prefer dedicated tools when available
+                                             - Show file paths clearly when working with files
 
-        """;
+                                             """;
 
     /// <summary>
-    /// Build the system prompt for the supplied context.
+    ///     Build the system prompt for the supplied context.
     /// </summary>
     /// <param name="context">The prompt context (agent, model, tools, files, skills, etc.).</param>
     /// <param name="ct">Cancellation token.</param>
@@ -67,7 +61,7 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine($"- `{tool.Name.Value}`: {tool.PromptSnippet ?? tool.Description}");
             if (tool.PromptGuidelines.Count > 0)
             {
-                foreach (var g in tool.PromptGuidelines)
+                foreach (string g in tool.PromptGuidelines)
                 {
                     builder.AppendLine($"  - {g}");
                 }

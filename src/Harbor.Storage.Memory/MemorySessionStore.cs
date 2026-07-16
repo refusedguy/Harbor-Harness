@@ -2,19 +2,16 @@ using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-
 namespace Harbor.Storage.Memory;
-
 /// <summary>
-/// In-memory session storage — for tests and ephemeral sessions.
-/// Implements Repository pattern (GOF) via ISessionStore.
-///
-/// All data is lost on process exit. Use for unit tests or one-shot prompts.
+///     In-memory session storage — for tests and ephemeral sessions.
+///     Implements Repository pattern (GOF) via ISessionStore.
+///     All data is lost on process exit. Use for unit tests or one-shot prompts.
 /// </summary>
 public sealed class MemorySessionStore : ISessionStore
 {
-    private readonly ConcurrentDictionary<string, Session> _sessions = new();
     private readonly ConcurrentDictionary<string, List<AgentMessage>> _messages = new();
+    private readonly ConcurrentDictionary<string, Session> _sessions = new();
 
     public Task<Result<Session>> CreateAsync(
         string directory, string agentName, string providerId, string modelId,
@@ -67,7 +64,7 @@ public sealed class MemorySessionStore : ISessionStore
 
         lock (list)
         {
-            var idx = list.FindIndex(m => m.Id == message.Id);
+            int idx = list.FindIndex(m => m.Id == message.Id);
             if (idx >= 0)
                 list[idx] = message;
             else

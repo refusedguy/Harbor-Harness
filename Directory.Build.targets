@@ -16,7 +16,7 @@
 
   <!-- Test projects: TUnit + Microsoft Testing Platform -->
   <ItemGroup Condition="$(IsTestProject) == 'true'">
-    <PackageReference Include="TUnit" Version="0.50.0" />
+    <PackageReference Include="TUnit" Version="0.50.0"/>
   </ItemGroup>
 
   <!-- Source generators: enable for all projects -->
@@ -42,7 +42,7 @@
 
   <!-- Embed provider JSON configs so they ship with the binary -->
   <ItemGroup Condition="'$(EmbedProviders)' == 'true'">
-    <EmbeddedResource Include="$(MSBuildThisFileDirectory)providers\*.json" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)providers\*.json"/>
   </ItemGroup>
 
 </Project>

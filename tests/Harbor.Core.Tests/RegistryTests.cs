@@ -1,11 +1,11 @@
+using System.Text.Json;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Core.Tests;
-
 public class RegistryTests
 {
     [Test]
@@ -71,15 +71,8 @@ public class RegistryTests
     }
 }
 
-internal sealed class TestTool : Harbor.Abstractions.Tools.ITool
+internal sealed class TestTool : ITool
 {
-    public ToolName Name { get; }
-    public string DisplayName { get; }
-    public string Description { get; }
-    public System.Text.Json.JsonDocument ParameterSchema { get; } = System.Text.Json.JsonDocument.Parse("{}");
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => null;
-    public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
     public TestTool(string name, string description)
     {
@@ -87,36 +80,37 @@ internal sealed class TestTool : Harbor.Abstractions.Tools.ITool
         DisplayName = name;
         Description = description;
     }
+    public ToolName Name { get; }
+    public string DisplayName { get; }
+    public string Description { get; }
+    public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("{}");
+    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public string? PromptSnippet => null;
+    public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
-    public Task<Harbor.Abstractions.Models.ToolResult> ExecuteAsync(
-        System.Text.Json.JsonElement args,
-        Harbor.Abstractions.Tools.ToolContext context,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Harbor.Abstractions.Models.ToolResult.Success("test output"));
-    }
+    public Task<ToolResult> ExecuteAsync(
+        JsonElement args,
+        ToolContext context,
+        CancellationToken cancellationToken = default) => Task.FromResult(ToolResult.Success("test output"));
 }
 
 internal sealed class TestLlmClient : ILlmClient
 {
-    public ProviderId ProviderId { get; }
 
     public TestLlmClient(string id)
     {
         ProviderId = ProviderId.Create(id);
     }
+    public ProviderId ProviderId { get; }
 
-    public IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent> StreamAsync(
-        Harbor.Abstractions.Providers.LlmRequest request,
+    public IAsyncEnumerable<LlmEvent> StreamAsync(
+        LlmRequest request,
+        CancellationToken cancellationToken = default) => AsyncEnumerable.Empty<LlmEvent>();
+
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(
         CancellationToken cancellationToken = default)
     {
-        return AsyncEnumerable.Empty<Harbor.Abstractions.Events.LlmEvent>();
-    }
-
-    public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetModelsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(CSharpFunctionalExtensions.Result.Success<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>(
-            Array.Empty<Harbor.Abstractions.Models.ModelInfo>()));
+        return Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(
+            Array.Empty<ModelInfo>()));
     }
 }

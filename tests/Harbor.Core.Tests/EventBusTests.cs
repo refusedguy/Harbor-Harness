@@ -1,10 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Core.Tests;
-
 public class EventBusTests
 {
     [Test]

@@ -1,6 +1,6 @@
-using System.Collections;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -11,7 +11,6 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Tui.Abstractions;
 using Harbor.Cli.Commands;
 using Harbor.Core.Agents;
 using Harbor.Core.Configuration;
@@ -24,14 +23,16 @@ using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
-using Harbor.Tui.Ansi;
+using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
+using Harbor.Tui.Abstractions;
+using Harbor.Tui.Ansi;
+using Harbor.Tui.Plain;
+using Harbor.Tui.Spectre;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Cli;
-
 public static class Program
 {
     public static async Task<int> Main(string[] args)
@@ -41,7 +42,7 @@ public static class Program
             return await RunInteractiveAsync();
         }
 
-        var command = args[0].ToLowerInvariant();
+        string command = args[0].ToLowerInvariant();
         return command switch
         {
             "ask" => await RunAskAsync(args.Skip(1).ToArray()),
@@ -55,17 +56,17 @@ public static class Program
             "config" => await RunConfigAsync(args.Skip(1).ToArray()),
             "help" or "--help" or "-h" => PrintHelp(),
             "version" or "--version" or "-v" => PrintVersion(),
-            _ => await RunInteractiveAsync(),
+            _ => await RunInteractiveAsync()
         };
     }
 
     private static IHost BuildHost()
     {
-        var homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var harborDir = Path.Combine(homeDir, ".harbor");
-        var sessionsDir = Path.Combine(harborDir, "sessions");
-        var cacheDir = Path.Combine(harborDir, "cache");
-        var sqlitePath = Path.Combine(harborDir, "sessions.db");
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string harborDir = Path.Combine(homeDir, ".harbor");
+        string sessionsDir = Path.Combine(harborDir, "sessions");
+        string cacheDir = Path.Combine(harborDir, "cache");
+        string sqlitePath = Path.Combine(harborDir, "sessions.db");
 
         Directory.CreateDirectory(harborDir);
         Directory.CreateDirectory(sessionsDir);
@@ -100,11 +101,11 @@ public static class Program
         var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
 
         // Override with HARBOR_MODEL env var if set
-        var envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
+        string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrEmpty(envModel))
         {
             config.Model = envModel;
-            var parts = envModel.Split('/', 2);
+            string[] parts = envModel.Split('/', 2);
             config.Provider = parts[0];
         }
 
@@ -114,10 +115,10 @@ public static class Program
             var registry = new AgentRegistry();
             var builder = new AgentRegistryBuilder(registry);
 
-            var defaultModel = config.Model;
-            var parts = defaultModel.Split('/', 2);
-            var providerId = parts[0];
-            var modelId = parts.Length > 1 ? parts[1] : defaultModel;
+            string defaultModel = config.Model;
+            string[] parts = defaultModel.Split('/', 2);
+            string providerId = parts[0];
+            string modelId = parts.Length > 1 ? parts[1] : defaultModel;
 
             builder.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
             builder.AddAgent(AgentDefinition.PlanDefault(modelId, providerId));
@@ -150,7 +151,7 @@ public static class Program
             var providerBuilder = new ProviderRegistryBuilder(registry);
             var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            var cacheDirResolved = Path.Combine(harborDir, "cache", "providers");
+            string cacheDirResolved = Path.Combine(harborDir, "cache", "providers");
             var authStore = sp.GetRequiredService<AuthStore>();
 
             // 1. Native Anthropic provider
@@ -193,28 +194,27 @@ public static class Program
         builder.Services.AddSingleton<IPermissionService>(sp =>
             new PermissionService(
                 sp.GetRequiredService<IAgentRegistry>(),
-                sp.GetRequiredService<ILogger<PermissionService>>(),
-                userAsker: null));
+                sp.GetRequiredService<ILogger<PermissionService>>()));
 
         // Storage — choose via config or HARBOR_STORAGE env var
-        var storage = config.Storage ?? Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "jsonl";
+        string storage = config.Storage ?? Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "jsonl";
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
         {
             "memory" => new MemorySessionStore(),
-            "sqlite" => new Harbor.Storage.Sqlite.SqliteSessionStore(
+            "sqlite" => new SqliteSessionStore(
                 sqlitePath,
-                sp.GetRequiredService<ILogger<Harbor.Storage.Sqlite.SqliteSessionStore>>()),
-            _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>()),
+                sp.GetRequiredService<ILogger<SqliteSessionStore>>()),
+            _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>())
         });
 
         // TUI — choose via config or HARBOR_TUI env var
-        var tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "ansi";
+        string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "ansi";
         builder.Services.AddSingleton<ITuiRenderer>(sp => tui.ToLowerInvariant() switch
         {
-            "plain" => new Harbor.Tui.Plain.PlainTuiRenderer(),
-            "spectre" => new Harbor.Tui.Spectre.SpectreTuiRenderer(
-                sp.GetRequiredService<ILogger<Harbor.Tui.Spectre.SpectreTuiRenderer>>()),
-            _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>()),
+            "plain" => new PlainTuiRenderer(),
+            "spectre" => new SpectreTuiRenderer(
+                sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
+            _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
         });
 
         // HttpClient
@@ -240,22 +240,22 @@ public static class Program
             loggerFactory.CreateLogger<DynamicModelCatalog>());
 
         // Load from filesystem
-        var providersDir = FindProvidersDirectory();
+        string? providersDir = FindProvidersDirectory();
         if (providersDir is not null && Directory.Exists(providersDir))
         {
             var files = Directory.EnumerateFiles(providersDir, "*.json").ToList();
-            foreach (var file in files)
+            foreach (string file in files)
             {
                 RegisterJsonProvider(file, builder, httpClientFactory, authStore, modelCatalog, loggerFactory);
             }
         }
 
         // Load embedded provider configs
-        foreach (var (name, content) in LoadEmbeddedProviders())
+        foreach ((string name, string content) in LoadEmbeddedProviders())
         {
             try
             {
-                var config = System.Text.Json.JsonSerializer.Deserialize<Harbor.Providers.OpenAiCompatible.ProviderConfig>(content);
+                var config = JsonSerializer.Deserialize<ProviderConfig>(content);
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;
                 if (config.Id is "anthropic" or "openai" or "ollama") continue;
 
@@ -286,7 +286,7 @@ public static class Program
     {
         try
         {
-            var config = Harbor.Providers.OpenAiCompatible.ProviderConfig.LoadFromFile(file);
+            var config = ProviderConfig.LoadFromFile(file);
             if (config.IsFailure)
             {
                 return;
@@ -318,13 +318,13 @@ public static class Program
         var resourceNames = assembly.GetManifestResourceNames()
             .Where(n => n.Contains("providers.") && n.EndsWith(".json"));
 
-        foreach (var name in resourceNames)
+        foreach (string name in resourceNames)
         {
             using var stream = assembly.GetManifestResourceStream(name);
             if (stream is null) continue;
             using var reader = new StreamReader(stream);
-            var content = reader.ReadToEnd();
-            var shortName = name.Substring(name.LastIndexOf("providers.", StringComparison.Ordinal) + "providers.".Length);
+            string content = reader.ReadToEnd();
+            string shortName = name.Substring(name.LastIndexOf("providers.", StringComparison.Ordinal) + "providers.".Length);
             yield return (shortName, content);
         }
     }
@@ -355,10 +355,10 @@ public static class Program
         {
             var writer = (Action<string>)(msg => renderer.WriteLineAsync(msg).GetAwaiter().GetResult());
             var reader = (Func<string, Task<string>>)(async prompt =>
-        {
-            var result = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-            return result.IsSuccess ? result.Value : string.Empty;
-        });
+            {
+                var result = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
+                return result.IsSuccess ? result.Value : string.Empty;
+            });
 
             var wizardResult = await wizard.RunAsync(reader, writer).ConfigureAwait(false);
             if (wizardResult.IsFailure)
@@ -378,15 +378,14 @@ public static class Program
         await renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
 
         // Create session
-        var cwd = Environment.CurrentDirectory;
+        string cwd = Environment.CurrentDirectory;
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-            ?? agentRegistry.GetAllAgents()[0];
-        var parts = config.Model.Split('/', 2);
+                           ?? agentRegistry.GetAllAgents()[0];
+        string[] parts = config.Model.Split('/', 2);
 
         var sessionResult = await sessionStore.CreateAsync(
             cwd, defaultAgent.Name.Value, parts[0],
-            parts.Length > 1 ? parts[1] : config.Model,
-            ct: default).ConfigureAwait(false);
+            parts.Length > 1 ? parts[1] : config.Model).ConfigureAwait(false);
 
         if (sessionResult.IsFailure)
         {
@@ -401,11 +400,11 @@ public static class Program
         {
             var inputResult = await renderer.ReadLineAsync("> ").ConfigureAwait(false);
             if (inputResult.IsFailure) break;
-            var input = inputResult.Value;
+            string? input = inputResult.Value;
 
             if (string.IsNullOrWhiteSpace(input)) continue;
 
-            var trimmed = input.Trim();
+            string trimmed = input.Trim();
             if (trimmed is "exit" or "quit" or ":q") break;
 
             if (trimmed.StartsWith('/'))
@@ -426,16 +425,16 @@ public static class Program
 
     private static async Task HandleSlashCommandAsync(
         string input, IServiceProvider sp, ITuiRenderer renderer,
-        Harbor.Abstractions.Agents.IAgent agent, Harbor.Abstractions.Agents.IAgentRegistry agentRegistry,
+        IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
-        Harbor.Abstractions.Providers.IProviderRegistry providers,
-        Harbor.Abstractions.Models.Session session)
+        IProviderRegistry providers,
+        Session session)
     {
-        var parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return;
 
-        var cmd = parts[0].ToLowerInvariant();
-        var args = parts.Skip(1).ToArray();
+        string cmd = parts[0].ToLowerInvariant();
+        string[] args = parts.Skip(1).ToArray();
         var writer = (Action<string>)(msg => renderer.WriteLineAsync(msg).GetAwaiter().GetResult());
         var reader = (Func<string, Task<string>>)(async prompt =>
         {
@@ -460,43 +459,43 @@ public static class Program
                 break;
 
             case "setup":
-                {
-                    var wizard = sp.GetRequiredService<OnboardingWizard>();
-                    await wizard.RunAsync(reader, writer);
-                    break;
-                }
+            {
+                var wizard = sp.GetRequiredService<OnboardingWizard>();
+                await wizard.RunAsync(reader, writer);
+                break;
+            }
 
             case "auth":
-                {
-                    var cmd_ = new AuthCommand(authStore, writer);
-                    var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, reader);
-                    await cmd_.ExecuteAsync(args, ctx);
-                    break;
-                }
+            {
+                var cmd_ = new AuthCommand(authStore, writer);
+                var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<IToolRegistry>(), writer, reader);
+                await cmd_.ExecuteAsync(args, ctx);
+                break;
+            }
 
             case "model":
-                {
-                    var cmd_ = new ModelCommand(configStore, providers, writer);
-                    var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, reader);
-                    await cmd_.ExecuteAsync(args, ctx);
-                    break;
-                }
+            {
+                var cmd_ = new ModelCommand(configStore, providers, writer);
+                var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<IToolRegistry>(), writer, reader);
+                await cmd_.ExecuteAsync(args, ctx);
+                break;
+            }
 
             case "agent" or "mode":
-                {
-                    var cmd_ = new AgentCommand(configStore, agentRegistry, writer);
-                    var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, reader);
-                    await cmd_.ExecuteAsync(args, ctx);
-                    break;
-                }
+            {
+                var cmd_ = new AgentCommand(configStore, agentRegistry, writer);
+                var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<IToolRegistry>(), writer, reader);
+                await cmd_.ExecuteAsync(args, ctx);
+                break;
+            }
 
             case "config":
-                {
-                    var cmd_ = new ConfigCommand(configStore, writer);
-                    var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, reader);
-                    await cmd_.ExecuteAsync(args, ctx);
-                    break;
-                }
+            {
+                var cmd_ = new ConfigCommand(configStore, writer);
+                var ctx = new SimpleCommandContext(session, agent, providers, sp.GetRequiredService<IToolRegistry>(), writer, reader);
+                await cmd_.ExecuteAsync(args, ctx);
+                break;
+            }
 
             case "providers":
                 await RunListProvidersAsync();
@@ -549,7 +548,7 @@ public static class Program
 
         var writer = (Action<string>)Console.WriteLine;
         var cmd = new AuthCommand(authStore, writer);
-        var ctx = new SimpleCommandContext(null!, null!, host.Services.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(), host.Services.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, _ => Task.FromResult(string.Empty));
+        var ctx = new SimpleCommandContext(null!, null!, host.Services.GetRequiredService<IProviderRegistry>(), host.Services.GetRequiredService<IToolRegistry>(), writer, _ => Task.FromResult(string.Empty));
         await cmd.ExecuteAsync(args, ctx);
         return 0;
     }
@@ -560,7 +559,7 @@ public static class Program
         var configStore = host.Services.GetRequiredService<IConfigStore>();
         var writer = (Action<string>)Console.WriteLine;
         var cmd = new ConfigCommand(configStore, writer);
-        var ctx = new SimpleCommandContext(null!, null!, host.Services.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(), host.Services.GetRequiredService<Harbor.Abstractions.Tools.IToolRegistry>(), writer, _ => Task.FromResult(string.Empty));
+        var ctx = new SimpleCommandContext(null!, null!, host.Services.GetRequiredService<IProviderRegistry>(), host.Services.GetRequiredService<IToolRegistry>(), writer, _ => Task.FromResult(string.Empty));
         await cmd.ExecuteAsync(args, ctx);
         return 0;
     }
@@ -573,7 +572,7 @@ public static class Program
             return 1;
         }
 
-        var prompt = string.Join(' ', args);
+        string prompt = string.Join(' ', args);
         using var host = BuildHost();
         var sp = host.Services;
 
@@ -589,8 +588,8 @@ public static class Program
 
         var config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
-            ?? agentRegistry.GetAllAgents()[0];
-        var parts = config.Model.Split('/', 2);
+                           ?? agentRegistry.GetAllAgents()[0];
+        string[] parts = config.Model.Split('/', 2);
 
         var sessionResult = await sessionStore.CreateAsync(Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.Model).ConfigureAwait(false);
         if (sessionResult.IsFailure)
@@ -620,7 +619,7 @@ public static class Program
         foreach (var id in providerIds)
         {
             var clientResult = providers.GetClient(id);
-            var status = clientResult.IsSuccess ? "OK" : "FAIL";
+            string status = clientResult.IsSuccess ? "OK" : "FAIL";
             Console.WriteLine($"  [{status}] {id}");
         }
         await Task.CompletedTask;
@@ -635,13 +634,25 @@ public static class Program
         if (!string.IsNullOrEmpty(providerId))
         {
             var pidResult = ProviderId.TryCreate(providerId);
-            if (pidResult.IsFailure) { Console.Error.WriteLine(pidResult.Error); return 1; }
+            if (pidResult.IsFailure)
+            {
+                Console.Error.WriteLine(pidResult.Error);
+                return 1;
+            }
 
             var clientResult = providers.GetClient(pidResult.Value);
-            if (clientResult.IsFailure) { Console.Error.WriteLine(clientResult.Error); return 1; }
+            if (clientResult.IsFailure)
+            {
+                Console.Error.WriteLine(clientResult.Error);
+                return 1;
+            }
 
             var modelsResult = await clientResult.Value.GetModelsAsync().ConfigureAwait(false);
-            if (modelsResult.IsFailure) { Console.Error.WriteLine(modelsResult.Error); return 1; }
+            if (modelsResult.IsFailure)
+            {
+                Console.Error.WriteLine(modelsResult.Error);
+                return 1;
+            }
 
             Console.WriteLine($"Models for {providerId} ({modelsResult.Value.Count}):");
             foreach (var m in modelsResult.Value)
@@ -650,7 +661,11 @@ public static class Program
         }
 
         var allResult = await providers.GetAllModelsAsync().ConfigureAwait(false);
-        if (allResult.IsFailure) { Console.Error.WriteLine(allResult.Error); return 1; }
+        if (allResult.IsFailure)
+        {
+            Console.Error.WriteLine(allResult.Error);
+            return 1;
+        }
 
         Console.WriteLine($"All models ({allResult.Value.Count}):");
         foreach (var g in allResult.Value.GroupBy(m => m.ProviderId))
@@ -666,7 +681,11 @@ public static class Program
         using var host = BuildHost();
         var sessionStore = host.Services.GetRequiredService<ISessionStore>();
         var result = await sessionStore.ListAsync().ConfigureAwait(false);
-        if (result.IsFailure) { Console.Error.WriteLine(result.Error); return 1; }
+        if (result.IsFailure)
+        {
+            Console.Error.WriteLine(result.Error);
+            return 1;
+        }
 
         Console.WriteLine($"Sessions ({result.Value.Count}):");
         foreach (var s in result.Value)
@@ -677,54 +696,54 @@ public static class Program
     private static int PrintTuiOptions()
     {
         Console.WriteLine("""
-            Available TUI renderers (set via /config set tui <name> or HARBOR_TUI env var):
-              ansi    — Default. ANSI escape codes, streaming render.
-              plain   — No ANSI, no colors. For pipes, CI, accessibility.
-              spectre — Spectre.Console rich rendering (panels, tables, markup).
-            """);
+                          Available TUI renderers (set via /config set tui <name> or HARBOR_TUI env var):
+                            ansi    — Default. ANSI escape codes, streaming render.
+                            plain   — No ANSI, no colors. For pipes, CI, accessibility.
+                            spectre — Spectre.Console rich rendering (panels, tables, markup).
+                          """);
         return 0;
     }
 
     private static int PrintStorageOptions()
     {
         Console.WriteLine("""
-            Available storage backends (set via /config set storage <name> or HARBOR_STORAGE env var):
-              jsonl   — Default. Append-only JSONL files. No native deps.
-              memory  — In-memory. Lost on exit. For tests/ephemeral.
-              sqlite  — SQLite DB with indexed queries. Native e_sqlite3 dep.
-            """);
+                          Available storage backends (set via /config set storage <name> or HARBOR_STORAGE env var):
+                            jsonl   — Default. Append-only JSONL files. No native deps.
+                            memory  — In-memory. Lost on exit. For tests/ephemeral.
+                            sqlite  — SQLite DB with indexed queries. Native e_sqlite3 dep.
+                          """);
         return 0;
     }
 
     private static int PrintHelp()
     {
         Console.WriteLine("""
-            Harbor — modular AI coding agent.
+                          Harbor — modular AI coding agent.
 
-            Usage:
-              harbor                  Start interactive TUI REPL (runs setup on first run)
-              harbor ask <prompt>     Run one-shot prompt
-              harbor setup            Run setup wizard
-              harbor auth set <p> <k> Set API key for provider
-              harbor auth list        List configured API keys
-              harbor providers        List registered providers
-              harbor models [pid]     List available models
-              harbor sessions         List saved sessions
-              harbor config           Show configuration
-              harbor tui              Show TUI options
-              harbor storage          Show storage options
-              harbor help             Show this help
-              harbor version          Show version
+                          Usage:
+                            harbor                  Start interactive TUI REPL (runs setup on first run)
+                            harbor ask <prompt>     Run one-shot prompt
+                            harbor setup            Run setup wizard
+                            harbor auth set <p> <k> Set API key for provider
+                            harbor auth list        List configured API keys
+                            harbor providers        List registered providers
+                            harbor models [pid]     List available models
+                            harbor sessions         List saved sessions
+                            harbor config           Show configuration
+                            harbor tui              Show TUI options
+                            harbor storage          Show storage options
+                            harbor help             Show this help
+                            harbor version          Show version
 
-            First run:
-              harbor setup
-              → Pick provider (kilocode has FREE models)
-              → Enter API key (or skip for local providers)
-              → Pick model and agent
+                          First run:
+                            harbor setup
+                            → Pick provider (kilocode has FREE models)
+                            → Enter API key (or skip for local providers)
+                            → Pick model and agent
 
-            Slash commands (in REPL):
-              /setup, /auth, /model, /agent, /config, /providers, /sessions, /tui, /storage, /help, /exit
-            """);
+                          Slash commands (in REPL):
+                            /setup, /auth, /model, /agent, /config, /providers, /sessions, /tui, /storage, /help, /exit
+                          """);
         return 0;
     }
 
@@ -738,30 +757,30 @@ public static class Program
 
     private static string? FindProvidersDirectory()
     {
-        var exeDir = AppContext.BaseDirectory;
-        var providersInExe = Path.Combine(exeDir, "providers");
+        string exeDir = AppContext.BaseDirectory;
+        string providersInExe = Path.Combine(exeDir, "providers");
         if (Directory.Exists(providersInExe)) return providersInExe;
 
-        var current = exeDir;
-        for (var i = 0; i < 8 && current is not null; i++)
+        string? current = exeDir;
+        for (int i = 0; i < 8 && current is not null; i++)
         {
-            var candidate = Path.Combine(current, "providers");
+            string candidate = Path.Combine(current, "providers");
             if (Directory.Exists(candidate)) return candidate;
             current = Path.GetDirectoryName(current);
         }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var userProviders = Path.Combine(home, ".harbor", "providers");
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userProviders = Path.Combine(home, ".harbor", "providers");
         return Directory.Exists(userProviders) ? userProviders : null;
     }
 }
 
 /// <summary>
-/// Adapter that resolves API key via AuthStore (config file first, then env var).
+///     Adapter that resolves API key via AuthStore (config file first, then env var).
 /// </summary>
-internal sealed class ConfigAuthResolver : Harbor.Providers.Anthropic.IAnthropicAuthResolver,
-    Harbor.Providers.OpenAI.IOpenAIAuthResolver,
-    Harbor.Providers.OpenAiCompatible.IAuthResolver
+internal sealed class ConfigAuthResolver : IAnthropicAuthResolver,
+    IOpenAIAuthResolver,
+    IAuthResolver
 {
     private readonly AuthStore _authStore;
     private readonly string _providerId;
@@ -782,15 +801,15 @@ internal sealed class ConfigAuthResolver : Harbor.Providers.Anthropic.IAnthropic
 }
 
 /// <summary>
-/// Simple ICommandContext implementation for REPL.
+///     Simple ICommandContext implementation for REPL.
 /// </summary>
 internal sealed class SimpleCommandContext : ICommandContext
 {
     public SimpleCommandContext(
-        Harbor.Abstractions.Models.Session session,
-        Harbor.Abstractions.Agents.IAgent agent,
-        Harbor.Abstractions.Providers.IProviderRegistry providers,
-        Harbor.Abstractions.Tools.IToolRegistry tools,
+        Session session,
+        IAgent agent,
+        IProviderRegistry providers,
+        IToolRegistry tools,
         Action<string> output,
         Func<string, Task<string>> prompt)
     {
@@ -802,20 +821,20 @@ internal sealed class SimpleCommandContext : ICommandContext
         Prompt = prompt;
     }
 
-    public Harbor.Abstractions.Sessions.ISessionContext Session { get; }
-    public Harbor.Abstractions.Agents.IAgent Agent { get; }
-    public Harbor.Abstractions.Providers.IProviderRegistry Providers { get; }
-    public Harbor.Abstractions.Tools.IToolRegistry Tools { get; }
+    public ISessionContext Session { get; }
+    public IAgent Agent { get; }
+    public IProviderRegistry Providers { get; }
+    public IToolRegistry Tools { get; }
     public Action<string> Output { get; }
     public Func<string, Task<string>> Prompt { get; }
 }
 
-internal sealed class DummySessionContext : Harbor.Abstractions.Sessions.ISessionContext
+internal sealed class DummySessionContext : ISessionContext
 {
-    public DummySessionContext(Harbor.Abstractions.Models.Session session) { Session = session; }
-    public Harbor.Abstractions.Models.Session Session { get; }
-    public IReadOnlyList<Harbor.Abstractions.Models.AgentMessage> Messages => Array.Empty<Harbor.Abstractions.Models.AgentMessage>();
-    public System.Threading.Channels.Channel<Harbor.Abstractions.Models.AgentMessage> SteeringQueue => System.Threading.Channels.Channel.CreateUnbounded<Harbor.Abstractions.Models.AgentMessage>();
-    public Task AppendMessageAsync(Harbor.Abstractions.Models.AgentMessage message, CancellationToken ct = default) => Task.CompletedTask;
-    public Task UpdateStatsAsync(Harbor.Abstractions.Models.Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+    public DummySessionContext(Session session) { Session = session; }
+    public Session Session { get; }
+    public IReadOnlyList<AgentMessage> Messages => Array.Empty<AgentMessage>();
+    public Channel<AgentMessage> SteeringQueue => Channel.CreateUnbounded<AgentMessage>();
+    public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) => Task.CompletedTask;
+    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
 }

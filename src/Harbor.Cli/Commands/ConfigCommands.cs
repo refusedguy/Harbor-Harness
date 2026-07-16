@@ -1,22 +1,19 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tui;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
-
 namespace Harbor.Cli.Commands;
-
 /// <summary>
-/// /setup — run onboarding wizard.
+///     /setup — run onboarding wizard.
 /// </summary>
 public sealed class SetupCommand : ISlashCommand
 {
-    public string Name => "setup";
-    public string Description => "Run setup wizard (provider, API key, model)";
-    public string Usage => "/setup";
-    public IReadOnlyList<string> Aliases => Array.Empty<string>();
+    private readonly Func<string, Task<string>> _reader;
 
     private readonly OnboardingWizard _wizard;
-    private readonly Func<string, Task<string>> _reader;
     private readonly Action<string> _writer;
 
     public SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer)
@@ -25,6 +22,10 @@ public sealed class SetupCommand : ISlashCommand
         _reader = reader;
         _writer = writer;
     }
+    public string Name => "setup";
+    public string Description => "Run setup wizard (provider, API key, model)";
+    public string Usage => "/setup";
+    public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -34,14 +35,10 @@ public sealed class SetupCommand : ISlashCommand
 }
 
 /// <summary>
-/// /auth — manage API keys.
+///     /auth — manage API keys.
 /// </summary>
 public sealed class AuthCommand : ISlashCommand
 {
-    public string Name => "auth";
-    public string Description => "Manage API keys (set, list, reset)";
-    public string Usage => "/auth set <provider> <key> | /auth list | /auth reset <provider>";
-    public IReadOnlyList<string> Aliases => new[] { "key", "api-key" };
 
     private readonly AuthStore _authStore;
     private readonly Action<string> _writer;
@@ -51,6 +48,10 @@ public sealed class AuthCommand : ISlashCommand
         _authStore = authStore;
         _writer = writer;
     }
+    public string Name => "auth";
+    public string Description => "Manage API keys (set, list, reset)";
+    public string Usage => "/auth set <provider> <key> | /auth list | /auth reset <provider>";
+    public IReadOnlyList<string> Aliases => new[] { "key", "api-key" };
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -64,13 +65,13 @@ public sealed class AuthCommand : ISlashCommand
             _writer("Available provider presets:");
             foreach (var p in ProviderPresets.All)
             {
-                var auth = p.RequiresApiKey ? "🔑" : "🔧";
+                string auth = p.RequiresApiKey ? "🔑" : "🔧";
                 _writer($"  {auth} {p.Id,-15} {p.DisplayName}");
             }
             return Result.Success();
         }
 
-        var subcommand = args[0].ToLowerInvariant();
+        string subcommand = args[0].ToLowerInvariant();
         switch (subcommand)
         {
             case "set":
@@ -79,8 +80,8 @@ public sealed class AuthCommand : ISlashCommand
                     _writer("Usage: /auth set <provider> <key>");
                     return Result.Success();
                 }
-                var providerId = args[1];
-                var key = args[2];
+                string providerId = args[1];
+                string key = args[2];
                 var setResult = await _authStore.SetApiKeyAsync(providerId, key, ct).ConfigureAwait(false);
                 if (setResult.IsSuccess)
                     _writer($"✓ API key saved for {providerId}");
@@ -95,7 +96,7 @@ public sealed class AuthCommand : ISlashCommand
                     _writer("Configured API keys:");
                     foreach (var kv in listResult.Value)
                     {
-                        var status = kv.Value ? "✓ set" : "✗ empty";
+                        string status = kv.Value ? "✓ set" : "✗ empty";
                         _writer($"  {kv.Key,-15} {status}");
                     }
                 }
@@ -122,31 +123,31 @@ public sealed class AuthCommand : ISlashCommand
 }
 
 /// <summary>
-/// /model — switch model.
+///     /model — switch model.
 /// </summary>
 public sealed class ModelCommand : ISlashCommand
 {
-    public string Name => "model";
-    public string Description => "Switch LLM model";
-    public string Usage => "/model <provider/model> | /model list [provider]";
-    public IReadOnlyList<string> Aliases => new[] { "m" };
 
     private readonly IConfigStore _configStore;
-    private readonly Harbor.Abstractions.Providers.IProviderRegistry _providers;
+    private readonly IProviderRegistry _providers;
     private readonly Action<string> _writer;
 
-    public ModelCommand(IConfigStore configStore, Harbor.Abstractions.Providers.IProviderRegistry providers, Action<string> writer)
+    public ModelCommand(IConfigStore configStore, IProviderRegistry providers, Action<string> writer)
     {
         _configStore = configStore;
         _providers = providers;
         _writer = writer;
     }
+    public string Name => "model";
+    public string Description => "Switch LLM model";
+    public string Usage => "/model <provider/model> | /model list [provider]";
+    public IReadOnlyList<string> Aliases => new[] { "m" };
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
         if (args.Count == 0 || args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
         {
-            var providerId = args.Count > 1 ? args[1] : null;
+            string? providerId = args.Count > 1 ? args[1] : null;
             if (providerId is null)
             {
                 var allResult = await _providers.GetAllModelsAsync(ct).ConfigureAwait(false);
@@ -168,7 +169,7 @@ public sealed class ModelCommand : ISlashCommand
             }
             else
             {
-                var pidResult = Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
+                var pidResult = ProviderId.TryCreate(providerId);
                 if (pidResult.IsFailure)
                 {
                     _writer(pidResult.Error);
@@ -196,7 +197,7 @@ public sealed class ModelCommand : ISlashCommand
         }
 
         // Set model
-        var model = string.Join(' ', args);
+        string model = string.Join(' ', args);
         var updateResult = await _configStore.UpdateAsync(c =>
         {
             c.Model = model;
@@ -217,25 +218,25 @@ public sealed class ModelCommand : ISlashCommand
 }
 
 /// <summary>
-/// /agent — switch agent (mode).
+///     /agent — switch agent (mode).
 /// </summary>
 public sealed class AgentCommand : ISlashCommand
 {
-    public string Name => "agent";
-    public string Description => "Switch agent (mode): code, plan, explore";
-    public string Usage => "/agent <name>";
-    public IReadOnlyList<string> Aliases => new[] { "mode", "a" };
+    private readonly IAgentRegistry _agents;
 
     private readonly IConfigStore _configStore;
-    private readonly Harbor.Abstractions.Agents.IAgentRegistry _agents;
     private readonly Action<string> _writer;
 
-    public AgentCommand(IConfigStore configStore, Harbor.Abstractions.Agents.IAgentRegistry agents, Action<string> writer)
+    public AgentCommand(IConfigStore configStore, IAgentRegistry agents, Action<string> writer)
     {
         _configStore = configStore;
         _agents = agents;
         _writer = writer;
     }
+    public string Name => "agent";
+    public string Description => "Switch agent (mode): code, plan, explore";
+    public string Usage => "/agent <name>";
+    public IReadOnlyList<string> Aliases => new[] { "mode", "a" };
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -249,7 +250,7 @@ public sealed class AgentCommand : ISlashCommand
             return Result.Success();
         }
 
-        var name = args[0];
+        string name = args[0];
         var updateResult = await _configStore.UpdateAsync(c =>
         {
             c.Agent = name;
@@ -266,14 +267,10 @@ public sealed class AgentCommand : ISlashCommand
 }
 
 /// <summary>
-/// /config — show or edit config.
+///     /config — show or edit config.
 /// </summary>
 public sealed class ConfigCommand : ISlashCommand
 {
-    public string Name => "config";
-    public string Description => "Show or edit configuration";
-    public string Usage => "/config | /config set <key> <value>";
-    public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
     private readonly IConfigStore _configStore;
     private readonly Action<string> _writer;
@@ -283,6 +280,10 @@ public sealed class ConfigCommand : ISlashCommand
         _configStore = configStore;
         _writer = writer;
     }
+    public string Name => "config";
+    public string Description => "Show or edit configuration";
+    public string Usage => "/config | /config set <key> <value>";
+    public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -312,8 +313,8 @@ public sealed class ConfigCommand : ISlashCommand
 
         if (args[0].Equals("set", StringComparison.OrdinalIgnoreCase) && args.Count >= 3)
         {
-            var key = args[1];
-            var value = string.Join(' ', args.Skip(2));
+            string key = args[1];
+            string value = string.Join(' ', args.Skip(2));
 
             var updateResult = await _configStore.UpdateAsync(c =>
             {
@@ -325,10 +326,10 @@ public sealed class ConfigCommand : ISlashCommand
                     case "tui": c.Tui = value; break;
                     case "storage": c.Storage = value; break;
                     case "maxsteps":
-                        if (int.TryParse(value, out var ms)) c.MaxSteps = ms;
+                        if (int.TryParse(value, out int ms)) c.MaxSteps = ms;
                         break;
                     case "costlimit":
-                        if (decimal.TryParse(value, out var cl)) c.CostLimit = cl;
+                        if (decimal.TryParse(value, out decimal cl)) c.CostLimit = cl;
                         break;
                     default: _writer($"Unknown config key: {key}"); break;
                 }

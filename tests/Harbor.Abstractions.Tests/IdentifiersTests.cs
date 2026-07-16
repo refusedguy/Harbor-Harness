@@ -1,10 +1,5 @@
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Abstractions.Tests;
-
 public class IdentifiersTests
 {
     [Test]
@@ -22,7 +17,9 @@ public class IdentifiersTests
             _ = SessionId.Create("");
             Assert.Fail("Should have thrown ArgumentException");
         }
-        catch (ArgumentException) { /* expected */ }
+        catch (ArgumentException)
+        { /* expected */
+        }
     }
 
     [Test]
@@ -59,8 +56,22 @@ public class IdentifiersTests
     [Test]
     public async Task ProviderId_Rejects_InvalidCharacters()
     {
-        try { _ = ProviderId.Create("open ai"); Assert.Fail("Should throw"); } catch (ArgumentException) { /* ok */ }
-        try { _ = ProviderId.Create("open.ai"); Assert.Fail("Should throw"); } catch (ArgumentException) { /* ok */ }
+        try
+        {
+            _ = ProviderId.Create("open ai");
+            Assert.Fail("Should throw");
+        }
+        catch (ArgumentException)
+        { /* ok */
+        }
+        try
+        {
+            _ = ProviderId.Create("open.ai");
+            Assert.Fail("Should throw");
+        }
+        catch (ArgumentException)
+        { /* ok */
+        }
     }
 
     [Test]
@@ -96,8 +107,22 @@ public class IdentifiersTests
     [Test]
     public async Task ToolName_Rejects_InvalidPattern()
     {
-        try { _ = ToolName.Create("read-file"); Assert.Fail("Should throw"); } catch (ArgumentException) { /* ok */ }
-        try { _ = ToolName.Create("123read"); Assert.Fail("Should throw"); } catch (ArgumentException) { /* ok */ }
+        try
+        {
+            _ = ToolName.Create("read-file");
+            Assert.Fail("Should throw");
+        }
+        catch (ArgumentException)
+        { /* ok */
+        }
+        try
+        {
+            _ = ToolName.Create("123read");
+            Assert.Fail("Should throw");
+        }
+        catch (ArgumentException)
+        { /* ok */
+        }
     }
 
     [Test]

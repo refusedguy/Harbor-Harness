@@ -1,20 +1,16 @@
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Providers;
-
 namespace Harbor.Core.Sessions;
-
 /// <summary>
-/// Converts domain <see cref="AgentMessage"/> instances to LLM-specific <see cref="LlmMessage"/> format.
-/// Implements Adapter pattern (GOF).
+///     Converts domain <see cref="AgentMessage" /> instances to LLM-specific <see cref="LlmMessage" /> format.
+///     Implements Adapter pattern (GOF).
 /// </summary>
 public sealed class MessageConverter
 {
     /// <summary>
-    /// Convert an ordered list of domain <see cref="AgentMessage"/>s to LLM-specific
-    /// <see cref="LlmMessage"/>s ready to send to a provider.
+    ///     Convert an ordered list of domain <see cref="AgentMessage" />s to LLM-specific
+    ///     <see cref="LlmMessage" />s ready to send to a provider.
     /// </summary>
     /// <param name="messages">The domain messages to convert.</param>
-    /// <returns>An ordered list of <see cref="LlmMessage"/> instances.</returns>
+    /// <returns>An ordered list of <see cref="LlmMessage" /> instances.</returns>
     public IReadOnlyList<LlmMessage> ToLlmMessages(IReadOnlyList<AgentMessage> messages)
     {
         var result = new List<LlmMessage>(messages.Count);
@@ -29,8 +25,8 @@ public sealed class MessageConverter
 
                 case AssistantMessage a:
                     result.Add(new LlmAssistantMessage(
-                        Content: ConvertParts(a.Parts),
-                        StopReason: a.StopReason.ToString().ToLowerInvariant()));
+                        ConvertParts(a.Parts),
+                        a.StopReason.ToString().ToLowerInvariant()));
                     break;
 
                 case ToolResultMessage tr:
@@ -64,9 +60,6 @@ public sealed class MessageConverter
                     break;
                 case ToolCallPart tc:
                     blocks.Add(new LlmToolCallBlock(tc.Id, tc.ToolName, tc.Args));
-                    break;
-                default:
-                    // skip unknown
                     break;
             }
         }

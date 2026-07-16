@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj" />
-    <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj" />
+    <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj"/>
   </ItemGroup>
 
 </Project>

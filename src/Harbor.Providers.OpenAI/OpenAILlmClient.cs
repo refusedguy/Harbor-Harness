@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -9,19 +10,16 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Providers.OpenAI;
-
 /// <summary>
-/// Native OpenAI provider — Chat Completions API + Responses API (for o1/o3/GPT-5+).
-/// Implements Strategy pattern (GOF) via ILlmClient.
-///
-/// Special features beyond OpenAI-compat:
-/// - Responses API for reasoning models (o1, o3, o4-mini)
-/// - reasoning_effort parameter
-/// - max_completion_tokens (vs legacy max_tokens)
-/// - reasoning_content streaming
-/// - tool_choice with specific function
+///     Native OpenAI provider — Chat Completions API + Responses API (for o1/o3/GPT-5+).
+///     Implements Strategy pattern (GOF) via ILlmClient.
+///     Special features beyond OpenAI-compat:
+///     - Responses API for reasoning models (o1, o3, o4-mini)
+///     - reasoning_effort parameter
+///     - max_completion_tokens (vs legacy max_tokens)
+///     - reasoning_content streaming
+///     - tool_choice with specific function
 /// </summary>
 public sealed class OpenAILlmClient : ILlmClient
 {
@@ -29,15 +27,13 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private readonly IOpenAIAuthResolver _auth;
+    private readonly OpenAIConfig _config;
 
     private readonly HttpClient _http;
-    private readonly OpenAIConfig _config;
-    private readonly IOpenAIAuthResolver _auth;
     private readonly ILogger<OpenAILlmClient> _logger;
-
-    public ProviderId ProviderId { get; } = ProviderId.Create("openai");
 
     public OpenAILlmClient(
         HttpClient http,
@@ -51,6 +47,8 @@ public sealed class OpenAILlmClient : ILlmClient
         _logger = logger;
     }
 
+    public ProviderId ProviderId { get; } = ProviderId.Create("openai");
+
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -58,7 +56,7 @@ public sealed class OpenAILlmClient : ILlmClient
         var channel = Channel.CreateUnbounded<LlmEvent>(new UnboundedChannelOptions
         {
             SingleReader = true,
-            SingleWriter = false,
+            SingleWriter = false
         });
 
         var writer = channel.Writer;
@@ -75,7 +73,7 @@ public sealed class OpenAILlmClient : ILlmClient
                 }
 
                 // Choose API: Responses API for o1/o3/o4-mini, Chat Completions for others
-                var useResponsesApi = IsReasoningModel(request.Model) || _config.ForceResponsesApi;
+                bool useResponsesApi = IsReasoningModel(request.Model) || _config.ForceResponsesApi;
                 var httpRequest = useResponsesApi
                     ? BuildResponsesRequest(request, apiKeyResult.Value)
                     : BuildChatCompletionsRequest(request, apiKeyResult.Value);
@@ -97,7 +95,7 @@ public sealed class OpenAILlmClient : ILlmClient
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        var errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         await writer.WriteAsync(new ErrorEvent($"OpenAI API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -112,7 +110,7 @@ public sealed class OpenAILlmClient : ILlmClient
 
                         if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
 
-                        var data = line.Substring(6);
+                        string data = line.Substring(6);
                         if (data == "[DONE]")
                         {
                             await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
@@ -156,7 +154,7 @@ public sealed class OpenAILlmClient : ILlmClient
     {
         // OpenAI has /v1/models endpoint, but it returns IDs only (no pricing/context info)
         // Better to return hardcoded catalog with full metadata
-        IReadOnlyList<ModelInfo> models = OpenAIModels.All;
+        var models = OpenAIModels.All;
         return Task.FromResult(Result.Success(models));
     }
 
@@ -170,19 +168,19 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private HttpRequestMessage BuildChatCompletionsRequest(LlmRequest request, string apiKey)
     {
-        var baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
-        var url = $"{baseUrl}/chat/completions";
+        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        string url = $"{baseUrl}/chat/completions";
 
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["messages"] = BuildChatMessages(request),
             ["stream"] = true,
-            ["stream_options"] = new { include_usage = true },
+            ["stream_options"] = new { include_usage = true }
         };
 
         // Reasoning models use max_completion_tokens, others max_tokens
-        var isReasoning = IsReasoningModel(request.Model);
+        bool isReasoning = IsReasoningModel(request.Model);
         if (request.MaxOutputTokens.HasValue)
         {
             payload[isReasoning ? "max_completion_tokens" : "max_tokens"] = request.MaxOutputTokens;
@@ -199,7 +197,7 @@ public sealed class OpenAILlmClient : ILlmClient
             payload["tools"] = request.Tools.Select(t => new
             {
                 type = "function",
-                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema },
+                function = new { name = t.Name, description = t.Description, parameters = t.InputSchema }
             });
         }
 
@@ -211,14 +209,14 @@ public sealed class OpenAILlmClient : ILlmClient
                 ToolChoice.None => "none",
                 ToolChoice.Required => "required",
                 ToolChoice.Specific s => new { type = "function", function = new { name = s.ToolName } },
-                _ => "auto",
+                _ => "auto"
             };
         }
 
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        string json = JsonSerializer.Serialize(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -227,14 +225,14 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private HttpRequestMessage BuildResponsesRequest(LlmRequest request, string apiKey)
     {
-        var baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
-        var url = $"{baseUrl}/responses";
+        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
+        string url = $"{baseUrl}/responses";
 
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
             ["input"] = BuildResponsesInput(request),
-            ["stream"] = true,
+            ["stream"] = true
         };
 
         if (request.MaxOutputTokens.HasValue)
@@ -245,7 +243,7 @@ public sealed class OpenAILlmClient : ILlmClient
         {
             payload["reasoning"] = new
             {
-                effort = request.ReasoningEffort.Value.ToString().ToLowerInvariant(),
+                effort = request.ReasoningEffort.Value.ToString().ToLowerInvariant()
             };
         }
 
@@ -256,14 +254,14 @@ public sealed class OpenAILlmClient : ILlmClient
                 type = "function",
                 name = t.Name,
                 description = t.Description,
-                parameters = t.InputSchema,
+                parameters = t.InputSchema
             });
         }
 
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
+        string json = JsonSerializer.Serialize(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -286,7 +284,7 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "",
+                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
                 },
                 LlmAssistantMessage a => new
                 {
@@ -296,16 +294,16 @@ public sealed class OpenAILlmClient : ILlmClient
                     {
                         id = tc.Id,
                         type = "function",
-                        function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() },
-                    }).ToList(),
+                        function = new { name = tc.Name, arguments = tc.Arguments.GetRawText() }
+                    }).ToList()
                 },
                 LlmToolResultMessage tr => new
                 {
                     role = "tool",
                     tool_call_id = tr.ToolCallId,
-                    content = tr.Output,
+                    content = tr.Output
                 },
-                _ => new { role = "user", content = "" },
+                _ => new { role = "user", content = "" }
             });
         }
 
@@ -328,20 +326,20 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "",
+                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
                 },
                 LlmAssistantMessage a => new
                 {
                     role = "assistant",
-                    content = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault(),
+                    content = a.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault()
                 },
                 LlmToolResultMessage tr => new
                 {
                     type = "function_call_output",
                     call_id = tr.ToolCallId,
-                    output = tr.Output,
+                    output = tr.Output
                 },
-                _ => new { role = "user", content = "" },
+                _ => new { role = "user", content = "" }
             });
         }
 
@@ -364,7 +362,7 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private IEnumerable<LlmEvent> MapChatChunkFromDocument(JsonElement root)
     {
-        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new();
+        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new List<JsonElement>();
         if (choices.Count == 0)
         {
             if (root.TryGetProperty("usage", out var usage))
@@ -378,20 +376,20 @@ public sealed class OpenAILlmClient : ILlmClient
 
         var choice = choices[0];
         var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        var finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
+        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
 
         if (delta.ValueKind == JsonValueKind.Object)
         {
             if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
             {
-                var text = content.GetString();
+                string? text = content.GetString();
                 if (!string.IsNullOrEmpty(text))
                     yield return new TextDeltaEvent("0", text);
             }
 
             if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
             {
-                var text = reasoning.GetString();
+                string? text = reasoning.GetString();
                 if (!string.IsNullOrEmpty(text))
                     yield return new ThinkingDeltaEvent("0", text);
             }
@@ -400,18 +398,18 @@ public sealed class OpenAILlmClient : ILlmClient
             {
                 foreach (var tc in tcs.EnumerateArray())
                 {
-                    var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                    string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
                     var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                     if (fn.ValueKind == JsonValueKind.Object)
                     {
-                        var name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
+                        string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
                         if (!string.IsNullOrEmpty(name))
                             yield return new ToolCallStartEvent(id, name!);
 
                         if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
                         {
-                            var argsStr = args.GetString();
+                            string? argsStr = args.GetString();
                             if (!string.IsNullOrEmpty(argsStr))
                                 yield return new ToolCallDeltaEvent(id, argsStr);
                         }
@@ -447,7 +445,7 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private IEnumerable<LlmEvent> MapResponsesChunkFromDocument(JsonElement root)
     {
-        var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+        string? type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
 
         switch (type)
         {
@@ -458,7 +456,7 @@ public sealed class OpenAILlmClient : ILlmClient
             case "response.output_text.delta":
                 if (root.TryGetProperty("delta", out var textDelta))
                 {
-                    var text = textDelta.GetString();
+                    string? text = textDelta.GetString();
                     if (!string.IsNullOrEmpty(text))
                         yield return new TextDeltaEvent("0", text);
                 }
@@ -467,17 +465,17 @@ public sealed class OpenAILlmClient : ILlmClient
             case "response.reasoning.delta":
                 if (root.TryGetProperty("delta", out var reasoningDelta))
                 {
-                    var text = reasoningDelta.GetString();
+                    string? text = reasoningDelta.GetString();
                     if (!string.IsNullOrEmpty(text))
                         yield return new ThinkingDeltaEvent("0", text);
                 }
                 break;
 
             case "response.function_call_arguments.delta":
-                var callId = root.TryGetProperty("output_index", out var oi) ? oi.GetInt32().ToString() : "0";
+                string callId = root.TryGetProperty("output_index", out var oi) ? oi.GetInt32().ToString() : "0";
                 if (root.TryGetProperty("delta", out var argsDelta))
                 {
-                    var args = argsDelta.GetString();
+                    string? args = argsDelta.GetString();
                     if (!string.IsNullOrEmpty(args))
                         yield return new ToolCallDeltaEvent(callId, args);
                 }
@@ -488,8 +486,8 @@ public sealed class OpenAILlmClient : ILlmClient
                     item.TryGetProperty("type", out var itemType) &&
                     itemType.GetString() == "function_call")
                 {
-                    var id = item.TryGetProperty("call_id", out var idEl) ? idEl.GetString() ?? "0" : "0";
-                    var name = item.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
+                    string id = item.TryGetProperty("call_id", out var idEl) ? idEl.GetString() ?? "0" : "0";
+                    string name = item.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? "" : "";
                     if (!string.IsNullOrEmpty(name))
                         yield return new ToolCallStartEvent(id, name);
                 }
@@ -520,7 +518,7 @@ public sealed class OpenAIConfig
 
 public interface IOpenAIAuthResolver
 {
-    Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
+    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
 }
 
 public sealed class EnvVarOpenAIAuthResolver : IOpenAIAuthResolver
@@ -538,7 +536,7 @@ public sealed class EnvVarOpenAIAuthResolver : IOpenAIAuthResolver
         if (!string.IsNullOrEmpty(_override))
             return Task.FromResult(Result.Success(_override));
 
-        var envValue = Environment.GetEnvironmentVariable(EnvVarName);
+        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
         if (string.IsNullOrEmpty(envValue))
             return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --openai-api-key."));
 
@@ -549,76 +547,76 @@ public sealed class EnvVarOpenAIAuthResolver : IOpenAIAuthResolver
 public static class OpenAIModels
 {
     public static readonly ModelInfo Gpt4o = new(
-        Id: "gpt-4o",
-        ProviderId: "openai",
-        DisplayName: "GPT-4o",
-        ContextWindow: 128_000,
-        MaxOutputTokens: 16_384,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(2.5m, 10m, 1.25m),
-        PromptTemplate: "openai");
+        "gpt-4o",
+        "openai",
+        "GPT-4o",
+        128_000,
+        16_384,
+        false,
+        true,
+        true,
+        new Pricing(2.5m, 10m, 1.25m),
+        "openai");
 
     public static readonly ModelInfo Gpt4oMini = new(
-        Id: "gpt-4o-mini",
-        ProviderId: "openai",
-        DisplayName: "GPT-4o mini",
-        ContextWindow: 128_000,
-        MaxOutputTokens: 16_384,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(0.15m, 0.6m, 0.075m),
-        PromptTemplate: "openai");
+        "gpt-4o-mini",
+        "openai",
+        "GPT-4o mini",
+        128_000,
+        16_384,
+        false,
+        true,
+        true,
+        new Pricing(0.15m, 0.6m, 0.075m),
+        "openai");
 
     public static readonly ModelInfo Gpt41 = new(
-        Id: "gpt-4.1",
-        ProviderId: "openai",
-        DisplayName: "GPT-4.1",
-        ContextWindow: 1_047_576,
-        MaxOutputTokens: 32_768,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(2m, 8m, 0.5m),
-        PromptTemplate: "openai");
+        "gpt-4.1",
+        "openai",
+        "GPT-4.1",
+        1_047_576,
+        32_768,
+        false,
+        true,
+        true,
+        new Pricing(2m, 8m, 0.5m),
+        "openai");
 
     public static readonly ModelInfo Gpt41Mini = new(
-        Id: "gpt-4.1-mini",
-        ProviderId: "openai",
-        DisplayName: "GPT-4.1 mini",
-        ContextWindow: 1_047_576,
-        MaxOutputTokens: 32_768,
-        SupportsReasoning: false,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(0.4m, 1.6m, 0.1m),
-        PromptTemplate: "openai");
+        "gpt-4.1-mini",
+        "openai",
+        "GPT-4.1 mini",
+        1_047_576,
+        32_768,
+        false,
+        true,
+        true,
+        new Pricing(0.4m, 1.6m, 0.1m),
+        "openai");
 
     public static readonly ModelInfo O3 = new(
-        Id: "o3",
-        ProviderId: "openai",
-        DisplayName: "o3",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 100_000,
-        SupportsReasoning: true,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(10m, 40m, 2.5m),
-        PromptTemplate: "openai");
+        "o3",
+        "openai",
+        "o3",
+        200_000,
+        100_000,
+        true,
+        true,
+        true,
+        new Pricing(10m, 40m, 2.5m),
+        "openai");
 
     public static readonly ModelInfo O4Mini = new(
-        Id: "o4-mini",
-        ProviderId: "openai",
-        DisplayName: "o4-mini",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 100_000,
-        SupportsReasoning: true,
-        SupportsVision: true,
-        SupportsToolUse: true,
-        Pricing: new Pricing(1.1m, 4.4m, 0.275m),
-        PromptTemplate: "openai");
+        "o4-mini",
+        "openai",
+        "o4-mini",
+        200_000,
+        100_000,
+        true,
+        true,
+        true,
+        new Pricing(1.1m, 4.4m, 0.275m),
+        "openai");
 
     public static readonly IReadOnlyList<ModelInfo> All = new[]
     {
@@ -627,6 +625,6 @@ public static class OpenAIModels
         Gpt41,
         Gpt41Mini,
         O3,
-        O4Mini,
+        O4Mini
     };
 }

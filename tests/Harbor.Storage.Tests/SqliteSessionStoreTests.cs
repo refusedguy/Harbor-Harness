@@ -2,14 +2,10 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.Storage.Tests;
-
 /// <summary>
-/// Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
-/// Verifies CRUD, message ordering, and cascading delete of messages.
+///     Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
+///     Verifies CRUD, message ordering, and cascading delete of messages.
 /// </summary>
 public class SqliteSessionStoreTests
 {
@@ -24,17 +20,17 @@ public class SqliteSessionStoreTests
 
     private static UserMessage NewUserMessage(string sessionId, string content, string idSuffix = "")
         => new(
-            Id: $"umsg-{idSuffix}{Guid.NewGuid():N}",
-            SessionId: sessionId,
-            CreatedAt: DateTimeOffset.UtcNow,
-            Content: content,
-            Agent: "code",
-            Model: "claude-opus-4");
+            $"umsg-{idSuffix}{Guid.NewGuid():N}",
+            sessionId,
+            DateTimeOffset.UtcNow,
+            content,
+            "code",
+            "claude-opus-4");
 
     [Test]
     public async Task CreateAsync_ReturnsSessionWithValidId()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var result = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
@@ -56,7 +52,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task GetAsync_ReturnsCreatedSession()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var created = await store.CreateAsync("/proj", "code", "openai", "gpt-4o");
@@ -78,7 +74,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task GetAsync_UnknownId_ReturnsFailure()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var result = await store.GetAsync("nonexistent-id");
@@ -94,7 +90,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task ListAsync_ReturnsAllCreatedSessions()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             await store.CreateAsync("/proj1", "code", "anthropic", "claude-opus-4");
@@ -116,7 +112,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task ListAsync_FiltersByProjectId()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var s1 = await store.CreateAsync("/projA", "code", "anthropic", "claude-opus-4");
@@ -138,7 +134,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task AppendMessageAsync_PersistsMessage()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
@@ -162,7 +158,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task GetMessagesAsync_ReturnsInCreatedAtOrder()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
@@ -171,11 +167,11 @@ public class SqliteSessionStoreTests
             // Insert messages with explicit, non-monotonic timestamps.
             // SqliteSessionStore orders by created_at ASC, so order should follow timestamps, not insertion order.
             await store.AppendMessageAsync(session.Id, new UserMessage(
-                Id: "m1", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(10), Content: "second-inserted-first-ts", Agent: "code", Model: "claude"));
+                "m1", session.Id, baseTime.AddSeconds(10), "second-inserted-first-ts", "code", "claude"));
             await store.AppendMessageAsync(session.Id, new UserMessage(
-                Id: "m2", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(5), Content: "first", Agent: "code", Model: "claude"));
+                "m2", session.Id, baseTime.AddSeconds(5), "first", "code", "claude"));
             await store.AppendMessageAsync(session.Id, new UserMessage(
-                Id: "m3", SessionId: session.Id, CreatedAt: baseTime.AddSeconds(20), Content: "third", Agent: "code", Model: "claude"));
+                "m3", session.Id, baseTime.AddSeconds(20), "third", "code", "claude"));
 
             var messages = await store.GetMessagesAsync(session.Id);
 
@@ -195,7 +191,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task DeleteAsync_RemovesSessionAndMessages()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
@@ -225,7 +221,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task UpdateMessageAsync_ReplacesPayload()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
@@ -249,7 +245,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task GetStatsAsync_ReturnsSessionMetadata()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
@@ -268,12 +264,12 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task UpdateStatsAsync_PersistsMetadata()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
 
-            var newMeta = new SessionMetadata(Cost: 0.99m, TokensInput: 200, TokensOutput: 100, TokensReasoning: 50, TokensCacheRead: 5, TokensCacheWrite: 2, MessageCount: 4, TimeCompacting: null);
+            var newMeta = new SessionMetadata(0.99m, 200, 100, 50, 5, 2, 4, null);
             var updateResult = await store.UpdateStatsAsync(session.Id, newMeta);
             await Assert.That(updateResult.IsSuccess).IsTrue();
 
@@ -294,7 +290,7 @@ public class SqliteSessionStoreTests
     [Test]
     public async Task AppendMessageAsync_UpdatesSessionTimestamp()
     {
-        var store = Create(out var dbPath);
+        var store = Create(out string dbPath);
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
