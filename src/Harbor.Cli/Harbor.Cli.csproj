@@ -27,6 +27,10 @@
     <ProjectReference Include="..\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

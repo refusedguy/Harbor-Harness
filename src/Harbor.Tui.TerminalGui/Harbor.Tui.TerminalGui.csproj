@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.TerminalGui</PackageId>
+    <Description>Experimental Harbor TUI renderer using Terminal.Gui v2 (mainstream .NET TUI framework).</Description>
+    <PackageTags>harbor;tui;terminal.gui;experimental</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Terminal.Gui" Version="2.4.17" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+  </ItemGroup>
+</Project>
