@@ -11,7 +11,7 @@ namespace Harbor.Abstractions.Tools;
 public sealed class ToolRegistry : IToolRegistry
 {
     private readonly object _frozenLock = new();
-    private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
+    private readonly NonBlocking.ConcurrentDictionary<ToolName, ITool> _tools = new();
     private FrozenDictionary<ToolName, ITool>? _frozenTools;
 
     /// <inheritdoc />

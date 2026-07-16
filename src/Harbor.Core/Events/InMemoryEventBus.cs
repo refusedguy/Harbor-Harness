@@ -123,10 +123,14 @@ public sealed class InMemoryEventBus : IEventBus
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
     {
         var all = _scrollback.Reader.ReadAllAsync(CancellationToken.None)
-            .ToBlockingEnumerable()
-            .TakeLast(maxEvents)
-            .ToList();
-        return all;
+            .ToBlockingEnumerable();
+        var result = new List<AgentEvent>(maxEvents);
+        foreach (var item in all)
+            result.Add(item);
+        // Keep only last maxEvents
+        if (result.Count > maxEvents)
+            result.RemoveRange(0, result.Count - maxEvents);
+        return result;
     }
 
     private void RemoveDeadSubscriptions(Subscription[] dead, int deadCount)

@@ -4,59 +4,60 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.ViewModels;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
-using Spectre.Console.Rendering;
-using System.Text;
+using Harbor.Tui.Spectre.Fullscreen.Components;
+using Harbor.Tui.Spectre.Fullscreen.Helpers;
 
 namespace Harbor.Tui.Spectre.Fullscreen;
 
 /// <summary>
-///     Full-screen Spectre.Console TUI renderer.
-///     <para>
-///         Owns the interactive lifecycle: renders a live <see cref="Layout" /> (header/status +
-///         scrollable chat + footer input) that is repainted on every <see cref="AgentEvent" />,
-///         and drives its own REPL loop with a multi-line, history-aware input prompt.
-///     </para>
+/// Full-screen interactive TUI renderer — thin orchestrator.
+/// Delegates to: ChatState (history), ScrollManager (scroll), InputState (input),
+/// LayoutBuilder (rendering), MouseHandler (mouse), MarkdownRenderer (formatting).
 /// </summary>
 public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
-    private readonly List<ChatLine> _lines = new();
-    private readonly List<string> _inputHistory = new();
-    private readonly StringBuilder _inputBuffer = new();
-    private readonly object _renderLock = new();
+    private readonly ChatState _chat = new();
+    private readonly ScrollManager _scroll = new();
+    private readonly InputState _input = new();
+    private readonly LayoutBuilder _layout;
 
     private decimal _cost;
     private string _footer = "Type a message, or /help.";
     private bool _isStreaming;
-    private string _model = string.Empty;
-    private string _provider = string.Empty;
-    private string _agent = "code";
-    private string _status = "idle";
-    private int _tokensIn;
-    private int _tokensOut;
     private string _streamBuffer = string.Empty;
     private string _thinkBuffer = string.Empty;
     private bool _stop;
-    private bool _isReadingInput;
     private LiveDisplayContext? _liveCtx;
     private Func<string, Task>? _slashHandler;
+    private readonly object _renderLock = new();
+
+    private static readonly string[] BuiltinCommands =
+    {
+        "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
+        "/providers", "/sessions", "/tui", "/storage", "/clear"
+    };
 
     public FullscreenTuiRenderer(ILogger<FullscreenTuiRenderer> logger) : base(logger)
     {
         Context = new FullscreenRenderContext();
+        _layout = new LayoutBuilder(_chat, _scroll, _input);
     }
 
     public override ITuiRenderContext Context { get; }
 
     void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler) => _slashHandler = handler;
 
+    // ═══════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════
+
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
         try
         {
-            AnsiConsole.Write(new Rule("[bold cyan]Harbor[/] — [silver]modular AI coding agent[/]")
+            AnsiConsole.Write(new Rule("[bold cyan]⚓ Harbor[/] [grey]— modular AI coding agent[/]")
             {
                 Style = Style.Parse("grey")
             });
@@ -77,115 +78,385 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         return Task.CompletedTask;
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  Event handling — delegates to ChatState
+    // ═══════════════════════════════════════════════════════════════
+
     private void ApplyEvent(AgentEvent @event)
     {
+        _layout.Status = "idle";
+
         switch (@event)
         {
             case AgentStartEvent ase:
-                _status = "running";
-                // Наполняем историю из стартового ивента только ОДИН раз при запуске.
-                // В интерактивном режиме новые сообщения юзера добавляются вручную в цикле ввода!
-                if (_lines.Count == 0)
-                {
+                _layout.Status = "running";
+                if (_chat.Count == 0)
                     foreach (var m in ase.Messages)
-                        if (m is UserMessage u)
-                            _lines.Add(new ChatLine("user", u.Content));
-                }
+                        if (m is UserMessage u) _chat.Add("user", u.Content);
+                _scroll.Reset();
                 break;
 
             case MessageStartEvent:
-                _status = "running";
+                _layout.Status = "running";
                 _isStreaming = true;
                 _streamBuffer = string.Empty;
+                _thinkBuffer = string.Empty;
                 break;
 
             case MessageUpdateEvent mu:
                 switch (mu.LlmEvent)
                 {
-                    case TextDeltaEvent td:
-                        _streamBuffer += td.Delta;
-                        break;
-                    case ThinkingDeltaEvent thd:
-                        _thinkBuffer += thd.Delta;
-                        break;
-                    case ToolCallStartEvent tcs:
-                        _lines.Add(new ChatLine("tool", $"→ {tcs.ToolName}"));
-                        break;
+                    case TextDeltaEvent td: _streamBuffer += td.Delta; break;
+                    case ThinkingDeltaEvent thd: _thinkBuffer += thd.Delta; break;
+                    case ToolCallStartEvent tcs: _chat.Add("tool", $"→ {tcs.ToolName}"); break;
                     case StepFinishEvent sf when sf.Usage is not null:
-                        _tokensIn += sf.Usage.InputTokens;
-                        _tokensOut += sf.Usage.OutputTokens;
+                        _layout.TokensIn += sf.Usage.InputTokens;
+                        _layout.TokensOut += sf.Usage.OutputTokens;
                         _cost += EstimateCost(sf.Usage.InputTokens, sf.Usage.OutputTokens);
+                        _layout.Cost = _cost;
                         break;
                 }
                 break;
 
             case MessageEndEvent:
-                if (!string.IsNullOrEmpty(_thinkBuffer))
-                {
-                    _lines.Add(new ChatLine("thinking", _thinkBuffer.Trim()));
-                    _thinkBuffer = string.Empty;
-                }
-                if (!string.IsNullOrEmpty(_streamBuffer))
-                {
-                    _lines.Add(new ChatLine("assistant", _streamBuffer.Trim()));
-                    _streamBuffer = string.Empty;
-                }
+                if (!string.IsNullOrEmpty(_thinkBuffer)) _chat.Add("thinking", _thinkBuffer.Trim());
+                if (!string.IsNullOrEmpty(_streamBuffer)) _chat.Add("assistant", _streamBuffer.Trim());
+                _streamBuffer = string.Empty;
+                _thinkBuffer = string.Empty;
                 _isStreaming = false;
-                _status = "idle";
+                _scroll.Reset();
                 break;
 
             case ToolExecutionStartEvent tes:
                 string args = tes.Args.GetRawText();
-                _lines.Add(new ChatLine("tool",
-                    string.IsNullOrEmpty(args) || args == "{}"
-                        ? $"→ {tes.ToolName}"
-                        : $"→ {tes.ToolName}  [dim]{Markup.Escape(args)}[/]"));
+                _chat.Add("tool", string.IsNullOrEmpty(args) || args == "{}"
+                    ? $"→ {tes.ToolName}"
+                    : $"→ {tes.ToolName}  [dim]{Markup.Escape(args)}[/]");
                 break;
 
             case ToolExecutionEndEvent tee:
                 string label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
                 string preview = tee.Result.Output.Length > 600
-                    ? tee.Result.Output[..600] + "..."
-                    : tee.Result.Output;
-                _lines.Add(new ChatLine("tool-result", $"{label} {Markup.Escape(preview.Trim())}"));
+                    ? tee.Result.Output[..600] + "..." : tee.Result.Output;
+                _chat.Add("tool-result", $"{label} {Markup.Escape(preview.Trim())}");
                 break;
 
-            case CompactionStartedEvent:
-                _status = "compacting";
-                break;
+            case CompactionStartedEvent: _layout.Status = "compacting"; break;
 
             case CompactionCompletedEvent cc:
-                _status = "running";
-                _lines.Add(new ChatLine("system",
-                    $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s[/]"));
+                _layout.Status = "running";
+                _chat.Add("system", $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s[/]");
                 break;
 
             case AgentErrorEvent err:
-                _status = "error";
-                _lines.Add(new ChatLine("error", err.Message));
+                _layout.Status = "error";
+                _chat.Add("error", err.Message);
                 break;
 
-            case AgentEndEvent:
-                _status = "idle";
-                break;
+            case AgentEndEvent: _layout.Status = "idle"; break;
         }
+
+        // Sync streaming state to layout
+        _layout.IsStreaming = _isStreaming;
+        _layout.StreamBuffer = _streamBuffer;
+        _layout.ThinkBuffer = _thinkBuffer;
     }
 
     private static decimal EstimateCost(int inTok, int outTok)
         => (decimal)inTok / 1_000_000m * 3m + (decimal)outTok / 1_000_000m * 15m;
 
+    // ═══════════════════════════════════════════════════════════════
+    //  Interactive REPL — delegates input to InputState, scroll to ScrollManager
+    // ═══════════════════════════════════════════════════════════════
+
+    public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
+    {
+        _layout.Model = agent.State.Agent.Model;
+        _layout.Provider = agent.State.Agent.ProviderId;
+        _layout.Agent = agent.State.Agent.Name.Value;
+
+        Console.Write("\x1b[?1000h\x1b[?1006h");
+
+        var inputTask = Task.Run(() => RunInputLoopAsync(agent, ct), ct);
+        var live = AnsiConsole.Live(_layout.Build());
+
+        AnsiConsole.Cursor.Hide();
+        live.StartAsync(async ctx =>
+        {
+            _liveCtx = ctx;
+            while (!_stop) await Task.Delay(100, ct).ConfigureAwait(false);
+        }).GetAwaiter().GetResult();
+
+        inputTask.GetAwaiter().GetResult();
+
+        Console.Write("\x1b[?1006l\x1b[?1000l");
+        AnsiConsole.Cursor.Show();
+        AnsiConsole.WriteLine();
+        return Task.FromResult(0);
+    }
+
+    private void RunInputLoopAsync(IAgent agent, CancellationToken ct)
+    {
+        while (!_stop)
+        {
+            if (agent.State.IsRunning)
+            {
+                _footer = "[yellow]⏳ Working…[/]  [grey](Esc = abort, wheel/PageUp/Down = scroll)[/]";
+                _layout.Footer = _footer;
+                RunWaitLoop(agent, ct);
+                continue;
+            }
+
+            _footer = _scroll.IsScrolling
+                ? "[grey]Scroll mode: PageUp/Down or wheel to navigate, End to return. Type to resume.[/]"
+                : "[grey]Type a message, or /help.  ↑↓ = history  Tab = autocomplete  Ctrl+L = clear  Esc = quit[/]";
+            _layout.Footer = _footer;
+
+            string? input = ReadInput(ct);
+            if (input is null) { _stop = true; return; }
+
+            string trimmed = input.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+            if (trimmed is "exit" or "quit" or ":q") { _stop = true; return; }
+
+            if (trimmed.StartsWith('/'))
+            {
+                if (_slashHandler is not null) _slashHandler(trimmed).GetAwaiter().GetResult();
+                _chat.Add("system", $"[dim]/{trimmed[1..]}[/]");
+                continue;
+            }
+
+            _input.Submit(trimmed);
+            _chat.Add("user", trimmed);
+            _footer = "[yellow]⏳ Working…[/]  [grey](Esc = abort, wheel/PageUp/Down = scroll)[/]";
+            _layout.Footer = _footer;
+            agent.PromptAsync(trimmed, ct).GetAwaiter().GetResult();
+        }
+    }
+
+    private void RunWaitLoop(IAgent agent, CancellationToken ct)
+    {
+        while (agent.State.IsRunning && !_stop)
+        {
+            if (ct.IsCancellationRequested) { _stop = true; return; }
+            if (!Console.KeyAvailable) { Thread.Sleep(30); continue; }
+
+            var key = Console.ReadKey(intercept: true);
+
+            if (key.KeyChar == '\x1b')
+            {
+                var mouse = MouseHandler.ParseSequence();
+                if (mouse == MouseHandler.MouseAction.ScrollUp) { DoScrollUp(3); continue; }
+                if (mouse == MouseHandler.MouseAction.ScrollDown) { DoScrollDown(3); continue; }
+                continue;
+            }
+
+            switch (key.Key)
+            {
+                case ConsoleKey.Escape:
+                    agent.AbortSource.Cancel();
+                    _chat.Add("system", "[yellow]⏹ Aborted.[/]");
+                    agent.WaitForIdleAsync(ct).GetAwaiter().GetResult();
+                    break;
+                case ConsoleKey.PageUp: DoScrollUp(5); break;
+                case ConsoleKey.PageDown: DoScrollDown(5); break;
+                case ConsoleKey.UpArrow: DoScrollUp(1); break;
+                case ConsoleKey.DownArrow: DoScrollDown(1); break;
+                case ConsoleKey.Home: DoScrollToTop(); break;
+                case ConsoleKey.End: DoScrollToBottom(); break;
+                case ConsoleKey.C when (key.Modifiers & ConsoleModifiers.Control) != 0:
+                    agent.AbortSource.Cancel();
+                    _chat.Add("system", "[yellow]⏹ Cancelled (Ctrl+C).[/]");
+                    agent.WaitForIdleAsync(ct).GetAwaiter().GetResult();
+                    break;
+                case ConsoleKey.L when (key.Modifiers & ConsoleModifiers.Control) != 0:
+                    Redraw();
+                    break;
+            }
+        }
+    }
+
+    private string? ReadInput(CancellationToken ct)
+    {
+        _input.Clear();
+        
+        _layout.IsReadingInput = true;
+        Redraw();
+
+        while (true)
+        {
+            if (ct.IsCancellationRequested)
+            {
+                
+                _layout.IsReadingInput = false;
+                return null;
+            }
+            if (!Console.KeyAvailable) { Thread.Sleep(15); continue; }
+
+            var key = Console.ReadKey(intercept: true);
+
+            // Mouse wheel
+            if (key.KeyChar == '\x1b')
+            {
+                var mouse = MouseHandler.ParseSequence();
+                if (mouse == MouseHandler.MouseAction.ScrollUp) { DoScrollUp(3); continue; }
+                if (mouse == MouseHandler.MouseAction.ScrollDown) { DoScrollDown(3); continue; }
+                continue;
+            }
+
+            // Enter (submit)
+            if (key.Key == ConsoleKey.Enter && (key.Modifiers & ConsoleModifiers.Alt) != 0)
+            {
+                _input.Append('\n');
+                Redraw();
+                continue;
+            }
+            if (key.Key == ConsoleKey.Enter)
+            {
+                var result = _input.Consume();
+                
+                _layout.IsReadingInput = false;
+                Redraw();
+                return result;
+            }
+
+            // Escape
+            if (key.Key == ConsoleKey.Escape)
+            {
+                if (_input.IsEmpty) {  _layout.IsReadingInput = false; return null; }
+                _input.Clear();
+                Redraw();
+                continue;
+            }
+
+            // Backspace
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                _input.Backspace();
+                Redraw();
+                continue;
+            }
+
+            // Ctrl+L
+            if (key.Key == ConsoleKey.L && (key.Modifiers & ConsoleModifiers.Control) != 0)
+            {
+                Redraw();
+                continue;
+            }
+
+            // Ctrl+C
+            if (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0)
+            {
+                
+                _layout.IsReadingInput = false;
+                _stop = true;
+                return null;
+            }
+
+            // History navigation
+            if (key.Key == ConsoleKey.UpArrow) { _input.NavigateUp(); Redraw(); continue; }
+            if (key.Key == ConsoleKey.DownArrow) { _input.NavigateDown(); Redraw(); continue; }
+
+            // Scroll keys
+            if (key.Key == ConsoleKey.Home) { DoScrollToTop(); continue; }
+            if (key.Key == ConsoleKey.End) { DoScrollToBottom(); continue; }
+            if (key.Key == ConsoleKey.PageUp) { DoScrollUp(10); continue; }
+            if (key.Key == ConsoleKey.PageDown) { DoScrollDown(10); continue; }
+
+            // Tab autocomplete
+            if (key.Key == ConsoleKey.Tab && _input.Length > 0 && _input[0] == '/')
+            {
+                var current = _input.Text;
+                var match = BuiltinCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
+                if (match is not null)
+                {
+                    _input.Clear();
+                    foreach (var c in match) _input.Append(c);
+                    _input.Append(' ');
+                    Redraw();
+                }
+                continue;
+            }
+
+            // Regular character (filter control chars that cause terminal bell)
+            if (key.KeyChar is >= (char)32 and not (char)127)
+            {
+                _input.Append(key.KeyChar);
+                if (_scroll.IsScrolling) _scroll.Reset();
+                Redraw();
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Scroll delegation
+    // ═══════════════════════════════════════════════════════════════
+
+    private void DoScrollUp(int lines)
+    {
+        int total = ComputeTotalLines();
+        _scroll.ScrollUp(lines, total, GetBodyHeight());
+        Redraw();
+    }
+
+    private void DoScrollDown(int lines)
+    {
+        _scroll.ScrollDown(lines);
+        Redraw();
+    }
+
+    private void DoScrollToTop()
+    {
+        int total = ComputeTotalLines();
+        _scroll.ScrollToTop(total, GetBodyHeight());
+        Redraw();
+    }
+
+    private void DoScrollToBottom()
+    {
+        _scroll.ScrollToBottom();
+        Redraw();
+    }
+
+    private int ComputeTotalLines()
+    {
+        var visible = _chat.Lines.ToList();
+        if (_isStreaming)
+        {
+            if (!string.IsNullOrEmpty(_thinkBuffer)) visible.Add(new ChatState.ChatLine("thinking", _thinkBuffer.Trim()));
+            if (!string.IsNullOrEmpty(_streamBuffer)) visible.Add(new ChatState.ChatLine("assistant", _streamBuffer.Trim()));
+        }
+        int width = 80;
+        try { width = Console.WindowWidth; } catch { /* Non-TTY */ }
+        int maxWidth = Math.Max(20, width - 6);
+        return LayoutBuilder.GetTotalVisibleLines(visible.ToArray(), maxWidth);
+    }
+
+    private static int GetBodyHeight()
+    {
+        try { return Math.Max(3, Console.WindowHeight - 8); }
+        catch { return 16; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Render
+    // ═══════════════════════════════════════════════════════════════
+
     private void Redraw()
     {
         lock (_renderLock)
         {
-            _liveCtx?.UpdateTarget(BuildLayout());
+            _liveCtx?.UpdateTarget(_layout.Build());
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    //  Base overrides
+    // ═══════════════════════════════════════════════════════════════
+
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
-        var result = AnsiConsole.Prompt(
-            new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
+        var result = AnsiConsole.Prompt(new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
         return Task.FromResult(Result.Success(result));
     }
 
@@ -207,393 +478,26 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         return Task.FromResult(Result.Success());
     }
 
-    public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
-    {
-        _model = agent.State.Agent.Model;
-        _provider = agent.State.Agent.ProviderId;
-        _agent = agent.State.Agent.Name.Value;
+    // ═══════════════════════════════════════════════════════════════
+    //  Test hooks
+    // ═══════════════════════════════════════════════════════════════
 
-        var inputTask = Task.Run(() => RunInputLoopAsync(agent, ct), ct);
-        var live = AnsiConsole.Live(BuildLayout());
+    internal int TestScrollOffset => _scroll.Offset;
+    internal bool TestIsScrolling => _scroll.IsScrolling;
+    internal int TestInputHistoryCount => _input.HistoryCount;
+    internal int TestHistoryIndex => _input.HistoryIndex;
+    internal string TestInputBuffer => _input.Text;
 
-        AnsiConsole.Cursor.Hide();
-
-        live.StartAsync(async ctx =>
-        {
-            _liveCtx = ctx;
-            while (!_stop)
-            {
-                await Task.Delay(200, ct).ConfigureAwait(false);
-            }
-        }).GetAwaiter().GetResult();
-
-        inputTask.GetAwaiter().GetResult();
-
-        AnsiConsole.Cursor.Show();
-        AnsiConsole.WriteLine();
-        return Task.FromResult(0);
-    }
-
-    private void RunInputLoopAsync(IAgent agent, CancellationToken ct)
-    {
-        while (!_stop)
-        {
-            if (agent.State.IsRunning)
-            {
-                var key = WaitForKey(ct);
-                if (key == ConsoleKey.Escape)
-                {
-                    agent.AbortSource.Cancel();
-                    _lines.Add(new ChatLine("system", "[yellow]aborting…[/]"));
-                    agent.WaitForIdleAsync(ct).GetAwaiter().GetResult();
-                }
-                continue;
-            }
-
-            _footer = "Type a message, or [grey]/help[/].  Alt+Enter = newline, Enter = submit.";
-            string? input = ReadInput(ct);
-            if (input is null) { _stop = true; return; }
-
-            string trimmed = input.Trim();
-            if (string.IsNullOrWhiteSpace(trimmed)) continue;
-            if (trimmed is "exit" or "quit" or ":q") { _stop = true; return; }
-
-            if (trimmed.StartsWith('/'))
-            {
-                if (_slashHandler is not null) _slashHandler(trimmed).GetAwaiter().GetResult();
-                continue;
-            }
-
-            _inputHistory.Add(trimmed);
-            _lines.Add(new ChatLine("user", trimmed));
-            _footer = "[yellow]working…[/]  (Esc to abort)";
-            agent.PromptAsync(trimmed, ct).GetAwaiter().GetResult();
-        }
-    }
-
-    private string? ReadInput(CancellationToken ct)
-    {
-        _inputBuffer.Clear();
-        _isReadingInput = true;
-        Redraw();
-
-        while (true)
-        {
-            if (ct.IsCancellationRequested)
-            {
-                _isReadingInput = false;
-                return null;
-            }
-            if (!Console.KeyAvailable)
-            {
-                Thread.Sleep(20);
-                continue;
-            }
-            var key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter && key.Modifiers == ConsoleModifiers.Alt)
-            {
-                _inputBuffer.Append('\n');
-                Redraw();
-                continue;
-            }
-            if (key.Key == ConsoleKey.Enter)
-            {
-                var result = _inputBuffer.ToString();
-                _inputBuffer.Clear();
-                _isReadingInput = false;
-                Redraw();
-                return result;
-            }
-            if (key.Key == ConsoleKey.Escape)
-            {
-                var result = _inputBuffer.ToString();
-                _inputBuffer.Clear();
-                _isReadingInput = false;
-                Redraw();
-                return string.IsNullOrEmpty(result) ? null : result;
-            }
-            if (key.Key == ConsoleKey.Backspace)
-            {
-                if (_inputBuffer.Length > 0)
-                {
-                    _inputBuffer.Remove(_inputBuffer.Length - 1, 1);
-                    Redraw();
-                }
-                continue;
-            }
-            if (key.KeyChar != '\0')
-            {
-                _inputBuffer.Append(key.KeyChar);
-                Redraw();
-            }
-        }
-    }
-
-    private static ConsoleKey WaitForKey(CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            if (Console.KeyAvailable) return Console.ReadKey(intercept: true).Key;
-            Thread.Sleep(50);
-        }
-        return ConsoleKey.Escape;
-    }
-
-    private Layout BuildLayout()
-    {
-        var layout = new Layout("root")
-            .SplitRows(
-                new Layout("header").Size(3),
-                new Layout("body"),
-                new Layout("footer").Size(3));
-
-        layout["header"].Update(Header());
-        layout["body"].Update(Body());
-        layout["footer"].Update(Footer());
-        return layout;
-    }
-
-    private Panel Header()
-    {
-        var statusColor = _status switch
-        {
-            "running" => "cyan",
-            "error" => "red",
-            "compacting" => "yellow",
-            _ => "grey"
-        };
-
-        var grid = new Grid().Expand();
-        grid.AddColumn(new GridColumn().LeftAligned());
-        grid.AddColumn(new GridColumn().Centered());
-        grid.AddColumn(new GridColumn().RightAligned());
-
-        grid.AddRow(
-            new Markup($"[bold cyan]⚓ HARBOR[/] [grey]»[/] [bold white]{Markup.Escape(_provider)}/{Markup.Escape(_model)}[/]"),
-            new Markup($"[grey]agent:[/] [bold silver]{Markup.Escape(_agent)}[/]  [grey]•[/]  [grey]status:[/] [{statusColor}]{Markup.Escape(_status)}[/]"),
-            new Markup($"[bold green]Cost: {_cost:C4}[/] [grey]({_tokensIn}↑ / {_tokensOut}↓)[/]")
-        );
-
-        return new Panel(grid)
-        {
-            Border = BoxBorder.Rounded,
-            BorderStyle = Style.Parse("cyan"),
-            Padding = new Padding(1, 0),
-            Expand = true
-        };
-    }
-
-    private Panel Body()
-    {
-        var visible = _lines.ToList();
-
-        if (_isStreaming)
-        {
-            if (!string.IsNullOrEmpty(_thinkBuffer))
-                visible.Add(new ChatLine("thinking", _thinkBuffer.Trim()));
-            if (!string.IsNullOrEmpty(_streamBuffer))
-                visible.Add(new ChatLine("assistant", _streamBuffer.Trim()));
-        }
-
-        int width = 80;
-        int height = 24;
-        try
-        {
-            width = Console.WindowWidth;
-            height = Console.WindowHeight;
-        }
-        catch { /* Fallback */ }
-
-        int maxWidth = Math.Max(20, width - 6);
-        int availableHeight = Math.Max(3, height - 8);
-
-        var allMarkupLines = new List<string>();
-        foreach (var chatLine in visible)
-        {
-            allMarkupLines.AddRange(RenderLineToMarkupLines(chatLine, maxWidth));
-            allMarkupLines.Add(string.Empty);
-        }
-
-        var slicedLines = allMarkupLines;
-        bool truncated = false;
-        if (allMarkupLines.Count > availableHeight)
-        {
-            slicedLines = allMarkupLines.Skip(allMarkupLines.Count - availableHeight).ToList();
-            truncated = true;
-        }
-
-        var bodyBuilder = new StringBuilder();
-        if (truncated)
-        {
-            bodyBuilder.AppendLine("[dim grey]▲ ... (older history truncated, increase window size to view) ...[/]");
-        }
-
-        foreach (var line in slicedLines)
-        {
-            bodyBuilder.AppendLine(line);
-        }
-
-        return new Panel(new Markup(bodyBuilder.ToString().TrimEnd()))
-        {
-            Border = BoxBorder.None,
-            Padding = new Padding(1, 0),
-            Expand = true
-        };
-    }
-
-    private IEnumerable<string> RenderLineToMarkupLines(ChatLine line, int maxWidth)
-    {
-        var result = new List<string>();
-        switch (line.Role)
-        {
-            case "user":
-                result.Add("[bold green]👤 User[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[green]│[/] [white]{Markup.Escape(l)}[/]");
-                break;
-
-            case "assistant":
-                result.Add("[bold cyan]🤖 Assistant[/]");
-                var formatted = FormatAssistantContentToList(line.Content, maxWidth - 6);
-                foreach (var l in formatted)
-                    result.Add($"[cyan]│[/] {l}");
-                break;
-
-            case "thinking":
-                result.Add("[italic dim grey]🧠 Thinking[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[dim grey]│[/] [italic dim grey]{Markup.Escape(l)}[/]");
-                break;
-
-            case "tool":
-                result.Add("[bold yellow]🔧 Tool Call[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[yellow]│[/] {l}");
-                break;
-
-            case "tool-result":
-                result.Add("[bold blue]📦 Tool Result[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[blue]│[/] {l}");
-                break;
-
-            case "error":
-                result.Add("[bold red]❌ Error[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[red]│[/] [bold red]{Markup.Escape(l)}[/]");
-                break;
-
-            default:
-                result.Add("[bold dim grey]⚙️ System[/]");
-                foreach (var l in WrapText(line.Content, maxWidth - 4))
-                    result.Add($"[dim grey]│[/] [dim]{l}[/]");
-                break;
-        }
-        return result;
-    }
-
-    private static List<string> FormatAssistantContentToList(string content, int maxWidth)
-    {
-        var lines = content.Replace("\r", "").Split('\n');
-        var result = new List<string>();
-        bool inCodeBlock = false;
-
-        foreach (var line in lines)
-        {
-            var trimmed = line.TrimStart();
-            if (trimmed.StartsWith("```"))
-            {
-                inCodeBlock = !inCodeBlock;
-                if (inCodeBlock)
-                {
-                    var lang = trimmed[3..].Trim();
-                    result.Add($"[bold yellow]┌─── Code: {lang} ──────────────────────────────────[/]");
-                }
-                else
-                {
-                    result.Add("[bold yellow]└─── Code End ──────────────────────────────────────[/]");
-                }
-                continue;
-            }
-
-            if (inCodeBlock)
-            {
-                var wrapped = WrapText(line, maxWidth - 4);
-                foreach (var wl in wrapped)
-                {
-                    result.Add($"[bold yellow]│[/] [silver]{Markup.Escape(wl)}[/]");
-                }
-            }
-            else
-            {
-                var wrapped = WrapText(line, maxWidth);
-                foreach (var wl in wrapped)
-                {
-                    result.Add($"[white]{Markup.Escape(wl)}[/]");
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static List<string> WrapText(string text, int maxWidth)
-    {
-        if (string.IsNullOrEmpty(text)) return new List<string> { string.Empty };
-        var lines = new List<string>();
-        var rawLines = text.Replace("\r", "").Split('\n');
-        foreach (var rawLine in rawLines)
-        {
-            if (rawLine.Length == 0)
-            {
-                lines.Add(string.Empty);
-                continue;
-            }
-            int index = 0;
-            while (index < rawLine.Length)
-            {
-                int length = Math.Min(maxWidth, rawLine.Length - index);
-                lines.Add(rawLine.Substring(index, length));
-                index += length;
-            }
-        }
-        return lines;
-    }
-
-    private Panel Footer()
-    {
-        if (_isReadingInput)
-        {
-            var typedText = Markup.Escape(_inputBuffer.ToString());
-            var display = string.IsNullOrEmpty(typedText)
-                ? "[green]›[/] [blink dim white]Type your message here...[/]"
-                : $"[green]›[/] [white]{typedText}[/]";
-
-            return new Panel(new Markup(display))
-            {
-                Border = BoxBorder.Rounded,
-                BorderStyle = Style.Parse("green"),
-                Padding = new Padding(1, 0),
-                Expand = true
-            };
-        }
-
-        return new Panel(new Markup(_footer))
-        {
-            Border = BoxBorder.Rounded,
-            BorderStyle = Style.Parse("grey"),
-            Padding = new Padding(1, 0),
-            Expand = true
-        };
-    }
-
-    private sealed record ChatLine(string Role, string Content);
+    internal void TestPushInputHistory(string text) => _input.Submit(text);
+    internal void TestNavigateHistoryUp() => _input.NavigateUp();
+    internal void TestNavigateHistoryDown() => _input.NavigateDown();
+    internal void TestScrollUp(int lines) => DoScrollUp(lines);
+    internal void TestScrollDown(int lines) => DoScrollDown(lines);
+    internal void TestScrollToTop() => DoScrollToTop();
+    internal void TestScrollToBottom() => DoScrollToBottom();
 }
 
-/// <summary>
-///     Render context shim — full-screen renderer draws through <see cref="AnsiConsole" />
-///     directly, so the <see cref="ITuiRenderContext" /> is only used by the base view dispatch.
-/// </summary>
+/// <summary>Render context shim.</summary>
 internal sealed class FullscreenRenderContext : ITuiRenderContext
 {
     public int Width => Console.WindowWidth;

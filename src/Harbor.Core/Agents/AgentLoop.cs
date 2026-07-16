@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
 using Harbor.Abstractions.Extensions;
@@ -179,12 +180,21 @@ public sealed class AgentLoop : IAgentLoop
 
                 // Accumulator for tool calls streamed as Start + Delta fragments
                 // (OpenAI-compatible providers never emit ToolCallEndEvent).
-                var pendingToolCalls = new Dictionary<string, (string Name, StringBuilder Args)>();
+                // Holds PooledStringBuilder values so we can return each arg buffer to the pool
+                // when the tool call is finalized on StepFinishEvent.
+                var pendingToolCalls = new Dictionary<string, (string Name, StringBuilderPool.PooledStringBuilder Args)>(capacity: 4);
                 try
                 {
                     await foreach (var evt in client.StreamAsync(request, ct).ConfigureAwait(false))
                     {
-                        _logger.LogTrace("Stream event: {EventType}", evt.GetType().Name);
+                        // LogTrace is the most frequent log call in the hot path (one per
+                        // stream event = potentially thousands per turn). Guarding it with
+                        // IsEnabled avoids the params object?[] array allocation that
+                        // LogTrace incurs even when trace logging is off.
+                        if (_logger.IsEnabled(LogLevel.Trace))
+                        {
+                            _logger.LogTrace("Stream event: {EventType}", evt.GetType().Name);
+                        }
                         switch (evt)
                         {
                             case TextDeltaEvent td:
@@ -227,15 +237,21 @@ public sealed class AgentLoop : IAgentLoop
                                     thinkingBuffer.Builder.Clear();
                                     hasPendingThinking = false;
                                 }
-                                pendingToolCalls[tcs.Id] = (tcs.ToolName, new StringBuilder());
+                                // Rent a pooled StringBuilder for accumulating tool-call arg deltas
+                                // (the previous per-call `new StringBuilder()` allocated on every
+                                // tool-call start, which can be dozens per turn).
+                                pendingToolCalls[tcs.Id] = (tcs.ToolName, StringBuilderPool.Rent());
                                 await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
                                 break;
 
                             case ToolCallDeltaEvent tcd:
-                                _logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
+                                if (_logger.IsEnabled(LogLevel.Trace))
+                                {
+                                    _logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
+                                }
                                 if (pendingToolCalls.TryGetValue(tcd.Id, out var acc))
                                 {
-                                    acc.Args.Append(tcd.ArgsDelta);
+                                    acc.Args.Builder.Append(tcd.ArgsDelta);
                                     pendingToolCalls[tcd.Id] = acc;
                                 }
                                 await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
@@ -262,13 +278,24 @@ public sealed class AgentLoop : IAgentLoop
                                     JsonElement parsedArgs;
                                     try
                                     {
-                                        using var doc = JsonDocument.Parse(
-                                            args.Length == 0 ? "{}" : args.ToString());
+                                        // Use the pooled builder's contents directly. Avoids
+                                        // allocating a fresh string when args is empty (the common
+                                        // case for tools that take no arguments).
+                                        string jsonText = args.Builder.Length == 0 ? "{}" : args.ToString();
+                                        using var doc = JsonDocument.Parse(jsonText);
                                         parsedArgs = doc.RootElement.Clone();
                                     }
                                     catch (JsonException)
                                     {
-                                        parsedArgs = JsonDocument.Parse("{}").RootElement.Clone();
+                                        // Previously this line leaked the JsonDocument: it was
+                                        // neither `using`-disposed nor explicitly disposed.
+                                        using var fallback = JsonDocument.Parse("{}");
+                                        parsedArgs = fallback.RootElement.Clone();
+                                    }
+                                    finally
+                                    {
+                                        // Return the per-tool-call pooled StringBuilder to the pool.
+                                        args.Dispose();
                                     }
 
                                     // Intern the tool name via StringPool — tool names are highly repeated.
@@ -285,6 +312,12 @@ public sealed class AgentLoop : IAgentLoop
                                 break;
 
                             case ErrorEvent err:
+                                // Return any per-tool-call pooled StringBuilders before early-returning.
+                                foreach (var (_, entry) in pendingToolCalls)
+                                {
+                                    entry.Args.Dispose();
+                                }
+                                pendingToolCalls.Clear();
                                 await _eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
                                 return Result.Failure(err.Message);
                         }
@@ -303,6 +336,13 @@ public sealed class AgentLoop : IAgentLoop
                         partial = partial.AppendThinking(thinkingBuffer.ToString());
                         thinkingBuffer.Builder.Clear();
                     }
+                    // Return any per-tool-call pooled StringBuilders to the pool — otherwise
+                    // cancellation mid-stream would leak them.
+                    foreach (var (_, entry) in pendingToolCalls)
+                    {
+                        entry.Args.Dispose();
+                    }
+                    pendingToolCalls.Clear();
                     partial = partial.WithFinish(StopReason.Aborted, finalUsage ?? new Usage(0, 0));
                 }
 
@@ -444,14 +484,32 @@ public sealed class AgentLoop : IAgentLoop
         }
         else
         {
-            // Size the task array directly (no LINQ Select).
-            var tasks = new Task<ToolResultEntry>[toolCalls.Count];
-            for (int i = 0; i < toolCalls.Count; i++)
+            // Rent the task array from the ArrayPool — Task.WhenAll accepts an IEnumerable<Task>,
+            // so we can pass a Span-based slice without the secondary ToArray() allocation.
+            // The pooled array is cleared before return so the Task references don't keep
+            // the underlying async state machines alive longer than necessary.
+            Task<ToolResultEntry>[]? tasks = null;
+            try
             {
-                tasks[i] = ExecuteSingleToolCallAsync(toolCalls[i], session, partial, agent, ct);
+                tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(toolCalls.Count);
+                for (int i = 0; i < toolCalls.Count; i++)
+                {
+                    tasks[i] = ExecuteSingleToolCallAsync(toolCalls[i], session, partial, agent, ct);
+                }
+
+                // Task.WhenAll takes an IEnumerable; wrap the active slice in a minimal
+                // struct enumerator so we don't materialize a second array via ToArray().
+                var resolved = await Task.WhenAll(new ArraySegment<Task<ToolResultEntry>>(tasks, 0, toolCalls.Count)).ConfigureAwait(false);
+                results.AddRange(resolved);
             }
-            var resolved = await Task.WhenAll(tasks).ConfigureAwait(false);
-            results.AddRange(resolved);
+            finally
+            {
+                if (tasks is not null)
+                {
+                    Array.Clear(tasks, 0, toolCalls.Count);
+                    ArrayPool<Task<ToolResultEntry>>.Shared.Return(tasks);
+                }
+            }
         }
 
         return new ToolResultMessage(
@@ -481,7 +539,19 @@ public sealed class AgentLoop : IAgentLoop
         var toolResult = _tools.GetTool(toolNameResult.Value);
         if (toolResult.IsFailure)
         {
-            string available = _tools.GetAllTools().Select(t => t.Name.Value).JoinToString(", ");
+            // Build the "available tools" list with a pooled StringBuilder instead of
+            // `.Select(...).JoinToString(...)` (which allocates an iterator + intermediate list).
+            string available;
+            using (var avail = StringBuilderPool.Rent(128))
+            {
+                var allTools = _tools.GetAllTools();
+                for (int i = 0; i < allTools.Count; i++)
+                {
+                    if (avail.Builder.Length > 0) avail.Builder.Append(", ");
+                    avail.Builder.Append(allTools[i].Name.Value);
+                }
+                available = avail.ToString();
+            }
             return new ToolResultEntry(
                 toolCall.Id,
                 toolCall.ToolName,
@@ -520,7 +590,15 @@ public sealed class AgentLoop : IAgentLoop
             }
 
             // Execute
-            _logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+            // Guard the GetRawText() call with IsEnabled — JsonElement.GetRawText()
+            // allocates a fresh string every call, and LogDebug evaluates its args
+            // eagerly before checking whether Debug is enabled. The guard eliminates
+            // the per-tool-call string allocation when debug logging is off (the
+            // common production case).
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+            }
             var ctx = new ToolContext(
                 session.Session.Id,
                 partial.Id,
@@ -533,7 +611,11 @@ public sealed class AgentLoop : IAgentLoop
                     _ = _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c);
                     return Task.CompletedTask;
                 },
-                (req, c) => _permissions.AskUserAsync(req, c).ContinueWith(t => t.Result.Value, c),
+                // async/await instead of ContinueWith + .Result: the latter allocates a
+                // continuation Task and accesses .Result which (though safe here because
+                // the antecedent is already complete) is a foot-gun. The async state
+                // machine is slightly cheaper and clearer about intent.
+                async (req, c) => (await _permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
                 null!);
 
             var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);

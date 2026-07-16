@@ -1,5 +1,5 @@
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -31,6 +31,9 @@ public sealed class OllamaLlmClient : ILlmClient
     };
     private readonly OllamaConfig _config;
 
+    // Pre-computed base URL — avoids per-request string manipulation.
+    private readonly string _baseUrl;
+
     private readonly HttpClient _http;
     private readonly ILogger<OllamaLlmClient> _logger;
 
@@ -39,6 +42,7 @@ public sealed class OllamaLlmClient : ILlmClient
         _http = http;
         _config = config;
         _logger = logger;
+        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("ollama");
@@ -93,10 +97,10 @@ public sealed class OllamaLlmClient : ILlmClient
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
 
-                        foreach (var evt in MapNdjsonChunk(line))
-                        {
-                            await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
-                        }
+                        // Stream events directly into the channel while the JsonDocument is
+                        // still alive — avoids the per-chunk .ToList() materialization that
+                        // would otherwise be required to keep JsonElement valid after dispose.
+                        await WriteNdjsonEventsAsync(line, writer, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -126,19 +130,19 @@ public sealed class OllamaLlmClient : ILlmClient
     {
         try
         {
-            string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-            string response = await _http.GetStringAsync($"{baseUrl}/api/tags", cancellationToken).ConfigureAwait(false);
+            string response = await _http.GetStringAsync(string.Concat(_baseUrl, "/api/tags"), cancellationToken).ConfigureAwait(false);
 
             using var doc = JsonDocument.Parse(response);
-            var models = new List<ModelInfo>();
-            if (doc.RootElement.TryGetProperty("models", out var modelsArray))
+            // Pre-size the models list only when the models array is present and has a known count.
+            List<ModelInfo>? models = null;
+            if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
             {
+                models = new List<ModelInfo>(modelsArray.GetArrayLength());
                 foreach (var m in modelsArray.EnumerateArray())
                 {
                     string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
                     if (string.IsNullOrEmpty(id)) continue;
 
-                    string displayName = id;
                     int ctx = m.TryGetProperty("model_info", out var info) &&
                               info.TryGetProperty("context_length", out var ctxEl) &&
                               ctxEl.ValueKind == JsonValueKind.Number
@@ -148,7 +152,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     models.Add(new ModelInfo(
                         id,
                         "ollama",
-                        displayName,
+                        id,
                         ctx,
                         ctx,
                         false,
@@ -158,7 +162,7 @@ public sealed class OllamaLlmClient : ILlmClient
                         "openai"));
                 }
             }
-            return Result.Success<IReadOnlyList<ModelInfo>>(models);
+            return Result.Success<IReadOnlyList<ModelInfo>>((IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>());
         }
         catch (Exception ex)
         {
@@ -168,10 +172,9 @@ public sealed class OllamaLlmClient : ILlmClient
 
     private HttpRequestMessage BuildRequest(LlmRequest request)
     {
-        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-        string url = $"{baseUrl}/api/chat";
+        string url = string.Concat(_baseUrl, "/api/chat");
 
-        var payload = new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
             ["messages"] = BuildMessages(request),
@@ -191,16 +194,19 @@ public sealed class OllamaLlmClient : ILlmClient
             });
         }
 
-        string json = JsonSerializer.Serialize(payload, JsonOptions);
-        return new HttpRequestMessage(HttpMethod.Post, url)
+        byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
+        var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
+            Content = new ByteArrayContent(jsonBytes)
         };
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        return msg;
     }
 
     private static Dictionary<string, object?> BuildOptions(LlmRequest request)
     {
-        var options = new Dictionary<string, object?>();
+        // Pre-size for the maximum known keys: temperature, top_p, top_k, num_predict.
+        var options = new Dictionary<string, object?>(4);
         if (request.Temperature.HasValue) options["temperature"] = request.Temperature;
         if (request.TopP.HasValue) options["top_p"] = request.TopP;
         if (request.TopK.HasValue) options["top_k"] = request.TopK;
@@ -249,17 +255,25 @@ public sealed class OllamaLlmClient : ILlmClient
         return result;
     }
 
-    private IEnumerable<LlmEvent> MapNdjsonChunk(string line)
+    /// <summary>
+    ///     Parse one NDJSON line and write any emitted events directly into the channel.
+    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
+    ///     materialization that the previous MapNdjsonChunk helper required to keep JsonElement
+    ///     values alive after dispose.
+    /// </summary>
+    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(line);
-            return MapNdjsonChunkFromDocument(doc.RootElement).ToList();
+            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement))
+            {
+                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse Ollama NDJSON chunk: {Line}", line);
-            return Enumerable.Empty<LlmEvent>();
         }
     }
 

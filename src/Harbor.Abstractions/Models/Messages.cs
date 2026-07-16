@@ -111,24 +111,51 @@ public sealed partial record AssistantMessage(
     /// </summary>
     /// <param name="text">The text to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
-    public AssistantMessage AppendText(string text) =>
-        this with { Parts = Parts.Append(new TextPart(text)).ToArray() };
+    public AssistantMessage AppendText(string text)
+    {
+        // Manual array copy avoids the LINQ `Append(...).ToArray()` pipeline, which
+        // allocates a struct iterator + final array. We allocate exactly one array
+        // (the new Parts) and copy the existing items by index.
+        var newArray = new ContentPart[Parts.Count + 1];
+        for (int i = 0; i < Parts.Count; i++)
+        {
+            newArray[i] = Parts[i];
+        }
+        newArray[Parts.Count] = new TextPart(text);
+        return this with { Parts = newArray };
+    }
 
     /// <summary>
     ///     Returns a copy of this message with an additional <see cref="ThinkingPart" /> appended.
     /// </summary>
     /// <param name="text">The thinking text to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
-    public AssistantMessage AppendThinking(string text) =>
-        this with { Parts = Parts.Append(new ThinkingPart(text)).ToArray() };
+    public AssistantMessage AppendThinking(string text)
+    {
+        var newArray = new ContentPart[Parts.Count + 1];
+        for (int i = 0; i < Parts.Count; i++)
+        {
+            newArray[i] = Parts[i];
+        }
+        newArray[Parts.Count] = new ThinkingPart(text);
+        return this with { Parts = newArray };
+    }
 
     /// <summary>
     ///     Returns a copy of this message with an additional <see cref="ToolCallPart" /> appended.
     /// </summary>
     /// <param name="toolCall">The tool call part to append.</param>
     /// <returns>A new <see cref="AssistantMessage" /> with the appended part.</returns>
-    public AssistantMessage AppendToolCall(ToolCallPart toolCall) =>
-        this with { Parts = Parts.Append(toolCall).ToArray() };
+    public AssistantMessage AppendToolCall(ToolCallPart toolCall)
+    {
+        var newArray = new ContentPart[Parts.Count + 1];
+        for (int i = 0; i < Parts.Count; i++)
+        {
+            newArray[i] = Parts[i];
+        }
+        newArray[Parts.Count] = toolCall;
+        return this with { Parts = newArray };
+    }
 
     /// <summary>
     ///     Returns a copy of this message with the finish metadata set.

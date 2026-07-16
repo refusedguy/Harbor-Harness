@@ -9,12 +9,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" Version="0.50.0"/>
+    <PackageReference Include="Spectre.Console" Version="0.57.2"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
   </ItemGroup>
 

@@ -57,17 +57,26 @@ public sealed class DefaultAgent : IAgent
 
         _eventBusSubscription = _eventBus.Subscribe(async (evt, ct) =>
         {
-            List<Func<AgentEvent, CancellationToken, ValueTask>> snapshot;
+            // Snapshot listeners under the lock, then iterate the snapshot outside the lock.
+            // Previously this allocated a fresh List<T> via ToList() on every published event,
+            // which is significant for high-frequency events like MessageUpdateEvent.
+            Func<AgentEvent, CancellationToken, ValueTask>[] snapshot;
             lock (_listenersLock)
             {
-                snapshot = _listeners.ToList();
+                int count = _listeners.Count;
+                if (count == 0) return;
+                snapshot = new Func<AgentEvent, CancellationToken, ValueTask>[count];
+                for (int i = 0; i < count; i++)
+                {
+                    snapshot[i] = _listeners[i];
+                }
             }
 
-            foreach (var listener in snapshot)
+            for (int i = 0; i < snapshot.Length; i++)
             {
                 try
                 {
-                    await listener(evt, ct).ConfigureAwait(false);
+                    await snapshot[i](evt, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -273,7 +282,13 @@ internal sealed class DefaultSessionContext : ISessionContext
         Channel<AgentMessage> steeringQueue)
     {
         Session = session;
-        _messages = messages.ToList();
+        // Pre-size the internal list to the known count. The previous `.ToList()` always
+        // allocated a new List<T> with a default capacity then grew it via doubling.
+        _messages = new List<AgentMessage>(messages.Count);
+        for (int i = 0; i < messages.Count; i++)
+        {
+            _messages.Add(messages[i]);
+        }
         _store = store;
         SteeringQueue = steeringQueue;
     }

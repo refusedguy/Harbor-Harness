@@ -17,19 +17,31 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 ## Project structure quick reference
 
 ```
-src/Harbor.Abstractions/     — interfaces & models (zero deps, depends on CSharpFunctionalExtensions only)
-src/Harbor.Core/             — base implementations (EventBus, AgentLoop, registries)
-src/Harbor.Tui.Abstractions/ — TUI interfaces, view models, views, renderers, MVVM base
-src/Harbor.Storage.Jsonl/    — JSONL session store
-src/Harbor.Providers.OpenAiCompatible/ — generic LLM client
-src/Harbor.Tools.Builtin/    — 8 builtin tools
-src/Harbor.Tui.Ansi/         — ANSI renderer
-src/Harbor.Cli/              — entry point
+src/Harbor.Abstractions/              — interfaces, models, events, 7 ValueObjects (zero deps)
+src/Harbor.Core/                      — EventBus, AgentLoop, registries, config, onboarding, compaction
+src/Harbor.Tui.Abstractions/          — MVVM: 4 ViewModels, 4 Views, ITuiRenderContext, ViewRegistry
+src/Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
+src/Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
+src/Harbor.Tui.Spectre/               — Spectre.Console renderer
+src/Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
+src/Harbor.Storage.Jsonl/             — JSONL session store (default)
+src/Harbor.Storage.Memory/            — in-memory store (tests)
+src/Harbor.Storage.Sqlite/            — SQLite store
+src/Harbor.Providers.Anthropic/       — native Anthropic (cache_control, thinking)
+src/Harbor.Providers.OpenAI/          — native OpenAI (Chat + Responses API)
+src/Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
+src/Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter
+src/Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
+src/Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands, FileLogger
 
-providers/   — JSON configs for 13 LLM providers (including kilocode with FREE models)
-specs/       — 16 design documents
-tests/       — TUnit tests (242+ passing)
+samples/plugins/                      — 4 sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
+providers/                            — 13 JSON LLM provider configs
+specs/                                — 16 design specification documents
+docs/                                 — 7 docs (architecture, benchmarks, build, dev, getting started, plugin dev, roadmap)
+tests/                                — 9 test projects (334 tests) + 1 benchmark project
 ```
+
+**Stats: 334 tests passed, 1 skipped, 0 failed. 0 warnings. 0% unsafe. Spectre.Console 0.57.2.**
 
 ### Env var quick reference
 

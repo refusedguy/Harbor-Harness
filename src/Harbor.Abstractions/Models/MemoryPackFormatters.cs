@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
 /// <summary>
@@ -14,13 +15,21 @@ namespace Harbor.Abstractions.Models;
 /// </remarks>
 public sealed class JsonElementMemoryPackFormatter : MemoryPackFormatter<JsonElement>
 {
+    /// <summary>
+    ///     Cached JSON serializer options. Re-using a single instance avoids the per-call
+    ///     reflection cache lookup that <see cref="JsonSerializer.Serialize(object?, JsonSerializerOptions?)" />
+    ///     performs when passed a null options instance. The default web options match the
+    ///     previous implicit behavior.
+    /// </summary>
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
     /// <inheritdoc />
     public override void Serialize<TBufferWriter>(ref MemoryPackWriter<TBufferWriter> writer, scoped ref JsonElement value)
     {
         // JsonElement is backed by a pooled JsonDocument; serialize to a string.
         // This is the simplest safe path; for high-throughput scenarios, an
         // UTF-8 based path could be added (requires MemoryPack internal API).
-        string json = JsonSerializer.Serialize(value);
+        string json = JsonSerializer.Serialize(value, SerializerOptions);
         writer.WriteString(json);
     }
 

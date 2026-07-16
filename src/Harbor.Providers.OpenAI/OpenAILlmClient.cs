@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -32,6 +31,10 @@ public sealed class OpenAILlmClient : ILlmClient
     private readonly IOpenAIAuthResolver _auth;
     private readonly OpenAIConfig _config;
 
+    // Pre-computed base URL with trailing slash stripped — avoids per-request
+    // string manipulation on the hot path.
+    private readonly string _baseUrl;
+
     private readonly HttpClient _http;
     private readonly ILogger<OpenAILlmClient> _logger;
 
@@ -45,6 +48,7 @@ public sealed class OpenAILlmClient : ILlmClient
         _config = config;
         _auth = auth;
         _logger = logger;
+        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("openai");
@@ -117,13 +121,16 @@ public sealed class OpenAILlmClient : ILlmClient
                             return;
                         }
 
-                        var events = useResponsesApi
-                            ? MapResponsesChunk(data)
-                            : MapChatCompletionsChunk(data);
-
-                        foreach (var evt in events)
+                        // Stream events directly into the channel while the JsonDocument is
+                        // still alive — avoids the per-chunk .ToList() materialization that
+                        // would otherwise be required to keep JsonElement valid after dispose.
+                        if (useResponsesApi)
                         {
-                            await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
+                            await WriteResponsesEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteChatChunkEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
                         }
                     }
                 }
@@ -168,10 +175,9 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private HttpRequestMessage BuildChatCompletionsRequest(LlmRequest request, string apiKey)
     {
-        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-        string url = $"{baseUrl}/chat/completions";
+        string url = string.Concat(_baseUrl, "/chat/completions");
 
-        var payload = new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>(8)
         {
             ["model"] = request.Model,
             ["messages"] = BuildChatMessages(request),
@@ -213,11 +219,12 @@ public sealed class OpenAILlmClient : ILlmClient
             };
         }
 
-        string json = JsonSerializer.Serialize(payload, JsonOptions);
+        byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
+            Content = new ByteArrayContent(jsonBytes)
         };
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         return msg;
@@ -225,10 +232,9 @@ public sealed class OpenAILlmClient : ILlmClient
 
     private HttpRequestMessage BuildResponsesRequest(LlmRequest request, string apiKey)
     {
-        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-        string url = $"{baseUrl}/responses";
+        string url = string.Concat(_baseUrl, "/responses");
 
-        var payload = new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
             ["input"] = BuildResponsesInput(request),
@@ -258,11 +264,12 @@ public sealed class OpenAILlmClient : ILlmClient
             });
         }
 
-        string json = JsonSerializer.Serialize(payload, JsonOptions);
+        byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
+            Content = new ByteArrayContent(jsonBytes)
         };
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         return msg;
@@ -346,24 +353,32 @@ public sealed class OpenAILlmClient : ILlmClient
         return result;
     }
 
-    private IEnumerable<LlmEvent> MapChatCompletionsChunk(string data)
+    /// <summary>
+    ///     Parse one SSE data line and write any emitted events directly into the channel.
+    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
+    ///     materialization that the previous MapChatCompletionsChunk helper required to keep
+    ///     JsonElement values alive after dispose.
+    /// </summary>
+    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(data);
-            return MapChatChunkFromDocument(doc.RootElement).ToList();
+            foreach (var evt in MapChatChunkFromDocument(doc.RootElement))
+            {
+                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse OpenAI chunk: {Data}", data);
-            return Enumerable.Empty<LlmEvent>();
         }
     }
 
     private IEnumerable<LlmEvent> MapChatChunkFromDocument(JsonElement root)
     {
-        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new List<JsonElement>();
-        if (choices.Count == 0)
+        // Enumerate choices lazily; only materialize the first choice we actually use.
+        if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.ValueKind != JsonValueKind.Array)
         {
             if (root.TryGetProperty("usage", out var usage))
             {
@@ -374,7 +389,10 @@ public sealed class OpenAILlmClient : ILlmClient
             yield break;
         }
 
-        var choice = choices[0];
+        // First choice only — OpenAI streams one choice at a time for non-parallel tool calls.
+        using var choicesIter = choicesEl.EnumerateArray();
+        if (!choicesIter.MoveNext()) yield break;
+        var choice = choicesIter.Current;
         var delta = choice.TryGetProperty("delta", out var d) ? d : default;
         string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
 
@@ -429,17 +447,25 @@ public sealed class OpenAILlmClient : ILlmClient
         }
     }
 
-    private IEnumerable<LlmEvent> MapResponsesChunk(string data)
+    /// <summary>
+    ///     Parse one SSE data line and write any emitted events directly into the channel.
+    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
+    ///     materialization that the previous MapResponsesChunk helper required to keep JsonElement
+    ///     values alive after dispose.
+    /// </summary>
+    private async Task WriteResponsesEventsAsync(string data, ChannelWriter<LlmEvent> writer, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(data);
-            return MapResponsesChunkFromDocument(doc.RootElement).ToList();
+            foreach (var evt in MapResponsesChunkFromDocument(doc.RootElement))
+            {
+                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse OpenAI Responses chunk: {Data}", data);
-            return Enumerable.Empty<LlmEvent>();
         }
     }
 

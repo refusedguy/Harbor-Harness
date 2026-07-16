@@ -1,5 +1,5 @@
+using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
@@ -35,6 +35,10 @@ public sealed class AnthropicLlmClient : ILlmClient
     private readonly IAnthropicAuthResolver _auth;
     private readonly AnthropicConfig _config;
 
+    // Pre-computed base URL with trailing slash stripped — avoids per-request
+    // string manipulation and conditional logic on the hot path.
+    private readonly string _baseUrl;
+
     private readonly HttpClient _http;
     private readonly ILogger<AnthropicLlmClient> _logger;
 
@@ -48,6 +52,7 @@ public sealed class AnthropicLlmClient : ILlmClient
         _config = config;
         _auth = auth;
         _logger = logger;
+        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("anthropic");
@@ -109,11 +114,13 @@ public sealed class AnthropicLlmClient : ILlmClient
                         // Anthropic SSE format: "event: type\ndata: {...}"
                         if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
 
+                        // Slice the payload portion without allocating a new substring when
+                        // possible — Substring is the cleanest cross-target helper here.
                         string data = line.Substring(6);
-                        foreach (var evt in MapAnthropicEvent(data))
-                        {
-                            await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
-                        }
+                        // Stream events directly into the channel while the JsonDocument is
+                        // still alive — avoids the per-chunk .ToList() materialization that
+                        // would otherwise be required to keep JsonElement valid after dispose.
+                        await WriteAnthropicEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
                     }
                 }
 
@@ -148,10 +155,12 @@ public sealed class AnthropicLlmClient : ILlmClient
 
     private HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
-        string baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
-        string url = $"{baseUrl}/messages";
+        string url = string.Concat(_baseUrl, "/messages");
 
-        var payload = new Dictionary<string, object?>
+        // Pre-size the payload dictionary for the maximum known key count to avoid
+        // rehash/resize during population. Worst-case keys: model, messages, stream,
+        // max_tokens, system, temperature, top_p, top_k, thinking, tools, tool_choice.
+        var payload = new Dictionary<string, object?>(12)
         {
             ["model"] = request.Model,
             ["messages"] = BuildMessages(request),
@@ -220,11 +229,15 @@ public sealed class AnthropicLlmClient : ILlmClient
             };
         }
 
-        string json = JsonSerializer.Serialize(payload, JsonOptions);
+        // Serialize directly to UTF-8 bytes and wrap in ByteArrayContent — this skips
+        // the intermediate string allocation that JsonSerializer.Serialize(string) +
+        // StringContent(UTF-8 encode) would otherwise produce.
+        byte[] jsonBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOptions);
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
+            Content = new ByteArrayContent(jsonBytes)
         };
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         // Auth: x-api-key header
         msg.Headers.TryAddWithoutValidation("x-api-key", apiKey);
@@ -328,17 +341,25 @@ public sealed class AnthropicLlmClient : ILlmClient
         return converted;
     }
 
-    private IEnumerable<LlmEvent> MapAnthropicEvent(string data)
+    /// <summary>
+    ///     Parse one SSE data line and write any emitted events directly into the
+    ///     channel. Streaming inside the JsonDocument's `using` scope eliminates the
+    ///     per-chunk .ToList() materialization that the previous MapAnthropicEvent
+    ///     helper required to keep JsonElement values alive after dispose.
+    /// </summary>
+    private async Task WriteAnthropicEventsAsync(string data, ChannelWriter<LlmEvent> writer, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(data);
-            return MapAnthropicEventFromDocument(doc.RootElement).ToList();
+            foreach (var evt in MapAnthropicEventFromDocument(doc.RootElement))
+            {
+                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse Anthropic event: {Data}", data);
-            return Enumerable.Empty<LlmEvent>();
         }
     }
 

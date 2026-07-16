@@ -13,10 +13,27 @@ public sealed class MessageConverter
     /// <returns>An ordered list of <see cref="LlmMessage" /> instances.</returns>
     public IReadOnlyList<LlmMessage> ToLlmMessages(IReadOnlyList<AgentMessage> messages)
     {
-        var result = new List<LlmMessage>(messages.Count);
-
-        foreach (var msg in messages)
+        // First pass: count the maximum number of LlmMessages we may produce.
+        // Each AssistantMessage / UserMessage yields exactly 1 LlmMessage, but a
+        // ToolResultMessage expands to one LlmMessage per ToolResultEntry.
+        int capacity = 0;
+        for (int i = 0; i < messages.Count; i++)
         {
+            if (messages[i] is ToolResultMessage tr)
+            {
+                capacity += tr.Results.Count;
+            }
+            else
+            {
+                capacity++;
+            }
+        }
+
+        var result = new List<LlmMessage>(capacity);
+
+        for (int i = 0; i < messages.Count; i++)
+        {
+            var msg = messages[i];
             switch (msg)
             {
                 case UserMessage u:
@@ -26,12 +43,14 @@ public sealed class MessageConverter
                 case AssistantMessage a:
                     result.Add(new LlmAssistantMessage(
                         ConvertParts(a.Parts),
-                        a.StopReason.ToString().ToLowerInvariant()));
+                        StopReasonToLower(a.StopReason)));
                     break;
 
                 case ToolResultMessage tr:
-                    foreach (var r in tr.Results)
+                    var results = tr.Results;
+                    for (int j = 0; j < results.Count; j++)
                     {
+                        var r = results[j];
                         result.Add(new LlmToolResultMessage(
                             r.ToolCallId,
                             r.ToolName,
@@ -48,8 +67,9 @@ public sealed class MessageConverter
     private static IReadOnlyList<LlmContentBlock> ConvertParts(IReadOnlyList<ContentPart> parts)
     {
         var blocks = new List<LlmContentBlock>(parts.Count);
-        foreach (var part in parts)
+        for (int i = 0; i < parts.Count; i++)
         {
+            var part = parts[i];
             switch (part)
             {
                 case TextPart t:
@@ -66,4 +86,21 @@ public sealed class MessageConverter
 
         return blocks;
     }
+
+    /// <summary>
+    ///     Lowercase the <see cref="StopReason" /> enum to the wire form expected by OpenAI-style
+    ///     providers ("stop", "length", "tool_use", …). Avoids the boxing allocation of
+    ///     <see cref="Enum.ToString" /> + the second allocation of <see cref="string.ToLowerInvariant" />
+    ///     on every converted assistant message (hot path: one conversion per LLM message).
+    /// </summary>
+    private static string StopReasonToLower(StopReason reason) => reason switch
+    {
+        StopReason.Stop => "stop",
+        StopReason.Length => "length",
+        StopReason.ToolUse => "tool_use",
+        StopReason.ContentFilter => "content_filter",
+        StopReason.Error => "error",
+        StopReason.Aborted => "aborted",
+        _ => reason.ToString().ToLowerInvariant()
+    };
 }

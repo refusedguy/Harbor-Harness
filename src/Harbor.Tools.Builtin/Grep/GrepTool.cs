@@ -139,6 +139,7 @@ public sealed class GrepTool : ITool
         return allFiles;
     }
 
+    private static readonly Regex GlobToRegexCache = new Regex("", RegexOptions.Compiled);
     private static Regex GlobToRegex(string glob)
     {
         string pattern = "^" + Regex.Escape(glob).Replace("\\*", ".*").Replace("\\?", ".") + "$";

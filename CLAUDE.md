@@ -15,38 +15,47 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 
 ```
 src/
-├── Harbor.Abstractions/         — interfaces, models, events (zero deps)
-├── Harbor.Core/                 — base implementations (EventBus, AgentLoop, registries)
-├── Harbor.Storage.Jsonl/        — JSONL session store
-├── Harbor.Storage.Memory/       — in-memory store (for tests)
-├── Harbor.Storage.Sqlite/       — SQLite store (indexed queries)
-├── Harbor.Providers.Anthropic/  — native Anthropic Messages API
-├── Harbor.Providers.OpenAI/     — native OpenAI (Chat + Responses API)
-├── Harbor.Providers.Ollama/     — native Ollama (NDJSON)
-├── Harbor.Providers.OpenAiCompatible/ — generic OpenAI-compat adapter
-├── Harbor.Tools.Builtin/        — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
-├── Harbor.Tui.Abstractions/     — TUI interfaces
-├── Harbor.Tui.Ansi/             — ANSI streaming renderer
-├── Harbor.Tui.Plain/            — plain text renderer (no colors)
-├── Harbor.Tui.Spectre/          — Spectre.Console renderer
-└── Harbor.Cli/                  — entry point, DI wiring
+├── Harbor.Abstractions/              — interfaces, models, events (zero deps)
+├── Harbor.Core/                      — EventBus, AgentLoop, registries, config, onboarding
+├── Harbor.Storage.Jsonl/             — JSONL session store (default, zero native deps)
+├── Harbor.Storage.Memory/            — in-memory store (tests/ephemeral)
+├── Harbor.Storage.Sqlite/            — SQLite store (indexed queries)
+├── Harbor.Providers.Anthropic/       — native Anthropic Messages API (cache_control, thinking)
+├── Harbor.Providers.OpenAI/          — native OpenAI (Chat Completions + Responses API)
+├── Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
+├── Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter (13 JSON configs)
+├── Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
+├── Harbor.Tui.Abstractions/          — MVVM: Views + ViewModels + ITuiRenderContext
+├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
+├── Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
+├── Harbor.Tui.Spectre/               — Spectre.Console renderer
+├── Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
+└── Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands
 
 samples/plugins/
-├── Harbor.Plugin.WebSearch/     — DuckDuckGo search
-├── Harbor.Plugin.TodoWrite/     — per-session todo list
-├── Harbor.Plugin.GitTools/      — safe git wrapper
-└── Harbor.Plugin.FileTree/      — directory tree visualization
+├── Harbor.Plugin.WebSearch/          — DuckDuckGo search (no API key)
+├── Harbor.Plugin.TodoWrite/          — per-session todo list
+├── Harbor.Plugin.GitTools/           — safe git wrapper
+└── Harbor.Plugin.FileTree/           — directory tree visualization
 
 tests/
-├── Harbor.Abstractions.Tests/   — 35 tests
-├── Harbor.Core.Tests/           — 10 tests (1 skipped)
-├── Harbor.Tools.Builtin.Tests/  — 16 tests
-└── Harbor.Storage.Jsonl.Tests/  — 5 tests
+├── Harbor.Abstractions.Tests/        — 35 tests (identifiers, sessions, permissions)
+├── Harbor.Core.Tests/                — 53 tests (event bus, registries, agent loop, compaction, converter, permissions, system prompt)
+├── Harbor.Tools.Builtin.Tests/       — 29 tests (all 8 tools + task tool)
+├── Harbor.Storage.Jsonl.Tests/       — 4 tests (JSONL CRUD)
+├── Harbor.Storage.Tests/             — 27 tests (Memory + SQLite CRUD)
+├── Harbor.Providers.Tests/           — 39 tests (models, config, auth, catalog, provider IDs)
+├── Harbor.Config.Tests/              — 36 tests (config store, auth store, presets, onboarding wizard)
+├── Harbor.Tui.Tests/                 — 104 tests (view models, render context, view registry, builtin views)
+├── Harbor.Tui.E2E.Tests/             — 8 tests (renderer output verification)
+└── Harbor.Benchmarks/                — 7 BenchmarkDotNet benchmarks
 
-providers/   — 13 JSON LLM provider configs
-specs/       — 16 detailed design documents
-docs/        — architecture, getting started, build, plugin dev
+providers/   — 13 JSON LLM provider configs (embedded + filesystem)
+specs/       — 16 design specification documents
+docs/        — architecture, benchmarks, build, dev, getting started, plugin dev, roadmap
 ```
+
+**Total: 334 tests passed, 1 skipped, 0 failed. 0 warnings, 0 errors. 0% unsafe code.**
 
 ## Code conventions
 
@@ -229,23 +238,29 @@ arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
 
 ### GOF patterns used
 - **Strategy**: `ILlmClient`, `ITool`, `ITuiRenderer`, `ISessionStore` — swap implementations.
-- **Registry**: `ProviderRegistry`, `ToolRegistry`, `AgentRegistry` — with `FrozenDictionary` for O(1) lookups.
-- **Observer**: `IEventBus`, `InMemoryEventBus`.
-- **Builder**: `ISystemPromptBuilder`, `IToolRegistryBuilder`.
-- **Adapter**: `MessageConverter`, `OpenAiCompatibleLlmClient`.
-- **Command**: `IAgent`, `DefaultAgent`, `TaskTool`.
-- **Specification**: `PermissionRuleset`.
-- **Value Object**: all `*Id` types.
-- **Factory Method**: `Session.Create`, `ToolResult.Success/Error`.
-- **Plugin**: `IPlugin` and sub-interfaces.
-- **Repository**: `ISessionStore`.
-- **Chain of Responsibility**: `AgentLoop` (prompt → LLM → tool → next turn → compaction).
+- **Registry**: `ProviderRegistry`, `ToolRegistry`, `AgentRegistry`, `ViewRegistry`, `ViewModelRegistry` — with `FrozenDictionary` for O(1) lookups.
+- **Observer**: `IEventBus`, `InMemoryEventBus` — pub/sub with `ImmutableArray` snapshot.
+- **Builder**: `ISystemPromptBuilder`, `IToolRegistryBuilder`, `IProviderRegistryBuilder`, `IAgentRegistryBuilder`.
+- **Adapter**: `MessageConverter`, `OpenAiCompatibleLlmClient`, `ConfigAuthResolver`.
+- **Command**: `IAgent`, `DefaultAgent`, `TaskTool`, `ISlashCommand` implementations.
+- **Specification**: `PermissionRuleset` — encapsulates permission evaluation logic.
+- **Value Object**: `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` (7 types via CSharpFunctionalExtensions).
+- **Factory Method**: `Session.Create`, `ToolResult.Success/Error`, `ProviderId.TryCreate`.
+- **Plugin**: `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` (5 contracts).
+- **Repository**: `ISessionStore` — abstracts persistence (Jsonl, Memory, Sqlite).
+- **Chain of Responsibility**: `AgentLoop` (prompt → LLM stream → tool execution → next turn → compaction).
+- **Flyweight**: `StringPool.Shared.GetOrAdd()` for tool name interning in `AgentLoop`.
+- **Object Pool**: `StringBuilderPool`, `ArrayPool<T>.Shared` via `ArrayPoolExtensions.RentScoped`.
+- **MVVM**: `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` via CommunityToolkit.Mvvm (28 usages).
+- **Decorator**: `BaseTuiRenderer` decorates concrete renderers with view dispatch.
 
-### Functional programming
-- `Result<T>` for error handling (no exceptions for expected failures).
+### Functional programming (FP)
+- `Result<T>` for error handling — Railway Oriented Programming (ROP), no exceptions for expected failures.
 - Immutable `record` types for messages, events, value objects.
-- Pure functions where possible.
-- `IAsyncEnumerable<T>` for streaming.
+- Pure functions where possible (e.g. `HeuristicTokenEstimator.Estimate`).
+- `IAsyncEnumerable<T>` for streaming (LLM events, tool progress).
+- Pattern matching with `switch` expressions on discriminated unions (`AgentEvent`, `LlmEvent`).
+- `Channel<T>` for lock-free producer-consumer (FP-inspired message passing).
 
 ### Async
 - `async`/`await` everywhere. No `.Result`, no `.Wait()`.
@@ -267,16 +282,63 @@ arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
 - **Never use `yield` inside `try`/`catch`** — C# forbids it. Extract to a separate method (see `MapChunkFromDocument` pattern).
 
 ### Performance
-- Use `FrozenDictionary<TKey, TValue>` / `FrozenSet<T>` for read-only collections built once.
+
+Harbor is performance-obsessed. These techniques are applied throughout:
+
+| Technique | Where | Count |
+|---|---|---|
+| `FrozenDictionary` / `FrozenSet` | ProviderRegistry, ToolRegistry (after `Freeze()`) | 20 refs |
+| `NonBlocking.ConcurrentDictionary` | ProviderRegistry, ToolRegistry, AgentRegistry (lock-free) | 9 refs |
+| `ArrayPool<T>.Shared` | InMemoryEventBus (dead subscribers), ProviderRegistry (task array) | 12 refs |
+| `StringBuilderPool` | AgentLoop (streaming coalesce), CompactionService, SystemPromptBuilder | 6 refs |
+| `Channel<T>` | EventBus scrollback, DefaultAgent steering/followup, all LLM clients | 7 refs |
+| `ImmutableArray<T>` | InMemoryEventBus subscriptions (atomic lock-free snapshot) | 6 refs |
+| `StringPool.Shared` | AgentLoop (tool name interning / flyweight) | 3 refs |
+| `[StructLayout(Sequential)]` | InMemoryEventBus.Subscription (cache-friendly iteration) | 1 ref |
+| `ConfigureAwait(false)` | All async library code | 193 refs |
+| `MemoryPack` `[MemoryPackable]` | All domain models (Session, Messages, Usage, etc.) | 27 refs |
+| `ZLinq` drop-in | Harbor.Core (replaces System.Linq) | 4 refs |
+| `IReadOnlyCollection<T>` | Public APIs (no defensive copies) | 43 refs |
+| Pre-sized `List<T>(capacity)` | All List allocations in Core | verified |
+
+Rules:
+- Use `FrozenDictionary` / `FrozenSet` for read-only collections built once.
 - Use `IReadOnlyCollection<T>` / `IReadOnlyList<T>` in public APIs.
 - Use `ArrayPool<T>.Shared` for rented buffers (see `ArrayPoolExtensions`).
-- Use `StringBuilder` for concatenation in loops; pool via `StringBuilderPool`.
+- Use `StringBuilderPool.Rent()` for concatenation in hot paths.
 - Use `Channel<T>` for backpressure-aware streaming.
-- Prefer manual `for` loops over LINQ in hot paths. For new hot-path code, prefer **ZLinq**
-  (see the ZLinq section above) — `using ZLinq;` + `.AsValueEnumerable()` is a drop-in.
+- Prefer manual `for` loops or ZLinq over `System.Linq` in hot paths.
 - Use `ArgumentList.Add(arg)` instead of `Arguments = "..."` for `ProcessStartInfo`.
-- Use `Result<T>` (Railway Oriented Programming) — no exceptions for expected failures.
 - **No `unsafe` code** — verified by `MA0046` analyzer (set to error).
+
+### Full-screen TUI development
+
+`FullscreenTuiRenderer` (in `Harbor.Tui.Spectre.Fullscreen`) is a full-screen interactive
+renderer using Spectre.Console 0.57.2 `Live` display. It owns the REPL lifecycle.
+
+| Hotkey | Action |
+|---|---|
+| `Enter` | Submit prompt |
+| `Alt+Enter` | Newline (multi-line input) |
+| `↑` / `↓` | Input history navigation (when idle) / scroll chat (when agent running) |
+| `PageUp` / `PageDown` | Scroll chat history by 10 lines |
+| `Home` / `End` | Scroll to top / bottom of chat |
+| `Tab` | Autocomplete slash-commands |
+| `Ctrl+L` | Refresh screen |
+| `Ctrl+C` | Force quit |
+| `Esc` | Abort agent (when running) / clear input (when typing) / quit (when empty) |
+
+Features:
+- **Scrollable chat history** with `▲ N lines above` / `▼ N lines below` indicators.
+- **Markdown rendering**: code blocks (```` ``` ````), `**bold**`, `*italic*`, `` `code` ``,
+  `# headers`, `- lists`, `1. numbered`, `[links](url)`.
+- **Word-aware wrapping** (breaks at word boundaries, falls back to char wrap for long tokens).
+- **Input history** persisted per session.
+- **Visual polish**: boxed messages with role icons (👤 🤖 🔧 📦 ❌ ⚙️), color-coded borders.
+- **Status bar**: provider/model, agent, cost, tokens, status with color-coded icon.
+
+When adding a new interactive renderer, implement `IInteractiveTuiRenderer` — `Program.cs`
+will delegate the REPL to it instead of running the default line-buffered loop.
 
 ## Build & test
 

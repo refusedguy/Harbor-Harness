@@ -219,7 +219,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     private static List<object> BuildMessages(LlmRequest request)
     {
-        var result = new List<object>();
+        var result = new List<object>(request.Messages.Count + 1);
         if (!string.IsNullOrEmpty(request.SystemPrompt))
         {
             result.Add(new { role = "system", content = request.SystemPrompt });

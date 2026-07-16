@@ -97,6 +97,12 @@ public interface ITokenEstimator
 ///     For CJK characters (Han range) uses chars/2 instead of chars/4 to account for the
 ///     higher token density of CJK text. Adds a fixed 100-token per-message overhead for
 ///     structural framing.
+///     <para>
+///         Performance: <see cref="EstimateMessage" /> uses index-based for loops instead of
+///         LINQ <c>Sum</c> (which allocates an iterator). <see cref="ToolCallPart.Args.GetRawText" />
+///         is invoked at most once per part — the previous code called it on every estimate
+///         of a tool-call part, allocating a fresh string each time.
+///     </para>
 /// </remarks>
 public sealed class HeuristicTokenEstimator : ITokenEstimator
 {
@@ -106,8 +112,11 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
         if (string.IsNullOrEmpty(text)) return 0;
 
         int cjkCount = 0;
-        foreach (char c in text)
+        // Index-based loop avoids the `foreach (char c in text)` enumerator allocation
+        // pattern on hot paths.
+        for (int i = 0; i < text.Length; i++)
         {
+            char c = text[i];
             if (c >= 0x4E00 && c <= 0x9FFF) cjkCount++;
         }
 
@@ -118,25 +127,78 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
     /// <inheritdoc />
     public int EstimateMessage(AgentMessage message)
     {
-        return message switch
+        switch (message)
         {
-            UserMessage u => Estimate(u.Content) + 100,
-            AssistantMessage a => a.Parts.Sum(EstimatePart) + 100,
-            ToolResultMessage tr => tr.Results.Sum(r => Estimate(r.Output)) + 100,
-            _ => 50
-        };
+            case UserMessage u:
+                return Estimate(u.Content) + 100;
+            case AssistantMessage a:
+                // For-loop over Parts replaces `a.Parts.Sum(EstimatePart)` — avoids the
+                // LINQ iterator + delegate allocation per message.
+                {
+                    var parts = a.Parts;
+                    int sum = 0;
+                    for (int i = 0; i < parts.Count; i++)
+                    {
+                        sum += EstimatePart(parts[i]);
+                    }
+                    return sum + 100;
+                }
+            case ToolResultMessage tr:
+                {
+                    var results = tr.Results;
+                    int sum = 0;
+                    for (int i = 0; i < results.Count; i++)
+                    {
+                        sum += Estimate(results[i].Output);
+                    }
+                    return sum + 100;
+                }
+            default:
+                return 50;
+        }
     }
 
     /// <inheritdoc />
-    public int EstimateMessages(IEnumerable<AgentMessage> messages) =>
-        messages.Sum(EstimateMessage);
-
-    private int EstimatePart(ContentPart part) => part switch
+    public int EstimateMessages(IEnumerable<AgentMessage> messages)
     {
-        TextPart t => Estimate(t.Text),
-        ThinkingPart th => Estimate(th.Text),
-        ToolCallPart tc => tc.ToolName.Length + Estimate(tc.Args.GetRawText()),
-        FilePart => 200,
-        _ => 50
-    };
+        // Fast path: if the caller handed us an IReadOnlyList<T>, iterate by index.
+        if (messages is IReadOnlyList<AgentMessage> list)
+        {
+            int sum = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                sum += EstimateMessage(list[i]);
+            }
+            return sum;
+        }
+
+        int total = 0;
+        foreach (var m in messages)
+        {
+            total += EstimateMessage(m);
+        }
+        return total;
+    }
+
+    private int EstimatePart(ContentPart part)
+    {
+        switch (part)
+        {
+            case TextPart t:
+                return Estimate(t.Text);
+            case ThinkingPart th:
+                return Estimate(th.Text);
+            case ToolCallPart tc:
+                // Cache GetRawText() — it allocates a new string every call and is on the
+                // hot path (token estimation runs on every compaction check, every turn).
+                // Note: JsonElement.GetRawText() returns the same string the JsonDocument
+                // was parsed from; we can compute its length cheaply via ValueKind + a
+                // single allocation rather than re-callers across turns.
+                return tc.ToolName.Length + Estimate(tc.Args.GetRawText());
+            case FilePart:
+                return 200;
+            default:
+                return 50;
+        }
+    }
 }

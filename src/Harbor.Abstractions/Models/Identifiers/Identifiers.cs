@@ -1,5 +1,47 @@
-using System.Text.RegularExpressions;
 namespace Harbor.Abstractions.Models.Identifiers;
+
+/// <summary>
+///     Internal char-validation helpers for identifier normalization. Replaces per-call
+///     <see cref="System.Text.RegularExpressions.Regex.IsMatch" /> on hot paths (every tool
+///     call constructs a <see cref="ToolName" />; every provider lookup constructs a
+///     <see cref="ProviderId" />).
+/// </summary>
+internal static class IdentifierValidation
+{
+    /// <summary>
+    ///     Validate <c>^[a-z0-9][a-z0-9-]*$</c> for provider ids without allocating a Regex.
+    /// </summary>
+    public static bool IsValidProviderId(string value)
+    {
+        if (value.Length == 0) return false;
+        if (!IsLowerOrDigit(value[0])) return false;
+        for (int i = 1; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (!IsLowerOrDigit(c) && c != '-') return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    ///     Validate <c>^[a-z][a-z0-9_]*$</c> for tool names without allocating a Regex.
+    /// </summary>
+    public static bool IsValidToolName(string value)
+    {
+        if (value.Length == 0) return false;
+        if (!IsLower(value[0])) return false;
+        for (int i = 1; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (!IsLowerOrDigit(c) && c != '_') return false;
+        }
+        return true;
+    }
+
+    private static bool IsLower(char c) => (uint)(c - 'a') <= ('z' - 'a');
+    private static bool IsLowerOrDigit(char c) => IsLower(c) || (uint)(c - '0') <= ('9' - '0');
+}
+
 /// <summary>
 ///     Strongly-typed identifier for a session.
 /// </summary>
@@ -219,7 +261,7 @@ public sealed class ProviderId : ValueObject
             throw new ArgumentException("Provider ID cannot be empty", nameof(value));
 
         string normalized = value.ToLowerInvariant();
-        if (!Regex.IsMatch(normalized, @"^[a-z0-9][a-z0-9-]*$"))
+        if (!IdentifierValidation.IsValidProviderId(normalized))
             throw new ArgumentException($"Provider ID '{value}' contains invalid characters", nameof(value));
 
         return new ProviderId(normalized);
@@ -368,7 +410,7 @@ public sealed class ToolName : ValueObject
             throw new ArgumentException("Tool name cannot be empty", nameof(value));
 
         string normalized = value.ToLowerInvariant();
-        if (!Regex.IsMatch(normalized, @"^[a-z][a-z0-9_]*$"))
+        if (!IdentifierValidation.IsValidToolName(normalized))
             throw new ArgumentException($"Tool name '{value}' must match ^[a-z][a-z0-9_]*$", nameof(value));
 
         return new ToolName(normalized);

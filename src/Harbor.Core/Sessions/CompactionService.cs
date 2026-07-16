@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Sessions;
@@ -254,25 +255,66 @@ public sealed class CompactionService : ICompactionService
         for (int i = 0; i < count; i++)
         {
             var msg = messages[i];
-            builder.Append('[').Append(msg.Role).Append("] ").AppendLine(FormatMessage(msg));
+            builder.Append('[').Append(msg.Role).Append("] ");
+            // Append the formatted message body inline to avoid the intermediate string
+            // that the previous `AppendLine(FormatMessage(msg))` produced.
+            AppendFormattedMessage(builder, msg);
+            builder.AppendLine();
         }
         builder.AppendLine("</conversation>");
         return builder.ToString();
     }
 
-    private static string FormatMessage(AgentMessage msg) => msg switch
+    private static void AppendFormattedMessage(StringBuilder builder, AgentMessage msg)
     {
-        UserMessage u => u.Content,
-        AssistantMessage a => a.Parts.Select(FormatPart).JoinToString("\n"),
-        ToolResultMessage tr => tr.Results.Select(r => $"[tool:{r.ToolName}] {r.Output}").JoinToString("\n"),
-        _ => msg.ToString() ?? string.Empty
-    };
+        switch (msg)
+        {
+            case UserMessage u:
+                builder.Append(u.Content);
+                break;
+            case AssistantMessage a:
+                {
+                    var parts = a.Parts;
+                    for (int i = 0; i < parts.Count; i++)
+                    {
+                        if (i > 0) builder.Append('\n');
+                        AppendFormattedPart(builder, parts[i]);
+                    }
+                    break;
+                }
+            case ToolResultMessage tr:
+                {
+                    var results = tr.Results;
+                    for (int i = 0; i < results.Count; i++)
+                    {
+                        if (i > 0) builder.Append('\n');
+                        var r = results[i];
+                        builder.Append("[tool:").Append(r.ToolName).Append("] ").Append(r.Output);
+                    }
+                    break;
+                }
+            default:
+                builder.Append(msg.ToString() ?? string.Empty);
+                break;
+        }
+    }
 
-    private static string FormatPart(ContentPart part) => part switch
+    private static void AppendFormattedPart(StringBuilder builder, ContentPart part)
     {
-        TextPart t => t.Text,
-        ThinkingPart th => $"[thinking] {th.Text}",
-        ToolCallPart tc => $"[tool_call:{tc.ToolName}] {tc.Args.GetRawText()}",
-        _ => string.Empty
-    };
+        switch (part)
+        {
+            case TextPart t:
+                builder.Append(t.Text);
+                break;
+            case ThinkingPart th:
+                builder.Append("[thinking] ").Append(th.Text);
+                break;
+            case ToolCallPart tc:
+                // GetRawText() allocates a string each call; this is the only call site in
+                // the formatter, so the cost is one allocation per tool-call part per
+                // summarization — acceptable for compaction (runs rarely).
+                builder.Append("[tool_call:").Append(tc.ToolName).Append("] ").Append(tc.Args.GetRawText());
+                break;
+        }
+    }
 }

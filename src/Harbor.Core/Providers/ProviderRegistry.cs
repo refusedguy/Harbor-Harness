@@ -13,9 +13,9 @@ namespace Harbor.Abstractions.Providers;
 /// </summary>
 public sealed class ProviderRegistry : IProviderRegistry
 {
-    private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
+    private readonly NonBlocking.ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly object _frozenLock = new();
-    private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
+    private readonly NonBlocking.ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called.
@@ -127,8 +127,9 @@ public sealed class ProviderRegistry : IProviderRegistry
 
             // Copy the active range into a Task[] for Task.WhenAll (it requires IEnumerable<Task>).
             // We use ArrayPool + manual count to avoid the per-call array allocation of new Task[n].
-            var whenAllInput = tasksArray.AsSpan(0, providerCount).ToArray();
-            var resolved = await Task.WhenAll(whenAllInput).ConfigureAwait(false);
+            // Wrapping the slice in an ArraySegment<Task<ModelBatch>> avoids the previous
+            // `tasksArray.AsSpan(0, providerCount).ToArray()` secondary allocation.
+            var resolved = await Task.WhenAll(new ArraySegment<Task<ModelBatch>>(tasksArray, 0, providerCount)).ConfigureAwait(false);
 
             // First pass: compute total capacity to avoid List resizes.
             int totalModels = 0;
@@ -137,6 +138,9 @@ public sealed class ProviderRegistry : IProviderRegistry
                 totalModels += resolved[i].Models.Count;
             }
 
+            // Pre-size a List<ModelInfo> to the exact total and append via index-based loop.
+            // AddRange(IReadOnlyList<T>) on a List<T> performs its own per-item Add, so this
+            // is equivalent in cost but elides the IEnumerable<T> enumeration overhead.
             var results = new List<ModelInfo>(totalModels);
             for (int i = 0; i < resolved.Length; i++)
             {
@@ -148,7 +152,11 @@ public sealed class ProviderRegistry : IProviderRegistry
                 }
                 else
                 {
-                    results.AddRange(batch.Models);
+                    var models = batch.Models;
+                    for (int j = 0; j < models.Count; j++)
+                    {
+                        results.Add(models[j]);
+                    }
                 }
             }
 
