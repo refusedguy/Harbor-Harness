@@ -29,6 +29,7 @@ using Harbor.Tui.Abstractions;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Tui.Spectre;
+using Harbor.Tui.Spectre.Fullscreen;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -278,6 +279,8 @@ public static class Program
             "plain" => new PlainTuiRenderer(),
             "spectre" => new SpectreTuiRenderer(
                 sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
+            "fullscreen" => new FullscreenTuiRenderer(
+                sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
             _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
         });
 
@@ -435,11 +438,14 @@ public static class Program
             config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
         }
 
-        // Show banner
-        await renderer.WriteLineAsync("Harbor — modular AI coding agent").ConfigureAwait(false);
-        await renderer.WriteLineAsync($"Provider: {config.Provider} | Model: {config.Model} | Agent: {config.Agent}").ConfigureAwait(false);
-        await renderer.WriteLineAsync("Type your message and press Enter. Type '/help' for commands, '/exit' to quit.").ConfigureAwait(false);
-        await renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
+        // Show banner — full-screen renderers draw their own header, so skip the text banner.
+        if (renderer is not IInteractiveTuiRenderer)
+        {
+            await renderer.WriteLineAsync("Harbor — modular AI coding agent").ConfigureAwait(false);
+            await renderer.WriteLineAsync($"Provider: {config.Provider} | Model: {config.Model} | Agent: {config.Agent}").ConfigureAwait(false);
+            await renderer.WriteLineAsync("Type your message and press Enter. Type '/help' for commands, '/exit' to quit.").ConfigureAwait(false);
+            await renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
+        }
 
         // Create session
         string cwd = Environment.CurrentDirectory;
@@ -459,7 +465,24 @@ public static class Program
 
         agent.Initialize(sessionResult.Value, defaultAgent);
 
-        // REPL
+        // Delegate the interactive loop to the renderer when it owns the screen
+        // (e.g. full-screen TUI). Otherwise fall back to the line-buffered REPL.
+        if (renderer is IInteractiveTuiRenderer interactive)
+        {
+            interactive.SetSlashHandler(raw => HandleSlashCommandAsync(
+                raw, host.Services, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value));
+            return await interactive.RunInteractiveAsync(agent, host.Services, ct: default).ConfigureAwait(false);
+        }
+
+        return await RunReplAsync(renderer, agent, host.Services, configStore, authStore, providers,
+            agentRegistry, sessionResult.Value).ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunReplAsync(
+        ITuiRenderer renderer, IAgent agent, IServiceProvider sp,
+        IConfigStore configStore, AuthStore authStore, IProviderRegistry providers,
+        IAgentRegistry agentRegistry, Session session)
+    {
         while (true)
         {
             var inputResult = await renderer.ReadLineAsync("> ").ConfigureAwait(false);
@@ -473,7 +496,7 @@ public static class Program
 
             if (trimmed.StartsWith('/'))
             {
-                await HandleSlashCommandAsync(trimmed, host.Services, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value).ConfigureAwait(false);
+                await HandleSlashCommandAsync(trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
                 continue;
             }
 
@@ -487,7 +510,7 @@ public static class Program
         return 0;
     }
 
-    private static async Task HandleSlashCommandAsync(
+    internal static async Task HandleSlashCommandAsync(
         string input, IServiceProvider sp, ITuiRenderer renderer,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
@@ -761,9 +784,10 @@ public static class Program
     {
         Console.WriteLine("""
                           Available TUI renderers (set via /config set tui <name> or HARBOR_TUI env var):
-                            ansi    — Default. ANSI escape codes, streaming render.
-                            plain   — No ANSI, no colors. For pipes, CI, accessibility.
-                            spectre — Spectre.Console rich rendering (panels, tables, markup).
+                            ansi      — Default. ANSI escape codes, streaming render.
+                            plain     — No ANSI, no colors. For pipes, CI, accessibility.
+                            spectre   — Spectre.Console rich rendering (panels, tables, markup).
+                            fullscreen— Full-screen Spectre TUI: panels, live layout, inline input.
                           """);
         return 0;
     }
