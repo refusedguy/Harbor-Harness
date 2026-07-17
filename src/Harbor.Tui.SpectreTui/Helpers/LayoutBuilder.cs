@@ -37,6 +37,9 @@ internal sealed class LayoutBuilder
     /// <summary>History scroll-back offset, mirrored from <see cref="UiState.ScrollOffset" />.</summary>
     public int ScrollOffset { get; set; }
 
+    /// <summary>Number of source <see cref="ChatLine" /> entries (pre-wrap), used for scroll %.</summary>
+    public int SourceCount { get; set; }
+
     /// <summary>Total wrapped history rows, mirrored from <see cref="UiState.TotalLines" />.</summary>
     public int TotalLines { get; set; }
 
@@ -119,12 +122,16 @@ internal sealed class LayoutBuilder
         var source = _lines;
 
         int total = source.Length;
-        int top = 0;
+        int top;
         if (maxHeight > 0 && total > maxHeight)
         {
-            top = Math.Clamp(ScrollOffset == 0
-                ? total - maxHeight
-                : Math.Min(ScrollOffset, total - 1), 0, total - 1);
+            // _scroll = rows lifted from the tail (0 = bottom/newest). Clamp the
+            // resulting first-visible index into a valid range.
+            top = Math.Clamp(total - maxHeight - ScrollOffset, 0, total - maxHeight);
+        }
+        else
+        {
+            top = 0;
         }
 
         var lines = new List<TextLine>();
@@ -135,7 +142,8 @@ internal sealed class LayoutBuilder
             lines.Add(Blank());
         }
 
-        for (int i = top; i < total; i++)
+        int end = maxHeight > 0 ? Math.Min(total, top + maxHeight) : total;
+        for (int i = top; i < end; i++)
             AppendRole(source[i].Role, source[i].Text);
 
         if (IsStreaming)
@@ -153,6 +161,7 @@ internal sealed class LayoutBuilder
         // (UiState.TotalLines / ViewportLines) for scroll clamping + percentage.
         TotalLines = lines.Count;
         ViewportLines = maxHeight;
+        SourceCount = total;
 
         var paragraph = new Paragraph().Alignment(Justify.Left);
         paragraph.Lines.AddRange(lines);

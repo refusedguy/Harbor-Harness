@@ -54,11 +54,20 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        // Single funnel: every agent event goes through the shared pure reducer.
-        // Scroll "pin to newest" is handled implicitly — the reducer leaves
-        // ScrollOffset untouched for agent events, so an offset of 0 always tails.
-        if (_store is not null)
-            _store.Dispatch(new UiMsg.Agent(@event));
+        try
+        {
+            // Single funnel: every agent event goes through the shared pure reducer.
+            if (_store is not null)
+            {
+                _store.Dispatch(new UiMsg.Agent(@event));
+                _logger.LogTrace("RenderAsync: {EventType} lines={Lines} running={Running}",
+                    @event.GetType().Name, _store.State.Lines.Length, _store.State.IsAgentRunning);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "RenderAsync failed for {EventType}", @event.GetType().Name);
+        }
         return base.RenderAsync(@event, ct);
     }
 
@@ -156,7 +165,22 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         public override void OnMessage(ApplicationContext context, ApplicationMessage message)
         {
-            if (message is not KeyMessage key) return;
+            try
+            {
+                OnKeyMessage(keyFromMessage(message));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OnMessage failed");
+            }
+        }
+
+        private KeyMessage? keyFromMessage(ApplicationMessage message)
+            => message is KeyMessage km ? km : null;
+
+        private void OnKeyMessage(KeyMessage? key)
+        {
+            if (key is null) return;
 
             // A newline delivered as a character (multi-line paste) must not be
             // treated as the Enter key — otherwise pasting text with line breaks
@@ -193,7 +217,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 _app?.Quit();
         }
 
-        /// <summary>Apply a scroll action to the local scroll position. Returns true if handled.</summary>
+        /// <summary>Apply a scroll action. _scroll is the index of the FIRST visible ChatLine
+        /// (0 = top of transcript, SourceCount-1 = newest at the bottom).</summary>
         private bool HandleLocalScroll(ChatAction action)
         {
             int page = Math.Max(1, _viewport - 2);
@@ -217,6 +242,19 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         public override void Render(RenderContext context)
         {
+            try
+            {
+                RenderCore(context);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Render failed; scroll={Scroll} viewport={Viewport} lines={Lines}",
+                    _scroll, _viewport, _store.State.Lines.Length);
+            }
+        }
+
+        private void RenderCore(RenderContext context)
+        {
             var historyArea = _layout.Layout.GetArea(context, "History");
             _viewport = historyArea.Height > 0 ? historyArea.Height : 0;
 
@@ -224,7 +262,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             // user is not left staring at a frozen old position while new output streams.
             var state = _store.State;
             if (state.IsAgentRunning && !_wasRunning)
-                _scroll = 0;
+                _scroll = 0; // pin to newest (bottom) when a new run starts
             _wasRunning = state.IsAgentRunning;
 
             SyncLayout();
@@ -232,10 +270,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
             // Clamp the local scroll to the now-measured content height so repeated
             // PageUp/Home can never push the offset past the top of the transcript.
-            int maxScroll = Math.Max(0, _layout.TotalLines - _viewport);
+            // Clamp the local scroll (index of first visible ChatLine) to the real
+            // source count so a large/negative offset can never push us out of range.
+            int maxScroll = Math.Max(0, _layout.SourceCount - _viewport);
             if (_scroll > maxScroll) _scroll = maxScroll;
+            if (_scroll < 0) _scroll = 0;
 
-            _logger.LogTrace("Render: {WidgetCount} widgets", widgets.Count);
+            _logger.LogTrace("Render: scroll={Scroll}/{Max} lines={Lines} widgets={Widgets}",
+                _scroll, maxScroll, _layout.SourceCount, widgets.Count);
             foreach ((string name, var widget) in widgets)
             {
                 var area = _layout.Layout.GetArea(context, name);
@@ -278,9 +320,9 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             string Label(ChatAction a) => _keyMap.Get(a).Label;
             var s = _store.State;
             string mode = s.Focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
-            int max = Math.Max(0, _layout.TotalLines - _viewport);
-            string scroll = max > 0
-                ? $"scroll {(_scroll * 100 / max)}%"
+            int src = _layout.SourceCount;
+            string scroll = src > 1
+                ? $"scroll {(_scroll * 100 / (src - 1))}%"
                 : "scroll 0%";
             return $"[grey]q[/] {Label(ChatAction.Quit)}  " +
                    $"[grey]F2[/] {Label(ChatAction.ToggleFocus)}  {mode}  " +

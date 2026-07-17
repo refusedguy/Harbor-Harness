@@ -18,11 +18,13 @@ public sealed class FileLoggerProvider : ILoggerProvider
         string logsDir = Path.Combine(exeDir, "logs");
         Directory.CreateDirectory(logsDir);
 
-        string stamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HHmmss");
+        // One log file per calendar day, appended across runs so a crash/restart in
+        // the same day keeps all history in a single file.
+        string stamp = DateTimeOffset.Now.ToString("yyyy-MM-dd");
         FilePath = Path.Combine(logsDir, $"harbor_{stamp}.log");
         _filter = level => level >= minLevel;
         _writer = new StreamWriter(
-            new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.Read),
+            new FileStream(FilePath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read),
             leaveOpen: false)
         {
             AutoFlush = true
