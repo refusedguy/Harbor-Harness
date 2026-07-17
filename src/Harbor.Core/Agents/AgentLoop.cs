@@ -77,7 +77,27 @@ public sealed class AgentLoop : IAgentLoop
         try
         {
             _logger.LogInformation("Agent loop starting: agent={Agent}", agent.Name.Value);
-            await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
+
+            // Resolve the model once up front so the context window can be carried
+            // on AgentStartEvent (renderers need it to show context usage).
+            var providerIdResult = ProviderId.TryCreate(agent.ProviderId);
+            if (providerIdResult.IsFailure)
+                return Result.Failure(providerIdResult.Error);
+
+            var clientResult = _providers.GetClient(providerIdResult.Value);
+            if (clientResult.IsFailure)
+                return Result.Failure(clientResult.Error);
+
+            var client = clientResult.Value;
+            var modelsResult = await client.GetModelsAsync(ct).ConfigureAwait(false);
+            if (modelsResult.IsFailure)
+                return Result.Failure(modelsResult.Error);
+
+            var model = FindModel(modelsResult.Value, agent.Model);
+            if (model is null)
+                return Result.Failure($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.");
+
+            await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model), ct).ConfigureAwait(false);
 
             int turn = 0;
             while (!ct.IsCancellationRequested)
@@ -85,26 +105,6 @@ public sealed class AgentLoop : IAgentLoop
                 turn++;
                 _logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
                 await _eventBus.PublishAsync(new TurnStartEvent(turn), ct).ConfigureAwait(false);
-
-                // 1. Resolve model — Railway Oriented Programming style:
-                //    Each step returns Result<T> and short-circuits on failure,
-                //    threading the error through to the final return.
-                var providerIdResult = ProviderId.TryCreate(agent.ProviderId);
-                if (providerIdResult.IsFailure)
-                    return Result.Failure(providerIdResult.Error);
-
-                var clientResult = _providers.GetClient(providerIdResult.Value);
-                if (clientResult.IsFailure)
-                    return Result.Failure(clientResult.Error);
-
-                var client = clientResult.Value;
-                var modelsResult = await client.GetModelsAsync(ct).ConfigureAwait(false);
-                if (modelsResult.IsFailure)
-                    return Result.Failure(modelsResult.Error);
-
-                var model = FindModel(modelsResult.Value, agent.Model);
-                if (model is null)
-                    return Result.Failure($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.");
 
                 // 2. Compaction check
                 if (_compaction.ShouldCompact(session.Messages, model))
@@ -310,6 +310,9 @@ public sealed class AgentLoop : IAgentLoop
                                 finalUsage = sf.Usage;
                                 stopReason = StopReasonJsonConverter.Parse(sf.FinishReason);
                                 partial = partial.WithFinish(stopReason, finalUsage ?? new Usage(0, 0));
+                                // Forward StepFinish to the bus so status bars / views can
+                                // tally token usage. The event is otherwise swallowed here.
+                                await _eventBus.PublishAsync(new MessageUpdateEvent(sf, partial), ct).ConfigureAwait(false);
                                 break;
 
                             case ErrorEvent err:

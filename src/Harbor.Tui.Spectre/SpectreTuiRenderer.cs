@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 namespace Harbor.Tui.Spectre;
@@ -16,6 +17,15 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
         Context = new SpectreRenderContext();
     }
     public override ITuiRenderContext Context { get; }
+
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
+    {
+        // Chat history and the input prompt are handled live by the line REPL
+        // (tokens stream directly, the prompt is written by ReadLineAsync). Only
+        // the status bar and diff overlay are rendered through the builtin views.
+        if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input) return false;
+        return base.ShouldRenderPlacement(placement, @event);
+    }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -39,13 +49,15 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
                 break;
 
             case MessageUpdateEvent mu:
-                RenderLlmEvent(mu.LlmEvent);
+                RenderLiveToken(mu.LlmEvent);
                 break;
 
             case MessageEndEvent:
                 AnsiConsole.WriteLine();
                 break;
 
+            // The following are emitted as live lines (not accumulated in the chat
+            // history view) so they appear inline without repainting the whole log.
             case ToolExecutionStartEvent tes:
                 AnsiConsole.WriteLine();
                 var panel = new Panel(new Markup($"[bold blue]→ {Markup.Escape(tes.ToolName)}[/] [dim]{Markup.Escape(tes.Args.GetRawText())}[/]"))
@@ -53,15 +65,6 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
                     Padding = new Padding(1, 0)
                 };
                 AnsiConsole.Write(panel);
-                break;
-
-            case ToolExecutionEndEvent tee:
-                string color = tee.IsError ? "red" : "green";
-                string label = tee.IsError ? "✗" : "✓";
-                string output = tee.Result.Output.Length > 500
-                    ? tee.Result.Output[..500] + "..."
-                    : tee.Result.Output;
-                AnsiConsole.Write(new Markup($"[{color}]{label}[/] [dim]{Markup.Escape(output)}[/]\n"));
                 break;
 
             case CompactionStartedEvent:
@@ -75,15 +78,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
             case AgentErrorEvent err:
                 AnsiConsole.Write(new Markup($"[red][[error]] {Markup.Escape(err.Message)}[/]\n"));
                 break;
-
-            case AgentEndEvent:
-                AnsiConsole.WriteLine();
-                break;
         }
+
+        // Status bar, finalized chat history, and diff overlay are rendered through
+        // the builtin views in BaseTuiRenderer.
         return base.RenderAsync(@event, ct);
     }
 
-    private static void RenderLlmEvent(LlmEvent evt)
+    private static void RenderLiveToken(LlmEvent evt)
     {
         switch (evt)
         {
@@ -95,16 +97,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer
                 AnsiConsole.Write(new Markup($"[dim italic]{Markup.Escape(thd.Delta)}[/]"));
                 break;
 
-            case ToolCallStartEvent tcs:
-                AnsiConsole.Write(new Markup($"\n[bold blue]→ {Markup.Escape(tcs.ToolName)}[/]"));
-                break;
-
             case ToolCallDeltaEvent tcd:
                 AnsiConsole.Write(new Markup($"[dim]{Markup.Escape(tcd.ArgsDelta)}[/]"));
-                break;
-
-            case StepFinishEvent sf when sf.Usage is not null:
-                AnsiConsole.Write(new Markup($"\n[dim][tokens: {sf.Usage.InputTokens} in / {sf.Usage.OutputTokens} out][/]\n"));
                 break;
         }
     }

@@ -75,6 +75,8 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
             "assistant" => "[assistant] ",
             "tool" => "[tool] ",
             "tool-result" => "[result] ",
+            "system" => "",
+            "error" => "[error] ",
             _ => $"[{role}] "
         };
 
@@ -86,6 +88,8 @@ public sealed class ChatHistoryView : TuiViewBase<ChatHistoryViewModel>
                 "assistant" => TuiColor.Cyan,
                 "tool" => TuiColor.Blue,
                 "tool-result" => TuiColor.Gray,
+                "system" => TuiColor.Yellow,
+                "error" => TuiColor.Red,
                 _ => TuiColor.Default
             };
             context.WriteColored(prefix, color);

@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Plain;
 /// <summary>
@@ -20,6 +21,15 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
         Context = new PlainRenderContext(_writer);
     }
 
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
+    {
+        // Chat history and the input prompt are handled live by the line REPL
+        // (tokens stream directly, the prompt is written by ReadLineAsync). Only
+        // the status bar and diff overlay are rendered through the builtin views.
+        if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input) return false;
+        return base.ShouldRenderPlacement(placement, @event);
+    }
+
     public override ITuiRenderContext Context { get; }
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
@@ -32,21 +42,18 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
                 break;
 
             case MessageUpdateEvent mu:
-                RenderLlmEvent(mu.LlmEvent, ctx);
+                RenderLiveToken(mu.LlmEvent, ctx);
                 break;
 
             case MessageEndEvent:
                 ctx.WriteLine();
                 break;
 
+            // Emitted as live lines (not accumulated in the chat history view) so they
+            // appear inline without repainting the whole log.
             case ToolExecutionStartEvent tes:
                 ctx.WriteLine();
                 ctx.WriteLine($"→ {tes.ToolName} {tes.Args.GetRawText()}");
-                break;
-
-            case ToolExecutionEndEvent tee:
-                string label = tee.IsError ? "ERROR" : "OK";
-                ctx.WriteLine($"  [{label}] {tee.Result.Output}");
                 break;
 
             case CompactionCompletedEvent cc:
@@ -60,7 +67,7 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
         return base.RenderAsync(@event, ct);
     }
 
-    private static void RenderLlmEvent(LlmEvent evt, ITuiRenderContext ctx)
+    private static void RenderLiveToken(LlmEvent evt, ITuiRenderContext ctx)
     {
         switch (evt)
         {
@@ -70,16 +77,8 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
             case ThinkingDeltaEvent thd:
                 ctx.Write(thd.Delta);
                 break;
-            case ToolCallStartEvent tcs:
-                ctx.WriteLine();
-                ctx.Write($"→ {tcs.ToolName} ");
-                break;
             case ToolCallDeltaEvent tcd:
                 ctx.Write(tcd.ArgsDelta);
-                break;
-            case StepFinishEvent sf when sf.Usage is not null:
-                ctx.WriteLine();
-                ctx.WriteLine($"[tokens: {sf.Usage.InputTokens} in / {sf.Usage.OutputTokens} out]");
                 break;
         }
     }

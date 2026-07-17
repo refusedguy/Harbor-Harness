@@ -25,7 +25,10 @@ public abstract record AgentEvent
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }
 
-public sealed record AgentStartEvent(string SessionId, IReadOnlyList<AgentMessage> Messages) : AgentEvent;
+public sealed record AgentStartEvent(
+    string SessionId,
+    IReadOnlyList<AgentMessage> Messages,
+    ModelInfo? Model = null) : AgentEvent;
 
 /// <summary>
 ///     Emitted at the start of each turn inside a run. <see cref="TurnIndex" /> is 1-based.

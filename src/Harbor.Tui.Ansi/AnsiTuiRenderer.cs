@@ -1,5 +1,6 @@
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Ansi;
 /// <summary>
@@ -14,6 +15,15 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
         Context = new AnsiRenderContext();
     }
     public override ITuiRenderContext Context { get; }
+
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
+    {
+        // Chat history and the input prompt are handled live by the line REPL
+        // (tokens stream directly, the prompt is written by ReadLineAsync). Only
+        // the status bar and diff overlay are rendered through the builtin views.
+        if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input) return false;
+        return base.ShouldRenderPlacement(placement, @event);
+    }
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -31,78 +41,58 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        // For ANSI streaming, render events directly for live token streaming
-        RenderEventDirectly(@event);
-        return base.RenderAsync(@event, ct);
-    }
-
-    private void RenderEventDirectly(AgentEvent @event)
-    {
-        var ctx = Context;
+        // Live token streaming is written directly for a smooth character-by-character
+        // feed; everything else (status bar, finalized chat history, diff overlay) is
+        // rendered through the builtin views in BaseTuiRenderer.
         switch (@event)
         {
-            case AgentStartEvent:
-                ctx.WriteLine();
-                break;
-
             case MessageStartEvent:
-                ctx.WriteColored("[assistant] ", TuiColor.Cyan);
+                Context.WriteColored("[assistant] ", TuiColor.Cyan);
                 break;
 
             case MessageUpdateEvent mu:
-                RenderLlmEvent(mu.LlmEvent, ctx);
+                RenderLiveToken(mu.LlmEvent, Context);
                 break;
 
             case MessageEndEvent:
-                ctx.WriteLine();
+                Context.WriteLine();
                 break;
 
+            // The following are emitted as live lines (not accumulated in the chat
+            // history view) so they appear inline without repainting the whole log.
             case ToolExecutionStartEvent tes:
-                ctx.WriteLine();
-                ctx.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
+                Context.WriteLine();
+                Context.WriteColored($"→ {tes.ToolName}", TuiColor.Blue);
                 string args = tes.Args.GetRawText();
                 if (!string.IsNullOrEmpty(args) && args != "{}")
                 {
-                    ctx.WriteStyled($" {args}", TuiStyle.Dim);
+                    Context.WriteStyled($" {args}", TuiStyle.Dim);
                 }
-                ctx.WriteLine();
-                break;
-
-            case ToolExecutionEndEvent tee:
-                var color = tee.IsError ? TuiColor.Red : TuiColor.Gray;
-                string label = tee.IsError ? "✗" : "✓";
-                ctx.WriteColored($"  {label} ", color);
-                string preview = tee.Result.Output.Length > 200
-                    ? tee.Result.Output[..200] + "..."
-                    : tee.Result.Output;
-                ctx.WriteStyled(preview.ReplaceLineEndings("\n  "), TuiStyle.Dim);
-                ctx.WriteLine();
+                Context.WriteLine();
                 break;
 
             case CompactionStartedEvent:
-                ctx.WriteLine();
-                ctx.WriteStyled("[compacting context...]", TuiStyle.Dim);
-                ctx.WriteLine();
+                Context.WriteLine();
+                Context.WriteStyled("[compacting context...]", TuiStyle.Dim);
+                Context.WriteLine();
                 break;
 
             case CompactionCompletedEvent cc:
-                ctx.WriteStyled($"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s]", TuiStyle.Dim);
-                ctx.WriteLine();
+                Context.WriteStyled($"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens in {cc.Duration.TotalSeconds:F1}s]", TuiStyle.Dim);
+                Context.WriteLine();
                 break;
 
             case AgentErrorEvent err:
-                ctx.WriteLine();
-                ctx.WriteColored($"[error] {err.Message}", TuiColor.Red);
-                ctx.WriteLine();
-                break;
-
-            case AgentEndEvent:
-                ctx.WriteLine();
+                Context.WriteLine();
+                Context.WriteColored($"[error] {err.Message}", TuiColor.Red);
+                Context.WriteLine();
                 break;
         }
+
+        return base.RenderAsync(@event, ct);
     }
 
-    private static void RenderLlmEvent(LlmEvent evt, ITuiRenderContext ctx)
+    private static void RenderLiveToken(LlmEvent evt, ITuiRenderContext ctx)
     {
         switch (evt)
         {
@@ -114,19 +104,8 @@ public sealed class AnsiTuiRenderer : BaseTuiRenderer
                 ctx.WriteStyled(thd.Delta, TuiStyle.Dim | TuiStyle.Italic);
                 break;
 
-            case ToolCallStartEvent tcs:
-                ctx.WriteLine();
-                ctx.WriteColored($"→ {tcs.ToolName}", TuiColor.Blue);
-                break;
-
             case ToolCallDeltaEvent tcd:
                 ctx.WriteStyled(tcd.ArgsDelta, TuiStyle.Dim);
-                break;
-
-            case StepFinishEvent sf when sf.Usage is not null:
-                ctx.WriteLine();
-                ctx.WriteStyled($"  [tokens: {sf.Usage.InputTokens} in / {sf.Usage.OutputTokens} out]", TuiStyle.Dim);
-                ctx.WriteLine();
                 break;
         }
     }

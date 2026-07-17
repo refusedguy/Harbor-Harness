@@ -32,9 +32,37 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     private int _tokensOut;
 
     /// <summary>
+    ///     Model context window (max input tokens). 0 when unknown.
+    /// </summary>
+    [ObservableProperty]
+    private int _contextWindow;
+
+    /// <summary>
+    ///     Current context size in tokens (last step's input/prompt token count).
+    /// </summary>
+    [ObservableProperty]
+    private int _contextTokens;
+
+    /// <summary>
+    ///     Context usage as a percentage of <see cref="_contextWindow" />. 0 when unknown.
+    /// </summary>
+    public int ContextPct => ContextWindow > 0 ? Math.Min(100, ContextTokens * 100 / ContextWindow) : 0;
+
+    /// <summary>
+    ///     Set the active model so the view model can compute context usage.
+    /// </summary>
+    /// <param name="model">The resolved model info (may be null).</param>
+    public void SetModel(ModelInfo? model)
+    {
+        ContextWindow = model?.ContextWindow ?? 0;
+    }
+
+    /// <summary>
     ///     Formatted status line for rendering.
     /// </summary>
-    public string Formatted => $"{Provider}/{Model} | agent: {Agent} | ${Cost:F4} | {TokensIn}↑ {TokensOut}↓ | {Status}";
+    public string Formatted => ContextWindow > 0
+        ? $"{Provider}/{Model} | agent: {Agent} | ${Cost:F4} | {TokensIn}↑ {TokensOut}↓ | ctx: {ContextTokens / 1000}k/{ContextPct}% | {Status}"
+        : $"{Provider}/{Model} | agent: {Agent} | ${Cost:F4} | {TokensIn}↑ {TokensOut}↓ | {Status}";
 
     /// <inheritdoc />
     public string Id => "status-bar";
@@ -44,15 +72,17 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     {
         switch (@event)
         {
-            case AgentStartEvent:
+            case AgentStartEvent ase:
                 Status = "running";
+                SetModel(ase.Model);
                 break;
             case AgentEndEvent:
                 Status = "idle";
                 break;
             case MessageUpdateEvent mu when mu.LlmEvent is StepFinishEvent sf && sf.Usage is not null:
-                TokensIn += sf.Usage!.InputTokens;
+                TokensIn += sf.Usage.InputTokens;
                 TokensOut += sf.Usage.OutputTokens;
+                ContextTokens = sf.Usage.InputTokens;
                 break;
             case AgentErrorEvent:
                 Status = "error";
@@ -76,6 +106,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         Cost = 0;
         TokensIn = 0;
         TokensOut = 0;
+        ContextTokens = 0;
         Status = "idle";
     }
 }
