@@ -27,5 +27,9 @@ M:System.Threading.ThreadPool.QueueUserWorkItem(System.Threading.WaitCallback);U
 M:System.Threading.Thread.Sleep(System.Int32);Use Task.Delay in async methods.
 M:System.Threading.Thread.Sleep(System.TimeSpan);Use Task.Delay in async methods.
 
+# Ban sync-over-async: TaskAwaiter.GetResult() — use 'await' instead.
+M:System.Runtime.CompilerServices.TaskAwaiter.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+M:System.Runtime.CompilerServices.ValueTaskAwaiter.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+
 # Ban Console.Write in libraries (only in CLI/TUI projects)
 # (Libraries should use ILogger<T>)

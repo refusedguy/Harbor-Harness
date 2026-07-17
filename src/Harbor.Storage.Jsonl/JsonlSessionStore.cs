@@ -101,7 +101,7 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
-    public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
     {
         try
         {
@@ -109,7 +109,7 @@ public sealed class JsonlSessionStore : ISessionStore
             foreach (string file in Directory.EnumerateFiles(_rootDirectory, "*.jsonl"))
             {
                 string sessionId = Path.GetFileNameWithoutExtension(file);
-                var getResult = GetAsync(sessionId, ct).GetAwaiter().GetResult();
+                var getResult = await GetAsync(sessionId, ct).ConfigureAwait(false);
                 if (getResult.IsSuccess)
                 {
                     if (projectId is null || getResult.Value.ProjectId == projectId)
@@ -118,11 +118,11 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
-            return Task.FromResult(Result.Success<IReadOnlyList<Session>>(sessions));
+            return Result.Success<IReadOnlyList<Session>>(sessions);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(Result.Failure<IReadOnlyList<Session>>(ex.Message));
+            return Result.Failure<IReadOnlyList<Session>>(ex.Message);
         }
     }
 

@@ -116,22 +116,22 @@ public abstract class BaseTuiRenderer : ITuiRenderer
         // from spamming the status bar after every token delta.
         if (ShouldRenderPlacement(TuiViewPlacement.StatusBar, @event))
         {
-            RenderPlacement(TuiViewPlacement.StatusBar, @event);
+            await RenderPlacementAsync(TuiViewPlacement.StatusBar, @event, ct).ConfigureAwait(false);
         }
 
         if (ShouldRenderPlacement(TuiViewPlacement.ChatHistory, @event))
         {
-            RenderPlacement(TuiViewPlacement.ChatHistory, @event);
+            await RenderPlacementAsync(TuiViewPlacement.ChatHistory, @event, ct).ConfigureAwait(false);
         }
 
         if (ShouldRenderPlacement(TuiViewPlacement.Input, @event))
         {
-            RenderPlacement(TuiViewPlacement.Input, @event);
+            await RenderPlacementAsync(TuiViewPlacement.Input, @event, ct).ConfigureAwait(false);
         }
 
         if (ShouldRenderPlacement(TuiViewPlacement.Overlay, @event))
         {
-            RenderPlacement(TuiViewPlacement.Overlay, @event);
+            await RenderPlacementAsync(TuiViewPlacement.Overlay, @event, ct).ConfigureAwait(false);
         }
     }
 
@@ -218,7 +218,7 @@ public abstract class BaseTuiRenderer : ITuiRenderer
         };
     }
 
-    protected void RenderPlacement(TuiViewPlacement placement, AgentEvent @event)
+    protected async Task RenderPlacementAsync(TuiViewPlacement placement, AgentEvent @event, CancellationToken ct = default)
     {
         var views = Views.GetByPlacement(placement);
         if (views.Count == 0) return;
@@ -227,7 +227,7 @@ public abstract class BaseTuiRenderer : ITuiRenderer
         {
             try
             {
-                view.RenderAsync(Context).GetAwaiter().GetResult();
+                await view.RenderAsync(Context, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

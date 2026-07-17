@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Harbor.Tui.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
@@ -17,9 +18,16 @@ namespace Harbor.Cli.Repl;
 /// Slash command dispatcher — single responsibility: route /commands to handlers.
 /// Extracted from Program.cs.
 /// </summary>
-internal static class SlashCommandDispatcher
+internal sealed class SlashCommandDispatcher
 {
-    public static async Task HandleAsync(
+    private readonly ILogger<SlashCommandDispatcher> _logger;
+
+    public SlashCommandDispatcher(ILogger<SlashCommandDispatcher> logger)
+    {
+        _logger = logger;
+    }
+
+    public async Task HandleAsync(
         string input, IServiceProvider sp, ITuiRenderer renderer,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
@@ -30,39 +38,49 @@ internal static class SlashCommandDispatcher
 
         string cmd = parts[0].ToLowerInvariant();
         string[] args = parts.Skip(1).ToArray();
-        var writer = (Action<string>)(msg => renderer.WriteLineAsync(msg).GetAwaiter().GetResult());
+        _logger.LogInformation("Slash command: /{Command} args={ArgCount}", cmd, args.Length);
+        var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
         var reader = (Func<string, Task<string>>)(async prompt =>
         {
             var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
             return r.IsSuccess ? r.Value : string.Empty;
         });
 
-        switch (cmd)
+        try
         {
-            case "help":
-                writer("Commands: /setup /auth /model /agent /config /providers /sessions /tui /storage /exit");
-                break;
-            case "setup":
-                await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
-                break;
-            case "auth":
-                await new AuthCommand(authStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
-                break;
-            case "model":
-                await new ModelCommand(configStore, providers, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
-                break;
-            case "agent" or "mode":
-                await new AgentCommand(configStore, agentRegistry, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
-                break;
-            case "config":
-                await new ConfigCommand(configStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
-                break;
-            case "providers": await ListProviders(sp); break;
-            case "sessions": await ListSessions(sp); break;
-            case "tui": PrintTuiOptions(); break;
-            case "storage": PrintStorageOptions(); break;
-            case "exit" or "quit": Environment.Exit(0); break;
-            default: writer($"Unknown: /{cmd}. /help for commands."); break;
+            switch (cmd)
+            {
+                case "help":
+                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /tui /storage /exit");
+                    break;
+                case "setup":
+                    await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
+                    break;
+                case "auth":
+                    await new AuthCommand(authStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
+                case "model":
+                    await new ModelCommand(configStore, providers, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
+                case "agent" or "mode":
+                    await new AgentCommand(configStore, agentRegistry, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
+                case "config":
+                    await new ConfigCommand(configStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
+                case "providers": await ListProviders(sp); break;
+                case "sessions": await ListSessions(sp); break;
+                case "tui": PrintTuiOptions(); break;
+                case "storage": PrintStorageOptions(); break;
+                case "exit" or "quit": Environment.Exit(0); break;
+                default: _logger.LogWarning("Unknown command: /{Command}", cmd); writer($"Unknown: /{cmd}. /help for commands."); break;
+            }
+            _logger.LogDebug("Command /{Command} completed", cmd);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error dispatching command /{Command}", cmd);
+            writer($"Error: {ex.Message}");
         }
     }
 

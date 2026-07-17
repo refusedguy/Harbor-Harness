@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Collections.Frozen;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NonBlocking;
 namespace Harbor.Abstractions.Providers;
 /// <summary>
@@ -16,11 +18,19 @@ public sealed class ProviderRegistry : IProviderRegistry
     private readonly NonBlocking.ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly object _frozenLock = new();
     private readonly NonBlocking.ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
+    private readonly ILogger<ProviderRegistry> _logger;
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called.
     /// </summary>
     private FrozenDictionary<ProviderId, Lazy<ILlmClient>>? _frozenClients;
+
+    public ProviderRegistry() : this(NullLogger<ProviderRegistry>.Instance) { }
+
+    public ProviderRegistry(ILogger<ProviderRegistry> logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<ProviderId> GetRegisteredProviderIds()
@@ -55,6 +65,7 @@ public sealed class ProviderRegistry : IProviderRegistry
             }
             catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
                 return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
             }
         }
@@ -68,10 +79,12 @@ public sealed class ProviderRegistry : IProviderRegistry
             }
             catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
                 return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
             }
         }
 
+        _logger.LogDebug("Provider not registered: {ProviderId}", providerId);
         return Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
     }
 
@@ -120,6 +133,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                     }
                     catch (Exception ex)
                     {
+                        _logger.LogWarning(ex, "Failed to get models for provider: {ProviderId}", pid);
                         return new ModelBatch(pid, Array.Empty<ModelInfo>(), ex.Message);
                     }
                 }, cancellationToken);

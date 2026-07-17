@@ -2,20 +2,22 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 public class ReadToolTests
 {
     [Test]
     public async Task Name_IsRead()
     {
-        var tool = new ReadTool();
+        var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         await Assert.That(tool.Name.Value).IsEqualTo("read");
     }
 
     [Test]
     public async Task ValidateArguments_MissingPath_ReturnsFailure()
     {
-        var tool = new ReadTool();
+        var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         var args = JsonDocument.Parse("{}").RootElement;
         var result = tool.ValidateArguments(args);
         await Assert.That(result.IsSuccess).IsFalse();
@@ -24,7 +26,7 @@ public class ReadToolTests
     [Test]
     public async Task ExecuteAsync_NonExistentFile_ReturnsError()
     {
-        var tool = new ReadTool();
+        var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         var args = JsonDocument.Parse("""{"path": "/nonexistent/file.txt"}""").RootElement;
         var ctx = CreateContext();
 
@@ -42,7 +44,7 @@ public class ReadToolTests
 
         try
         {
-            var tool = new ReadTool();
+            var tool = new ReadTool(NullLogger<ReadTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -65,7 +67,7 @@ public class ReadToolTests
 
         try
         {
-            var tool = new ReadTool();
+            var tool = new ReadTool(NullLogger<ReadTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -101,7 +103,7 @@ public class WriteToolTests
         string tempFile = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}.txt");
         try
         {
-            var tool = new WriteTool();
+            var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"content\": \"test content\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -124,7 +126,7 @@ public class WriteToolTests
         string tempFile = Path.Combine(tempDir, "sub", "dir", "file.txt");
         try
         {
-            var tool = new WriteTool();
+            var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"content\": \"nested\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -160,7 +162,7 @@ public class EditToolTests
         await File.WriteAllTextAsync(tempFile, "Hello, World!");
         try
         {
-            var tool = new EditTool();
+            var tool = new EditTool(NullLogger<EditTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"World\", \"newString\": \"Harbor\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -182,7 +184,7 @@ public class EditToolTests
         await File.WriteAllTextAsync(tempFile, "Hello");
         try
         {
-            var tool = new EditTool();
+            var tool = new EditTool(NullLogger<EditTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"notthere\", \"newString\": \"x\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -204,7 +206,7 @@ public class EditToolTests
         await File.WriteAllTextAsync(tempFile, "ababab");
         try
         {
-            var tool = new EditTool();
+            var tool = new EditTool(NullLogger<EditTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"a\", \"newString\": \"x\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -225,7 +227,7 @@ public class EditToolTests
         await File.WriteAllTextAsync(tempFile, "ababab");
         try
         {
-            var tool = new EditTool();
+            var tool = new EditTool(NullLogger<EditTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"a\", \"newString\": \"x\", \"replaceAll\": true}}").RootElement;
             var ctx = CreateContext();
 
@@ -265,7 +267,7 @@ public class GlobToolTests
 
         try
         {
-            var tool = new GlobTool();
+            var tool = new GlobTool(NullLogger<GlobTool>.Instance);
             var args = JsonDocument.Parse($"{{\"pattern\": \"*.cs\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -306,7 +308,7 @@ public class GrepToolTests
 
         try
         {
-            var tool = new GrepTool();
+            var tool = new GrepTool(NullLogger<GrepTool>.Instance);
             var args = JsonDocument.Parse($"{{\"pattern\": \"foo\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -332,7 +334,7 @@ public class GrepToolTests
 
         try
         {
-            var tool = new GrepTool();
+            var tool = new GrepTool(NullLogger<GrepTool>.Instance);
             var args = JsonDocument.Parse($"{{\"pattern\": \"xyz\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
             var ctx = CreateContext();
 
@@ -364,7 +366,7 @@ public class BashToolTests
     [Test]
     public async Task ExecuteAsync_Echo_ReturnsOutput()
     {
-        var tool = new BashTool();
+        var tool = new BashTool(NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command": "echo hello"}""").RootElement;
         var ctx = CreateContext();
 
@@ -377,7 +379,7 @@ public class BashToolTests
     [Test]
     public async Task ExecuteAsync_ExitCode_NonZero_ReturnsError()
     {
-        var tool = new BashTool();
+        var tool = new BashTool(NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse("""{"command": "exit 1"}""").RootElement;
         var ctx = CreateContext();
 

@@ -78,6 +78,7 @@ public sealed class AgentLoop : IAgentLoop
     {
         try
         {
+            _logger.LogInformation("Agent loop starting: agent={Agent}", agent.Name.Value);
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
 
             int turn = 0;
@@ -110,6 +111,7 @@ public sealed class AgentLoop : IAgentLoop
                 // 2. Compaction check
                 if (_compaction.ShouldCompact(session.Messages, model))
                 {
+                    _logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
                     await _eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
                     var compactionResult = await _compaction.CompactAsync(session.Session.Id, session.Messages, model, ct).ConfigureAwait(false);
 
@@ -166,6 +168,7 @@ public sealed class AgentLoop : IAgentLoop
                 //    to avoid creating a new array per delta (the previous AppendText per-delta approach
                 //    was O(n²) in array allocations).
                 var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
+                _logger.LogDebug("Message start: turn={Turn}", turn);
                 await _eventBus.PublishAsync(new MessageStartEvent(partial), ct).ConfigureAwait(false);
 
                 // Pre-size to typical tool-call count to avoid List resizes.
@@ -346,6 +349,7 @@ public sealed class AgentLoop : IAgentLoop
                     partial = partial.WithFinish(StopReason.Aborted, finalUsage ?? new Usage(0, 0));
                 }
 
+                _logger.LogDebug("Message end: turn={Turn} stopReason={StopReason}", turn, stopReason);
                 await _eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
                 await session.AppendMessageAsync(partial, ct).ConfigureAwait(false);
                 if (finalUsage != null)
@@ -357,6 +361,7 @@ public sealed class AgentLoop : IAgentLoop
                 _logger.LogDebug("Turn {Turn}: toolCalls={ToolCalls} stopReason={StopReason}", turn, toolCalls.Count, stopReason);
                 if (toolCalls.Count == 0 || stopReason is StopReason.Stop or StopReason.Length or StopReason.Aborted)
                 {
+                    _logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
                     await _eventBus.PublishAsync(
                         new TurnEndEvent(partial, Array.Empty<ToolResultMessage>()), ct).ConfigureAwait(false);
                     break;
@@ -371,6 +376,7 @@ public sealed class AgentLoop : IAgentLoop
                 // tool_call, otherwise the model loops calling the same tool).
                 await session.AppendMessageAsync(toolResults, ct).ConfigureAwait(false);
 
+                _logger.LogDebug("Turn {Turn} end (with tool results)", turn);
                 await _eventBus.PublishAsync(
                     new TurnEndEvent(partial, new[] { toolResults }), ct).ConfigureAwait(false);
 
@@ -388,6 +394,7 @@ public sealed class AgentLoop : IAgentLoop
                 }
             }
 
+            _logger.LogInformation("Agent loop completed: agent={Agent}", agent.Name.Value);
             await _eventBus.PublishAsync(
                 new AgentEndEvent(SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
 
@@ -561,6 +568,7 @@ public sealed class AgentLoop : IAgentLoop
 
         await _eventBus.PublishAsync(new ToolExecutionStartEvent(
             toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
+        _logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
 
         try
         {
@@ -620,6 +628,7 @@ public sealed class AgentLoop : IAgentLoop
 
             var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);
 
+            _logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
             await _eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, result, result.IsError), ct).ConfigureAwait(false);
 

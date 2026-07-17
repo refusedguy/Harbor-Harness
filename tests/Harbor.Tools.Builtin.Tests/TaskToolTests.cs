@@ -5,6 +5,8 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -56,14 +58,14 @@ public class TaskToolTests
     public async Task Name_IsTask()
     {
         var agents = new AgentRegistry();
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
         await Assert.That(tool.Name.Value).IsEqualTo("task");
     }
 
     [Test]
     public async Task ValidateArguments_MissingAgent_ReturnsFailure()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         var args = JsonDocument.Parse("""{"prompt":"hi"}""").RootElement;
 
         var result = tool.ValidateArguments(args);
@@ -75,7 +77,7 @@ public class TaskToolTests
     [Test]
     public async Task ValidateArguments_MissingPrompt_ReturnsFailure()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         var args = JsonDocument.Parse("""{"agent":"explore"}""").RootElement;
 
         var result = tool.ValidateArguments(args);
@@ -87,7 +89,7 @@ public class TaskToolTests
     [Test]
     public async Task ValidateArguments_AgentNotString_ReturnsFailure()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         var args = JsonDocument.Parse("""{"agent":123,"prompt":"hi"}""").RootElement;
 
         var result = tool.ValidateArguments(args);
@@ -98,7 +100,7 @@ public class TaskToolTests
     [Test]
     public async Task ValidateArguments_BothPresent_ReturnsSuccess()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         var args = Args(("agent", "explore"), ("prompt", "look around"));
 
         var result = tool.ValidateArguments(args);
@@ -111,7 +113,7 @@ public class TaskToolTests
     {
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
         var args = Args(("agent", "nonexistent"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
@@ -126,7 +128,7 @@ public class TaskToolTests
     {
         var agents = new AgentRegistry();
         agents.Register(NonSubAgent("code"));
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
         var args = Args(("agent", "code"), ("prompt", "do work"));
         var result = await tool.ExecuteAsync(args, CreateContext());
@@ -141,7 +143,7 @@ public class TaskToolTests
     {
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
         var args = Args(("agent", "explore"), ("prompt", "find all TODO comments in src/"));
         var result = await tool.ExecuteAsync(args, CreateContext());
@@ -155,7 +157,7 @@ public class TaskToolTests
     public async Task ExecuteAsync_InvalidAgentName_ReturnsError()
     {
         var agents = new AgentRegistry();
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
         // AgentName.Create lowercases and accepts any non-empty string, so use a
         // clearly invalid one — empty string triggers the failure path.
@@ -170,7 +172,7 @@ public class TaskToolTests
     public async Task ExecuteAsync_NoSubAgentsRegistered_ListsEmpty()
     {
         var agents = new AgentRegistry();
-        var tool = new TaskTool(agents);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
         var args = Args(("agent", "explore"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
@@ -182,14 +184,14 @@ public class TaskToolTests
     [Test]
     public async Task ExecutionMode_IsSequential()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         await Assert.That(tool.ExecutionMode).IsEqualTo(ExecutionMode.Sequential);
     }
 
     [Test]
     public async Task PromptSnippet_ContainsTaskKeyword()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         await Assert.That(tool.PromptSnippet).IsNotNull();
         await Assert.That(tool.PromptSnippet!).Contains("task");
     }
@@ -197,7 +199,7 @@ public class TaskToolTests
     [Test]
     public async Task PromptGuidelines_ContainsSubAgentExamples()
     {
-        var tool = new TaskTool(new AgentRegistry());
+        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         await Assert.That(tool.PromptGuidelines.Count).IsGreaterThan(0);
         // The guidelines should mention at least one of the builtin sub-agents.
         bool mentionsExplore = tool.PromptGuidelines.Any(g => g.Contains("explore"));

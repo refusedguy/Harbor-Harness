@@ -1,11 +1,16 @@
 using System.Diagnostics;
 using System.Text;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Tools.Builtin;
 /// <summary>
 ///     Executes shell commands. Captures stdout/stderr/exit code.
 /// </summary>
 public sealed class BashTool : ITool
 {
+    private readonly ILogger<BashTool> _logger;
+
+    public BashTool(ILogger<BashTool> logger) { _logger = logger; }
+
     public ToolName Name => ToolName.Create("bash");
     public string DisplayName => "Bash";
     public string Description => "Execute a shell command. Output is captured and returned. Commands run in the current working directory. Use `cwd` to override.";
@@ -88,6 +93,8 @@ public sealed class BashTool : ITool
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeout));
 
+        _logger.LogDebug("Executing: {Command} (timeout: {Timeout}s)", command, timeout);
+
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is not null) stdout.AppendLine(e.Data);
@@ -107,7 +114,7 @@ public sealed class BashTool : ITool
         {
             await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
             if (!process.HasExited)
             {
@@ -115,6 +122,7 @@ public sealed class BashTool : ITool
                 catch
                 { /* ignore */
                 }
+                _logger.LogWarning(ex, "Command timed out after {Timeout}s", timeout);
                 return ToolResult.Error(
                     $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
             }
@@ -124,6 +132,8 @@ public sealed class BashTool : ITool
         if (stdout.Length > 0) output.AppendLine(stdout.ToString());
         if (stderr.Length > 0) output.AppendLine($"[stderr]\n{stderr}");
         output.AppendLine($"[exit code: {process.ExitCode}]");
+
+        _logger.LogInformation("Command completed: exit={ExitCode}", process.ExitCode);
 
         if (output.Length > 50_000)
             output.Length = 50_000;

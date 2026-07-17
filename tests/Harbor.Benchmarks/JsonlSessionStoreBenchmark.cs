@@ -33,7 +33,9 @@ public class JsonlSessionStoreBenchmark
         Directory.CreateDirectory(_rootDirectory);
         _store = new JsonlSessionStore(_rootDirectory, NullLogger<JsonlSessionStore>.Instance);
 
+#pragma warning disable RS0030 // Do not use APIs banned for analyzers — BenchmarkDotNet [IterationSetup] requires sync
         var createResult = _store.CreateAsync("/tmp", "code", "stub", "stub-1").GetAwaiter().GetResult();
+#pragma warning restore RS0030
         _session = createResult.IsSuccess ? createResult.Value : throw new InvalidOperationException("create failed");
         _sessionId = _session.Id;
 

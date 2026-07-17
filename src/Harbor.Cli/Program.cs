@@ -11,16 +11,37 @@ namespace Harbor.Cli;
 /// </summary>
 public static class Program
 {
+    private static ILogger _logger = null!;
+
     public static async Task<int> Main(string[] args)
     {
+        var logLevel = ResolveLogLevel(args);
+        var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddProvider(new Logging.FileLoggerProvider(logLevel));
+            if (logLevel <= LogLevel.Information)
+            {
+                builder.AddSimpleConsole(o =>
+                {
+                    o.SingleLine = true;
+                    o.TimestampFormat = "HH:mm:ss ";
+                });
+            }
+            builder.SetMinimumLevel(logLevel);
+        });
+        _logger = loggerFactory.CreateLogger(typeof(Program).FullName ?? "Program");
+
+        _logger.LogInformation("Starting Harbor CLI with {ArgCount} args: {Args}", args.Length, string.Join(' ', args));
         try
         {
-
-
         if (args.Length == 0)
+        {
+            _logger.LogInformation("No args provided — entering interactive mode");
             return await RunInteractiveAsync(args);
+        }
 
         string command = args[0].ToLowerInvariant();
+        _logger.LogInformation("Command: {Command}", command);
         return command switch
         {
             "ask" => await RunAskAsync(args.Skip(1).ToArray()),
@@ -39,6 +60,7 @@ public static class Program
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled exception in CLI entry point");
             Console.Error.WriteLine(ex.Message);
             return 1;
         }
@@ -46,36 +68,45 @@ public static class Program
 
     private static async Task<int> RunInteractiveAsync(params string[] args)
     {
+        _logger.LogInformation("Starting interactive mode");
         using var host = HostBuilder.Build(args);
-        return await ReplRunner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
+        var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
+        var exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
+        _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
+        return exitCode;
     }
 
     private static async Task<int> RunAskAsync(string[] args)
     {
         if (args.Length == 0) { Console.Error.WriteLine("Usage: harbor ask <prompt>"); return 1; }
         string prompt = string.Join(' ', StripLogArgs(args));
+        _logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
         using var host = HostBuilder.Build(args);
-        return await ReplRunner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+        var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
+        return await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
     }
 
     private static async Task<int> RunSetupAsync()
     {
+        _logger.LogInformation("Starting setup wizard");
         using var host = HostBuilder.Build();
         var wizard = host.Services.GetRequiredService<Core.Onboarding.OnboardingWizard>();
         var renderer = host.Services.GetRequiredService<Tui.Abstractions.ITuiRenderer>();
         await renderer.InitializeAsync().ConfigureAwait(false);
-        var writer = (Action<string>)(msg => renderer.WriteLineAsync(msg).GetAwaiter().GetResult());
+        var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
         var reader = (Func<string, Task<string>>)(async prompt =>
         {
             var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
             return r.IsSuccess ? r.Value : string.Empty;
         });
         var result = await wizard.RunAsync(reader, writer).ConfigureAwait(false);
+        _logger.LogInformation("Setup wizard finished with success={Success}", result.IsSuccess);
         return result.IsSuccess ? 0 : 1;
     }
 
     private static async Task<int> RunAuthAsync(string[] args)
     {
+        _logger.LogInformation("Starting auth command");
         using var host = HostBuilder.Build(args);
         var authStore = host.Services.GetRequiredService<Core.Configuration.AuthStore>();
         var writer = (Action<string>)Console.WriteLine;
@@ -90,6 +121,7 @@ public static class Program
 
     private static async Task<int> RunConfigAsync(string[] args)
     {
+        _logger.LogInformation("Starting config command");
         using var host = HostBuilder.Build(args);
         var configStore = host.Services.GetRequiredService<Core.Configuration.IConfigStore>();
         var writer = (Action<string>)Console.WriteLine;
@@ -104,10 +136,13 @@ public static class Program
 
     private static async Task<int> RunListProvidersAsync()
     {
+        _logger.LogInformation("Listing providers");
         using var host = HostBuilder.Build();
         var providers = host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>();
-        Console.WriteLine($"Providers ({providers.GetRegisteredProviderIds().Count}):");
-        foreach (var id in providers.GetRegisteredProviderIds())
+        var ids = providers.GetRegisteredProviderIds();
+        _logger.LogInformation("Found {Count} registered providers", ids.Count);
+        Console.WriteLine($"Providers ({ids.Count}):");
+        foreach (var id in ids)
         {
             var r = providers.GetClient(id);
             Console.WriteLine($"  [{(r.IsSuccess ? "OK" : "FAIL")}] {id}");
@@ -118,6 +153,7 @@ public static class Program
 
     private static async Task<int> RunListModelsAsync(string? providerId)
     {
+        _logger.LogInformation("Listing models for provider {Provider}", providerId ?? "(all)");
         using var host = HostBuilder.Build();
         var providers = host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>();
         if (!string.IsNullOrEmpty(providerId))
@@ -128,12 +164,14 @@ public static class Program
             if (clientResult.IsFailure) { Console.Error.WriteLine(clientResult.Error); return 1; }
             var modelsResult = await clientResult.Value.GetModelsAsync().ConfigureAwait(false);
             if (modelsResult.IsFailure) { Console.Error.WriteLine(modelsResult.Error); return 1; }
+            _logger.LogInformation("Found {Count} models for {Provider}", modelsResult.Value.Count, providerId);
             Console.WriteLine($"Models for {providerId}:");
             foreach (var m in modelsResult.Value) Console.WriteLine($"  {m.Id} — {m.DisplayName}");
             return 0;
         }
         var allResult = await providers.GetAllModelsAsync().ConfigureAwait(false);
         if (allResult.IsFailure) { Console.Error.WriteLine(allResult.Error); return 1; }
+        _logger.LogInformation("Found {Count} total models", allResult.Value.Count);
         Console.WriteLine($"All models ({allResult.Value.Count}):");
         foreach (var g in allResult.Value.GroupBy(m => m.ProviderId))
         {
@@ -145,12 +183,16 @@ public static class Program
 
     private static async Task<int> RunListSessionsAsync()
     {
+        _logger.LogInformation("Listing sessions");
         using var host = HostBuilder.Build();
         var store = host.Services.GetRequiredService<Abstractions.Sessions.ISessionStore>();
         var result = await store.ListAsync().ConfigureAwait(false);
         if (result.IsSuccess)
+        {
+            _logger.LogInformation("Found {Count} sessions", result.Value.Count);
             foreach (var s in result.Value)
                 Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
+        }
         return 0;
     }
 

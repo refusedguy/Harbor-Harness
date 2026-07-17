@@ -2,6 +2,8 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Abstractions.Events;
 /// <summary>
 ///     In-memory pub/sub event bus. Implements Observer pattern (GOF).
@@ -16,6 +18,7 @@ public sealed class InMemoryEventBus : IEventBus
 {
     private readonly int _maxScrollback;
     private readonly Channel<AgentEvent> _scrollback;
+    private readonly ILogger<InMemoryEventBus> _logger;
     /// <summary>
     ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
     ///     snapshot reads with zero allocation; mutations use <see cref="ImmutableInterlocked" />
@@ -28,8 +31,16 @@ public sealed class InMemoryEventBus : IEventBus
     ///     supplied capacity.
     /// </summary>
     /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers.</param>
-    public InMemoryEventBus(int maxScrollback = 1000)
+    public InMemoryEventBus(int maxScrollback = 1000) : this(NullLogger<InMemoryEventBus>.Instance, maxScrollback) { }
+
+    /// <summary>
+    ///     Construct an <see cref="InMemoryEventBus" /> with a logger and bounded scrollback buffer.
+    /// </summary>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers.</param>
+    public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback = 1000)
     {
+        _logger = logger;
         _maxScrollback = maxScrollback;
         _scrollback = Channel.CreateBounded<AgentEvent>(new BoundedChannelOptions(maxScrollback)
         {
@@ -42,6 +53,8 @@ public sealed class InMemoryEventBus : IEventBus
     /// <inheritdoc />
     public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
+        _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
+
         // 1. Add to scrollback channel (drop oldest if full)
         _scrollback.Writer.TryWrite(@event);
 
@@ -49,8 +62,11 @@ public sealed class InMemoryEventBus : IEventBus
         var snapshot = _subscriptions;
         if (snapshot.IsEmpty)
         {
+            _logger.LogTrace("No subscribers for event {EventType}", @event.GetType().Name);
             return;
         }
+
+        _logger.LogTrace("Publishing to {SubscriberCount} subscribers", snapshot.Length);
 
         // 3. Fan-out to subscribers; collect failures in a pooled array to avoid
         //    allocating a List in the common case where nothing throws.
@@ -66,8 +82,9 @@ public sealed class InMemoryEventBus : IEventBus
                 {
                     await sub.Handler(@event, ct).ConfigureAwait(false);
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
                     if (dead is null)
                     {
                         dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);

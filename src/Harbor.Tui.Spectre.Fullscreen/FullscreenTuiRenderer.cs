@@ -70,12 +70,11 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         }
     }
 
-    public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
+    public override async Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         ApplyEvent(@event);
-        base.RenderAsync(@event, ct).GetAwaiter().GetResult();
+        await base.RenderAsync(@event, ct).ConfigureAwait(false);
         Redraw();
-        return Task.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -169,7 +168,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     //  Interactive REPL — delegates input to InputState, scroll to ScrollManager
     // ═══════════════════════════════════════════════════════════════
 
-    public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
+    public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
         _layout.Model = agent.State.Agent.Model;
         _layout.Provider = agent.State.Agent.ProviderId;
@@ -181,21 +180,21 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         var live = AnsiConsole.Live(_layout.Build());
 
         AnsiConsole.Cursor.Hide();
-        live.StartAsync(async ctx =>
+        await live.StartAsync(async ctx =>
         {
             _liveCtx = ctx;
             while (!_stop) await Task.Delay(100, ct).ConfigureAwait(false);
-        }).GetAwaiter().GetResult();
+        }).ConfigureAwait(false);
 
-        inputTask.GetAwaiter().GetResult();
+        await inputTask.ConfigureAwait(false);
 
         Console.Write("\x1b[?1006l\x1b[?1000l");
         AnsiConsole.Cursor.Show();
         AnsiConsole.WriteLine();
-        return Task.FromResult(0);
+        return 0;
     }
 
-    private void RunInputLoopAsync(IAgent agent, CancellationToken ct)
+    private async Task RunInputLoopAsync(IAgent agent, CancellationToken ct)
     {
         while (!_stop)
         {
@@ -203,7 +202,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             {
                 _footer = "[yellow]⏳ Working…[/]  [grey](Esc = abort, wheel/PageUp/Down = scroll)[/]";
                 _layout.Footer = _footer;
-                RunWaitLoop(agent, ct);
+                await RunWaitLoopAsync(agent, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -221,7 +220,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
 
             if (trimmed.StartsWith('/'))
             {
-                if (_slashHandler is not null) _slashHandler(trimmed).GetAwaiter().GetResult();
+                if (_slashHandler is not null) await _slashHandler(trimmed).ConfigureAwait(false);
                 _chat.Add("system", $"[dim]/{trimmed[1..]}[/]");
                 continue;
             }
@@ -230,11 +229,11 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             _chat.Add("user", trimmed);
             _footer = "[yellow]⏳ Working…[/]  [grey](Esc = abort, wheel/PageUp/Down = scroll)[/]";
             _layout.Footer = _footer;
-            agent.PromptAsync(trimmed, ct).GetAwaiter().GetResult();
+            await agent.PromptAsync(trimmed, ct).ConfigureAwait(false);
         }
     }
 
-    private void RunWaitLoop(IAgent agent, CancellationToken ct)
+    private async Task RunWaitLoopAsync(IAgent agent, CancellationToken ct)
     {
         while (agent.State.IsRunning && !_stop)
         {
@@ -256,7 +255,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 case ConsoleKey.Escape:
                     agent.AbortSource.Cancel();
                     _chat.Add("system", "[yellow]⏹ Aborted.[/]");
-                    agent.WaitForIdleAsync(ct).GetAwaiter().GetResult();
+                    await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;
                 case ConsoleKey.PageUp: DoScrollUp(5); break;
                 case ConsoleKey.PageDown: DoScrollDown(5); break;
@@ -267,7 +266,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 case ConsoleKey.C when (key.Modifiers & ConsoleModifiers.Control) != 0:
                     agent.AbortSource.Cancel();
                     _chat.Add("system", "[yellow]⏹ Cancelled (Ctrl+C).[/]");
-                    agent.WaitForIdleAsync(ct).GetAwaiter().GetResult();
+                    await agent.WaitForIdleAsync(ct).ConfigureAwait(false);
                     break;
                 case ConsoleKey.L when (key.Modifiers & ConsoleModifiers.Control) != 0:
                     Redraw();
@@ -279,7 +278,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     private string? ReadInput(CancellationToken ct)
     {
         _input.Clear();
-        
+
         _layout.IsReadingInput = true;
         Redraw();
 
@@ -287,7 +286,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         {
             if (ct.IsCancellationRequested)
             {
-                
+
                 _layout.IsReadingInput = false;
                 return null;
             }
@@ -314,7 +313,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             if (key.Key == ConsoleKey.Enter)
             {
                 var result = _input.Consume();
-                
+
                 _layout.IsReadingInput = false;
                 Redraw();
                 return result;
@@ -347,7 +346,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             // Ctrl+C
             if (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0)
             {
-                
+
                 _layout.IsReadingInput = false;
                 _stop = true;
                 return null;

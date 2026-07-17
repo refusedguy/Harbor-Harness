@@ -31,7 +31,6 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Tui.Termina;
-using Termina.Hosting;
 
 namespace Harbor.Cli.Hosting;
 /// <summary>
@@ -40,6 +39,9 @@ namespace Harbor.Cli.Hosting;
 /// </summary>
 internal static class HostBuilder
 {
+    private static ILoggerFactory _loggerFactory = null!;
+    private static ILogger _logger = null!;
+
     public static IHost Build(params string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -54,6 +56,11 @@ internal static class HostBuilder
 
         var builder = Host.CreateApplicationBuilder();
         ConfigureLogging(builder, args);
+
+        _loggerFactory = builder.Services.BuildServiceProvider().GetRequiredService<ILoggerFactory>();
+        _logger = _loggerFactory.CreateLogger(typeof(HostBuilder).FullName ?? "HostBuilder");
+
+        _logger.LogInformation("Building host");
         RegisterCore(builder);
         RegisterRegistries(builder, harborDir);
         RegisterStorage(builder, sessionsDir, sqlitePath);
@@ -66,7 +73,7 @@ internal static class HostBuilder
     {
         builder.Logging.ClearProviders();
         var logLevel = Program.ResolveLogLevel(args);
-        builder.Logging.AddProvider(new FileLoggerProvider(logLevel));
+
         if (logLevel <= LogLevel.Information)
         {
             builder.Logging.AddSimpleConsole(o =>
@@ -80,13 +87,14 @@ internal static class HostBuilder
 
     private static void RegisterCore(HostApplicationBuilder builder)
     {
+        _logger.LogInformation("Registering core services");
         builder.Services.AddSingleton<IConfigStore>(sp => new JsonConfigStore(
             logger: sp.GetRequiredService<ILogger<JsonConfigStore>>()));
         builder.Services.AddSingleton<AuthStore>();
         builder.Services.AddSingleton<OnboardingWizard>();
         builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
-        builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(maxScrollback: 1000));
-        builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(sp.GetRequiredService<ILogger<InMemoryEventBus>>(), 1000));
+        builder.Services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
@@ -94,10 +102,14 @@ internal static class HostBuilder
 
     private static void RegisterRegistries(HostApplicationBuilder builder, string harborDir)
     {
+        _logger.LogInformation("Loading config");
         var configStore = new JsonConfigStore(logger: builder.Services.BuildServiceProvider().GetRequiredService<ILogger<JsonConfigStore>>());
+#pragma warning disable RS0030 // Do not use APIs banned for analyzers — DI setup is synchronous, no SynchronizationContext present
         var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
+#pragma warning restore RS0030
         ApplyEnvOverrides(config);
 
+        _logger.LogInformation("Registering agents, tools, providers, compaction, and permissions");
         builder.Services.AddSingleton<IAgentRegistry>(sp => CreateAgentRegistry(config));
         builder.Services.AddSingleton<IToolRegistry>(sp => CreateToolRegistry(sp));
         builder.Services.AddSingleton<IProviderRegistry>(sp => CreateProviderRegistry(sp, harborDir, config));
@@ -138,21 +150,23 @@ internal static class HostBuilder
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry);
-        tb.AddTool<ReadTool>();
-        tb.AddTool<WriteTool>();
-        tb.AddTool<EditTool>();
-        tb.AddTool<BashTool>();
-        tb.AddTool<GlobTool>();
-        tb.AddTool<GrepTool>();
-        tb.AddTool<LsTool>();
-        tb.AddTool(new TaskTool(sp.GetRequiredService<IAgentRegistry>()));
+        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+        tb.AddTool(() => new ReadTool(loggerFactory.CreateLogger<ReadTool>()));
+        tb.AddTool(() => new WriteTool(loggerFactory.CreateLogger<WriteTool>()));
+        tb.AddTool(() => new EditTool(loggerFactory.CreateLogger<EditTool>()));
+        tb.AddTool(() => new BashTool(loggerFactory.CreateLogger<BashTool>()));
+        tb.AddTool(() => new GlobTool(loggerFactory.CreateLogger<GlobTool>()));
+        tb.AddTool(() => new GrepTool(loggerFactory.CreateLogger<GrepTool>()));
+        tb.AddTool(() => new LsTool(loggerFactory.CreateLogger<LsTool>()));
+        tb.AddTool(new TaskTool(sp.GetRequiredService<IAgentRegistry>(), loggerFactory.CreateLogger<TaskTool>()));
         registry.Freeze();
+        _logger.LogInformation("Registered {Count} tools", 8);
         return registry;
     }
 
     private static ProviderRegistry CreateProviderRegistry(IServiceProvider sp, string harborDir, HarborConfig config)
     {
-        var registry = new ProviderRegistry();
+        var registry = new ProviderRegistry(sp.GetRequiredService<ILogger<ProviderRegistry>>());
         var pb = new ProviderRegistryBuilder(registry);
         var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
@@ -176,12 +190,14 @@ internal static class HostBuilder
         ProviderRegistration.RegisterJsonProviders(pb, httpFactory, loggerFactory, cacheDir, authStore);
 
         registry.Freeze();
+        _logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
         return registry;
     }
 
     private static void RegisterStorage(HostApplicationBuilder builder, string sessionsDir, string sqlitePath)
     {
         string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "jsonl";
+        _logger.LogInformation("Storage backend: {Storage}", storage);
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
         {
             "memory" => new MemorySessionStore(),
@@ -193,14 +209,12 @@ internal static class HostBuilder
     private static void RegisterTui(HostApplicationBuilder builder)
     {
         var configStore = new JsonConfigStore(logger: builder.Services.BuildServiceProvider().GetRequiredService<ILogger<JsonConfigStore>>());
+#pragma warning disable RS0030 // Do not use APIs banned for analyzers — DI setup is synchronous, no SynchronizationContext present
         var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
+#pragma warning restore RS0030
 
-        string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "ansi";
-        if (tui.ToLowerInvariant() is "termina")
-        {
-            builder.Services.AddSingleton<ChatBridge>();
-            builder.Services.AddTermina("/chat", termina => termina.RegisterRoute<ChatPage, ChatViewModel>("/chat"));
-        }
+        string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "spectre-tui";
+        _logger.LogInformation("TUI renderer: {Tui}", tui);
         builder.Services.AddSingleton<ITuiRenderer>(sp => tui.ToLowerInvariant() switch
         {
             "plain" => new PlainTuiRenderer(),
@@ -216,6 +230,7 @@ internal static class HostBuilder
 
     private static void RegisterHttpClients(HostApplicationBuilder builder)
     {
+        _logger.LogInformation("Registering HTTP clients");
         builder.Services.AddHttpClient("anthropic");
         builder.Services.AddHttpClient("openai");
         builder.Services.AddHttpClient("ollama");

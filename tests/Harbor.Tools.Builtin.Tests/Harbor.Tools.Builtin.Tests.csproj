@@ -9,6 +9,7 @@
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
     <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj"/>
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0"/>
   </ItemGroup>
 
 </Project>
