@@ -4,7 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.SpectreTui;
-using Harbor.Tui.SpectreTui.Helpers;
+using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tui.Tests;
@@ -263,7 +263,7 @@ public class SpectreTuiRendererTests
     }
 }
 
-public class SpectreTuiLayoutBuilderTests
+public class SpectreTuiChatViewProjectorTests
 {
     [Test]
     public async Task BuildWidgets_WithUnbalancedBrackets_DoesNotThrow()
@@ -275,7 +275,7 @@ public class SpectreTuiLayoutBuilderTests
             new ChatLine(ChatRole.Tool, "→ read  {\"path\":\"a\"}"),
             new ChatLine(ChatRole.ToolResult, "✓ [1, 2, 3] ok ] trailing"),
             new ChatLine(ChatRole.User, "use a[b] syntax"));
-        var layout = new LayoutBuilder();
+        var layout = new ChatViewProjector();
         layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
 
         var widgets = layout.BuildWidgets(0);
@@ -288,13 +288,92 @@ public class SpectreTuiLayoutBuilderTests
     public async Task BuildWidgets_StreamingAppendsActiveBuffers()
     {
         var lines = ImmutableArray.Create(new ChatLine(ChatRole.User, "hi"));
-        var layout = new LayoutBuilder();
+        var layout = new ChatViewProjector();
         layout.SetLines(lines, isStreaming: true, new ActiveMessage("Hello", "Thinking…"));
 
         var widgets = layout.BuildWidgets(0);
 
         await Assert.That(widgets.Count).IsEqualTo(6);
         await Assert.That(layout.IsStreaming).IsTrue();
+    }
+
+    [Test]
+    public async Task BuildHistory_SlicesInDisplayRows_NotChatLines()
+    {
+        // Regression for "scroll mixes ChatLine count with terminal rows": a single
+        // long message that expands to many display rows must be sliced by ROW count,
+        // so a small viewport never surfaces more rows than it can show, and a large
+        // viewport with few long messages must not report a dead (zero) scroll.
+        var longMsg =
+            "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10";
+        var lines = ImmutableArray.Create(
+            new ChatLine(ChatRole.User, "u1"),
+            new ChatLine(ChatRole.Assistant, longMsg),
+            new ChatLine(ChatRole.User, "u2"));
+
+        var layout = new ChatViewProjector();
+        layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
+
+        // 3 messages → (1+1) + (10+1) + (1+1) = 15 display rows total.
+        const int viewport = 5;
+        layout.BuildWidgets(viewport);
+
+        // Visible window must never exceed the viewport height, regardless of how many
+        // ChatLines map into it (this is the bug: slicing before expand overflowed).
+        await Assert.That(layout.TotalLines - layout.HistoryTopRow).IsLessThanOrEqualTo(viewport);
+
+        // TotalLines is the FULL wrapped content, not the truncated visible window,
+        // so scroll math has a correct denominator.
+        await Assert.That(layout.TotalLines).IsEqualTo(15);
+        await Assert.That(layout.ViewportLines).IsEqualTo(viewport);
+    }
+
+    [Test]
+    public async Task BuildHistory_ScrollOffsetIsDisplayRowsFromBottom()
+    {
+        var longMsg = string.Join("\n", Enumerable.Range(1, 20).Select(i => $"a{i}"));
+        var lines = ImmutableArray.Create(
+            new ChatLine(ChatRole.Assistant, longMsg),
+            new ChatLine(ChatRole.User, "tail"));
+
+        var layout = new ChatViewProjector();
+        layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
+
+        const int viewport = 4;
+        // Offset 0 → pinned to tail → first visible row is (TotalLines - viewport).
+        layout.ScrollOffset = 0;
+        layout.BuildWidgets(viewport);
+        int pinnedTop = layout.HistoryTopRow;
+        await Assert.That(layout.TotalLines).IsEqualTo(23); // 20 + blank + 1 + blank
+        await Assert.That(pinnedTop).IsEqualTo(23 - viewport);
+
+        // Offset lifts N display rows from the bottom; the slice shifts upward.
+        layout.ScrollOffset = 10;
+        layout.BuildWidgets(viewport);
+        await Assert.That(layout.HistoryTopRow).IsEqualTo(23 - viewport - 10);
+        await Assert.That(layout.HistoryTopRow).IsNotEqualTo(pinnedTop);
+    }
+
+    [Test]
+    public async Task BuildHistory_StreamOnlyAppendedWhenPinnedToBottom()
+    {
+        var lines = ImmutableArray.Create(new ChatLine(ChatRole.User, "u"));
+        var layout = new ChatViewProjector();
+        layout.SetLines(lines, isStreaming: true, new ActiveMessage("live", "think"));
+
+        // Pinned (offset 0): stream rows are appended → total includes them.
+        layout.ScrollOffset = 0;
+        layout.BuildWidgets(10);
+        int pinnedTotal = layout.TotalLines;
+
+        // Scrolled back: stream must NOT be appended (history stays stable).
+        layout.ScrollOffset = 100;
+        layout.BuildWidgets(10);
+        int scrolledTotal = layout.TotalLines;
+
+        // Source is 1 line (+blank) = 2 display rows; stream adds think+assistant+blanks.
+        await Assert.That(pinnedTotal).IsGreaterThan(scrolledTotal);
+        await Assert.That(scrolledTotal).IsEqualTo(2);
     }
 }
 
