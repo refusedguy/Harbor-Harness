@@ -134,4 +134,101 @@ public static class UiReducer
 
     private static UiState WithStatus(this UiState state, string status) =>
         state with { Status = status };
+
+    // ── unified update (TEA "update") ──────────────────────────────────────
+
+    /// <summary>
+    ///     The single update function for the interactive UI. Maps any
+    ///     <see cref="UiMsg" /> to the next immutable <see cref="UiState" /> plus an
+    ///     optional <see cref="TuiEffect" /> for the host to run. This is the ONLY
+    ///     place where key input, focus, scroll, and input-editing transitions live.
+    /// </summary>
+    public static (UiState State, TuiEffect Effect) Update(UiState state, UiMsg msg) => msg switch
+    {
+        UiMsg.Agent a => (Reduce(state, a.Event), new TuiEffect.None()),
+        UiMsg.KeyInput k => UpdateKey(state, k),
+        UiMsg.Viewport v => (state with { ViewportLines = v.HistoryHeight }, new TuiEffect.None()),
+        UiMsg.HistoryMeasured t => (state with { TotalLines = t.TotalLines }, new TuiEffect.None()),
+        _ => (state, new TuiEffect.None())
+    };
+
+    private static (UiState State, TuiEffect Effect) UpdateKey(UiState state, UiMsg.KeyInput k)
+    {
+        // While the agent runs, only Abort is accepted.
+        if (state.IsAgentRunning && k.Action != ChatAction.Abort)
+            return (state, new TuiEffect.None());
+
+        switch (k.Action)
+        {
+            case ChatAction.Quit:
+                return (state, new TuiEffect.QuitApp());
+
+            case ChatAction.Abort:
+                return (state
+                        .AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"),
+                    new TuiEffect.AbortAgent());
+
+            case ChatAction.Submit:
+            {
+                var (nextInput, submitted) = state.Input.Consume();
+                var next = state.SetInput(nextInput);
+                if (submitted is null)
+                    return (next, new TuiEffect.None());
+
+                if (submitted.StartsWith('/'))
+                    return (next, new TuiEffect.RunSlash(submitted));
+
+                next = next.AddLine(ChatRole.User, submitted);
+                return (next, new TuiEffect.PromptAgent(submitted));
+            }
+
+            case ChatAction.ToggleFocus:
+                return (state.SetFocus(state.Focus == FocusMode.Input ? FocusMode.Chat : FocusMode.Input),
+                    new TuiEffect.None());
+
+            // Scrolling works in both focus modes; the wheel arrives as PageUp/PageDown.
+            case ChatAction.ScrollUpLine:
+                return (state.SetScroll(state.ScrollOffset + 1), new TuiEffect.None());
+            case ChatAction.ScrollDownLine:
+                return (state.SetScroll(state.ScrollOffset - 1), new TuiEffect.None());
+            case ChatAction.ScrollUpPage:
+                return (state.SetScroll(state.ScrollOffset + Math.Max(1, state.ViewportLines - 2)), new TuiEffect.None());
+            case ChatAction.ScrollDownPage:
+                return (state.SetScroll(state.ScrollOffset - Math.Max(1, state.ViewportLines - 2)), new TuiEffect.None());
+            case ChatAction.ScrollTop:
+                return (state.SetScroll(int.MaxValue), new TuiEffect.None());
+            case ChatAction.ScrollBottom:
+                return (state.SetScroll(0), new TuiEffect.None());
+
+            // Input editing only when the input box owns focus.
+            case ChatAction.Backspace:
+                return state.Focus == FocusMode.Input
+                    ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.Backspace())), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
+            case ChatAction.InputHistoryPrev:
+                return state.Focus == FocusMode.Input
+                    ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.HistoryUp())), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
+            case ChatAction.InputHistoryNext:
+                return state.Focus == FocusMode.Input
+                    ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.HistoryDown())), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
+            case ChatAction.Autocomplete:
+                return state.Focus == FocusMode.Input && state.Input.Text.StartsWith('/')
+                    ? (state.SetInput(InputMsg.Update(state.Input,
+                        new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands))), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
+            case ChatAction.Char:
+                return state.Focus == FocusMode.Input && k.Pressed.Character is { } c
+                    ? (state.SetInput(InputMsg.Update(state.Input, new InputMsg.Char(c))), new TuiEffect.None())
+                    : (state, new TuiEffect.None());
+
+            case ChatAction.Clear:
+                return (new UiState(), new TuiEffect.None());
+
+            case ChatAction.None:
+            default:
+                return (state, new TuiEffect.None());
+        }
+    }
 }

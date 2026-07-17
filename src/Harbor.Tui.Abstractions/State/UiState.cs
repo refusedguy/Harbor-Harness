@@ -93,6 +93,36 @@ public sealed record UiState
     /// <summary>Whether the user has requested to quit the interactive loop.</summary>
     public bool ShouldQuit { get; init; }
 
+    /// <summary>Editable prompt state (text + history navigation).</summary>
+    public InputModel Input { get; init; } = InputModel.Empty;
+
+    /// <summary>Which region currently owns the keyboard (drives highlight + routing).</summary>
+    public FocusMode Focus { get; init; } = FocusMode.Input;
+
+    /// <summary>
+    ///     History scroll-back offset (0 = pinned to newest line, grows toward the
+    ///     top). Clamped to <c>TotalLines - ViewportLines</c> by the reducer.
+    /// </summary>
+    public int ScrollOffset { get; init; }
+
+    /// <summary>Number of history rows currently visible (reported by the renderer).</summary>
+    public int ViewportLines { get; init; }
+
+    /// <summary>Total number of wrapped history rows (reported by the renderer).</summary>
+    public int TotalLines { get; init; }
+
+    /// <summary>How far the history is scrolled, as a percentage (0 = bottom, 100 = top).</summary>
+    public int ScrollPercent
+    {
+        get
+        {
+            int max = Math.Max(0, TotalLines - ViewportLines);
+            if (max == 0) return 0;
+            // ScrollOffset grows toward the top, so flip it for a top-anchored percentage.
+            return (int)Math.Round(100.0 * (TotalLines - ViewportLines - ScrollOffset) / max);
+        }
+    }
+
     /// <summary>
     ///     Append a line to the transcript, returning a new immutable snapshot.
     ///     Avoids allocating an intermediate list.
@@ -108,5 +138,19 @@ public sealed record UiState
         var builder = Lines.ToBuilder();
         builder[index] = new ChatLine(role, text);
         return this with { Lines = builder.MoveToImmutable() };
+    }
+
+    /// <summary>Return a snapshot with the editable input model replaced.</summary>
+    public UiState SetInput(InputModel input) => this with { Input = input };
+
+    /// <summary>Return a snapshot with the keyboard focus replaced.</summary>
+    public UiState SetFocus(FocusMode focus) => this with { Focus = focus };
+
+    /// <summary>Return a snapshot with the history scroll offset clamped to valid range.</summary>
+    public UiState SetScroll(int offset)
+    {
+        int max = Math.Max(0, TotalLines - ViewportLines);
+        int clamped = Math.Clamp(offset, 0, max);
+        return clamped == ScrollOffset ? this : this with { ScrollOffset = clamped };
     }
 }

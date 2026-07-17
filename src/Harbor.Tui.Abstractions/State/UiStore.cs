@@ -87,8 +87,28 @@ public sealed class UiStore
     }
 
     /// <summary>
+    ///     The unified TEA dispatch: route any <see cref="UiMsg" /> through the single
+    ///     <see cref="UiReducer.Update(UiState, UiMsg)" />, apply the resulting state,
+    ///     and return the effect for the host to run. Renderers call this and run the
+    ///     returned effect — they never mutate state or call <c>IAgent</c> themselves.
+    /// </summary>
+    public TuiEffect Dispatch(UiMsg msg)
+    {
+        (UiState next, TuiEffect effect) = UiReducer.Update(_state, msg);
+        lock (_gate)
+        {
+            _state = next;
+        }
+
+        Changed?.Invoke(this, new UiStateChangedEventArgs(next));
+        return effect;
+    }
+
+    /// <summary>
     ///     Apply a manual transition (e.g. user input, bind meta) through a reducer
-    ///     function. Used by renderers that own input without an agent event.
+    ///     function. Prefer <see cref="Dispatch(UiMsg)" /> for new code; this remains
+    ///     for the effect runner (<see cref="TuiEffectHost" />), which legitimately
+    ///     folds follow-up state as part of running an effect.
     /// </summary>
     public void Transition(Func<UiState, UiState> reducer)
     {
