@@ -62,5 +62,5 @@ public interface IInteractiveTuiRenderer : ITuiRenderer
     ///     dispatch <c>/command</c> input without referencing Core directly.
     /// </summary>
     /// <param name="handler">Async handler taking the raw <c>/command</c> text.</param>
-    void SetSlashHandler(Func<string, Task> handler);
+    public void SetSlashHandler(Func<string, Task> handler);
 }

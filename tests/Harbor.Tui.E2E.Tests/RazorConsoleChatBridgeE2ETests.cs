@@ -1,16 +1,10 @@
-using System.Text;
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Tui.RazorConsole;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.E2E.Tests;
-
 /// <summary>
 ///     Tests the ChatBridge event formatting logic shared by RazorConsole.
 ///     Verifies that agent events are correctly translated to user-visible
@@ -27,7 +21,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_PushLine_UserMessage_AppearsInMessages()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         bridge.PushLine("user", "hello from user");
 
@@ -40,7 +34,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_PushLine_AssistantMessage_AppearsInMessages()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         bridge.PushLine("assistant", "hello from assistant");
 
@@ -53,7 +47,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_ApplyEvent_AgentStart_PopulatesMessages()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         var userMsg = new UserMessage(Guid.NewGuid().ToString("N"), "s1", DateTimeOffset.UtcNow, "test prompt", "code", "stub-model");
         bridge.ApplyEvent(new AgentStartEvent("s1", new AgentMessage[] { userMsg }));
@@ -68,7 +62,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_ApplyEvent_MessageEnd_CompletesStreaming()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         var partial = AssistantMessage.Empty("s1", "stub");
         bridge.ApplyEvent(new MessageStartEvent(partial));
@@ -84,7 +78,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_ApplyEvent_ToolExecutionEnd_AddsResultMessage()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         var result = ToolResult.Success("file contents here");
         bridge.ApplyEvent(new ToolExecutionEndEvent("tc1", result, false));
@@ -98,7 +92,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_ApplyEvent_AgentError_SetsErrorStatus()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         bridge.ApplyEvent(new AgentErrorEvent("boom"));
 
@@ -111,7 +105,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_ApplyEvent_AgentEnd_SetsIdleStatus()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         bridge.ApplyEvent(new AgentErrorEvent("err"));
         await Assert.That(bridge.Status).IsEqualTo("error");
@@ -124,7 +118,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_QuitRequested_OnExit()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         await bridge.SendAsync("exit");
 
@@ -135,7 +129,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_EmptyInput_DoesNothing()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         await bridge.SendAsync("");
         await bridge.SendAsync("   ");
@@ -147,7 +141,7 @@ public class RazorConsoleChatBridgeE2ETests
     public async Task ChatBridge_MultipleEvents_BuildsTranscript()
     {
         var stubAgent = new StubAgent();
-        var bridge = new Harbor.Tui.RazorConsole.ChatBridge(stubAgent, null, NullLogger.Instance);
+        var bridge = new ChatBridge(stubAgent, null, NullLogger.Instance);
 
         var userMsg = new UserMessage(Guid.NewGuid().ToString("N"), "s1", DateTimeOffset.UtcNow, "first prompt", "code", "stub-model");
         bridge.ApplyEvent(new AgentStartEvent("s1", new AgentMessage[] { userMsg }));

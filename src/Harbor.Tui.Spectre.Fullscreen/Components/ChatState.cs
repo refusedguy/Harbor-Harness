@@ -1,8 +1,7 @@
 namespace Harbor.Tui.Spectre.Fullscreen.Components;
-
 /// <summary>
-/// Manages chat line state with bounded memory.
-/// Single responsibility: store and trim chat history.
+///     Manages chat line state with bounded memory.
+///     Single responsibility: store and trim chat history.
 /// </summary>
 public sealed class ChatState
 {
@@ -23,7 +22,9 @@ public sealed class ChatState
     private void Trim()
     {
         while (_lines.Count > MaxLines)
+        {
             _lines.RemoveAt(0);
+        }
     }
 
     public sealed record ChatLine(string Role, string Content);

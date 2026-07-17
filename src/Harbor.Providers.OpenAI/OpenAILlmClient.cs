@@ -29,11 +29,11 @@ public sealed class OpenAILlmClient : ILlmClient
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
     private readonly IOpenAIAuthResolver _auth;
-    private readonly OpenAIConfig _config;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation on the hot path.
     private readonly string _baseUrl;
+    private readonly OpenAIConfig _config;
 
     private readonly HttpClient _http;
     private readonly ILogger<OpenAILlmClient> _logger;
@@ -48,7 +48,7 @@ public sealed class OpenAILlmClient : ILlmClient
         _config = config;
         _auth = auth;
         _logger = logger;
-        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
+        _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("openai");

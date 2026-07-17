@@ -1,13 +1,9 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.RazorConsole;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.Tests;
-
 public class RazorConsoleRendererTests
 {
     private static RazorConsoleRenderer CreateRenderer() => new(NullLogger<RazorConsoleRenderer>.Instance);

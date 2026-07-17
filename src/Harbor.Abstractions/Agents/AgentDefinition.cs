@@ -60,8 +60,7 @@ public sealed record AgentDefinition(
         "Default coding agent. Can read, write, edit files and run commands.",
         model,
         providerId,
-        PermissionRuleset.Default,
-        50);
+        PermissionRuleset.Default);
 
     /// <summary>
     ///     Returns the default <c>plan</c> agent — read-only exploration plus git/cat, 100 steps.

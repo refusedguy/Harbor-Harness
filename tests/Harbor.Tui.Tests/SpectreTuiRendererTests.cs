@@ -1,15 +1,11 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.SpectreTui;
 using Harbor.Tui.SpectreTui.Components;
 using Harbor.Tui.SpectreTui.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.Tests;
-
 public class SpectreTuiRendererTests
 {
     private static SpectreTuiRenderer CreateRenderer() => new(NullLogger<SpectreTuiRenderer>.Instance);
@@ -164,7 +160,7 @@ public class SpectreTuiInputStateTests
         var input = new InputState();
         input.Append('h');
         input.Append('i');
-        var consumed = input.Consume();
+        string consumed = input.Consume();
         await Assert.That(consumed).IsEqualTo("hi");
         await Assert.That(input.Text).IsEqualTo(string.Empty);
         await Assert.That(input.HistoryCount).IsEqualTo(1);
@@ -174,7 +170,7 @@ public class SpectreTuiInputStateTests
     public async Task Consume_Empty_DoesNotAddToHistory()
     {
         var input = new InputState();
-        var consumed = input.Consume();
+        string consumed = input.Consume();
         await Assert.That(consumed).IsEqualTo(string.Empty);
         await Assert.That(input.HistoryCount).IsEqualTo(0);
     }

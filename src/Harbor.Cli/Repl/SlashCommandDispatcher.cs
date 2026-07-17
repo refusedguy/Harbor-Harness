@@ -1,22 +1,20 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Harbor.Tui.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
 using Harbor.Cli.Commands;
 using Harbor.Cli.Hosting;
-
+using Harbor.Core.Configuration;
+using Harbor.Core.Onboarding;
+using Harbor.Tui.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Repl;
-
 /// <summary>
-/// Slash command dispatcher — single responsibility: route /commands to handlers.
-/// Extracted from Program.cs.
+///     Slash command dispatcher — single responsibility: route /commands to handlers.
+///     Extracted from Program.cs.
 /// </summary>
 internal sealed class SlashCommandDispatcher
 {
@@ -73,7 +71,10 @@ internal sealed class SlashCommandDispatcher
                 case "tui": PrintTuiOptions(); break;
                 case "storage": PrintStorageOptions(); break;
                 case "exit" or "quit": Environment.Exit(0); break;
-                default: _logger.LogWarning("Unknown command: /{Command}", cmd); writer($"Unknown: /{cmd}. /help for commands."); break;
+                default:
+                    _logger.LogWarning("Unknown command: /{Command}", cmd);
+                    writer($"Unknown: /{cmd}. /help for commands.");
+                    break;
             }
             _logger.LogDebug("Command /{Command} completed", cmd);
         }

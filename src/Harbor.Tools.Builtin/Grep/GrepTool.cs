@@ -1,24 +1,19 @@
 using System.Buffers;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Fast recursive content search. Local disk: sync bulk I/O + dir prune + binary skip.
-/// Parallel across files; stops at maxResults.
+///     Fast recursive content search. Local disk: sync bulk I/O + dir prune + binary skip.
+///     Parallel across files; stops at maxResults.
 /// </summary>
 public sealed class GrepTool : ITool
 {
-    private readonly ILogger<GrepTool> _logger;
 
-    public GrepTool(ILogger<GrepTool> logger) { _logger = logger; }
+    private const int MaxFileBytes = 2 * 1024 * 1024; // 2 MiB — skip monsters
+    private const int BinaryProbeBytes = 8192;
 
     private static readonly HashSet<string> IgnoredDirNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -38,9 +33,9 @@ public sealed class GrepTool : ITool
         ".mp3", ".mp4", ".wav", ".avi", ".mov",
         ".nupkg", ".jar", ".class", ".pyc", ".pyo"
     };
+    private readonly ILogger<GrepTool> _logger;
 
-    private const int MaxFileBytes = 2 * 1024 * 1024; // 2 MiB — skip monsters
-    private const int BinaryProbeBytes = 8192;
+    public GrepTool(ILogger<GrepTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("grep");
     public string DisplayName => "Grep";
@@ -58,23 +53,23 @@ public sealed class GrepTool : ITool
     ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "pattern":    { "type": "string",  "description": "Regular expression pattern" },
-            "path":       { "type": "string",  "description": "Base directory or file (default: cwd)" },
-            "include":    { "type": "string",  "description": "File name glob (e.g. '*.cs')" },
-            "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default: false)" },
-            "maxResults": { "type": "integer", "description": "Max matches (default: 100)" }
-          },
-          "required": ["pattern"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "pattern":    { "type": "string",  "description": "Regular expression pattern" },
+                                                                          "path":       { "type": "string",  "description": "Base directory or file (default: cwd)" },
+                                                                          "include":    { "type": "string",  "description": "File name glob (e.g. '*.cs')" },
+                                                                          "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default: false)" },
+                                                                          "maxResults": { "type": "integer", "description": "Max matches (default: 100)" }
+                                                                        },
+                                                                        "required": ["pattern"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
         if (!args.TryGetProperty("pattern", out var p) || p.ValueKind != JsonValueKind.String
-            || string.IsNullOrEmpty(p.GetString()))
+                                                       || string.IsNullOrEmpty(p.GetString()))
             return Result.Failure("Missing required argument 'pattern'.");
 
         try
@@ -100,16 +95,16 @@ public sealed class GrepTool : ITool
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        var pattern = args.GetProperty("pattern").GetString()!;
-        var path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
+        string pattern = args.GetProperty("pattern").GetString()!;
+        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
             ? p.GetString()!
             : Environment.CurrentDirectory;
-        var include = args.TryGetProperty("include", out var i) && i.ValueKind == JsonValueKind.String
+        string? include = args.TryGetProperty("include", out var i) && i.ValueKind == JsonValueKind.String
             ? i.GetString()
             : null;
-        var ignoreCase = args.TryGetProperty("ignoreCase", out var ic)
-                         && ic.ValueKind == JsonValueKind.True;
-        var maxResults = args.TryGetProperty("maxResults", out var m)
+        bool ignoreCase = args.TryGetProperty("ignoreCase", out var ic)
+                          && ic.ValueKind == JsonValueKind.True;
+        int maxResults = args.TryGetProperty("maxResults", out var m)
                          && m.ValueKind == JsonValueKind.Number
             ? Math.Clamp(m.GetInt32(), 1, 10_000)
             : 100;
@@ -134,7 +129,7 @@ public sealed class GrepTool : ITool
         _logger.LogDebug("Grep: {Pattern} from {Path}", pattern, path);
 
         var results = new List<string>(Math.Min(maxResults, 128));
-        var truncated = false;
+        bool truncated = false;
 
         try
         {
@@ -175,7 +170,7 @@ public sealed class GrepTool : ITool
 
                         lock (results)
                         {
-                            foreach (var line in local)
+                            foreach (string line in local)
                             {
                                 if (results.Count >= maxResults)
                                 {
@@ -215,14 +210,14 @@ public sealed class GrepTool : ITool
 
         _logger.LogDebug("Grep complete: {Count} matches, Truncated={Truncated}", results.Count, truncated);
 
-        var header = truncated || results.Count >= maxResults
+        string header = truncated || results.Count >= maxResults
             ? $"Found {results.Count}+ matches (showing {results.Count}):"
             : $"Found {results.Count} matches:";
 
         // Join without LINQ
         var sb = new StringBuilder(results.Count * 64);
         sb.AppendLine(header);
-        foreach (var t in results)
+        foreach (string t in results)
             sb.AppendLine(t);
 
         return ToolResult.Success(
@@ -254,12 +249,12 @@ public sealed class GrepTool : ITool
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite,
-                bufferSize: 64 * 1024,
+                64 * 1024,
                 FileOptions.SequentialScan);
 
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 64 * 1024);
+            using var reader = new StreamReader(stream, Encoding.UTF8, true, 64 * 1024);
 
-            var lineNum = 0;
+            int lineNum = 0;
             while (reader.ReadLine() is { } line)
             {
                 ct.ThrowIfCancellationRequested();
@@ -273,7 +268,7 @@ public sealed class GrepTool : ITool
                     continue;
 
                 // Cap absurdly long lines (minified)
-                var display = line.Length > 400 ? string.Concat(line.AsSpan(0, 400), "…") : line;
+                string display = line.Length > 400 ? string.Concat(line.AsSpan(0, 400), "…") : line;
                 sink.Add($"{file}:{lineNum}: {display}");
             }
         }
@@ -288,7 +283,7 @@ public sealed class GrepTool : ITool
     }
 
     /// <summary>
-    /// Stack-based walk that never enters ignored directories (unlike AllDirectories + filter).
+    ///     Stack-based walk that never enters ignored directories (unlike AllDirectories + filter).
     /// </summary>
     private static IEnumerable<string> EnumerateFilesFast(string root, Regex? includeRx)
     {
@@ -297,7 +292,7 @@ public sealed class GrepTool : ITool
 
         while (stack.Count > 0)
         {
-            var dir = stack.Pop();
+            string dir = stack.Pop();
             IEnumerable<string> subdirs;
             try
             {
@@ -308,9 +303,9 @@ public sealed class GrepTool : ITool
                 continue;
             }
 
-            foreach (var sub in subdirs)
+            foreach (string sub in subdirs)
             {
-                var name = Path.GetFileName(sub);
+                string name = Path.GetFileName(sub);
                 if (IgnoredDirNames.Contains(name))
                     continue;
                 stack.Push(sub);
@@ -326,7 +321,7 @@ public sealed class GrepTool : ITool
                 continue;
             }
 
-            foreach (var file in files)
+            foreach (string file in files)
             {
                 if (!IsSearchableFile(file, includeRx))
                     continue;
@@ -337,7 +332,7 @@ public sealed class GrepTool : ITool
 
     private static bool IsSearchableFile(string file, Regex? includeRx)
     {
-        var ext = Path.GetExtension(file);
+        string ext = Path.GetExtension(file);
         if (ext.Length > 0 && IgnoredExtensions.Contains(ext))
             return false;
 
@@ -351,14 +346,14 @@ public sealed class GrepTool : ITool
     {
         try
         {
-            var toRead = (int)Math.Min(length, BinaryProbeBytes);
-            var buffer = ArrayPool<byte>.Shared.Rent(toRead);
+            int toRead = (int)Math.Min(length, BinaryProbeBytes);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(toRead);
             try
             {
                 using var fs = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                    bufferSize: toRead, FileOptions.SequentialScan);
-                var n = fs.Read(buffer, 0, toRead);
+                    toRead, FileOptions.SequentialScan);
+                int n = fs.Read(buffer, 0, toRead);
                 // NUL byte ⇒ binary
                 return buffer.AsSpan(0, n).IndexOf((byte)0) >= 0;
             }
@@ -379,25 +374,25 @@ public sealed class GrepTool : ITool
         if (glob.Contains('{', StringComparison.Ordinal) && glob.Contains('}', StringComparison.Ordinal))
         {
             // very small brace expand: *.{cs,ts} → *.(cs|ts)
-            var start = glob.IndexOf('{');
-            var end = glob.IndexOf('}');
+            int start = glob.IndexOf('{');
+            int end = glob.IndexOf('}');
             if (start >= 0 && end > start)
             {
-                var before = glob[..start];
-                var after = glob[(end + 1)..];
-                var alts = glob.Substring(start + 1, end - start - 1).Split(',');
+                string before = glob[..start];
+                string after = glob[(end + 1)..];
+                string[] alts = glob.Substring(start + 1, end - start - 1).Split(',');
                 glob = before + "(" + string.Join("|", alts.Select(a => a.Trim())) + ")" + after;
             }
         }
 
-        var pattern = "^" + Regex.Escape(glob)
-            .Replace("\\*", ".*", StringComparison.Ordinal)
-            .Replace("\\?", ".", StringComparison.Ordinal)
-            // un-escape grouping we introduced for braces
-            .Replace("\\(", "(", StringComparison.Ordinal)
-            .Replace("\\)", ")", StringComparison.Ordinal)
-            .Replace("\\|", "|", StringComparison.Ordinal)
-            + "$";
+        string pattern = "^" + Regex.Escape(glob)
+                                 .Replace("\\*", ".*", StringComparison.Ordinal)
+                                 .Replace("\\?", ".", StringComparison.Ordinal)
+                                 // un-escape grouping we introduced for braces
+                                 .Replace("\\(", "(", StringComparison.Ordinal)
+                                 .Replace("\\)", ")", StringComparison.Ordinal)
+                                 .Replace("\\|", "|", StringComparison.Ordinal)
+                             + "$";
 
         return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
             TimeSpan.FromSeconds(1));

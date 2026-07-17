@@ -10,9 +10,7 @@ using Harbor.Tui.SpectreTui.Helpers;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 using Spectre.Tui.App;
-
 namespace Harbor.Tui.SpectreTui;
-
 /// <summary>
 ///     Full-screen interactive TUI renderer built on the real Spectre.TUI
 ///     widget framework (Spectre.Tui + Spectre.Tui.App). A <see cref="ChatScreen" />
@@ -24,16 +22,16 @@ namespace Harbor.Tui.SpectreTui;
 public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<SpectreTuiRenderer> _logger;
-    private Func<string, Task>? _slashHandler;
     private ChatScreen? _screen;
-
-    public override ITuiRenderContext Context { get; }
+    private Func<string, Task>? _slashHandler;
 
     public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
     {
         _logger = logger;
         Context = new SpectreTuiRenderContext();
     }
+
+    public override ITuiRenderContext Context { get; }
 
     void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler)
         => _slashHandler = handler;
@@ -58,13 +56,6 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         return base.RenderAsync(@event, ct);
     }
 
-    /// <summary>
-    ///     Suppress placement-driven rendering — the <see cref="ChatScreen" /> owns the display
-    ///     and renders via its widget tree. The base class would otherwise write status/history
-    ///     lines straight to the console and corrupt the fullscreen layout.
-    /// </summary>
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
-
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
         _screen = new ChatScreen(agent, _slashHandler, _logger);
@@ -84,38 +75,54 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.WriteColored(prompt, TuiColor.Green);
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
     public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
-    { Context.Write(text); return Task.FromResult(Result.Success()); }
+    {
+        Context.Write(text);
+        return Task.FromResult(Result.Success());
+    }
 
     public override Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default)
-    { Context.WriteLine(text); return Task.FromResult(Result.Success()); }
+    {
+        Context.WriteLine(text);
+        return Task.FromResult(Result.Success());
+    }
 
     public override Task<Result> ClearAsync(CancellationToken ct = default)
-    { Context.Clear(); return Task.FromResult(Result.Success()); }
+    {
+        Context.Clear();
+        return Task.FromResult(Result.Success());
+    }
+
+    /// <summary>
+    ///     Suppress placement-driven rendering — the <see cref="ChatScreen" /> owns the display
+    ///     and renders via its widget tree. The base class would otherwise write status/history
+    ///     lines straight to the console and corrupt the fullscreen layout.
+    /// </summary>
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     /// <summary>The chat screen - owns the Spectre.TUI application loop.</summary>
     private sealed class ChatScreen : Screen
     {
         private readonly IAgent _agent;
-        private readonly Func<string, Task>? _slash;
-        private readonly ILogger _logger;
         private readonly ChatState _chat = new();
         private readonly InputState _input = new();
         private readonly LayoutBuilder _layout;
+        private readonly ILogger _logger;
+        private readonly Func<string, Task>? _slash;
         private readonly HashSet<string> _slashCommands = new()
         {
             "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
             "/providers", "/sessions", "/tui", "/storage", "/clear"
         };
+        private decimal _cost;
+        private string _streamBuffer = string.Empty;
 
         private bool _streaming;
-        private string _streamBuffer = string.Empty;
         private string _thinkBuffer = string.Empty;
-        private decimal _cost;
 
         public ChatScreen(IAgent agent, Func<string, Task>? slash, ILogger logger)
         {
@@ -134,7 +141,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     _layout.Status = "running";
                     if (_chat.Count == 0)
                         foreach (var m in ase.Messages)
-                            if (m is UserMessage u) _chat.Add("user", u.Content);
+                            if (m is UserMessage u)
+                                _chat.Add("user", u.Content);
                     break;
                 case MessageStartEvent:
                     _layout.Status = "running";
@@ -164,14 +172,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     _streaming = false;
                     break;
                 case ToolExecutionStartEvent tes:
-                    var args = tes.Args.GetRawText();
+                    string args = tes.Args.GetRawText();
                     _chat.Add("tool", string.IsNullOrEmpty(args) || args == "{}"
                         ? $"→ {tes.ToolName}"
                         : $"→ {tes.ToolName}  [dim]{Escape(args)}[/]");
                     break;
                 case ToolExecutionEndEvent tee:
-                    var label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
-                    var preview = tee.Result.Output.Length > 600
+                    string label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
+                    string preview = tee.Result.Output.Length > 600
                         ? tee.Result.Output[..600] + "..." : tee.Result.Output;
                     _chat.Add("tool-result", $"{label} {Escape(preview.Trim())}");
                     break;
@@ -196,7 +204,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             => (text ?? string.Empty).Replace("[", "\\[", StringComparison.Ordinal);
 
         private static decimal EstimateCost(int inTok, int outTok)
-            => (decimal)inTok / 1_000_000m * 3m + (decimal)outTok / 1_000_000m * 15m;
+            => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
 
         public override void OnEnter(ApplicationContext context)
         {
@@ -216,7 +224,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 return;
             }
 
-            if (key.Key == Key.Escape) { context.Quit(); return; }
+            if (key.Key == Key.Escape)
+            {
+                context.Quit();
+                return;
+            }
 
             if (key.Character is >= (char)32 and not (char)127)
             {
@@ -250,7 +262,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         private void HandleRunningKey(ApplicationContext context, KeyMessage key)
         {
-            if (key.Key == Key.Escape || (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl)))
+            if (key.Key == Key.Escape || key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
             {
                 _logger.LogWarning("Agent aborted by user");
                 _agent.AbortSource.Cancel();
@@ -261,10 +273,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         private void SubmitCurrent(ApplicationContext context)
         {
-            var text = _input.Consume();
+            string text = _input.Consume();
             _logger.LogInformation("Submitting: {Text}", text);
             if (string.IsNullOrWhiteSpace(text)) return;
-            if (text is "exit" or "quit" or ":q") { context.Quit(); return; }
+            if (text is "exit" or "quit" or ":q")
+            {
+                context.Quit();
+                return;
+            }
 
             if (text.StartsWith('/') && _slash is not null)
             {
@@ -280,24 +296,21 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         private void Autocomplete()
         {
-            var current = _input.Text;
-            var match = _slashCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
+            string current = _input.Text;
+            string? match = _slashCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
             if (match is null) return;
             _input.Clear();
-            foreach (var c in match) _input.Append(c);
+            foreach (char c in match) _input.Append(c);
             _input.Append(' ');
         }
 
-        public override void Update(FrameInfo frame, IRenderBounds bounds)
-        {
-            _layout.IsReadingInput = !_agent.State.IsRunning;
-        }
+        public override void Update(FrameInfo frame, IRenderBounds bounds) => _layout.IsReadingInput = !_agent.State.IsRunning;
 
         public override void Render(RenderContext context)
         {
             var widgets = _layout.BuildWidgets();
             _logger.LogTrace("Render: {WidgetCount} widgets", widgets.Count);
-            foreach (var (name, widget) in widgets)
+            foreach ((string name, var widget) in widgets)
             {
                 var area = _layout.Layout.GetArea(context, name);
                 if (area.Width > 0 && area.Height > 0)

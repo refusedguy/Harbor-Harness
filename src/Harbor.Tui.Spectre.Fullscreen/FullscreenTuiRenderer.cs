@@ -4,46 +4,54 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
-using Microsoft.Extensions.Logging;
-using Spectre.Console;
 using Harbor.Tui.Spectre.Fullscreen.Components;
 using Harbor.Tui.Spectre.Fullscreen.Helpers;
-
+using Microsoft.Extensions.Logging;
+using Spectre.Console;
 namespace Harbor.Tui.Spectre.Fullscreen;
-
 /// <summary>
-/// Full-screen interactive TUI renderer — thin orchestrator.
-/// Delegates to: ChatState (history), ScrollManager (scroll), InputState (input),
-/// LayoutBuilder (rendering), MouseHandler (mouse), MarkdownRenderer (formatting).
+///     Full-screen interactive TUI renderer — thin orchestrator.
+///     Delegates to: ChatState (history), ScrollManager (scroll), InputState (input),
+///     LayoutBuilder (rendering), MouseHandler (mouse), MarkdownRenderer (formatting).
 /// </summary>
 public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
-    private readonly ChatState _chat = new();
-    private readonly ScrollManager _scroll = new();
-    private readonly InputState _input = new();
-    private readonly LayoutBuilder _layout;
-
-    private decimal _cost;
-    private string _footer = "Type a message, or /help.";
-    private bool _isStreaming;
-    private string _streamBuffer = string.Empty;
-    private string _thinkBuffer = string.Empty;
-    private bool _stop;
-    private LiveDisplayContext? _liveCtx;
-    private Func<string, Task>? _slashHandler;
-    private readonly object _renderLock = new();
 
     private static readonly string[] BuiltinCommands =
     {
         "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
         "/providers", "/sessions", "/tui", "/storage", "/clear"
     };
+    private readonly ChatState _chat = new();
+    private readonly InputState _input = new();
+    private readonly LayoutBuilder _layout;
+    private readonly object _renderLock = new();
+    private readonly ScrollManager _scroll = new();
+
+    private decimal _cost;
+    private string _footer = "Type a message, or /help.";
+    private bool _isStreaming;
+    private LiveDisplayContext? _liveCtx;
+    private Func<string, Task>? _slashHandler;
+    private bool _stop;
+    private string _streamBuffer = string.Empty;
+    private string _thinkBuffer = string.Empty;
 
     public FullscreenTuiRenderer(ILogger<FullscreenTuiRenderer> logger) : base(logger)
     {
         Context = new FullscreenRenderContext();
         _layout = new LayoutBuilder(_chat, _scroll, _input);
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Test hooks
+    // ═══════════════════════════════════════════════════════════════
+
+    internal int TestScrollOffset => _scroll.Offset;
+    internal bool TestIsScrolling => _scroll.IsScrolling;
+    internal int TestInputHistoryCount => _input.HistoryCount;
+    internal int TestHistoryIndex => _input.HistoryIndex;
+    internal string TestInputBuffer => _input.Text;
 
     public override ITuiRenderContext Context { get; }
 
@@ -78,6 +86,67 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     }
 
     // ═══════════════════════════════════════════════════════════════
+    //  Interactive REPL — delegates input to InputState, scroll to ScrollManager
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
+    {
+        _layout.Model = agent.State.Agent.Model;
+        _layout.Provider = agent.State.Agent.ProviderId;
+        _layout.Agent = agent.State.Agent.Name.Value;
+
+        Console.Write("\x1b[?1000h\x1b[?1006h");
+
+        var inputTask = Task.Run(() => RunInputLoopAsync(agent, ct), ct);
+        var live = AnsiConsole.Live(_layout.Build());
+
+        AnsiConsole.Cursor.Hide();
+        await live.StartAsync(async ctx =>
+        {
+            _liveCtx = ctx;
+            while (!_stop)
+            {
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+        }).ConfigureAwait(false);
+
+        await inputTask.ConfigureAwait(false);
+
+        Console.Write("\x1b[?1006l\x1b[?1000l");
+        AnsiConsole.Cursor.Show();
+        AnsiConsole.WriteLine();
+        return 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Base overrides
+    // ═══════════════════════════════════════════════════════════════
+
+    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
+    {
+        string result = AnsiConsole.Prompt(new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
+        return Task.FromResult(Result.Success(result));
+    }
+
+    public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
+    {
+        AnsiConsole.Write(Markup.Escape(text));
+        return Task.FromResult(Result.Success());
+    }
+
+    public override Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default)
+    {
+        AnsiConsole.WriteLine(text ?? string.Empty);
+        return Task.FromResult(Result.Success());
+    }
+
+    public override Task<Result> ClearAsync(CancellationToken ct = default)
+    {
+        AnsiConsole.Clear();
+        return Task.FromResult(Result.Success());
+    }
+
+    // ═══════════════════════════════════════════════════════════════
     //  Event handling — delegates to ChatState
     // ═══════════════════════════════════════════════════════════════
 
@@ -91,7 +160,8 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 _layout.Status = "running";
                 if (_chat.Count == 0)
                     foreach (var m in ase.Messages)
-                        if (m is UserMessage u) _chat.Add("user", u.Content);
+                        if (m is UserMessage u)
+                            _chat.Add("user", u.Content);
                 _scroll.Reset();
                 break;
 
@@ -162,37 +232,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     }
 
     private static decimal EstimateCost(int inTok, int outTok)
-        => (decimal)inTok / 1_000_000m * 3m + (decimal)outTok / 1_000_000m * 15m;
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Interactive REPL — delegates input to InputState, scroll to ScrollManager
-    // ═══════════════════════════════════════════════════════════════
-
-    public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
-    {
-        _layout.Model = agent.State.Agent.Model;
-        _layout.Provider = agent.State.Agent.ProviderId;
-        _layout.Agent = agent.State.Agent.Name.Value;
-
-        Console.Write("\x1b[?1000h\x1b[?1006h");
-
-        var inputTask = Task.Run(() => RunInputLoopAsync(agent, ct), ct);
-        var live = AnsiConsole.Live(_layout.Build());
-
-        AnsiConsole.Cursor.Hide();
-        await live.StartAsync(async ctx =>
-        {
-            _liveCtx = ctx;
-            while (!_stop) await Task.Delay(100, ct).ConfigureAwait(false);
-        }).ConfigureAwait(false);
-
-        await inputTask.ConfigureAwait(false);
-
-        Console.Write("\x1b[?1006l\x1b[?1000l");
-        AnsiConsole.Cursor.Show();
-        AnsiConsole.WriteLine();
-        return 0;
-    }
+        => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
 
     private async Task RunInputLoopAsync(IAgent agent, CancellationToken ct)
     {
@@ -212,11 +252,19 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             _layout.Footer = _footer;
 
             string? input = ReadInput(ct);
-            if (input is null) { _stop = true; return; }
+            if (input is null)
+            {
+                _stop = true;
+                return;
+            }
 
             string trimmed = input.Trim();
             if (string.IsNullOrWhiteSpace(trimmed)) continue;
-            if (trimmed is "exit" or "quit" or ":q") { _stop = true; return; }
+            if (trimmed is "exit" or "quit" or ":q")
+            {
+                _stop = true;
+                return;
+            }
 
             if (trimmed.StartsWith('/'))
             {
@@ -237,16 +285,31 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
     {
         while (agent.State.IsRunning && !_stop)
         {
-            if (ct.IsCancellationRequested) { _stop = true; return; }
-            if (!Console.KeyAvailable) { Thread.Sleep(30); continue; }
+            if (ct.IsCancellationRequested)
+            {
+                _stop = true;
+                return;
+            }
+            if (!Console.KeyAvailable)
+            {
+                Thread.Sleep(30);
+                continue;
+            }
 
             var key = Console.ReadKey(intercept: true);
 
             if (key.KeyChar == '\x1b')
             {
                 var mouse = MouseHandler.ParseSequence();
-                if (mouse == MouseHandler.MouseAction.ScrollUp) { DoScrollUp(3); continue; }
-                if (mouse == MouseHandler.MouseAction.ScrollDown) { DoScrollDown(3); continue; }
+                if (mouse == MouseHandler.MouseAction.ScrollUp)
+                {
+                    DoScrollUp(3);
+                    continue;
+                }
+                if (mouse == MouseHandler.MouseAction.ScrollDown)
+                {
+                    DoScrollDown(3);
+                }
                 continue;
             }
 
@@ -290,7 +353,11 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 _layout.IsReadingInput = false;
                 return null;
             }
-            if (!Console.KeyAvailable) { Thread.Sleep(15); continue; }
+            if (!Console.KeyAvailable)
+            {
+                Thread.Sleep(15);
+                continue;
+            }
 
             var key = Console.ReadKey(intercept: true);
 
@@ -298,8 +365,15 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             if (key.KeyChar == '\x1b')
             {
                 var mouse = MouseHandler.ParseSequence();
-                if (mouse == MouseHandler.MouseAction.ScrollUp) { DoScrollUp(3); continue; }
-                if (mouse == MouseHandler.MouseAction.ScrollDown) { DoScrollDown(3); continue; }
+                if (mouse == MouseHandler.MouseAction.ScrollUp)
+                {
+                    DoScrollUp(3);
+                    continue;
+                }
+                if (mouse == MouseHandler.MouseAction.ScrollDown)
+                {
+                    DoScrollDown(3);
+                }
                 continue;
             }
 
@@ -312,7 +386,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             }
             if (key.Key == ConsoleKey.Enter)
             {
-                var result = _input.Consume();
+                string result = _input.Consume();
 
                 _layout.IsReadingInput = false;
                 Redraw();
@@ -322,7 +396,11 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             // Escape
             if (key.Key == ConsoleKey.Escape)
             {
-                if (_input.IsEmpty) {  _layout.IsReadingInput = false; return null; }
+                if (_input.IsEmpty)
+                {
+                    _layout.IsReadingInput = false;
+                    return null;
+                }
                 _input.Clear();
                 Redraw();
                 continue;
@@ -353,24 +431,50 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             }
 
             // History navigation
-            if (key.Key == ConsoleKey.UpArrow) { _input.NavigateUp(); Redraw(); continue; }
-            if (key.Key == ConsoleKey.DownArrow) { _input.NavigateDown(); Redraw(); continue; }
+            if (key.Key == ConsoleKey.UpArrow)
+            {
+                _input.NavigateUp();
+                Redraw();
+                continue;
+            }
+            if (key.Key == ConsoleKey.DownArrow)
+            {
+                _input.NavigateDown();
+                Redraw();
+                continue;
+            }
 
             // Scroll keys
-            if (key.Key == ConsoleKey.Home) { DoScrollToTop(); continue; }
-            if (key.Key == ConsoleKey.End) { DoScrollToBottom(); continue; }
-            if (key.Key == ConsoleKey.PageUp) { DoScrollUp(10); continue; }
-            if (key.Key == ConsoleKey.PageDown) { DoScrollDown(10); continue; }
+            if (key.Key == ConsoleKey.Home)
+            {
+                DoScrollToTop();
+                continue;
+            }
+            if (key.Key == ConsoleKey.End)
+            {
+                DoScrollToBottom();
+                continue;
+            }
+            if (key.Key == ConsoleKey.PageUp)
+            {
+                DoScrollUp(10);
+                continue;
+            }
+            if (key.Key == ConsoleKey.PageDown)
+            {
+                DoScrollDown(10);
+                continue;
+            }
 
             // Tab autocomplete
             if (key.Key == ConsoleKey.Tab && _input.Length > 0 && _input[0] == '/')
             {
-                var current = _input.Text;
-                var match = BuiltinCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
+                string current = _input.Text;
+                string? match = BuiltinCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
                 if (match is not null)
                 {
                     _input.Clear();
-                    foreach (var c in match) _input.Append(c);
+                    foreach (char c in match) _input.Append(c);
                     _input.Append(' ');
                     Redraw();
                 }
@@ -426,7 +530,10 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             if (!string.IsNullOrEmpty(_streamBuffer)) visible.Add(new ChatState.ChatLine("assistant", _streamBuffer.Trim()));
         }
         int width = 80;
-        try { width = Console.WindowWidth; } catch { /* Non-TTY */ }
+        try { width = Console.WindowWidth; }
+        catch
+        { /* Non-TTY */
+        }
         int maxWidth = Math.Max(20, width - 6);
         return LayoutBuilder.GetTotalVisibleLines(visible.ToArray(), maxWidth);
     }
@@ -448,44 +555,6 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             _liveCtx?.UpdateTarget(_layout.Build());
         }
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Base overrides
-    // ═══════════════════════════════════════════════════════════════
-
-    public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
-    {
-        var result = AnsiConsole.Prompt(new TextPrompt<string>($"[green]{Markup.Escape(prompt)}[/]").AllowEmpty());
-        return Task.FromResult(Result.Success(result));
-    }
-
-    public override Task<Result> WriteAsync(string text, CancellationToken ct = default)
-    {
-        AnsiConsole.Write(Markup.Escape(text));
-        return Task.FromResult(Result.Success());
-    }
-
-    public override Task<Result> WriteLineAsync(string? text = null, CancellationToken ct = default)
-    {
-        AnsiConsole.WriteLine(text ?? string.Empty);
-        return Task.FromResult(Result.Success());
-    }
-
-    public override Task<Result> ClearAsync(CancellationToken ct = default)
-    {
-        AnsiConsole.Clear();
-        return Task.FromResult(Result.Success());
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Test hooks
-    // ═══════════════════════════════════════════════════════════════
-
-    internal int TestScrollOffset => _scroll.Offset;
-    internal bool TestIsScrolling => _scroll.IsScrolling;
-    internal int TestInputHistoryCount => _input.HistoryCount;
-    internal int TestHistoryIndex => _input.HistoryIndex;
-    internal string TestInputBuffer => _input.Text;
 
     internal void TestPushInputHistory(string text) => _input.Submit(text);
     internal void TestNavigateHistoryUp() => _input.NavigateUp();

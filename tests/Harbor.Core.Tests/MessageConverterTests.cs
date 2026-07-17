@@ -3,7 +3,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Sessions;
 namespace Harbor.Core.Tests;
-
 /// <summary>
 ///     Tests for <see cref="MessageConverter.ToLlmMessages" /> — verifies that each
 ///     domain <see cref="AgentMessage" /> subtype is mapped to the correct

@@ -7,7 +7,7 @@ namespace Harbor.Abstractions.Agents;
 /// </summary>
 public sealed class AgentRegistry : IAgentRegistry
 {
-    private readonly NonBlocking.ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
+    private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
 
     /// <inheritdoc />
     public IReadOnlyList<AgentDefinition> GetAllAgents()

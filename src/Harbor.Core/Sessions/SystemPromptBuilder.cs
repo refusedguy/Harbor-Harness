@@ -1,10 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Core.Sessions;
 /// <summary>
 ///     Default system prompt builder. Implements Builder pattern (GOF).
@@ -13,14 +11,6 @@ namespace Harbor.Core.Sessions;
 /// </summary>
 public sealed class SystemPromptBuilder : ISystemPromptBuilder
 {
-    private readonly ILogger<SystemPromptBuilder> _logger;
-
-    public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) { }
-
-    public SystemPromptBuilder(ILogger<SystemPromptBuilder> logger)
-    {
-        _logger = logger;
-    }
 
     private const string DefaultBasePrompt = """
                                              You are Harbor, a coding agent. Solve tasks with tools. Be precise and minimal.
@@ -42,6 +32,14 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
                                        - Do not exfiltrate secrets (.env, keys, tokens) into chat or tool arguments.
                                        - No destructive ops without explicit user intent (rm -rf, git push --force, drop db, format).
                                        """;
+    private readonly ILogger<SystemPromptBuilder> _logger;
+
+    public SystemPromptBuilder() : this(NullLogger<SystemPromptBuilder>.Instance) { }
+
+    public SystemPromptBuilder(ILogger<SystemPromptBuilder> logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default)

@@ -29,10 +29,10 @@ public sealed class OllamaLlmClient : ILlmClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly OllamaConfig _config;
 
     // Pre-computed base URL — avoids per-request string manipulation.
     private readonly string _baseUrl;
+    private readonly OllamaConfig _config;
 
     private readonly HttpClient _http;
     private readonly ILogger<OllamaLlmClient> _logger;
@@ -42,7 +42,7 @@ public sealed class OllamaLlmClient : ILlmClient
         _http = http;
         _config = config;
         _logger = logger;
-        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
+        _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("ollama");

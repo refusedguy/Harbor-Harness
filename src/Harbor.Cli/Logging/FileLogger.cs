@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Logging;
-
 /// <summary>
 ///     Minimal file logger provider. Writes all log entries to a dated file in a
 ///     <c>logs</c> directory next to the entry assembly. Avoids extra dependencies
@@ -10,21 +9,20 @@ namespace Harbor.Cli.Logging;
 [ProviderAlias("File")]
 public sealed class FileLoggerProvider : ILoggerProvider
 {
-    private readonly string _filePath;
     private readonly Func<LogLevel, bool> _filter;
     private readonly StreamWriter _writer;
 
     public FileLoggerProvider(LogLevel minLevel)
     {
-        var exeDir = AppContext.BaseDirectory;
-        var logsDir = Path.Combine(exeDir, "logs");
+        string exeDir = AppContext.BaseDirectory;
+        string logsDir = Path.Combine(exeDir, "logs");
         Directory.CreateDirectory(logsDir);
 
-        var stamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HHmmss");
-        _filePath = Path.Combine(logsDir, $"harbor_{stamp}.log");
+        string stamp = DateTimeOffset.Now.ToString("yyyy-MM-dd_HHmmss");
+        FilePath = Path.Combine(logsDir, $"harbor_{stamp}.log");
         _filter = level => level >= minLevel;
         _writer = new StreamWriter(
-            new FileStream(_filePath, FileMode.Create, FileAccess.Write, FileShare.Read),
+            new FileStream(FilePath, FileMode.Create, FileAccess.Write, FileShare.Read),
             leaveOpen: false)
         {
             AutoFlush = true
@@ -34,15 +32,12 @@ public sealed class FileLoggerProvider : ILoggerProvider
         _writer.WriteLine($"exe: {exeDir}");
     }
 
-    public ILogger CreateLogger(string categoryName) => new FileLogger(this, categoryName, _filter);
-
-    public string FilePath => _filePath;
-
-    internal void Write(LogLevel level, string category, string message)
+    public string FilePath
     {
-        var line = $"{DateTimeOffset.Now:HH:mm:ss.fff} [{level,-11}] {category}: {message}";
-        _writer.WriteLine(line);
+        get;
     }
+
+    public ILogger CreateLogger(string categoryName) => new FileLogger(this, categoryName, _filter);
 
     public void Dispose()
     {
@@ -57,11 +52,17 @@ public sealed class FileLoggerProvider : ILoggerProvider
         }
     }
 
+    internal void Write(LogLevel level, string category, string message)
+    {
+        string line = $"{DateTimeOffset.Now:HH:mm:ss.fff} [{level,-11}] {category}: {message}";
+        _writer.WriteLine(line);
+    }
+
     private sealed class FileLogger : ILogger
     {
-        private readonly FileLoggerProvider _provider;
         private readonly string _category;
         private readonly Func<LogLevel, bool> _filter;
+        private readonly FileLoggerProvider _provider;
 
         public FileLogger(FileLoggerProvider provider, string category, Func<LogLevel, bool> filter)
         {
@@ -84,7 +85,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
             if (!IsEnabled(logLevel))
                 return;
 
-            var msg = formatter(state, exception);
+            string msg = formatter(state, exception);
             if (exception is not null)
                 msg += $"{Environment.NewLine}{exception}";
             _provider.Write(logLevel, _category, msg);

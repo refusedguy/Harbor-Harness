@@ -1,5 +1,4 @@
 namespace Harbor.Abstractions.Models.Identifiers;
-
 /// <summary>
 ///     Internal char-validation helpers for identifier normalization. Replaces per-call
 ///     <see cref="System.Text.RegularExpressions.Regex.IsMatch" /> on hot paths (every tool
@@ -38,8 +37,8 @@ internal static class IdentifierValidation
         return true;
     }
 
-    private static bool IsLower(char c) => (uint)(c - 'a') <= ('z' - 'a');
-    private static bool IsLowerOrDigit(char c) => IsLower(c) || (uint)(c - '0') <= ('9' - '0');
+    private static bool IsLower(char c) => (uint)(c - 'a') <= 'z' - 'a';
+    private static bool IsLowerOrDigit(char c) => IsLower(c) || (uint)(c - '0') <= '9' - '0';
 }
 
 /// <summary>

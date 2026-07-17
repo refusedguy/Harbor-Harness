@@ -273,26 +273,26 @@ public sealed class CompactionService : ICompactionService
                 builder.Append(u.Content);
                 break;
             case AssistantMessage a:
+            {
+                var parts = a.Parts;
+                for (int i = 0; i < parts.Count; i++)
                 {
-                    var parts = a.Parts;
-                    for (int i = 0; i < parts.Count; i++)
-                    {
-                        if (i > 0) builder.Append('\n');
-                        AppendFormattedPart(builder, parts[i]);
-                    }
-                    break;
+                    if (i > 0) builder.Append('\n');
+                    AppendFormattedPart(builder, parts[i]);
                 }
+                break;
+            }
             case ToolResultMessage tr:
+            {
+                var results = tr.Results;
+                for (int i = 0; i < results.Count; i++)
                 {
-                    var results = tr.Results;
-                    for (int i = 0; i < results.Count; i++)
-                    {
-                        if (i > 0) builder.Append('\n');
-                        var r = results[i];
-                        builder.Append("[tool:").Append(r.ToolName).Append("] ").Append(r.Output);
-                    }
-                    break;
+                    if (i > 0) builder.Append('\n');
+                    var r = results[i];
+                    builder.Append("[tool:").Append(r.ToolName).Append("] ").Append(r.Output);
                 }
+                break;
+            }
             default:
                 builder.Append(msg.ToString() ?? string.Empty);
                 break;

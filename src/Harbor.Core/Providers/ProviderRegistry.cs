@@ -15,10 +15,10 @@ namespace Harbor.Abstractions.Providers;
 /// </summary>
 public sealed class ProviderRegistry : IProviderRegistry
 {
-    private readonly NonBlocking.ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
+    private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly object _frozenLock = new();
-    private readonly NonBlocking.ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
     private readonly ILogger<ProviderRegistry> _logger;
+    private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called.

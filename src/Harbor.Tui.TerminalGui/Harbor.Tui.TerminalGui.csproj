@@ -8,14 +8,14 @@
     <NoWarn>CS0618;NU1603</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Terminal.Gui" Version="2.4.17" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Terminal.Gui" Version="2.4.17"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.Tui.Tests" />
+    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
   </ItemGroup>
 </Project>

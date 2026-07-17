@@ -1,14 +1,9 @@
-using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Termina;
 using Microsoft.Extensions.Logging.Abstractions;
 using R3;
-
 namespace Harbor.Tui.Tests;
-
 public class TerminaRendererTests
 {
     private static TerminaRenderer CreateRenderer() => new(NullLogger<TerminaRenderer>.Instance);

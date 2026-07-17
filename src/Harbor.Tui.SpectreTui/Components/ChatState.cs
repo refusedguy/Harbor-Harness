@@ -1,12 +1,10 @@
 namespace Harbor.Tui.SpectreTui.Components;
-
 /// <summary>
 ///     Rolling chat history. Each entry carries a semantic role so the layout
 ///     builder can colour and prefix it consistently (user / assistant / tool / …).
 /// </summary>
 internal sealed class ChatState
 {
-    public sealed record ChatLine(string Role, string Content);
 
     private readonly List<ChatLine> _lines = new();
 
@@ -18,4 +16,6 @@ internal sealed class ChatState
         => _lines.Add(new ChatLine(role, content));
 
     public void Clear() => _lines.Clear();
+
+    public sealed record ChatLine(string Role, string Content);
 }

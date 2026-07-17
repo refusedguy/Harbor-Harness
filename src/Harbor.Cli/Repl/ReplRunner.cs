@@ -1,25 +1,17 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Harbor.Tui.Abstractions;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
-using Harbor.Abstractions.Tui;
-using Harbor.Core.Agents;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Hosting;
-
+using Harbor.Tui.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Repl;
-
 /// <summary>
-/// REPL and interactive session runner — single responsibility: run the user interaction loop.
-/// Extracted from Program.cs.
+///     REPL and interactive session runner — single responsibility: run the user interaction loop.
+///     Extracted from Program.cs.
 /// </summary>
 internal sealed class ReplRunner
 {
@@ -104,13 +96,13 @@ internal sealed class ReplRunner
             var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
             interactive.SetSlashHandler(raw => dispatcher.HandleAsync(
                 raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value));
-            var exitCode = await interactive.RunInteractiveAsync(agent, sp, ct: default).ConfigureAwait(false);
+            int exitCode = await interactive.RunInteractiveAsync(agent, sp).ConfigureAwait(false);
             _logger.LogInformation("Interactive loop ended with exit code {ExitCode}", exitCode);
             return exitCode;
         }
 
         _logger.LogInformation("Non-interactive renderer — entering line REPL");
-        var lineExitCode = await RunLineReplAsync(renderer, agent, sp, configStore, authStore, providers, agentRegistry, sessionResult.Value).ConfigureAwait(false);
+        int lineExitCode = await RunLineReplAsync(renderer, agent, sp, configStore, authStore, providers, agentRegistry, sessionResult.Value).ConfigureAwait(false);
         _logger.LogInformation("Line REPL ended with exit code {ExitCode}", lineExitCode);
         return lineExitCode;
     }

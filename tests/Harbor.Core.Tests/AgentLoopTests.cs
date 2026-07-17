@@ -1,21 +1,18 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
+using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
-
 /// <summary>
 ///     Tests for <see cref="AgentLoop" /> using a mock <see cref="ILlmClient" /> that yields
 ///     a scripted sequence of <see cref="LlmEvent" />s. Verifies the happy-path event sequence
@@ -25,76 +22,16 @@ namespace Harbor.Core.Tests;
 public class AgentLoopTests
 {
     private static readonly ModelInfo TestModel = new(
-        Id: "test-model",
-        ProviderId: "test",
-        DisplayName: "Test Model",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 4096,
-        SupportsReasoning: false,
-        SupportsVision: false,
-        SupportsToolUse: true,
-        Pricing: Pricing.Unknown,
-        PromptTemplate: "openai");
-
-    /// <summary>
-    ///     A scripted <see cref="ILlmClient" /> that replays a fixed sequence of events on each
-    ///     <see cref="StreamAsync" /> call. <see cref="GetModelsAsync" /> always returns
-    ///     <see cref="TestModel" />.
-    /// </summary>
-    private sealed class MockLlmClient : ILlmClient
-    {
-        private readonly LlmEvent[] _events;
-
-        public MockLlmClient(params LlmEvent[] events) => _events = events;
-
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            foreach (var e in _events)
-            {
-                yield return e;
-                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel }));
-    }
-
-    /// <summary>
-    ///     Minimal <see cref="ISessionContext" /> for tests — keeps an in-memory message list
-    ///     and discards stats updates. The agent loop only reads <see cref="Messages" /> and
-    ///     calls <see cref="AppendMessageAsync" /> / <see cref="UpdateStatsAsync" />.
-    /// </summary>
-    private sealed class TestSessionContext : ISessionContext
-    {
-        private readonly List<AgentMessage> _messages;
-
-        public TestSessionContext(Session session, IReadOnlyList<AgentMessage> messages)
-        {
-            Session = session;
-            _messages = new List<AgentMessage>(messages);
-            SteeringQueue = System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>();
-        }
-
-        public Session Session { get; }
-        public IReadOnlyList<AgentMessage> Messages => _messages;
-        public System.Threading.Channels.Channel<AgentMessage> SteeringQueue { get; }
-
-        public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
-        {
-            _messages.Add(message);
-            return Task.CompletedTask;
-        }
-
-        public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default)
-        {
-            return Task.CompletedTask;
-        }
-    }
+        "test-model",
+        "test",
+        "Test Model",
+        200_000,
+        4096,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
 
     private static (AgentLoop loop, ProviderRegistry providers, ToolRegistry tools, AgentRegistry agents, InMemoryEventBus bus) CreateLoop(MockLlmClient client)
     {
@@ -179,7 +116,7 @@ public class AgentLoopTests
 
         // The loop appended an assistant message with the joined text.
         var assistant = session.Messages.OfType<AssistantMessage>().Single();
-        var text = string.Concat(assistant.Parts.OfType<TextPart>().Select(t => t.Text));
+        string text = string.Concat(assistant.Parts.OfType<TextPart>().Select(t => t.Text));
         await Assert.That(text).IsEqualTo("Hello, World!");
     }
 
@@ -257,13 +194,73 @@ public class AgentLoopTests
     }
 
     /// <summary>
+    ///     A scripted <see cref="ILlmClient" /> that replays a fixed sequence of events on each
+    ///     <see cref="StreamAsync" /> call. <see cref="GetModelsAsync" /> always returns
+    ///     <see cref="TestModel" />.
+    /// </summary>
+    private sealed class MockLlmClient : ILlmClient
+    {
+        private readonly LlmEvent[] _events;
+
+        public MockLlmClient(params LlmEvent[] events)
+        {
+            _events = events;
+        }
+
+        public ProviderId ProviderId => ProviderId.Create("test");
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var e in _events)
+            {
+                yield return e;
+                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel }));
+    }
+
+    /// <summary>
+    ///     Minimal <see cref="ISessionContext" /> for tests — keeps an in-memory message list
+    ///     and discards stats updates. The agent loop only reads <see cref="Messages" /> and
+    ///     calls <see cref="AppendMessageAsync" /> / <see cref="UpdateStatsAsync" />.
+    /// </summary>
+    private sealed class TestSessionContext : ISessionContext
+    {
+        private readonly List<AgentMessage> _messages;
+
+        public TestSessionContext(Session session, IReadOnlyList<AgentMessage> messages)
+        {
+            Session = session;
+            _messages = new List<AgentMessage>(messages);
+            SteeringQueue = Channel.CreateUnbounded<AgentMessage>();
+        }
+
+        public Session Session { get; }
+        public IReadOnlyList<AgentMessage> Messages => _messages;
+        public Channel<AgentMessage> SteeringQueue { get; }
+
+        public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
+        {
+            _messages.Add(message);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    /// <summary>
     ///     Session context wrapper that captures every <see cref="UpdateStatsAsync" /> call
     ///     so tests can assert the usage flowed through.
     /// </summary>
     private sealed class CapturingStatsSession : ISessionContext
     {
-        private readonly TestSessionContext _inner;
         private readonly List<Usage> _captured;
+        private readonly TestSessionContext _inner;
 
         public CapturingStatsSession(Session session, IReadOnlyList<AgentMessage> messages, List<Usage> captured)
         {
@@ -273,7 +270,7 @@ public class AgentLoopTests
 
         public Session Session => _inner.Session;
         public IReadOnlyList<AgentMessage> Messages => _inner.Messages;
-        public System.Threading.Channels.Channel<AgentMessage> SteeringQueue => _inner.SteeringQueue;
+        public Channel<AgentMessage> SteeringQueue => _inner.SteeringQueue;
         public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) => _inner.AppendMessageAsync(message, ct);
         public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default)
         {

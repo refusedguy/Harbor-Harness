@@ -7,7 +7,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Core.Sessions;
 namespace Harbor.Core.Tests;
-
 /// <summary>
 ///     Tests for <see cref="SystemPromptBuilder" /> — verifies that the assembled prompt
 ///     contains the expected sections: environment metadata, agent-specific instructions,
@@ -16,16 +15,16 @@ namespace Harbor.Core.Tests;
 public class SystemPromptBuilderTests
 {
     private static readonly ModelInfo TestModel = new(
-        Id: "test-model",
-        ProviderId: "test",
-        DisplayName: "Test Model",
-        ContextWindow: 200_000,
-        MaxOutputTokens: 4_096,
-        SupportsReasoning: false,
-        SupportsVision: false,
-        SupportsToolUse: true,
-        Pricing: Pricing.Unknown,
-        PromptTemplate: "openai");
+        "test-model",
+        "test",
+        "Test Model",
+        200_000,
+        4_096,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
 
     private static AgentDefinition Agent(string? append = null) => new(
         AgentName.Create("code"),
@@ -34,7 +33,6 @@ public class SystemPromptBuilderTests
         "test-model",
         "test",
         PermissionRuleset.Default,
-        50,
         SystemPromptAppend: append);
 
     private static SystemPromptContext Context(
@@ -44,10 +42,10 @@ public class SystemPromptBuilderTests
         agent,
         TestModel,
         tools,
-        ContextFiles: Array.Empty<ContextFile>(),
-        Skills: Array.Empty<SkillDescriptor>(),
-        McpInstructions: null,
-        WorkingDirectory: workingDirectory);
+        Array.Empty<ContextFile>(),
+        Array.Empty<SkillDescriptor>(),
+        null,
+        workingDirectory);
 
     private static ToolDescriptor Tool(string name, string description, string? snippet = null, params string[] guidelines) => new(
         ToolName.Create(name),
@@ -62,7 +60,7 @@ public class SystemPromptBuilderTests
     public async Task BuildAsync_IncludesEnvironmentSection()
     {
         var builder = new SystemPromptBuilder();
-        var ctx = Context(Agent(), Array.Empty<ToolDescriptor>(), workingDirectory: "/custom/dir");
+        var ctx = Context(Agent(), Array.Empty<ToolDescriptor>(), "/custom/dir");
 
         string prompt = await builder.BuildAsync(ctx);
 

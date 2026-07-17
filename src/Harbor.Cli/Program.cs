@@ -1,13 +1,19 @@
-using Microsoft.Extensions.DependencyInjection;
-using Harbor.Tui.Abstractions;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
+using Harbor.Cli.Commands;
 using Harbor.Cli.Hosting;
+using Harbor.Cli.Logging;
 using Harbor.Cli.Repl;
+using Harbor.Core.Configuration;
+using Harbor.Core.Onboarding;
+using Harbor.Tui.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Cli;
-
 /// <summary>
-/// Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
+///     Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
 /// </summary>
 public static class Program
 {
@@ -18,7 +24,7 @@ public static class Program
         var logLevel = ResolveLogLevel(args);
         var loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.AddProvider(new Logging.FileLoggerProvider(logLevel));
+            builder.AddProvider(new FileLoggerProvider(logLevel));
             if (logLevel <= LogLevel.Information)
             {
                 builder.AddSimpleConsole(o =>
@@ -34,29 +40,29 @@ public static class Program
         _logger.LogInformation("Starting Harbor CLI with {ArgCount} args: {Args}", args.Length, string.Join(' ', args));
         try
         {
-        if (args.Length == 0)
-        {
-            _logger.LogInformation("No args provided — entering interactive mode");
-            return await RunInteractiveAsync(args);
-        }
+            if (args.Length == 0)
+            {
+                _logger.LogInformation("No args provided — entering interactive mode");
+                return await RunInteractiveAsync(args);
+            }
 
-        string command = args[0].ToLowerInvariant();
-        _logger.LogInformation("Command: {Command}", command);
-        return command switch
-        {
-            "ask" => await RunAskAsync(args.Skip(1).ToArray()),
-            "providers" => await RunListProvidersAsync(),
-            "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
-            "sessions" => await RunListSessionsAsync(),
-            "tui" => PrintTuiOptions(),
-            "storage" => PrintStorageOptions(),
-            "setup" => await RunSetupAsync(),
-            "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
-            "config" => await RunConfigAsync(args.Skip(1).ToArray()),
-            "help" or "--help" or "-h" => PrintHelp(),
-            "version" or "--version" or "-v" => PrintVersion(),
-            _ => await RunInteractiveAsync()
-        };
+            string command = args[0].ToLowerInvariant();
+            _logger.LogInformation("Command: {Command}", command);
+            return command switch
+            {
+                "ask" => await RunAskAsync(args.Skip(1).ToArray()),
+                "providers" => await RunListProvidersAsync(),
+                "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
+                "sessions" => await RunListSessionsAsync(),
+                "tui" => PrintTuiOptions(),
+                "storage" => PrintStorageOptions(),
+                "setup" => await RunSetupAsync(),
+                "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
+                "config" => await RunConfigAsync(args.Skip(1).ToArray()),
+                "help" or "--help" or "-h" => PrintHelp(),
+                "version" or "--version" or "-v" => PrintVersion(),
+                _ => await RunInteractiveAsync()
+            };
         }
         catch (Exception ex)
         {
@@ -71,14 +77,18 @@ public static class Program
         _logger.LogInformation("Starting interactive mode");
         using var host = HostBuilder.Build(args);
         var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
-        var exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
+        int exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
         return exitCode;
     }
 
     private static async Task<int> RunAskAsync(string[] args)
     {
-        if (args.Length == 0) { Console.Error.WriteLine("Usage: harbor ask <prompt>"); return 1; }
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("Usage: harbor ask <prompt>");
+            return 1;
+        }
         string prompt = string.Join(' ', StripLogArgs(args));
         _logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
         using var host = HostBuilder.Build(args);
@@ -90,8 +100,8 @@ public static class Program
     {
         _logger.LogInformation("Starting setup wizard");
         using var host = HostBuilder.Build();
-        var wizard = host.Services.GetRequiredService<Core.Onboarding.OnboardingWizard>();
-        var renderer = host.Services.GetRequiredService<Tui.Abstractions.ITuiRenderer>();
+        var wizard = host.Services.GetRequiredService<OnboardingWizard>();
+        var renderer = host.Services.GetRequiredService<ITuiRenderer>();
         await renderer.InitializeAsync().ConfigureAwait(false);
         var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
         var reader = (Func<string, Task<string>>)(async prompt =>
@@ -108,12 +118,12 @@ public static class Program
     {
         _logger.LogInformation("Starting auth command");
         using var host = HostBuilder.Build(args);
-        var authStore = host.Services.GetRequiredService<Core.Configuration.AuthStore>();
+        var authStore = host.Services.GetRequiredService<AuthStore>();
         var writer = (Action<string>)Console.WriteLine;
-        var cmd = new Commands.AuthCommand(authStore, writer);
+        var cmd = new AuthCommand(authStore, writer);
         var ctx = new SimpleCommandContext(null!, null!,
-            host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>(),
-            host.Services.GetRequiredService<Abstractions.Tools.IToolRegistry>(),
+            host.Services.GetRequiredService<IProviderRegistry>(),
+            host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
         await cmd.ExecuteAsync(args, ctx);
         return 0;
@@ -123,12 +133,12 @@ public static class Program
     {
         _logger.LogInformation("Starting config command");
         using var host = HostBuilder.Build(args);
-        var configStore = host.Services.GetRequiredService<Core.Configuration.IConfigStore>();
+        var configStore = host.Services.GetRequiredService<IConfigStore>();
         var writer = (Action<string>)Console.WriteLine;
-        var cmd = new Commands.ConfigCommand(configStore, writer);
+        var cmd = new ConfigCommand(configStore, writer);
         var ctx = new SimpleCommandContext(null!, null!,
-            host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>(),
-            host.Services.GetRequiredService<Abstractions.Tools.IToolRegistry>(),
+            host.Services.GetRequiredService<IProviderRegistry>(),
+            host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
         await cmd.ExecuteAsync(args, ctx);
         return 0;
@@ -138,7 +148,7 @@ public static class Program
     {
         _logger.LogInformation("Listing providers");
         using var host = HostBuilder.Build();
-        var providers = host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>();
+        var providers = host.Services.GetRequiredService<IProviderRegistry>();
         var ids = providers.GetRegisteredProviderIds();
         _logger.LogInformation("Found {Count} registered providers", ids.Count);
         Console.WriteLine($"Providers ({ids.Count}):");
@@ -155,22 +165,38 @@ public static class Program
     {
         _logger.LogInformation("Listing models for provider {Provider}", providerId ?? "(all)");
         using var host = HostBuilder.Build();
-        var providers = host.Services.GetRequiredService<Abstractions.Providers.IProviderRegistry>();
+        var providers = host.Services.GetRequiredService<IProviderRegistry>();
         if (!string.IsNullOrEmpty(providerId))
         {
-            var pidResult = Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
-            if (pidResult.IsFailure) { Console.Error.WriteLine(pidResult.Error); return 1; }
+            var pidResult = ProviderId.TryCreate(providerId);
+            if (pidResult.IsFailure)
+            {
+                Console.Error.WriteLine(pidResult.Error);
+                return 1;
+            }
             var clientResult = providers.GetClient(pidResult.Value);
-            if (clientResult.IsFailure) { Console.Error.WriteLine(clientResult.Error); return 1; }
+            if (clientResult.IsFailure)
+            {
+                Console.Error.WriteLine(clientResult.Error);
+                return 1;
+            }
             var modelsResult = await clientResult.Value.GetModelsAsync().ConfigureAwait(false);
-            if (modelsResult.IsFailure) { Console.Error.WriteLine(modelsResult.Error); return 1; }
+            if (modelsResult.IsFailure)
+            {
+                Console.Error.WriteLine(modelsResult.Error);
+                return 1;
+            }
             _logger.LogInformation("Found {Count} models for {Provider}", modelsResult.Value.Count, providerId);
             Console.WriteLine($"Models for {providerId}:");
             foreach (var m in modelsResult.Value) Console.WriteLine($"  {m.Id} — {m.DisplayName}");
             return 0;
         }
         var allResult = await providers.GetAllModelsAsync().ConfigureAwait(false);
-        if (allResult.IsFailure) { Console.Error.WriteLine(allResult.Error); return 1; }
+        if (allResult.IsFailure)
+        {
+            Console.Error.WriteLine(allResult.Error);
+            return 1;
+        }
         _logger.LogInformation("Found {Count} total models", allResult.Value.Count);
         Console.WriteLine($"All models ({allResult.Value.Count}):");
         foreach (var g in allResult.Value.GroupBy(m => m.ProviderId))
@@ -185,7 +211,7 @@ public static class Program
     {
         _logger.LogInformation("Listing sessions");
         using var host = HostBuilder.Build();
-        var store = host.Services.GetRequiredService<Abstractions.Sessions.ISessionStore>();
+        var store = host.Services.GetRequiredService<ISessionStore>();
         var result = await store.ListAsync().ConfigureAwait(false);
         if (result.IsSuccess)
         {
@@ -196,15 +222,23 @@ public static class Program
         return 0;
     }
 
-    private static int PrintTuiOptions() { Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen"); return 0; }
-    private static int PrintStorageOptions() { Console.WriteLine("Storage: jsonl (default), memory, sqlite"); return 0; }
+    private static int PrintTuiOptions()
+    {
+        Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen");
+        return 0;
+    }
+    private static int PrintStorageOptions()
+    {
+        Console.WriteLine("Storage: jsonl (default), memory, sqlite");
+        return 0;
+    }
 
     private static int PrintHelp()
     {
         Console.WriteLine("""
-            Harbor — modular AI coding agent.
-            Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|help|version]
-            """);
+                          Harbor — modular AI coding agent.
+                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|help|version]
+                          """);
         return 0;
     }
 
@@ -223,7 +257,10 @@ public static class Program
         {
             if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
                 args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
-            { raw = args[i + 1]; break; }
+            {
+                raw = args[i + 1];
+                break;
+            }
         }
         raw ??= Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL");
         return Enum.TryParse<LogLevel>(raw, true, out var level) ? level : LogLevel.Warning;
@@ -237,8 +274,12 @@ public static class Program
         {
             if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
                 args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
-            { i += 2; continue; }
-            result.Add(args[i]); i++;
+            {
+                i += 2;
+                continue;
+            }
+            result.Add(args[i]);
+            i++;
         }
         return result.ToArray();
     }

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -8,7 +9,6 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
-
 /// <summary>
 ///     Tests for <see cref="CompactionService" />: the <see cref="CompactionService.ShouldCompact" />
 ///     threshold check and the cut-point selection logic exercised via
@@ -18,53 +18,28 @@ namespace Harbor.Core.Tests;
 public class CompactionServiceTests
 {
     private static readonly ModelInfo SmallModel = new(
-        Id: "test-model",
-        ProviderId: "test",
-        DisplayName: "Test Model",
-        ContextWindow: 4_096,
-        MaxOutputTokens: 1_024,
-        SupportsReasoning: false,
-        SupportsVision: false,
-        SupportsToolUse: true,
-        Pricing: Pricing.Unknown,
-        PromptTemplate: "openai");
+        "test-model",
+        "test",
+        "Test Model",
+        4_096,
+        1_024,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
 
     private static readonly ModelInfo HugeModel = new(
-        Id: "test-model",
-        ProviderId: "test",
-        DisplayName: "Test Model",
-        ContextWindow: 1_000_000,
-        MaxOutputTokens: 1_024,
-        SupportsReasoning: false,
-        SupportsVision: false,
-        SupportsToolUse: true,
-        Pricing: Pricing.Unknown,
-        PromptTemplate: "openai");
-
-    /// <summary>
-    ///     Mock client that returns the supplied summary text as a single
-    ///     <see cref="TextDeltaEvent" /> followed by a <see cref="StepFinishEvent" />.
-    /// </summary>
-    private sealed class SummaryLlmClient : ILlmClient
-    {
-        private readonly string _summary;
-
-        public SummaryLlmClient(string summary) => _summary = summary;
-
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            yield return new TextDeltaEvent("0", _summary);
-            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { SmallModel }));
-    }
+        "test-model",
+        "test",
+        "Test Model",
+        1_000_000,
+        1_024,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
 
     private static CompactionService CreateService(ILlmClient? client = null)
     {
@@ -161,16 +136,16 @@ public class CompactionServiceTests
         // KeepRecentTokens=500 we keep ~4 messages in the tail and prune the
         // first 2 into the summary.
         svc.KeepRecentTokens = 500;
-        svc.TailTurns = 0;         // disable the tail_turns floor for a deterministic cut
+        svc.TailTurns = 0; // disable the tail_turns floor for a deterministic cut
 
         var messages = new List<AgentMessage>
         {
-            User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),  // 0
-            Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),  // 1
-            User("cccccccccccccccccccccccccccccccccccccccc"),   // 2
-            Assistant("dddddddddddddddddddddddddddddddddddd"),   // 3
-            User("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),   // 4
-            Assistant("ffffffffffffffffffffffffffffffffffff"),   // 5
+            User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), // 0
+            Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), // 1
+            User("cccccccccccccccccccccccccccccccccccccccc"), // 2
+            Assistant("dddddddddddddddddddddddddddddddddddd"), // 3
+            User("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"), // 4
+            Assistant("ffffffffffffffffffffffffffffffffffff") // 5
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -211,7 +186,7 @@ public class CompactionServiceTests
             AssistantWithToolCall("call-1", "read"),
             ToolResult("read", "cccccccccccccccccccccccccccccccccccc"),
             User("dddddddddddddddddddddddddddddddddddd"),
-            Assistant("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+            Assistant("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -228,8 +203,8 @@ public class CompactionServiceTests
     public async Task CompactAsync_TailTurnsFloor_Enforced()
     {
         var svc = CreateService();
-        svc.KeepRecentTokens = 1;        // keep almost nothing
-        svc.TailTurns = 2;               // but enforce at least 2*4 = 8 tail messages
+        svc.KeepRecentTokens = 1; // keep almost nothing
+        svc.TailTurns = 2; // but enforce at least 2*4 = 8 tail messages
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 12; i++)
@@ -254,7 +229,7 @@ public class CompactionServiceTests
             User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
             Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
             User("cccccccccccccccccccccccccccccccccccccccc"),
-            Assistant("dddddddddddddddddddddddddddddddddddd"),
+            Assistant("dddddddddddddddddddddddddddddddddddd")
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -268,7 +243,7 @@ public class CompactionServiceTests
 
     private static AssistantMessage AssistantWithToolCall(string id, string toolName)
     {
-        var args = System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone();
+        var args = JsonDocument.Parse("{}").RootElement.Clone();
         return new AssistantMessage(
             Guid.NewGuid().ToString("N"),
             "session-1",
@@ -277,5 +252,33 @@ public class CompactionServiceTests
             StopReason.ToolUse,
             new Usage(0, 0),
             "test-model");
+    }
+
+    /// <summary>
+    ///     Mock client that returns the supplied summary text as a single
+    ///     <see cref="TextDeltaEvent" /> followed by a <see cref="StepFinishEvent" />.
+    /// </summary>
+    private sealed class SummaryLlmClient : ILlmClient
+    {
+        private readonly string _summary;
+
+        public SummaryLlmClient(string summary)
+        {
+            _summary = summary;
+        }
+
+        public ProviderId ProviderId => ProviderId.Create("test");
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            yield return new TextDeltaEvent("0", _summary);
+            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
+        }
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { SmallModel }));
     }
 }

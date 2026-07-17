@@ -4,9 +4,8 @@ using Harbor.Abstractions.Models;
 using Harbor.Tui.Termina;
 using Microsoft.Extensions.Logging.Abstractions;
 using R3;
-
+using Result = CSharpFunctionalExtensions.Result;
 namespace Harbor.Tui.E2E.Tests;
-
 /// <summary>
 ///     Tests the Termina ChatBridge event formatting logic.
 ///     Verifies that agent events are correctly translated to display lines
@@ -219,7 +218,7 @@ public class TerminaChatBridgeE2ETests
     public async Task ChatBridge_Dispose_CompletesObservable()
     {
         var bridge = new ChatBridge(NullLogger.Instance);
-        var completed = false;
+        bool completed = false;
         bridge.OutputStream.Subscribe(_ => { }, _ => completed = true);
 
         bridge.Dispose();
@@ -238,11 +237,11 @@ public class TerminaChatBridgeE2ETests
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NoopDisposable();
 
-        public Task<CSharpFunctionalExtensions.Result> PromptAsync(string text, CancellationToken ct = default)
-            => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
+        public Task<Result> PromptAsync(string text, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
 
-        public Task<CSharpFunctionalExtensions.Result> PromptAsync(UserMessage message, CancellationToken ct = default)
-            => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
+        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
+            => Task.FromResult(Result.Success());
 
         public void Initialize(Session session, AgentDefinition agent) { }
         public void Steer(AgentMessage message) { }

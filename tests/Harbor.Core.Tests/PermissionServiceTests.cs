@@ -5,7 +5,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Core.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
-
 /// <summary>
 ///     Tests for <see cref="PermissionService" /> — verifies the allow / ask / deny branches
 ///     of <see cref="PermissionService.CheckAsync" /> against rulesets configured on the agent.
@@ -18,13 +17,12 @@ public class PermissionServiceTests
         "Default coding agent.",
         "test-model",
         "test",
-        new PermissionRuleset(rules),
-        50);
+        new PermissionRuleset(rules));
 
     private static JsonElement Args(params (string key, string value)[] pairs)
     {
         var dict = new Dictionary<string, object?>();
-        foreach (var (k, v) in pairs)
+        foreach ((string k, string v) in pairs)
             dict[k] = v;
         return JsonDocument.Parse(JsonSerializer.Serialize(dict)).RootElement.Clone();
     }
@@ -77,6 +75,7 @@ public class PermissionServiceTests
             new PermissionRule("write", "*", PermissionAction.Ask));
 
         PermissionRequest? captured = null;
+
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {
             captured = req;
@@ -101,7 +100,7 @@ public class PermissionServiceTests
         var agent = AgentWithRuleset(
             new PermissionRule("write", "*", PermissionAction.Ask));
 
-        var (svc, _) = CreateService(agent, asker: null);
+        var (svc, _) = CreateService(agent);
         var args = Args(("path", "/repo/file.txt"));
 
         var result = await svc.CheckAsync("code", "write", args);
@@ -181,7 +180,7 @@ public class PermissionServiceTests
     {
         // Empty ruleset: every action falls through to Ask in the ruleset evaluator.
         var agent = AgentWithRuleset();
-        var (svc, _) = CreateService(agent, asker: null);
+        var (svc, _) = CreateService(agent);
 
         var result = await svc.CheckAsync("code", "task", Args());
 

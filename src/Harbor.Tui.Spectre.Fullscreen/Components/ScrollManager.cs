@@ -1,47 +1,50 @@
-using System.Text;
-
 namespace Harbor.Tui.Spectre.Fullscreen.Components;
-
 /// <summary>
-/// Manages scroll offset state for the chat history view.
-/// Single responsibility: track and compute scroll position.
+///     Manages scroll offset state for the chat history view.
+///     Single responsibility: track and compute scroll position.
 /// </summary>
 public sealed class ScrollManager
 {
-    private int _offset;
-    private bool _isScrolling;
 
-    public int Offset => _offset;
-    public bool IsScrolling => _isScrolling;
+    public int Offset
+    {
+        get;
+        private set;
+    }
+    public bool IsScrolling
+    {
+        get;
+        private set;
+    }
 
     public void ScrollUp(int lines, int totalLines, int viewportHeight)
     {
-        var maxScroll = Math.Max(0, totalLines - viewportHeight);
-        _offset = Math.Min(_offset + lines, maxScroll);
-        _isScrolling = _offset > 0;
+        int maxScroll = Math.Max(0, totalLines - viewportHeight);
+        Offset = Math.Min(Offset + lines, maxScroll);
+        IsScrolling = Offset > 0;
     }
 
     public void ScrollDown(int lines)
     {
-        _offset = Math.Max(0, _offset - lines);
-        if (_offset == 0) _isScrolling = false;
+        Offset = Math.Max(0, Offset - lines);
+        if (Offset == 0) IsScrolling = false;
     }
 
     public void ScrollToTop(int totalLines, int viewportHeight)
     {
-        _offset = Math.Max(0, totalLines - viewportHeight);
-        _isScrolling = _offset > 0;
+        Offset = Math.Max(0, totalLines - viewportHeight);
+        IsScrolling = Offset > 0;
     }
 
     public void ScrollToBottom()
     {
-        _offset = 0;
-        _isScrolling = false;
+        Offset = 0;
+        IsScrolling = false;
     }
 
     public void Reset()
     {
-        _offset = 0;
-        _isScrolling = false;
+        Offset = 0;
+        IsScrolling = false;
     }
 }

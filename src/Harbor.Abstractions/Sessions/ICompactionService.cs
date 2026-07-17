@@ -134,25 +134,25 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
             case AssistantMessage a:
                 // For-loop over Parts replaces `a.Parts.Sum(EstimatePart)` — avoids the
                 // LINQ iterator + delegate allocation per message.
+            {
+                var parts = a.Parts;
+                int sum = 0;
+                for (int i = 0; i < parts.Count; i++)
                 {
-                    var parts = a.Parts;
-                    int sum = 0;
-                    for (int i = 0; i < parts.Count; i++)
-                    {
-                        sum += EstimatePart(parts[i]);
-                    }
-                    return sum + 100;
+                    sum += EstimatePart(parts[i]);
                 }
+                return sum + 100;
+            }
             case ToolResultMessage tr:
+            {
+                var results = tr.Results;
+                int sum = 0;
+                for (int i = 0; i < results.Count; i++)
                 {
-                    var results = tr.Results;
-                    int sum = 0;
-                    for (int i = 0; i < results.Count; i++)
-                    {
-                        sum += Estimate(results[i].Output);
-                    }
-                    return sum + 100;
+                    sum += Estimate(results[i].Output);
                 }
+                return sum + 100;
+            }
             default:
                 return 50;
         }

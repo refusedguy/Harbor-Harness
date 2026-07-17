@@ -1,21 +1,18 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-/// Find files by glob. Supports **, *, ?, and simple *.{a,b} braces.
-/// Prunes heavy dirs (not a full .gitignore parser).
+///     Find files by glob. Supports **, *, ?, and simple *.{a,b} braces.
+///     Prunes heavy dirs (not a full .gitignore parser).
 /// </summary>
 public sealed class GlobTool : ITool
 {
-    private readonly ILogger<GlobTool> _logger;
 
-    public GlobTool(ILogger<GlobTool> logger) { _logger = logger; }
+    private const int DefaultMaxResults = 1000;
+    private const int HardMaxResults = 5000;
 
     private static readonly HashSet<string> PrunedDirNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -24,9 +21,9 @@ public sealed class GlobTool : ITool
         "target", "vendor", "__pycache__", ".next", ".nuxt",
         "coverage", ".turbo", ".cache"
     };
+    private readonly ILogger<GlobTool> _logger;
 
-    private const int DefaultMaxResults = 1000;
-    private const int HardMaxResults = 5000;
+    public GlobTool(ILogger<GlobTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("glob");
     public string DisplayName => "Glob";
@@ -78,15 +75,15 @@ public sealed class GlobTool : ITool
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        var pattern = args.GetProperty("pattern").GetString()!.Trim();
-        var basePath = args.TryGetProperty("path", out var bp) && bp.ValueKind == JsonValueKind.String
+        string pattern = args.GetProperty("pattern").GetString()!.Trim();
+        string basePath = args.TryGetProperty("path", out var bp) && bp.ValueKind == JsonValueKind.String
             ? bp.GetString()!
             : Environment.CurrentDirectory;
-        var noPrune = args.TryGetProperty("ignoreGitignore", out var ig)
-                      && ig.ValueKind == JsonValueKind.True;
-        var maxResults = DefaultMaxResults;
+        bool noPrune = args.TryGetProperty("ignoreGitignore", out var ig)
+                       && ig.ValueKind == JsonValueKind.True;
+        int maxResults = DefaultMaxResults;
         if (args.TryGetProperty("maxResults", out var mr) && mr.ValueKind == JsonValueKind.Number
-                                                          && mr.TryGetInt32(out var m))
+                                                          && mr.TryGetInt32(out int m))
             maxResults = Math.Clamp(m, 1, HardMaxResults);
 
         try
@@ -106,14 +103,14 @@ public sealed class GlobTool : ITool
         // Expand light braces: *.{cs,ts} → *.cs + *.ts (one level)
         var patterns = ExpandBraces(pattern);
         var matches = new List<string>(Math.Min(maxResults, 256));
-        var truncated = false;
+        bool truncated = false;
 
         try
         {
-            foreach (var pat in patterns)
+            foreach (string pat in patterns)
             {
                 ct.ThrowIfCancellationRequested();
-                foreach (var file in EnumerateGlob(basePath, pat, prune: !noPrune, ct))
+                foreach (string file in EnumerateGlob(basePath, pat, !noPrune, ct))
                 {
                     matches.Add(file);
                     if (matches.Count >= maxResults)
@@ -148,7 +145,7 @@ public sealed class GlobTool : ITool
         sb.Append(" files");
         if (truncated) sb.Append(" (truncated at ").Append(maxResults).Append(')');
         sb.Append(':').Append('\n');
-        foreach (var r in relative)
+        foreach (string r in relative)
             sb.Append(r).Append('\n');
 
         return ToolResult.Success(
@@ -157,7 +154,7 @@ public sealed class GlobTool : ITool
     }
 
     /// <summary>
-    /// Walk segments. "**" = zero or more directories (recursive), with prune.
+    ///     Walk segments. "**" = zero or more directories (recursive), with prune.
     /// </summary>
     private static IEnumerable<string> EnumerateGlob(
         string basePath,
@@ -169,24 +166,24 @@ public sealed class GlobTool : ITool
         if (pattern.Length == 0)
             yield break;
 
-        var segments = pattern.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        string[] segments = pattern.Split('/', StringSplitOptions.RemoveEmptyEntries);
         // BFS: set of directories that match the prefix so far
         var dirs = new List<string> { basePath };
 
-        for (var si = 0; si < segments.Length; si++)
+        for (int si = 0; si < segments.Length; si++)
         {
             ct.ThrowIfCancellationRequested();
-            var segment = segments[si];
-            var isLast = si == segments.Length - 1;
+            string segment = segments[si];
+            bool isLast = si == segments.Length - 1;
             var nextDirs = new List<string>();
 
             if (segment == "**")
             {
                 // All dirs under each current dir (including itself)
-                foreach (var dir in dirs)
+                foreach (string dir in dirs)
                 {
                     ct.ThrowIfCancellationRequested();
-                    foreach (var d in EnumerateDirsRecursive(dir, prune, ct))
+                    foreach (string d in EnumerateDirsRecursive(dir, prune, ct))
                         nextDirs.Add(d);
                 }
                 // de-dupe dirs
@@ -196,16 +193,16 @@ public sealed class GlobTool : ITool
 
             var rx = SegmentToRegex(segment);
 
-            foreach (var dir in dirs)
+            foreach (string dir in dirs)
             {
                 ct.ThrowIfCancellationRequested();
 
                 if (!isLast)
                 {
                     // must be directories
-                    foreach (var sub in SafeEnumerateDirectories(dir))
+                    foreach (string sub in SafeEnumerateDirectories(dir))
                     {
-                        var name = Path.GetFileName(sub);
+                        string name = Path.GetFileName(sub);
                         if (prune && PrunedDirNames.Contains(name))
                             continue;
                         if (rx.IsMatch(name))
@@ -215,9 +212,9 @@ public sealed class GlobTool : ITool
                 else
                 {
                     // last segment: files (and optionally dirs if pattern ends without file — we want files)
-                    foreach (var file in SafeEnumerateFiles(dir))
+                    foreach (string file in SafeEnumerateFiles(dir))
                     {
-                        var name = Path.GetFileName(file);
+                        string name = Path.GetFileName(file);
                         if (rx.IsMatch(name))
                             yield return file;
                     }
@@ -239,12 +236,12 @@ public sealed class GlobTool : ITool
         while (stack.Count > 0)
         {
             ct.ThrowIfCancellationRequested();
-            var dir = stack.Pop();
+            string dir = stack.Pop();
             yield return dir;
 
-            foreach (var sub in SafeEnumerateDirectories(dir))
+            foreach (string sub in SafeEnumerateDirectories(dir))
             {
-                var name = Path.GetFileName(sub);
+                string name = Path.GetFileName(sub);
                 if (prune && PrunedDirNames.Contains(name))
                     continue;
                 stack.Push(sub);
@@ -269,7 +266,7 @@ public sealed class GlobTool : ITool
     {
         var sb = new StringBuilder(segment.Length * 2);
         sb.Append('^');
-        foreach (var ch in segment)
+        foreach (char ch in segment)
         {
             switch (ch)
             {
@@ -289,20 +286,20 @@ public sealed class GlobTool : ITool
     /// <summary>Very small brace expand: one `{a,b}` group per pattern.</summary>
     private static List<string> ExpandBraces(string pattern)
     {
-        var start = pattern.IndexOf('{');
-        var end = pattern.IndexOf('}');
+        int start = pattern.IndexOf('{');
+        int end = pattern.IndexOf('}');
         if (start < 0 || end <= start)
             return [pattern];
 
-        var before = pattern[..start];
-        var after = pattern[(end + 1)..];
-        var body = pattern.Substring(start + 1, end - start - 1);
-        var parts = body.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string before = pattern[..start];
+        string after = pattern[(end + 1)..];
+        string body = pattern.Substring(start + 1, end - start - 1);
+        string[] parts = body.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length == 0)
             return [pattern];
 
         var list = new List<string>(parts.Length);
-        foreach (var part in parts)
+        foreach (string part in parts)
             list.Add(before + part + after);
         return list;
     }

@@ -1,16 +1,9 @@
-using System;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using R3;
-using Termina;
 using Termina.Input;
 using Termina.Layout;
 using Termina.Reactive;
 using Termina.Terminal;
-using TextDecoration = Termina.Terminal.TextDecoration;
-
 namespace Harbor.Tui.Termina;
 /// <summary>
 ///     Reactive view model for the Termina chat page. Holds the streamed output as an
@@ -19,8 +12,8 @@ namespace Harbor.Tui.Termina;
 public sealed class ChatViewModel : ReactiveViewModel
 {
     private readonly ChatBridge _bridge;
-    private readonly Subject<ChatLine> _stream = new();
     private readonly ILogger? _logger;
+    private readonly Subject<ChatLine> _stream = new();
 
     public ChatViewModel(ChatBridge bridge, ILogger? logger = null)
     {
@@ -86,8 +79,8 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
 {
     private readonly ChatBridge _bridge;
     private readonly ILogger? _logger;
-    private StreamingTextNode? _output;
     private TextInputNode? _input;
+    private StreamingTextNode? _output;
 
     public ChatPage(ChatBridge bridge, ILogger? logger = null)
     {
@@ -108,9 +101,9 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
             .WithForeground(Color.Cyan)
             .WithHistory();
 
-        ViewModel.Stream
+        this.ViewModel.Stream
             .Subscribe(line => AppendLine(line))
-            .DisposeWith(Subscriptions);
+            .DisposeWith(this.Subscriptions);
 
         _bridge.OutputStream
             .Subscribe(line =>
@@ -118,34 +111,34 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
                 _logger?.LogDebug("OutputStream received token: {TokenLength} chars", line.Text.Length);
                 AppendLine(line);
             })
-            .DisposeWith(Subscriptions);
+            .DisposeWith(this.Subscriptions);
 
         _input.Submitted
             .Subscribe(text =>
             {
                 _logger?.LogInformation("TextInput submitted: {Text}", text);
-                ViewModel.HandleSubmit(text);
+                this.ViewModel.HandleSubmit(text);
                 _input.Clear();
             })
-            .DisposeWith(Subscriptions);
+            .DisposeWith(this.Subscriptions);
 
         // Pattern 2 (always-visible input): route every key from the ViewModel's
         // input observable into the TextInputNode so it can handle character input,
         // backspace, cursor movement and history. Escape is intercepted here to quit.
-        ViewModel.Input
+        this.ViewModel.Input
             .OfType<IInputEvent, KeyPressed>()
             .Subscribe(key =>
             {
                 _logger?.LogDebug("Key pressed: {Key}", key.KeyInfo.Key);
                 if (key.KeyInfo.Key == ConsoleKey.Escape)
                 {
-                    ViewModel.RequestShutdown();
+                    this.ViewModel.RequestShutdown();
                     return;
                 }
 
                 _input.HandleInput(key.KeyInfo);
             })
-            .DisposeWith(Subscriptions);
+            .DisposeWith(this.Subscriptions);
 
         _logger?.LogInformation("ChatPage.OnBound completed — subscriptions wired");
     }
@@ -162,7 +155,7 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
     {
         _logger?.LogInformation("ChatPage.OnNavigatedTo called");
         base.OnNavigatedTo();
-        FocusPolicy = FocusPolicy.FirstFocusable;
+        this.FocusPolicy = FocusPolicy.FirstFocusable;
         _logger?.LogInformation("FocusPolicy set to FirstFocusable");
     }
 

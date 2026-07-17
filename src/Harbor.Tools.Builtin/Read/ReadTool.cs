@@ -1,27 +1,24 @@
 using System.Buffers;
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-/// Reads text (optionally a line window) or reports image metadata.
-/// Streams lines for offset/limit — never loads whole multi‑MB files just to slice.
+///     Reads text (optionally a line window) or reports image metadata.
+///     Streams lines for offset/limit — never loads whole multi‑MB files just to slice.
 /// </summary>
 public sealed class ReadTool : ITool
 {
-    private readonly ILogger<ReadTool> _logger;
-
-    public ReadTool(ILogger<ReadTool> logger) { _logger = logger; }
 
     private const int MaxChars = 100_000;
     private const int MaxFileBytes = 10 * 1024 * 1024; // 10 MiB hard cap for text
     private const int BinaryProbeBytes = 8192;
     private const int ImageTokenEstimate = 1200;
     private const int DefaultLineLimit = 2000; // full-file safety when no limit given
+    private readonly ILogger<ReadTool> _logger;
+
+    public ReadTool(ILogger<ReadTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("read");
     public string DisplayName => "Read";
@@ -59,11 +56,11 @@ public sealed class ReadTool : ITool
             return Result.Failure("Missing or empty 'path'.");
 
         if (args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
-                                                     && o.TryGetInt32(out var offset) && offset < 1)
+                                                     && o.TryGetInt32(out int offset) && offset < 1)
             return Result.Failure("'offset' must be >= 1.");
 
         if (args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number
-                                                    && l.TryGetInt32(out var limit) && limit < 1)
+                                                    && l.TryGetInt32(out int limit) && limit < 1)
             return Result.Failure("'limit' must be >= 1.");
 
         return Result.Success();
@@ -74,7 +71,7 @@ public sealed class ReadTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var path = args.GetProperty("path").GetString()!;
+        string path = args.GetProperty("path").GetString()!;
         int? offset = args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
             ? o.GetInt32() : null;
         int? limit = args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number
@@ -100,7 +97,7 @@ public sealed class ReadTool : ITool
             return ToolResult.Error($"Cannot stat file: {ex.Message}");
         }
 
-        var mime = DetectMimeType(path);
+        string mime = DetectMimeType(path);
 
         // ── images ──────────────────────────────────────────────
         if (IsImageMimeType(mime))
@@ -110,8 +107,8 @@ public sealed class ReadTool : ITool
 
             // Host can attach bytes via metadata if vision is wired.
             // Don't dump base64 into the text channel by default (blows context).
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-            var b64 = Convert.ToBase64String(bytes);
+            byte[] bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            string b64 = Convert.ToBase64String(bytes);
 
             return ToolResult.Success(
                 $"Image: {path} ({bytes.Length} bytes, {mime}). " +
@@ -150,16 +147,16 @@ public sealed class ReadTool : ITool
         }
 
         // ── text, streamed by line ───────────────────────────────
-        var startLine = offset ?? 1; // 1-based
-        var maxLines = limit ?? DefaultLineLimit; // always capped
-        var skip = startLine - 1;
+        int startLine = offset ?? 1; // 1-based
+        int maxLines = limit ?? DefaultLineLimit; // always capped
+        int skip = startLine - 1;
 
         var sb = new StringBuilder(Math.Min(MaxChars, 16 * 1024));
-        var lineNo = 0;
-        var taken = 0;
-        var truncatedByLines = false;
-        var truncatedByChars = false;
-        var totalLinesSeen = 0;
+        int lineNo = 0;
+        int taken = 0;
+        bool truncatedByLines = false;
+        bool truncatedByChars = false;
+        int totalLinesSeen = 0;
 
         try
         {
@@ -168,16 +165,16 @@ public sealed class ReadTool : ITool
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite,
-                bufferSize: 64 * 1024,
+                64 * 1024,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
 
             using var reader = new StreamReader(stream, Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true, bufferSize: 64 * 1024);
+                true, 64 * 1024);
 
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                string? line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line is null)
                     break;
 
@@ -198,7 +195,7 @@ public sealed class ReadTool : ITool
                 if (line.EndsWith('\r'))
                     line = line[..^1];
 
-                var numbered = $"[{lineNo:D4}] {line}";
+                string numbered = $"[{lineNo:D4}] {line}";
 
                 if (sb.Length + numbered.Length + 1 > MaxChars)
                 {
@@ -258,16 +255,16 @@ public sealed class ReadTool : ITool
     {
         try
         {
-            var toRead = (int)Math.Min(length, BinaryProbeBytes);
+            int toRead = (int)Math.Min(length, BinaryProbeBytes);
             if (toRead == 0) return false;
 
-            var buffer = ArrayPool<byte>.Shared.Rent(toRead);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(toRead);
             try
             {
                 using var fs = new FileStream(
                     path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                    bufferSize: toRead, FileOptions.SequentialScan);
-                var n = fs.Read(buffer, 0, toRead);
+                    toRead, FileOptions.SequentialScan);
+                int n = fs.Read(buffer, 0, toRead);
                 return buffer.AsSpan(0, n).IndexOf((byte)0) >= 0;
             }
             finally
@@ -283,7 +280,7 @@ public sealed class ReadTool : ITool
 
     private static string DetectMimeType(string path)
     {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
+        string ext = Path.GetExtension(path).ToLowerInvariant();
         return ext switch
         {
             ".txt" or ".md" or ".markdown" or ".log" or ".csv" or ".tsv" => "text/plain",

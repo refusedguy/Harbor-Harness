@@ -1,8 +1,6 @@
-using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.Views;
@@ -15,7 +13,6 @@ using Termina.Terminal;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tui.Termina;
-
 /// <summary>
 ///     A single rendered chat line carrying its role color. The <see cref="ChatBridge" /> emits
 ///     these so the page can append role-appropriate, color-coded text to the streaming node.
@@ -30,12 +27,10 @@ public sealed record ChatLine(string Text, Color? Color = null, bool NewLineBefo
 /// </summary>
 public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
-    private readonly ILogger<TerminaRenderer> _logger;
     private readonly TerminaRenderContext _context;
+    private readonly ILogger<TerminaRenderer> _logger;
     private ChatBridge? _bridge;
     private Func<string, Task>? _slashHandler;
-
-    public override ITuiRenderContext Context => _context;
 
     public TerminaRenderer(ILogger<TerminaRenderer> logger) : base(logger)
     {
@@ -43,10 +38,9 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         _context = new TerminaRenderContext();
     }
 
-    void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler)
-    {
-        _slashHandler = handler;
-    }
+    public override ITuiRenderContext Context => _context;
+
+    void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler) => _slashHandler = handler;
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -67,13 +61,6 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         _bridge?.Push(@event);
         return base.RenderAsync(@event, ct);
     }
-
-    /// <summary>
-    ///     Suppress placement-driven rendering — Termina's <see cref="ChatPage" /> owns the
-    ///     display and subscribes to the shared <see cref="ChatBridge" />. The base class would
-    ///     otherwise write status/history lines straight to the console and corrupt the screen.
-    /// </summary>
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
@@ -105,7 +92,7 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         _context.WriteColored(prompt, TuiColor.Green);
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
@@ -132,6 +119,13 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         _bridge?.Dispose();
         base.Dispose();
     }
+
+    /// <summary>
+    ///     Suppress placement-driven rendering — Termina's <see cref="ChatPage" /> owns the
+    ///     display and subscribes to the shared <see cref="ChatBridge" />. The base class would
+    ///     otherwise write status/history lines straight to the console and corrupt the screen.
+    /// </summary>
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 }
 
 /// <summary>
@@ -141,8 +135,8 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 /// </summary>
 public sealed class ChatBridge : IDisposable
 {
-    private readonly Subject<ChatLine> _outputStream = new();
     private readonly ILogger _logger;
+    private readonly Subject<ChatLine> _outputStream = new();
     private bool _awaitingAssistantLabel = true;
 
     public ChatBridge(ILogger logger)
@@ -155,6 +149,8 @@ public sealed class ChatBridge : IDisposable
     public Func<string, Task>? SlashHandler { get; set; }
 
     public Observable<ChatLine> OutputStream => _outputStream;
+
+    public void Dispose() => _outputStream.Dispose();
 
     public void Push(AgentEvent @event)
     {
@@ -240,10 +236,10 @@ public sealed class ChatBridge : IDisposable
                 yield break;
             case MessageEndEvent:
                 _awaitingAssistantLabel = true;
-                yield return new ChatLine("\n", null);
+                yield return new ChatLine("\n");
                 yield break;
             case ToolExecutionStartEvent tes:
-                var args = tes.Args.GetRawText();
+                string args = tes.Args.GetRawText();
                 yield return new ChatLine(
                     string.IsNullOrEmpty(args) || args == "{}"
                         ? $"→ {tes.ToolName}\n"
@@ -251,8 +247,8 @@ public sealed class ChatBridge : IDisposable
                     Color.Yellow);
                 yield break;
             case ToolExecutionEndEvent tee:
-                var label = tee.IsError ? "✗" : "✓";
-                var preview = tee.Result.Output.Length > 600
+                string label = tee.IsError ? "✗" : "✓";
+                string preview = tee.Result.Output.Length > 600
                     ? tee.Result.Output[..600] + "..." : tee.Result.Output;
                 yield return new ChatLine($"{label} {preview.Trim()}\n", tee.IsError ? Color.Red : Color.Gray);
                 yield break;
@@ -267,8 +263,6 @@ public sealed class ChatBridge : IDisposable
                 yield break;
         }
     }
-
-    public void Dispose() => _outputStream.Dispose();
 }
 
 /// <summary>Render context shim over the console for non-interactive helpers.</summary>

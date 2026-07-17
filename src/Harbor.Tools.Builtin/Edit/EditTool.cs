@@ -1,24 +1,21 @@
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-/// Surgical string replace. oldString must be unique unless replaceAll.
-/// Multi-edit applies in order on the updated buffer.
+///     Surgical string replace. oldString must be unique unless replaceAll.
+///     Multi-edit applies in order on the updated buffer.
 /// </summary>
 public sealed class EditTool : ITool
 {
-    private readonly ILogger<EditTool> _logger;
-
-    public EditTool(ILogger<EditTool> logger) { _logger = logger; }
 
     private const int MaxFileChars = 5_000_000;
     private const int MaxDiffLines = 80;
     private const int SnippetLen = 80;
+    private readonly ILogger<EditTool> _logger;
+
+    public EditTool(ILogger<EditTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("edit");
     public string DisplayName => "Edit";
@@ -69,13 +66,13 @@ public sealed class EditTool : ITool
             || string.IsNullOrWhiteSpace(pathEl.GetString()))
             return Result.Failure("Missing or empty 'path'.");
 
-        var hasSingle = args.TryGetProperty("oldString", out var os)
-                        && os.ValueKind == JsonValueKind.String
-                        && args.TryGetProperty("newString", out var ns)
-                        && ns.ValueKind == JsonValueKind.String;
-        var hasMulti = args.TryGetProperty("edits", out var ed)
-                       && ed.ValueKind == JsonValueKind.Array
-                       && ed.GetArrayLength() > 0;
+        bool hasSingle = args.TryGetProperty("oldString", out var os)
+                         && os.ValueKind == JsonValueKind.String
+                         && args.TryGetProperty("newString", out var ns)
+                         && ns.ValueKind == JsonValueKind.String;
+        bool hasMulti = args.TryGetProperty("edits", out var ed)
+                        && ed.ValueKind == JsonValueKind.Array
+                        && ed.GetArrayLength() > 0;
 
         if (!hasSingle && !hasMulti)
             return Result.Failure("Provide edits[] or both oldString and newString.");
@@ -103,7 +100,7 @@ public sealed class EditTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var rawPath = args.GetProperty("path").GetString()!;
+        string rawPath = args.GetProperty("path").GetString()!;
 
         string path;
         try
@@ -137,9 +134,9 @@ public sealed class EditTool : ITool
             return ToolResult.Error(
                 $"File too large to edit in-memory ({original.Length} chars; max {MaxFileChars}).");
 
-        var content = original;
-        var totalReplacements = 0;
-        var editSteps = 0;
+        string content = original;
+        int totalReplacements = 0;
+        int editSteps = 0;
 
         try
         {
@@ -147,13 +144,13 @@ public sealed class EditTool : ITool
                 && editsEl.ValueKind == JsonValueKind.Array
                 && editsEl.GetArrayLength() > 0)
             {
-                var step = 0;
+                int step = 0;
                 foreach (var edit in editsEl.EnumerateArray())
                 {
                     step++;
-                    var oldStr = edit.GetProperty("oldString").GetString()!;
-                    var newStr = edit.GetProperty("newString").GetString() ?? string.Empty;
-                    var replaceAll = GetBool(edit, "replaceAll");
+                    string oldStr = edit.GetProperty("oldString").GetString()!;
+                    string newStr = edit.GetProperty("newString").GetString() ?? string.Empty;
+                    bool replaceAll = GetBool(edit, "replaceAll");
 
                     var applied = ApplyEdit(content, oldStr, newStr, replaceAll);
                     if (!applied.Ok)
@@ -166,9 +163,9 @@ public sealed class EditTool : ITool
             }
             else
             {
-                var oldStr = args.GetProperty("oldString").GetString()!;
-                var newStr = args.GetProperty("newString").GetString() ?? string.Empty;
-                var replaceAll = GetBool(args, "replaceAll");
+                string oldStr = args.GetProperty("oldString").GetString()!;
+                string newStr = args.GetProperty("newString").GetString() ?? string.Empty;
+                bool replaceAll = GetBool(args, "replaceAll");
 
                 var applied = ApplyEdit(content, oldStr, newStr, replaceAll);
                 if (!applied.Ok)
@@ -207,7 +204,7 @@ public sealed class EditTool : ITool
             return ToolResult.Error($"Failed to write: {ex.Message}");
         }
 
-        var diff = GenerateContextDiff(original, content, MaxDiffLines);
+        string diff = GenerateContextDiff(original, content, MaxDiffLines);
         var msg = new StringBuilder();
         msg.Append("Edited ").Append(path)
             .Append(": ").Append(totalReplacements).Append(" replacement(s) in ")
@@ -220,12 +217,6 @@ public sealed class EditTool : ITool
             new { path, changes = totalReplacements, steps = editSteps });
     }
 
-    private readonly record struct EditResult(bool Ok, string Text, int Count, string? Error)
-    {
-        public static EditResult Success(string text, int count) => new(true, text, count, null);
-        public static EditResult Fail(string error) => new(false, string.Empty, 0, error);
-    }
-
     private static EditResult ApplyEdit(string content, string oldStr, string newStr, bool replaceAll)
     {
         if (string.IsNullOrEmpty(oldStr))
@@ -236,27 +227,27 @@ public sealed class EditTool : ITool
 
         if (replaceAll)
         {
-            var count = CountOccurrences(content, oldStr);
+            int count = CountOccurrences(content, oldStr);
             if (count == 0)
                 return EditResult.Fail($"oldString not found: {Snippet(oldStr)}");
 
             return EditResult.Success(content.Replace(oldStr, newStr, StringComparison.Ordinal), count);
         }
 
-        var first = content.IndexOf(oldStr, StringComparison.Ordinal);
+        int first = content.IndexOf(oldStr, StringComparison.Ordinal);
         if (first < 0)
             return EditResult.Fail($"oldString not found: {Snippet(oldStr)}");
 
-        var second = content.IndexOf(oldStr, first + oldStr.Length, StringComparison.Ordinal);
+        int second = content.IndexOf(oldStr, first + oldStr.Length, StringComparison.Ordinal);
         if (second >= 0)
         {
-            var total = CountOccurrences(content, oldStr);
+            int total = CountOccurrences(content, oldStr);
             return EditResult.Fail(
                 $"oldString found {total} times; make it unique or set replaceAll=true. " +
                 $"Snippet: {Snippet(oldStr)}");
         }
 
-        var replaced = string.Concat(
+        string replaced = string.Concat(
             content.AsSpan(0, first),
             newStr.AsSpan(),
             content.AsSpan(first + oldStr.Length));
@@ -266,8 +257,8 @@ public sealed class EditTool : ITool
 
     private static int CountOccurrences(string haystack, string needle)
     {
-        var count = 0;
-        var idx = 0;
+        int count = 0;
+        int idx = 0;
         while ((idx = haystack.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0)
         {
             count++;
@@ -277,26 +268,28 @@ public sealed class EditTool : ITool
     }
 
     /// <summary>
-    /// Compact unified-ish diff: only changed line ranges with small context.
-    /// Not a full LCS diff — good enough for agent feedback, O(n) lines.
+    ///     Compact unified-ish diff: only changed line ranges with small context.
+    ///     Not a full LCS diff — good enough for agent feedback, O(n) lines.
     /// </summary>
     private static string GenerateContextDiff(string oldText, string newText, int maxHunkLines)
     {
-        var oldLines = SplitLines(oldText);
-        var newLines = SplitLines(newText);
+        string[] oldLines = SplitLines(oldText);
+        string[] newLines = SplitLines(newText);
 
         // Myers would be ideal; for tool output use simple LCS-free window:
         // find first/last differing region by scanning from start/end.
-        var oLen = oldLines.Length;
-        var nLen = newLines.Length;
+        int oLen = oldLines.Length;
+        int nLen = newLines.Length;
 
-        var prefix = 0;
+        int prefix = 0;
         while (prefix < oLen && prefix < nLen
                              && oldLines[prefix] == newLines[prefix])
+        {
             prefix++;
+        }
 
-        var oSuffix = oLen - 1;
-        var nSuffix = nLen - 1;
+        int oSuffix = oLen - 1;
+        int nSuffix = nLen - 1;
         while (oSuffix >= prefix && nSuffix >= prefix
                                  && oldLines[oSuffix] == newLines[nSuffix])
         {
@@ -311,23 +304,23 @@ public sealed class EditTool : ITool
         sb.AppendLine("Diff (context):");
 
         const int ctx = 2;
-        var fromOld = Math.Max(0, prefix - ctx);
-        var toOld = Math.Min(oLen - 1, oSuffix + ctx);
-        var fromNew = Math.Max(0, prefix - ctx);
-        var toNew = Math.Min(nLen - 1, nSuffix + ctx);
+        int fromOld = Math.Max(0, prefix - ctx);
+        int toOld = Math.Min(oLen - 1, oSuffix + ctx);
+        int fromNew = Math.Max(0, prefix - ctx);
+        int toNew = Math.Min(nLen - 1, nSuffix + ctx);
 
-        var linesUsed = 0;
+        int linesUsed = 0;
 
-        for (var i = fromOld; i < prefix && linesUsed < maxHunkLines; i++, linesUsed++)
+        for (int i = fromOld; i < prefix && linesUsed < maxHunkLines; i++, linesUsed++)
             sb.Append("  ").AppendLine(oldLines[i]);
 
-        for (var i = prefix; i <= oSuffix && i < oLen && linesUsed < maxHunkLines; i++, linesUsed++)
+        for (int i = prefix; i <= oSuffix && i < oLen && linesUsed < maxHunkLines; i++, linesUsed++)
             sb.Append("- ").AppendLine(oldLines[i]);
 
-        for (var i = prefix; i <= nSuffix && i < nLen && linesUsed < maxHunkLines; i++, linesUsed++)
+        for (int i = prefix; i <= nSuffix && i < nLen && linesUsed < maxHunkLines; i++, linesUsed++)
             sb.Append("+ ").AppendLine(newLines[i]);
 
-        for (var i = oSuffix + 1; i <= toOld && linesUsed < maxHunkLines; i++, linesUsed++)
+        for (int i = oSuffix + 1; i <= toOld && linesUsed < maxHunkLines; i++, linesUsed++)
             sb.Append("  ").AppendLine(oldLines[i]);
 
         if (linesUsed >= maxHunkLines)
@@ -346,10 +339,16 @@ public sealed class EditTool : ITool
 
     private static string Snippet(string s)
     {
-        var t = s.Replace('\n', '⏎').Replace('\r', ' ');
+        string t = s.Replace('\n', '⏎').Replace('\r', ' ');
         return t.Length <= SnippetLen ? $"«{t}»" : $"«{t[..SnippetLen]}…»";
     }
 
     private static bool GetBool(JsonElement args, string name)
         => args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.True;
+
+    private readonly record struct EditResult(bool Ok, string Text, int Count, string? Error)
+    {
+        public static EditResult Success(string text, int count) => new(true, text, count, null);
+        public static EditResult Fail(string error) => new(false, string.Empty, 0, error);
+    }
 }

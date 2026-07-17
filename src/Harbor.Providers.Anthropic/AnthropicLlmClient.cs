@@ -33,11 +33,11 @@ public sealed class AnthropicLlmClient : ILlmClient
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
     private readonly IAnthropicAuthResolver _auth;
-    private readonly AnthropicConfig _config;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation and conditional logic on the hot path.
     private readonly string _baseUrl;
+    private readonly AnthropicConfig _config;
 
     private readonly HttpClient _http;
     private readonly ILogger<AnthropicLlmClient> _logger;
@@ -52,7 +52,7 @@ public sealed class AnthropicLlmClient : ILlmClient
         _config = config;
         _auth = auth;
         _logger = logger;
-        _baseUrl = (string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/'));
+        _baseUrl = string.IsNullOrEmpty(_config.BaseUrl) ? DefaultBaseUrl : _config.BaseUrl.TrimEnd('/');
     }
 
     public ProviderId ProviderId { get; } = ProviderId.Create("anthropic");

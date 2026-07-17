@@ -1,12 +1,8 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.TerminalGui;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.Tests;
-
 public class TerminalGuiRendererTests
 {
     private static TerminalGuiRenderer CreateRenderer() => new(NullLogger<TerminalGuiRenderer>.Instance);

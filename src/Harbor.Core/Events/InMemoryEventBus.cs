@@ -16,9 +16,9 @@ namespace Harbor.Abstractions.Events;
 /// </summary>
 public sealed class InMemoryEventBus : IEventBus
 {
+    private readonly ILogger<InMemoryEventBus> _logger;
     private readonly int _maxScrollback;
     private readonly Channel<AgentEvent> _scrollback;
-    private readonly ILogger<InMemoryEventBus> _logger;
     /// <summary>
     ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
     ///     snapshot reads with zero allocation; mutations use <see cref="ImmutableInterlocked" />

@@ -1,8 +1,10 @@
-@using Microsoft.AspNetCore.Components
-@using Microsoft.AspNetCore.Components.Web
+@inject ChatBridge Harbor
 @using global::RazorConsole.Components
 @using Spectre.Console
-@inject ChatBridge Harbor
+@using Columns = Spectre.Console.Columns
+@using Markup = Spectre.Console.Markup
+@using Panel = Spectre.Console.Panel
+@using Rows = Spectre.Console.Rows
 @implements IDisposable
 
 <Rows>
@@ -16,7 +18,7 @@
                 {
                     <Markup Content="No messages yet - type below to start chatting."
                             Foreground="@Color.Grey"
-                            Decoration="Decoration.Italic" />
+                            Decoration="Decoration.Italic"/>
                 }
 
                 @foreach (var m in Harbor.Messages)
@@ -37,10 +39,10 @@
                     }
                     else if (string.IsNullOrWhiteSpace(Harbor.ThinkBuffer))
                     {
-                        <Newline />
+                        <Newline/>
                         <Markup Content="Harbor is thinking..."
                                 Foreground="@Color.Grey"
-                                Decoration="Decoration.Italic" />
+                                Decoration="Decoration.Italic"/>
                     }
                 }
             </Rows>
@@ -55,68 +57,68 @@
                BorderColor="@Color.Grey"
                FocusedBorderColor="@Color.Cyan1"
                OnSubmit="Submit"
-               Expand="true" />
+               Expand="true"/>
 
     <Markup Content="exit to quit  ·  /help for commands  ·  Enter to send"
             Foreground="@Color.Grey"
-            Decoration="Decoration.Dim" />
+            Decoration="Decoration.Dim"/>
 </Rows>
 
 @code {
-    private string _input = string.Empty;
+private string _input = string.Empty;
 
-    private string PanelTitle =>
-        $"Harbor · {Harbor.AgentName} · {Harbor.Provider}/{Harbor.Model} · {Harbor.Status}";
+private string PanelTitle =>
+    $"Harbor · {Harbor.AgentName} · {Harbor.Provider}/{Harbor.Model} · {Harbor.Status}";
 
-    private Color StatusColor => Harbor.Status switch
-    {
-        "running" => Color.Cyan1,
-        "compacting" => Color.Yellow,
-        "error" => Color.Red,
-        _ => Color.Grey
-    };
+private Color StatusColor => Harbor.Status switch
+{
+    "running" => Color.Cyan1,
+    "compacting" => Color.Yellow,
+    "error" => Color.Red,
+    _ => Color.Grey
+};
 
-    private static (string Label, Color LabelColor, Color TextColor) RoleStyle(string role) => role switch
-    {
-        "user" => ("You", Color.Green, Color.White),
-        "assistant" => ("Harbor", Color.Cyan1, Color.Grey85),
-        "tool" => ("tool", Color.Blue, Color.Grey74),
-        "tool-result" => ("  ↳", Color.Grey, Color.Grey58),
-        "thinking" => ("think", Color.Grey, Color.Grey54),
-        "system" => ("sys", Color.Grey, Color.Grey62),
-        "error" => ("error", Color.Red, Color.Red1),
-        _ => ("·", Color.Grey, Color.Grey)
-    };
+private static (string Label, Color LabelColor, Color TextColor) RoleStyle(string role) => role switch
+{
+    "user" => ("You", Color.Green, Color.White),
+    "assistant" => ("Harbor", Color.Cyan1, Color.Grey85),
+    "tool" => ("tool", Color.Blue, Color.Grey74),
+    "tool-result" => ("  ↳", Color.Grey, Color.Grey58),
+    "thinking" => ("think", Color.Grey, Color.Grey54),
+    "system" => ("sys", Color.Grey, Color.Grey62),
+    "error" => ("error", Color.Red, Color.Red1),
+    _ => ("·", Color.Grey, Color.Grey)
+};
 
-    protected override void OnInitialized()
-    {
-        Harbor.StateChanged += OnStateChanged;
-    }
+protected override void OnInitialized()
+{
+    Harbor.StateChanged += OnStateChanged;
+}
 
-    private void OnStateChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
+private void OnStateChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
 
-    private async Task Submit()
-    {
-        var value = _input;
-        _input = string.Empty;
-        StateHasChanged();
-        await Harbor.SendAsync(value);
-    }
+private async Task Submit()
+{
+    var value = _input;
+    _input = string.Empty;
+    StateHasChanged();
+    await Harbor.SendAsync(value);
+}
 
-    public void Dispose()
-    {
-        Harbor.StateChanged -= OnStateChanged;
-    }
+public void Dispose()
+{
+    Harbor.StateChanged -= OnStateChanged;
+}
 }
 
 @{
-    RenderFragment Message(string role, string text) =>
-        @<Rows>
-            @{ var style = RoleStyle(role); }
-            <Newline />
-            <Columns Expand="false">
-                <Markup Content="@style.Label" Foreground="@style.LabelColor" Decoration="Decoration.Bold" />
-                <Markup Content="@text" Foreground="@style.TextColor" />
-            </Columns>
-        </Rows>;
+RenderFragment Message(string role, string text) =>
+    @<Rows>
+        @{ var style = RoleStyle(role); }
+        <Newline/>
+        <Columns Expand="false">
+            <Markup Content="@style.Label" Foreground="@style.LabelColor" Decoration="Decoration.Bold"/>
+            <Markup Content="@text" Foreground="@style.TextColor"/>
+        </Columns>
+    </Rows>;
 }

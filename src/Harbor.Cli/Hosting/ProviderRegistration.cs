@@ -4,12 +4,10 @@ using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Cli.Hosting;
-
 /// <summary>
-/// Provider registration — single responsibility: discover and register LLM providers.
-/// Extracted from Program.cs.
+///     Provider registration — single responsibility: discover and register LLM providers.
+///     Extracted from Program.cs.
 /// </summary>
 internal static class ProviderRegistration
 {

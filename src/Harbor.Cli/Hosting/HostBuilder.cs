@@ -1,15 +1,9 @@
-using Harbor.Tui.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Abstractions.Tui;
-using Harbor.Cli.Logging;
 using Harbor.Core.Agents;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
@@ -18,24 +12,25 @@ using Harbor.Core.Sessions;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
-using Harbor.Providers.OpenAiCompatible;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
+using Harbor.Tui.Abstractions;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
+using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Spectre;
 using Harbor.Tui.Spectre.Fullscreen;
-using System.Reflection;
-using System.Text.Json;
-using System.Threading.Channels;
 using Harbor.Tui.Termina;
-
+using Harbor.Tui.TerminalGui;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Hosting;
 /// <summary>
-/// DI host configuration — single responsibility: wire services.
-/// Extracted from Program.cs to reduce god object.
+///     DI host configuration — single responsibility: wire services.
+///     Extracted from Program.cs to reduce god object.
 /// </summary>
 internal static class HostBuilder
 {
@@ -93,7 +88,7 @@ internal static class HostBuilder
         builder.Services.AddSingleton<AuthStore>();
         builder.Services.AddSingleton<OnboardingWizard>();
         builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
-        builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(sp.GetRequiredService<ILogger<InMemoryEventBus>>(), 1000));
+        builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(sp.GetRequiredService<ILogger<InMemoryEventBus>>()));
         builder.Services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
@@ -220,10 +215,10 @@ internal static class HostBuilder
             "plain" => new PlainTuiRenderer(),
             "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
             "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
-            "spectre-tui" => new Harbor.Tui.SpectreTui.SpectreTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.SpectreTui.SpectreTuiRenderer>>()),
-            "terminal-gui" => new Harbor.Tui.TerminalGui.TerminalGuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.TerminalGui.TerminalGuiRenderer>>()),
-            "termina" => new Harbor.Tui.Termina.TerminaRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Termina.TerminaRenderer>>()),
-            "razor" => new Harbor.Tui.RazorConsole.RazorConsoleRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.RazorConsole.RazorConsoleRenderer>>()),
+            "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(sp.GetRequiredService<ILogger<Tui.SpectreTui.SpectreTuiRenderer>>()),
+            "terminal-gui" => new TerminalGuiRenderer(sp.GetRequiredService<ILogger<TerminalGuiRenderer>>()),
+            "termina" => new TerminaRenderer(sp.GetRequiredService<ILogger<TerminaRenderer>>()),
+            "razor" => new RazorConsoleRenderer(sp.GetRequiredService<ILogger<RazorConsoleRenderer>>()),
             _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
         });
     }

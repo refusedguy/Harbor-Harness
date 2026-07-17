@@ -10,9 +10,7 @@ using Harbor.Core.Configuration;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
-
 namespace Harbor.Cli.Hosting;
-
 /// <summary>Adapter that resolves API key via AuthStore.</summary>
 internal sealed class ConfigAuthResolver : IAnthropicAuthResolver, IOpenAIAuthResolver, IAuthResolver
 {
@@ -20,7 +18,10 @@ internal sealed class ConfigAuthResolver : IAnthropicAuthResolver, IOpenAIAuthRe
     private readonly string _providerId;
 
     public ConfigAuthResolver(AuthStore authStore, string providerId)
-    { _authStore = authStore; _providerId = providerId; }
+    {
+        _authStore = authStore;
+        _providerId = providerId;
+    }
 
     public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
         => _authStore.GetApiKeyAsync(_providerId, ct);
@@ -36,8 +37,11 @@ internal sealed class SimpleCommandContext : ICommandContext
         IToolRegistry tools, Action<string> output, Func<string, Task<string>> prompt)
     {
         Session = new DummySessionContext(session);
-        Agent = agent; Providers = providers; Tools = tools;
-        Output = output; Prompt = prompt;
+        Agent = agent;
+        Providers = providers;
+        Tools = tools;
+        Output = output;
+        Prompt = prompt;
     }
     public ISessionContext Session { get; }
     public IAgent Agent { get; }

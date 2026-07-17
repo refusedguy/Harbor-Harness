@@ -1,14 +1,11 @@
-using Harbor.Core.Agents;
 using System.Text.Json;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
-
 /// <summary>
 ///     Tests for <see cref="TaskTool" /> — argument validation, unknown-agent errors,
 ///     non-sub-agent rejection, and the happy path message formatting.
@@ -31,9 +28,7 @@ public class TaskToolTests
         name,
         "test-model",
         "test",
-        PermissionRuleset.Default,
-        50,
-        IsSubAgent: false);
+        PermissionRuleset.Default);
 
     private static ToolContext CreateContext() => new(
         "session-1",
@@ -49,7 +44,7 @@ public class TaskToolTests
     private static JsonElement Args(params (string key, string value)[] pairs)
     {
         var dict = new Dictionary<string, object?>();
-        foreach (var (k, v) in pairs)
+        foreach ((string k, string v) in pairs)
             dict[k] = v;
         return JsonDocument.Parse(JsonSerializer.Serialize(dict)).RootElement.Clone();
     }

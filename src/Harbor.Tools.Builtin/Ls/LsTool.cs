@@ -1,19 +1,17 @@
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-/// Lists directory contents (type, size, mtime). Caps output; prunes heavy dirs when recursive.
+///     Lists directory contents (type, size, mtime). Caps output; prunes heavy dirs when recursive.
 /// </summary>
 public sealed class LsTool : ITool
 {
-    private readonly ILogger<LsTool> _logger;
 
-    public LsTool(ILogger<LsTool> logger) { _logger = logger; }
+    private const int DefaultMaxEntries = 500;
+    private const int HardMaxEntries = 2000;
+    private const int DefaultMaxDepth = 3;
 
     private static readonly HashSet<string> PrunedDirNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -22,10 +20,9 @@ public sealed class LsTool : ITool
         "target", "vendor", "__pycache__", ".next", ".nuxt",
         "coverage", ".turbo", ".cache"
     };
+    private readonly ILogger<LsTool> _logger;
 
-    private const int DefaultMaxEntries = 500;
-    private const int HardMaxEntries = 2000;
-    private const int DefaultMaxDepth = 3;
+    public LsTool(ILogger<LsTool> logger) { _logger = logger; }
 
     public ToolName Name => ToolName.Create("ls");
     public string DisplayName => "List";
@@ -59,11 +56,11 @@ public sealed class LsTool : ITool
     public Result ValidateArguments(JsonElement args)
     {
         if (args.TryGetProperty("depth", out var d) && d.ValueKind == JsonValueKind.Number
-                                                    && d.TryGetInt32(out var depth) && depth < 1)
+                                                    && d.TryGetInt32(out int depth) && depth < 1)
             return Result.Failure("depth must be >= 1");
 
         if (args.TryGetProperty("maxEntries", out var m) && m.ValueKind == JsonValueKind.Number
-                                                         && m.TryGetInt32(out var max) && max < 1)
+                                                         && m.TryGetInt32(out int max) && max < 1)
             return Result.Failure("maxEntries must be >= 1");
 
         return Result.Success();
@@ -80,16 +77,16 @@ public sealed class LsTool : ITool
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        var path = GetString(args, "path") ?? Environment.CurrentDirectory;
-        var all = GetBool(args, "all");
-        var recursive = GetBool(args, "recursive");
-        var depthArg = GetInt(args, "depth");
-        var maxEntriesArg = GetInt(args, "maxEntries");
+        string path = GetString(args, "path") ?? Environment.CurrentDirectory;
+        bool all = GetBool(args, "all");
+        bool recursive = GetBool(args, "recursive");
+        int? depthArg = GetInt(args, "depth");
+        int? maxEntriesArg = GetInt(args, "maxEntries");
 
-        var maxDepth = recursive
+        int maxDepth = recursive
             ? Math.Clamp(depthArg ?? DefaultMaxDepth, 1, 8)
             : 1;
-        var maxEntries = Math.Clamp(maxEntriesArg ?? DefaultMaxEntries, 1, HardMaxEntries);
+        int maxEntries = Math.Clamp(maxEntriesArg ?? DefaultMaxEntries, 1, HardMaxEntries);
 
         path = Path.GetFullPath(path);
 
@@ -106,11 +103,11 @@ public sealed class LsTool : ITool
         {
             ListDirectory(
                 path,
-                relativePrefix: "",
+                "",
                 all,
                 recursive,
                 maxDepth,
-                currentDepth: 0,
+                0,
                 sb,
                 state,
                 ct);
@@ -180,14 +177,14 @@ public sealed class LsTool : ITool
         // Stable, agent-friendly order: dirs first, then files; ordinal ignore-case.
         Array.Sort(entries, static (a, b) =>
         {
-            var aDir = a is DirectoryInfo;
-            var bDir = b is DirectoryInfo;
+            bool aDir = a is DirectoryInfo;
+            bool bDir = b is DirectoryInfo;
             if (aDir != bDir)
                 return aDir ? -1 : 1;
             return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
 
-        var indent = currentDepth == 0 ? "" : new string(' ', currentDepth * 2);
+        string indent = currentDepth == 0 ? "" : new string(' ', currentDepth * 2);
 
         foreach (var entry in entries)
         {
@@ -195,7 +192,7 @@ public sealed class LsTool : ITool
             if (state.Truncated)
                 return;
 
-            var name = entry.Name;
+            string name = entry.Name;
             if (!all && name.StartsWith('.'))
                 continue;
 
@@ -290,7 +287,7 @@ public sealed class LsTool : ITool
 
     private static int? GetInt(JsonElement args, string name)
         => args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number
-                                                 && el.TryGetInt32(out var n)
+                                                 && el.TryGetInt32(out int n)
             ? n
             : null;
 

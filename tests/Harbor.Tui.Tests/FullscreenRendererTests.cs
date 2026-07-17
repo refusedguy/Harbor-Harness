@@ -1,9 +1,7 @@
-using Harbor.Tui.Spectre.Fullscreen.Helpers;
 using Harbor.Tui.Spectre.Fullscreen;
+using Harbor.Tui.Spectre.Fullscreen.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
-using Spectre.Console;
 namespace Harbor.Tui.Tests;
-
 /// <summary>
 ///     Tests for <see cref="FullscreenTuiRenderer" /> — verifies the pure helpers (word wrap,
 ///     markdown formatting) and the stateful scroll / input-history navigation logic.
@@ -43,7 +41,7 @@ public class FullscreenRendererTests
 
         await Assert.That(lines.Count).IsGreaterThan(1);
         // No line should exceed the maxWidth.
-        foreach (var line in lines)
+        foreach (string line in lines)
             await Assert.That(line.Length).IsLessThanOrEqualTo(20);
         // Re-joining with spaces should yield the original text (modulo whitespace).
         await Assert.That(string.Join(' ', lines)).IsEqualTo(text);
@@ -56,7 +54,7 @@ public class FullscreenRendererTests
         var lines = MarkdownRenderer.WordWrap(text, 10);
 
         await Assert.That(lines.Count).IsGreaterThan(1);
-        foreach (var line in lines)
+        foreach (string line in lines)
             await Assert.That(line.Length).IsLessThanOrEqualTo(10);
     }
 
@@ -311,7 +309,7 @@ public class FullscreenRendererTests
         renderer.TestPushInputHistory("only");
 
         renderer.TestNavigateHistoryUp();
-        renderer.TestNavigateHistoryUp();  // already at oldest, no-op
+        renderer.TestNavigateHistoryUp(); // already at oldest, no-op
 
         await Assert.That(renderer.TestHistoryIndex).IsEqualTo(0);
         await Assert.That(renderer.TestInputBuffer).IsEqualTo("only");
@@ -324,8 +322,8 @@ public class FullscreenRendererTests
         renderer.TestPushInputHistory("first");
         renderer.TestPushInputHistory("second");
 
-        renderer.TestNavigateHistoryUp();      // index=1, buffer="second"
-        renderer.TestNavigateHistoryDown();    // index=-1, buffer=""
+        renderer.TestNavigateHistoryUp(); // index=1, buffer="second"
+        renderer.TestNavigateHistoryDown(); // index=-1, buffer=""
 
         await Assert.That(renderer.TestHistoryIndex).IsEqualTo(-1);
         await Assert.That(renderer.TestInputBuffer).IsEqualTo(string.Empty);
@@ -339,8 +337,8 @@ public class FullscreenRendererTests
         renderer.TestPushInputHistory("second");
         renderer.TestPushInputHistory("third");
 
-        renderer.TestNavigateHistoryUp();  // third
-        renderer.TestNavigateHistoryUp();  // second
+        renderer.TestNavigateHistoryUp(); // third
+        renderer.TestNavigateHistoryUp(); // second
         renderer.TestNavigateHistoryDown(); // third again
 
         await Assert.That(renderer.TestHistoryIndex).IsEqualTo(2);
@@ -364,7 +362,7 @@ public class FullscreenRendererTests
         var renderer = CreateRenderer();
         renderer.TestPushInputHistory("first");
 
-        renderer.TestNavigateHistoryDown();  // _historyIndex == -1 → no-op
+        renderer.TestNavigateHistoryDown(); // _historyIndex == -1 → no-op
 
         await Assert.That(renderer.TestHistoryIndex).IsEqualTo(-1);
         await Assert.That(renderer.TestInputBuffer).IsEqualTo(string.Empty);

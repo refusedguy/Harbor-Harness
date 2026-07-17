@@ -7,21 +7,21 @@
     <PackageTags>harbor;tui;termina;experimental</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj" />
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj" />
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Termina" Version="0.15.0" />
-    <PackageReference Include="Termina.Generators" Version="0.15.0" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Termina" Version="0.15.0"/>
+    <PackageReference Include="Termina.Generators" Version="0.15.0" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.Tui.Tests" />
+    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
   </ItemGroup>
   <Target Name="RemoveTerminaGenerators" BeforeTargets="CoreCompile">
     <ItemGroup>
-      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Termina.Generators'" />
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Termina.Generators'"/>
     </ItemGroup>
   </Target>
 </Project>

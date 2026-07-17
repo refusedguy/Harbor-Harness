@@ -9,9 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RazorConsole.Core;
-
 namespace Harbor.Tui.RazorConsole;
-
 /// <summary>
 ///     Full-screen interactive TUI renderer built on the RazorConsole.Core
 ///     Blazor-for-the-console framework. The <see cref="ChatTui" /> root component
@@ -22,9 +20,9 @@ namespace Harbor.Tui.RazorConsole;
 public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<RazorConsoleRenderer> _logger;
-    private Func<string, Task>? _slashHandler;
     private ChatBridge? _bridge;
     private IHost? _host;
+    private Func<string, Task>? _slashHandler;
 
     /// <summary>
     ///     Construct a <see cref="RazorConsoleRenderer" /> with the supplied logger.
@@ -53,12 +51,6 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
         _bridge?.ApplyEvent(@event);
         return base.RenderAsync(@event, ct);
     }
-
-    /// <summary>
-    ///     Suppress placement-driven rendering — RazorConsole handles its own
-    ///     display through the <see cref="ChatTui" /> component tree.
-    /// </summary>
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     /// <summary>
     ///     Run the interactive chat loop. Builds a generic host configured with the
@@ -104,7 +96,7 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.WriteColored(prompt, TuiColor.Green);
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
@@ -136,6 +128,12 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
         _host = null;
         base.Dispose();
     }
+
+    /// <summary>
+    ///     Suppress placement-driven rendering — RazorConsole handles its own
+    ///     display through the <see cref="ChatTui" /> component tree.
+    /// </summary>
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     private static void ConfigureConsoleAppOptions(ConsoleAppOptions o)
     {
@@ -197,8 +195,6 @@ public sealed class ChatBridge
 {
     private readonly ILogger _logger;
     private readonly List<ChatLine> _messages = new();
-    private string _streamBuffer = string.Empty;
-    private string _thinkBuffer = string.Empty;
 
     /// <summary>
     ///     Construct a <see cref="ChatBridge" />.
@@ -233,10 +229,18 @@ public sealed class ChatBridge
     public bool IsStreaming { get; private set; }
 
     /// <summary>The partial assistant reply streamed so far this turn (live preview).</summary>
-    public string StreamBuffer => _streamBuffer;
+    public string StreamBuffer
+    {
+        get;
+        private set;
+    } = string.Empty;
 
     /// <summary>The partial "thinking" text streamed so far this turn (live preview).</summary>
-    public string ThinkBuffer => _thinkBuffer;
+    public string ThinkBuffer
+    {
+        get;
+        private set;
+    } = string.Empty;
 
     /// <summary>Human-readable status (idle / running / compacting / error).</summary>
     public string Status { get; private set; }
@@ -267,7 +271,7 @@ public sealed class ChatBridge
             return;
         }
 
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         _logger.LogInformation("Submitting: {Text}", trimmed);
 
         if (trimmed is "exit" or "quit" or "q" or ":q")
@@ -369,17 +373,17 @@ public sealed class ChatBridge
             case MessageStartEvent:
                 Status = "running";
                 IsStreaming = true;
-                _streamBuffer = string.Empty;
-                _thinkBuffer = string.Empty;
+                StreamBuffer = string.Empty;
+                ThinkBuffer = string.Empty;
                 break;
             case MessageUpdateEvent mu:
                 switch (mu.LlmEvent)
                 {
                     case TextDeltaEvent td:
-                        _streamBuffer += td.Delta;
+                        StreamBuffer += td.Delta;
                         break;
                     case ThinkingDeltaEvent thd:
-                        _thinkBuffer += thd.Delta;
+                        ThinkBuffer += thd.Delta;
                         break;
                     case ToolCallStartEvent tcs:
                         _messages.Add(new ChatLine(ChatRoles.Tool, tcs.ToolName));
@@ -389,28 +393,28 @@ public sealed class ChatBridge
                 break;
             case MessageEndEvent:
                 IsStreaming = false;
-                if (!string.IsNullOrWhiteSpace(_thinkBuffer))
+                if (!string.IsNullOrWhiteSpace(ThinkBuffer))
                 {
-                    _messages.Add(new ChatLine(ChatRoles.Thinking, _thinkBuffer.Trim()));
+                    _messages.Add(new ChatLine(ChatRoles.Thinking, ThinkBuffer.Trim()));
                 }
 
-                if (!string.IsNullOrWhiteSpace(_streamBuffer))
+                if (!string.IsNullOrWhiteSpace(StreamBuffer))
                 {
-                    _messages.Add(new ChatLine(ChatRoles.Assistant, _streamBuffer.Trim()));
+                    _messages.Add(new ChatLine(ChatRoles.Assistant, StreamBuffer.Trim()));
                 }
 
-                _streamBuffer = string.Empty;
-                _thinkBuffer = string.Empty;
+                StreamBuffer = string.Empty;
+                ThinkBuffer = string.Empty;
                 break;
             case ToolExecutionStartEvent tes:
-                var args = tes.Args.GetRawText();
+                string args = tes.Args.GetRawText();
                 _messages.Add(new ChatLine(ChatRoles.Tool, string.IsNullOrEmpty(args) || args == "{}"
                     ? tes.ToolName
                     : $"{tes.ToolName} {args}"));
                 break;
             case ToolExecutionEndEvent tee:
-                var output = tee.Result.Output;
-                var preview = output.Length > 600 ? output[..600] + "..." : output;
+                string output = tee.Result.Output;
+                string preview = output.Length > 600 ? output[..600] + "..." : output;
                 _messages.Add(new ChatLine(ChatRoles.ToolResult,
                     $"{(tee.IsError ? "✗" : "✓")} {preview.Trim()}"));
                 break;

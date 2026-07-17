@@ -1,21 +1,18 @@
 using System.Text;
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-/// Writes/overwrites a text file. Sequential. Creates parent dirs by default.
+///     Writes/overwrites a text file. Sequential. Creates parent dirs by default.
 /// </summary>
 public sealed class WriteTool : ITool
 {
+
+    private const int MaxContentChars = 5_000_000; // hard safety vs runaway model output
     private readonly ILogger<WriteTool> _logger;
 
     public WriteTool(ILogger<WriteTool> logger) { _logger = logger; }
-
-    private const int MaxContentChars = 5_000_000; // hard safety vs runaway model output
 
     public ToolName Name => ToolName.Create("write");
     public string DisplayName => "Write";
@@ -54,7 +51,7 @@ public sealed class WriteTool : ITool
             || contentEl.ValueKind != JsonValueKind.String)
             return Result.Failure("Missing required argument 'content'.");
 
-        var content = contentEl.GetString() ?? string.Empty;
+        string content = contentEl.GetString() ?? string.Empty;
         if (content.Length > MaxContentChars)
             return Result.Failure(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
@@ -67,9 +64,9 @@ public sealed class WriteTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        var rawPath = args.GetProperty("path").GetString()!;
-        var content = args.GetProperty("content").GetString() ?? string.Empty;
-        var createDirs = GetBoolDefaultTrue(args, "createDirs");
+        string rawPath = args.GetProperty("path").GetString()!;
+        string content = args.GetProperty("content").GetString() ?? string.Empty;
+        bool createDirs = GetBoolDefaultTrue(args, "createDirs");
 
         if (content.Length > MaxContentChars)
             return ToolResult.Error(
@@ -92,19 +89,19 @@ public sealed class WriteTool : ITool
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory, not a file: {path}");
 
-        var existed = File.Exists(path);
+        bool existed = File.Exists(path);
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         try
         {
             if (createDirs)
             {
-                var dir = Path.GetDirectoryName(path);
+                string? dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir))
                     Directory.CreateDirectory(dir); // no-op if exists
             }
             else
             {
-                var dir = Path.GetDirectoryName(path);
+                string? dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     return ToolResult.Error($"Parent directory does not exist: {dir}");
             }
@@ -132,11 +129,11 @@ public sealed class WriteTool : ITool
             return ToolResult.Error($"Failed to write: {ex.Message}");
         }
 
-        var byteCount = encoding.GetByteCount(content); // need encoding in scope — fix below
+        int byteCount = encoding.GetByteCount(content); // need encoding in scope — fix below
         // use Encoding.UTF8.GetByteCount(content) instead if encoding local only in try
 
-        var action = existed ? "Overwrote" : "Created";
-        var bytes = Encoding.UTF8.GetByteCount(content);
+        string action = existed ? "Overwrote" : "Created";
+        int bytes = Encoding.UTF8.GetByteCount(content);
 
         return ToolResult.Success(
             $"{action} {path} ({content.Length} chars, {bytes} bytes)",

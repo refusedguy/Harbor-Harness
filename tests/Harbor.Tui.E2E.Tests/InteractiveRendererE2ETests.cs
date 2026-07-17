@@ -1,16 +1,13 @@
-using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.SpectreTui;
-using Harbor.Tui.TerminalGui;
 using Harbor.Tui.Termina;
+using Harbor.Tui.TerminalGui;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.E2E.Tests;
-
 /// <summary>
 ///     E2E tests for the 4 experimental interactive renderers.
 ///     Tests lifecycle, non-interactive paths, and event-through-renderer
@@ -53,7 +50,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_Initialize_Dispose_NoCrash()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         var init = await renderer.InitializeAsync();
         await Assert.That(init.IsSuccess).IsTrue();
         renderer.Dispose();
@@ -62,7 +59,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_WriteWriteLineClear_ReturnSuccess()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         await Assert.That((await renderer.InitializeAsync()).IsSuccess).IsTrue();
         await Assert.That((await renderer.WriteAsync("hi")).IsSuccess).IsTrue();
         await Assert.That((await renderer.WriteLineAsync("line")).IsSuccess).IsTrue();
@@ -73,7 +70,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_RenderAsync_HelloStream_NoCrash()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         await renderer.InitializeAsync();
         foreach (var evt in BuildHelloStream())
         {
@@ -85,7 +82,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_RenderAsync_ToolCallStream_NoCrash()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         await renderer.InitializeAsync();
         foreach (var evt in BuildToolCallStream())
         {
@@ -97,7 +94,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_RenderAsync_ErrorStream_NoCrash()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         await renderer.InitializeAsync();
         foreach (var evt in BuildErrorStream())
         {
@@ -109,7 +106,7 @@ public class InteractiveRendererE2ETests
     [Test]
     public async Task SpectreTui_ReadLineAsync_ReturnsSuccess()
     {
-        var renderer = new SpectreTui.SpectreTuiRenderer(NullLogger<SpectreTui.SpectreTuiRenderer>.Instance);
+        var renderer = new SpectreTuiRenderer(NullLogger<SpectreTuiRenderer>.Instance);
         var result = await renderer.ReadLineAsync("? ");
         await Assert.That(result.IsSuccess).IsTrue();
         renderer.Dispose();

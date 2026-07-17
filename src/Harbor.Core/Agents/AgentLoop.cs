@@ -1,8 +1,6 @@
 using System.Buffers;
-using System.Text;
 using CommunityToolkit.HighPerformance.Buffers;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Agents;
@@ -276,7 +274,7 @@ public sealed class AgentLoop : IAgentLoop
                                 }
 
                                 // Materialize any tool calls accumulated from Start/Delta fragments.
-                                foreach (var (id, (name, args)) in pendingToolCalls)
+                                foreach ((string id, (string name, var args)) in pendingToolCalls)
                                 {
                                     JsonElement parsedArgs;
                                     try

@@ -1,18 +1,13 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
-/// Delegates work to a sub-agent (Command). Long-running: fully async, cancel via context.Abort.
-/// Sequential so it doesn't race side-effect tools in the same turn.
+///     Delegates work to a sub-agent (Command). Long-running: fully async, cancel via context.Abort.
+///     Sequential so it doesn't race side-effect tools in the same turn.
 /// </summary>
 public sealed class TaskTool : ITool
 {
@@ -42,30 +37,30 @@ public sealed class TaskTool : ITool
     ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "agent": {
-              "type": "string",
-              "description": "Name of the sub-agent to use (e.g. 'explore', 'plan')"
-            },
-            "prompt": {
-              "type": "string",
-              "description": "Task description for the sub-agent. Should be self-contained."
-            }
-          },
-          "required": ["agent", "prompt"]
-        }
-        """);
+                                                                      {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "agent": {
+                                                                            "type": "string",
+                                                                            "description": "Name of the sub-agent to use (e.g. 'explore', 'plan')"
+                                                                          },
+                                                                          "prompt": {
+                                                                            "type": "string",
+                                                                            "description": "Task description for the sub-agent. Should be self-contained."
+                                                                          }
+                                                                        },
+                                                                        "required": ["agent", "prompt"]
+                                                                      }
+                                                                      """);
 
     public Result ValidateArguments(JsonElement args)
     {
         if (!args.TryGetProperty("agent", out var agentEl) || agentEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(agentEl.GetString()))
+                                                           || string.IsNullOrWhiteSpace(agentEl.GetString()))
             return Result.Failure("Missing required argument 'agent'.");
 
         if (!args.TryGetProperty("prompt", out var promptEl) || promptEl.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(promptEl.GetString()))
+                                                             || string.IsNullOrWhiteSpace(promptEl.GetString()))
             return Result.Failure("Missing required argument 'prompt'.");
 
         return Result.Success();
@@ -81,8 +76,8 @@ public sealed class TaskTool : ITool
             cancellationToken, context.Abort);
         var ct = linked.Token;
 
-        var agentName = args.GetProperty("agent").GetString()!;
-        var prompt = args.GetProperty("prompt").GetString()!;
+        string agentName = args.GetProperty("agent").GetString()!;
+        string prompt = args.GetProperty("prompt").GetString()!;
 
         var nameResult = AgentName.TryCreate(agentName);
         if (nameResult.IsFailure)
@@ -91,7 +86,7 @@ public sealed class TaskTool : ITool
         var agentDefResult = _agents.GetAgent(nameResult.Value);
         if (agentDefResult.IsFailure)
         {
-            var available = string.Join(", ",
+            string available = string.Join(", ",
                 _agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value));
             return ToolResult.Error(
                 $"Unknown sub-agent: '{agentName}'. Available sub-agents: {available}");
@@ -125,7 +120,7 @@ public sealed class TaskTool : ITool
             var subAgent = sp.GetRequiredService<IAgent>();
 
             // Working dir: best-effort from parent session if you store it; else cwd.
-            var workDir = Environment.CurrentDirectory;
+            string workDir = Environment.CurrentDirectory;
 
             var sessionResult = await sessionStore.CreateAsync(
                 workDir,
@@ -150,13 +145,13 @@ public sealed class TaskTool : ITool
                 return ToolResult.Error($"Sub-agent '{agentName}' failed: {runResult.Error}");
 
             // Pull final answer from the sub-session transcript.
-            var output = ExtractFinalAnswer(sessionResult.Value)
-                         ?? "[sub-agent completed with no text output]";
+            string output = ExtractFinalAnswer(sessionResult.Value)
+                            ?? "[sub-agent completed with no text output]";
 
             _logger.LogInformation("Sub-agent completed: {Agent}", agentName);
 
             await context.ReportProgress(
-                new ToolProgressUpdate(Status: $"[task] '{agentName}' done", PercentComplete: 100),
+                new ToolProgressUpdate($"[task] '{agentName}' done", 100),
                 ct).ConfigureAwait(false);
 
             return ToolResult.Success(output);
@@ -173,7 +168,7 @@ public sealed class TaskTool : ITool
     }
 
     /// <summary>
-    /// Best-effort: last assistant text in the sub-session. Adjust if your Session API differs.
+    ///     Best-effort: last assistant text in the sub-session. Adjust if your Session API differs.
     /// </summary>
     private static string? ExtractFinalAnswer(Session session)
     {

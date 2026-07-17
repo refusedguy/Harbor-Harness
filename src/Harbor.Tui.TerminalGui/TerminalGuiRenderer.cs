@@ -1,7 +1,4 @@
-using System;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -10,12 +7,10 @@ using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.Logging;
-using Terminal.Gui;
 using Terminal.Gui.App;
 using Terminal.Gui.Configuration;
 using Terminal.Gui.Drawing;
 using Terminal.Gui.Drivers;
-using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
 using Attribute = Terminal.Gui.Drawing.Attribute;
@@ -29,18 +24,18 @@ namespace Harbor.Tui.TerminalGui;
 public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<TerminalGuiRenderer> _logger;
-    private Func<string, Task>? _slashHandler;
     private IApplication? _app;
     private TerminalGuiScreen? _screen;
-
-    /// <inheritdoc />
-    public override ITuiRenderContext Context { get; }
+    private Func<string, Task>? _slashHandler;
 
     public TerminalGuiRenderer(ILogger<TerminalGuiRenderer> logger) : base(logger)
     {
         _logger = logger;
         Context = new TerminalGuiRenderContext();
     }
+
+    /// <inheritdoc />
+    public override ITuiRenderContext Context { get; }
 
     void IInteractiveTuiRenderer.SetSlashHandler(Func<string, Task> handler)
         => _slashHandler = handler;
@@ -60,8 +55,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         return base.RenderAsync(@event, ct);
     }
 
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
-
     /// <inheritdoc />
     public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
@@ -70,7 +63,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         _screen = new TerminalGuiScreen(agent, _slashHandler, _app, _logger);
 
         // Жестко задаем дарк-мод тему, чтобы убить дефолтный синий цвет Terminal.Gui
-        var darkScheme = new Scheme()
+        var darkScheme = new Scheme
         {
             Normal = new Attribute(Color.White, Color.Black),
             Focus = new Attribute(Color.Black, Color.Gray),
@@ -84,7 +77,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         {
             Title = "⚓ Harbor",
             Width = Dim.Fill(),
-            Height = Dim.Fill(),
+            Height = Dim.Fill()
         };
 
         // 1. Top Header (Hints)
@@ -94,7 +87,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             Y = 0,
             Width = Dim.Fill(),
             Height = 1,
-            Text = " ⚓ Harbor Chat  |  Enter: Send  |  Shift+Enter: New Line  |  /help: Commands",
+            Text = " ⚓ Harbor Chat  |  Enter: Send  |  Shift+Enter: New Line  |  /help: Commands"
         };
 
         // 2. Chat Output
@@ -106,7 +99,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             Height = Dim.Fill(5), // Leave space for status + input
             ReadOnly = true,
             WordWrap = true,
-            Title = "Conversation",
+            Title = "Conversation"
         };
         output.Border.LineStyle = LineStyle.Rounded;
 
@@ -117,7 +110,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             X = 0,
             Y = Pos.Bottom(output),
             Width = Dim.Fill(),
-            Height = 1,
+            Height = 1
 
         };
 
@@ -129,7 +122,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             Width = Dim.Fill(),
             Height = Dim.Fill(), // Fills the rest down to window border
             WordWrap = true,
-            Title = "❯ Input",
+            Title = "❯ Input"
         };
         input.Border.LineStyle = LineStyle.Rounded;
 
@@ -142,7 +135,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     return; // Let TextView handle Shift+Enter as newline
                 }
 
-                var text = input.Text.ToString()?.Trim();
+                string? text = input.Text?.Trim();
                 if (!string.IsNullOrEmpty(text))
                 {
                     input.Text = string.Empty;
@@ -169,7 +162,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
     {
         Context.WriteColored(prompt, TuiColor.Green);
-        var line = Console.ReadLine();
+        string? line = Console.ReadLine();
         return Task.FromResult(Result.Success(line ?? string.Empty));
     }
 
@@ -202,38 +195,40 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         base.Dispose();
     }
 
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
+
     /// <summary>
     ///     Screen state with hard 20-FPS throttling and zero-allocation streaming.
     /// </summary>
     private sealed class TerminalGuiScreen
     {
+        private static readonly TimeSpan ThrottleInterval = TimeSpan.FromMilliseconds(50); // 20 FPS
         private readonly IAgent _agent;
-        private readonly Func<string, Task>? _slash;
         private readonly IApplication _app;
-        private readonly ILogger _logger;
 
         private readonly List<(string Role, string Text)> _chat = new();
         private readonly StringBuilder _finalizedText = new();
-        private readonly StringBuilder _streamBuffer = new();
-        private readonly StringBuilder _thinkBuffer = new();
-
-        private TextView? _output;
-        private Label? _statusBar;
-
-        private bool _wasAtBottom = true;
-        private decimal _cost;
-        private int _tokensIn;
-        private int _tokensOut;
-        private string _status = "idle";
+        private readonly ILogger _logger;
 
         // Throttle logic
         private readonly Timer _renderTimer;
-        private volatile bool _isDirty;
-        private static readonly TimeSpan ThrottleInterval = TimeSpan.FromMilliseconds(50); // 20 FPS
+        private readonly Func<string, Task>? _slash;
 
         // Spinner
         private readonly string[] _spinnerFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+        private readonly StringBuilder _streamBuffer = new();
+        private readonly StringBuilder _thinkBuffer = new();
+        private decimal _cost;
+        private volatile bool _isDirty;
+
+        private TextView? _output;
         private int _spinnerIdx;
+        private string _status = "idle";
+        private Label? _statusBar;
+        private int _tokensIn;
+        private int _tokensOut;
+
+        private bool _wasAtBottom = true;
 
         public TerminalGuiScreen(IAgent agent, Func<string, Task>? slash, IApplication app, ILogger logger)
         {
@@ -258,8 +253,10 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     _status = "running";
                     if (_chat.Count == 0)
                         foreach (var m in ase.Messages)
+                        {
                             if (m is UserMessage u)
                                 Add("user", u.Content);
+                        }
                     MarkDirty();
                     break;
 
@@ -300,15 +297,15 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     break;
 
                 case ToolExecutionStartEvent tes:
-                    var args = tes.Args.GetRawText();
+                    string args = tes.Args.GetRawText();
                     Add("tool", string.IsNullOrEmpty(args) || args == "{}"
                         ? $"→ {tes.ToolName}"
                         : $"→ {tes.ToolName}  {args}");
                     break;
 
                 case ToolExecutionEndEvent tee:
-                    var label = tee.IsError ? "✗" : "✓";
-                    var preview = tee.Result.Output.Length > 600
+                    string label = tee.IsError ? "✗" : "✓";
+                    string preview = tee.Result.Output.Length > 600
                         ? tee.Result.Output[..600] + "..." : tee.Result.Output;
                     Add("tool-result", $"{label} {preview.Trim()}");
                     break;
@@ -373,7 +370,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         {
             _chat.Add((role, text));
 
-            var formatted = role switch
+            string formatted = role switch
             {
                 "user" => $"🧑 {text}\n\n",
                 "assistant" => $"🤖 {text}\n\n",
@@ -419,7 +416,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
             if (_statusBar is not null)
             {
-                var spinner = (_status == "running" || _status == "generating…")
+                string spinner = _status == "running" || _status == "generating…"
                     ? _spinnerFrames[_spinnerIdx++ % _spinnerFrames.Length]
                     : "⏳";
 
@@ -436,7 +433,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         }
 
         private static decimal EstimateCost(int inTok, int outTok)
-            => (decimal)inTok / 1_000_000m * 3m + (decimal)outTok / 1_000_000m * 15m;
+            => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
     }
 }
 
