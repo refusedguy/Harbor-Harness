@@ -8,14 +8,14 @@ namespace Harbor.Tui.SpectreTui.View;
 /// </summary>
 internal static class ChatMarkdown
 {
-    /// <summary>Default ON so agent #/**/` output is readable.</summary>
-    public static bool Enabled { get; set; } = true;
 
     private static readonly Regex HeadingRegex = new(
         @"^\s{0,3}(#{1,3})\s+(.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Dictionary<string, List<TextSpan>> Cache = new(512);
+    /// <summary>Default ON so agent #/**/` output is readable.</summary>
+    public static bool Enabled { get; set; } = true;
 
     public static IEnumerable<TextSpan> ToSpans(string text, Color baseColor)
     {
@@ -52,7 +52,10 @@ internal static class ChatMarkdown
 
     public static void ClearCache()
     {
-        lock (Cache) Cache.Clear();
+        lock (Cache)
+        {
+            Cache.Clear();
+        }
     }
 
     private static IEnumerable<TextSpan> Render(string text, Color baseColor)
@@ -68,7 +71,7 @@ internal static class ChatMarkdown
             yield break;
         }
 
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         if (trimmed is "---" or "***" or "___")
         {
             yield return new TextSpan("────────────", new Style(Color.Grey));
@@ -116,7 +119,7 @@ internal static class ChatMarkdown
                 }
             }
 
-            if ((text[i] == '*' && Peek(text, i, "**")) || (text[i] == '_' && Peek(text, i, "__")))
+            if (text[i] == '*' && Peek(text, i, "**") || text[i] == '_' && Peek(text, i, "__"))
             {
                 string token = text[i] == '*' ? "**" : "__";
                 int end = text.IndexOf(token, i + 2, StringComparison.Ordinal);
@@ -147,14 +150,14 @@ internal static class ChatMarkdown
             i = next;
         }
 
-        foreach (var (t, s) in result)
+        foreach ((string t, var s) in result)
             yield return new TextSpan(t, s);
     }
 
     private static int IndexOfAny(string text, int start, params char[] chars)
     {
         int best = text.Length;
-        foreach (var c in chars)
+        foreach (char c in chars)
         {
             int idx = text.IndexOf(c, start);
             if (idx >= 0 && idx < best) best = idx;

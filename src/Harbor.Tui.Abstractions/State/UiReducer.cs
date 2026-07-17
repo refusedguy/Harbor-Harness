@@ -1,10 +1,6 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions.State;
-
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Pure reducer: <c>(UiState, AgentEvent) → UiState</c>. This is the single
 ///     place that maps agent activity into UI state. Every interactive renderer
@@ -18,8 +14,10 @@ namespace Harbor.Tui.Abstractions.State;
 ///         the buffers are folded into <see cref="UiState.Lines" />. Token accounting
 ///         is accumulated in <see cref="CostSnapshot" /> via <see cref="EstimateCost" />.
 ///     </para>
-///     <para>Must never call into <c>IAgent</c> or perform I/O — side-effects are the
-///     responsibility of <see cref="ITuiEffectRunner" /> (see <see cref="Classify" />).</para>
+///     <para>
+///         Must never call into <c>IAgent</c> or perform I/O — side-effects are the
+///         responsibility of <see cref="ITuiEffectRunner" /> (see <see cref="Classify" />).
+///     </para>
 /// </remarks>
 public static class UiReducer
 {
@@ -84,8 +82,8 @@ public static class UiReducer
 
     private static UiState OnStepFinish(UiState state, Usage usage)
     {
-        var nextIn = state.Cost.TokensIn + usage.InputTokens;
-        var nextOut = state.Cost.TokensOut + usage.OutputTokens;
+        long nextIn = state.Cost.TokensIn + usage.InputTokens;
+        long nextOut = state.Cost.TokensOut + usage.OutputTokens;
         return state with
         {
             Cost = new CostSnapshot(
@@ -115,7 +113,7 @@ public static class UiReducer
 
     private static string FormatToolStart(ToolExecutionStartEvent tes)
     {
-        var args = tes.Args.GetRawText();
+        string args = tes.Args.GetRawText();
         return string.IsNullOrEmpty(args) || args == "{}"
             ? $"→ {tes.ToolName}"
             : $"→ {tes.ToolName}  {args}";
@@ -123,9 +121,9 @@ public static class UiReducer
 
     private static string FormatToolEnd(ToolExecutionEndEvent tee)
     {
-        var label = tee.IsError ? "✗" : "✓";
-        var output = tee.Result.Output ?? string.Empty;
-        var preview = output.Length > 600 ? output[..600] + "..." : output;
+        string label = tee.IsError ? "✗" : "✓";
+        string output = tee.Result.Output ?? string.Empty;
+        string preview = output.Length > 600 ? output[..600] + "..." : output;
         return $"{label} {preview.Trim()}";
     }
 
@@ -187,7 +185,7 @@ public static class UiReducer
 
             case ChatAction.Submit:
             {
-                var (nextInput, submitted) = state.Input.Consume();
+                (var nextInput, string? submitted) = state.Input.Consume();
                 var next = state.SetInput(nextInput);
                 if (submitted is null)
                     return (next, new TuiEffect.None());
@@ -253,7 +251,7 @@ public static class UiReducer
     /// </summary>
     private static (UiState State, TuiEffect Effect) ClassifySubmit(UiState state, string submitted)
     {
-        var trimmed = submitted.Trim();
+        string trimmed = submitted.Trim();
         if (ChatCommands.ExitWords.Contains(trimmed))
             return (state, new TuiEffect.QuitApp());
 
@@ -273,7 +271,7 @@ public static class UiReducer
     private static (UiState State, TuiEffect Effect) TransitionAbort(UiState state)
     {
         var next = state
-            .AddLine(ChatRole.System, "Aborted.")
+                .AddLine(ChatRole.System, "Aborted.")
             with
             {
                 IsStreaming = false,

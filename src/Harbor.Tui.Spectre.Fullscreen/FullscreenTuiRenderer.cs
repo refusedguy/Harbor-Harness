@@ -160,8 +160,10 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 _layout.Status = "running";
                 if (_chat.Count == 0)
                     foreach (var m in ase.Messages)
+                    {
                         if (m is UserMessage u)
                             _chat.Add("user", u.Content);
+                    }
                 _scroll.Reset();
                 break;
 

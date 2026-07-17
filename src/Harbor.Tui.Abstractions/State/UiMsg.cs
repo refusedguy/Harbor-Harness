@@ -1,7 +1,5 @@
 using Harbor.Abstractions.Events;
-
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input
 ///     — agent events, key presses, and view-measured geometry — flows through this

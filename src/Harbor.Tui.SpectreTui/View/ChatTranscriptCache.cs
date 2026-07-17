@@ -38,8 +38,10 @@ internal sealed class ChatTranscriptCache
             if (prefixOk)
             {
                 for (int i = _source.Length; i < lines.Length; i++)
+                {
                     ChatMessageFormatter.AppendRole(
-                        _rows, lines[i].Role, lines[i].Text, markdown: ChatMarkdown.Enabled);
+                        _rows, lines[i].Role, lines[i].Text, ChatMarkdown.Enabled);
+                }
 
                 _source = lines;
                 return;
@@ -48,8 +50,10 @@ internal sealed class ChatTranscriptCache
 
         _rows.Clear();
         for (int i = 0; i < lines.Length; i++)
+        {
             ChatMessageFormatter.AppendRole(
-                _rows, lines[i].Role, lines[i].Text, markdown: ChatMarkdown.Enabled);
+                _rows, lines[i].Role, lines[i].Text, ChatMarkdown.Enabled);
+        }
 
         _source = lines;
     }

@@ -6,9 +6,7 @@ using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.SpectreTui;
 using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.Tests;
-
 /// <summary>
 ///     Tests for the TEA core (UiReducer / UiStore / InputModel) — the shared,
 ///     renderer-agnostic state machine. No terminal, no IAgent, no Spectre
@@ -132,7 +130,7 @@ public class InputModelTests
     {
         var input = InputMsg.Update(InputModel.Empty, new InputMsg.Char('h'));
         input = InputMsg.Update(input, new InputMsg.Char('i'));
-        var (next, submitted) = input.Consume();
+        (var next, string? submitted) = input.Consume();
         await Assert.That(submitted).IsEqualTo("hi");
         await Assert.That(next.Text).IsEqualTo(string.Empty);
         await Assert.That(next.History.Length).IsEqualTo(1);
@@ -276,7 +274,7 @@ public class SpectreTuiChatViewProjectorTests
             new ChatLine(ChatRole.ToolResult, "✓ [1, 2, 3] ok ] trailing"),
             new ChatLine(ChatRole.User, "use a[b] syntax"));
         var layout = new ChatViewProjector();
-        layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
+        layout.SetLines(lines, false, ActiveMessage.Empty);
 
         var widgets = layout.BuildWidgets(0);
 
@@ -289,7 +287,7 @@ public class SpectreTuiChatViewProjectorTests
     {
         var lines = ImmutableArray.Create(new ChatLine(ChatRole.User, "hi"));
         var layout = new ChatViewProjector();
-        layout.SetLines(lines, isStreaming: true, new ActiveMessage("Hello", "Thinking…"));
+        layout.SetLines(lines, true, new ActiveMessage("Hello", "Thinking…"));
 
         var widgets = layout.BuildWidgets(0);
 
@@ -304,7 +302,7 @@ public class SpectreTuiChatViewProjectorTests
         // long message that expands to many display rows must be sliced by ROW count,
         // so a small viewport never surfaces more rows than it can show, and a large
         // viewport with few long messages must not report a dead (zero) scroll.
-        var longMsg =
+        string longMsg =
             "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10";
         var lines = ImmutableArray.Create(
             new ChatLine(ChatRole.User, "u1"),
@@ -312,7 +310,7 @@ public class SpectreTuiChatViewProjectorTests
             new ChatLine(ChatRole.User, "u2"));
 
         var layout = new ChatViewProjector();
-        layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
+        layout.SetLines(lines, false, ActiveMessage.Empty);
 
         // 3 messages → (1+1) + (10+1) + (1+1) = 15 display rows total.
         const int viewport = 5;
@@ -331,13 +329,13 @@ public class SpectreTuiChatViewProjectorTests
     [Test]
     public async Task BuildHistory_ScrollOffsetIsDisplayRowsFromBottom()
     {
-        var longMsg = string.Join("\n", Enumerable.Range(1, 20).Select(i => $"a{i}"));
+        string longMsg = string.Join("\n", Enumerable.Range(1, 20).Select(i => $"a{i}"));
         var lines = ImmutableArray.Create(
             new ChatLine(ChatRole.Assistant, longMsg),
             new ChatLine(ChatRole.User, "tail"));
 
         var layout = new ChatViewProjector();
-        layout.SetLines(lines, isStreaming: false, ActiveMessage.Empty);
+        layout.SetLines(lines, false, ActiveMessage.Empty);
 
         const int viewport = 4;
         // Offset 0 → pinned to tail → first visible row is (TotalLines - viewport).
@@ -359,7 +357,7 @@ public class SpectreTuiChatViewProjectorTests
     {
         var lines = ImmutableArray.Create(new ChatLine(ChatRole.User, "u"));
         var layout = new ChatViewProjector();
-        layout.SetLines(lines, isStreaming: true, new ActiveMessage("live", "think"));
+        layout.SetLines(lines, true, new ActiveMessage("live", "think"));
 
         // Pinned (offset 0): stream rows are appended → total includes them.
         layout.ScrollOffset = 0;

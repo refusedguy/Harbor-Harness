@@ -21,6 +21,8 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
         Context = new PlainRenderContext(_writer);
     }
 
+    public override ITuiRenderContext Context { get; }
+
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
     {
         // Chat history and the input prompt are handled live by the line REPL
@@ -29,8 +31,6 @@ public sealed class PlainTuiRenderer : BaseTuiRenderer
         if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input) return false;
         return base.ShouldRenderPlacement(placement, @event);
     }
-
-    public override ITuiRenderContext Context { get; }
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {

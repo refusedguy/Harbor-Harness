@@ -1,8 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
-
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Semantic role of a rendered transcript line. Shared by every renderer so
 ///     colour/prefix logic stays consistent across frameworks.

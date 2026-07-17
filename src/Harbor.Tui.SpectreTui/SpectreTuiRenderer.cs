@@ -9,7 +9,6 @@ using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 using Spectre.Tui.App;
-
 namespace Harbor.Tui.SpectreTui;
 /// <summary>
 ///     Full-screen interactive TUI renderer built on Spectre.TUI.
@@ -19,10 +18,10 @@ namespace Harbor.Tui.SpectreTui;
 public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<SpectreTuiRenderer> _logger;
+    private TuiEffectHost? _effects;
     private ChatScreen? _screen;
     private Func<string, Task>? _slashHandler;
     private UiStore? _store;
-    private TuiEffectHost? _effects;
 
     public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
     {
@@ -121,17 +120,17 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         => false;
 
     /// <summary>
-    ///     Thin TEA view: keys → <see cref="UiMsg"/>, effects → host,
-    ///     <see cref="UiState"/> → <see cref="LayoutBuilder"/>.
+    ///     Thin TEA view: keys → <see cref="UiMsg" />, effects → host,
+    ///     <see cref="UiState" /> → <see cref="LayoutBuilder" />.
     ///     Local scroll is display-rows-from-bottom (0 = live tail).
     /// </summary>
     private sealed class ChatScreen : Screen
     {
-        private readonly UiStore _store;
         private readonly TuiEffectHost _effects;
-        private readonly ILogger _logger;
-        private readonly ChatViewProjector _layout;
         private readonly ChatKeyMap _keyMap = new();
+        private readonly ChatViewProjector _layout;
+        private readonly ILogger _logger;
+        private readonly UiStore _store;
         private ApplicationContext? _app;
 
         // Display-rows lifted from the bottom. 0 = pinned to newest (live).
@@ -203,8 +202,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         /// <summary>
         ///     <c>_scroll</c> = display-rows up from bottom; 0 = live tail.
-        ///     Clamp happens in <see cref="LayoutBuilder.BuildWidgets"/> /
-        ///     <see cref="LayoutBuilder.EffectiveScroll"/>.
+        ///     Clamp happens in <see cref="LayoutBuilder.BuildWidgets" /> /
+        ///     <see cref="LayoutBuilder.EffectiveScroll" />.
         /// </summary>
         private bool HandleLocalScroll(ChatAction action)
         {
@@ -293,7 +292,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 "Render: scroll={Scroll}/{Max} total={Total} viewport={Viewport} lines={Lines}",
                 _scroll, _layout.MaxScroll, _layout.TotalLines, _viewport, state.Lines.Length);
 
-            foreach (var (name, widget) in widgets)
+            foreach ((string name, var widget) in widgets)
             {
                 // Rebuild footer widget if we updated FooterText after BuildWidgets.
                 // Cheapest approach: if footer text changed post-build, only the Footer
@@ -306,7 +305,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             // (Avoid rebuilding the whole tree just for the % label.)
             var footerWidget = ParagraphFromFooter(_layout.FooterText);
 
-            foreach (var (name, widget) in widgets)
+            foreach ((string name, var widget) in widgets)
             {
                 var area = _layout.Layout.GetArea(context, name);
                 if (area.Width <= 0 || area.Height <= 0)
@@ -348,7 +347,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
             int max = _layout.MaxScroll;
             string scroll = max > 0
-                ? $"scroll {(_scroll * 100 / max)}%"
+                ? $"scroll {_scroll * 100 / max}%"
                 : "scroll 0%";
 
             // Esc is quit (see keymap); show it honestly.

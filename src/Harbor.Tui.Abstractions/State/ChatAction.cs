@@ -1,7 +1,5 @@
-namespace Harbor.Tui.Abstractions.State;
-
 using System.Collections.Immutable;
-
+namespace Harbor.Tui.Abstractions.State;
 /// <summary>
 ///     All interactive actions the chat UI understands, decoupled from the raw key
 ///     that triggers them. The concrete key bindings live in <see cref="ChatKeyMap" />
@@ -25,7 +23,7 @@ public enum ChatAction
     Autocomplete,
     Backspace,
     Clear,
-    Char,
+    Char
 }
 
 /// <summary>
@@ -36,7 +34,7 @@ public enum ChatAction
 public enum FocusMode
 {
     Input,
-    Chat,
+    Chat
 }
 
 /// <summary>

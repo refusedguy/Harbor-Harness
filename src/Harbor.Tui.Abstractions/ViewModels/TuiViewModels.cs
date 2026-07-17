@@ -14,6 +14,18 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     [ObservableProperty]
     private string _agent = "code";
 
+    /// <summary>
+    ///     Current context size in tokens (last step's input/prompt token count).
+    /// </summary>
+    [ObservableProperty]
+    private int _contextTokens;
+
+    /// <summary>
+    ///     Model context window (max input tokens). 0 when unknown.
+    /// </summary>
+    [ObservableProperty]
+    private int _contextWindow;
+
     [ObservableProperty]
     private decimal _cost;
     [ObservableProperty]
@@ -32,30 +44,9 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     private int _tokensOut;
 
     /// <summary>
-    ///     Model context window (max input tokens). 0 when unknown.
-    /// </summary>
-    [ObservableProperty]
-    private int _contextWindow;
-
-    /// <summary>
-    ///     Current context size in tokens (last step's input/prompt token count).
-    /// </summary>
-    [ObservableProperty]
-    private int _contextTokens;
-
-    /// <summary>
     ///     Context usage as a percentage of <see cref="_contextWindow" />. 0 when unknown.
     /// </summary>
     public int ContextPct => ContextWindow > 0 ? Math.Min(100, ContextTokens * 100 / ContextWindow) : 0;
-
-    /// <summary>
-    ///     Set the active model so the view model can compute context usage.
-    /// </summary>
-    /// <param name="model">The resolved model info (may be null).</param>
-    public void SetModel(ModelInfo? model)
-    {
-        ContextWindow = model?.ContextWindow ?? 0;
-    }
 
     /// <summary>
     ///     Formatted status line for rendering.
@@ -96,6 +87,12 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
         }
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    ///     Set the active model so the view model can compute context usage.
+    /// </summary>
+    /// <param name="model">The resolved model info (may be null).</param>
+    public void SetModel(ModelInfo? model) => ContextWindow = model?.ContextWindow ?? 0;
 
     /// <summary>
     ///     Reset all counters to zero. Bound to the <c>Reset</c> command.

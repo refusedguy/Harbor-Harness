@@ -3,7 +3,7 @@ using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
 /// <summary>
-///     ChatLine / role / body text → display <see cref="TextLine"/> rows.
+///     ChatLine / role / body text → display <see cref="TextLine" /> rows.
 ///     No scroll, no layout, no Spectre Layout tree.
 /// </summary>
 internal static class ChatMessageFormatter
@@ -21,7 +21,7 @@ internal static class ChatMessageFormatter
 
     public static TextLine RoleHeader(ChatRole role)
     {
-        var (label, style) = role switch
+        (string label, var style) = role switch
         {
             ChatRole.User => ("you", new Style(Color.Green, null, Decoration.Bold)),
             ChatRole.Assistant => ("assistant", new Style(Color.Aqua, null, Decoration.Bold)),
@@ -53,7 +53,7 @@ internal static class ChatMessageFormatter
         string body = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal);
         const string indent = "  ";
 
-        foreach (var segment in body.Split('\n'))
+        foreach (string segment in body.Split('\n'))
         {
             var line = new TextLine();
             line.Spans.Add(new TextSpan(indent, new Style(color)));

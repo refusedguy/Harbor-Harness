@@ -1,5 +1,4 @@
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Central registry of key bindings + human-readable labels for the chat UI.
 ///     Both the input handler (per-renderer, ~5 lines) and the footer/help text
@@ -8,15 +7,8 @@ namespace Harbor.Tui.Abstractions.State;
 /// </summary>
 public sealed class ChatKeyMap
 {
-    /// <summary>Match spec: a key code, optionally gated by required modifiers.</summary>
-    public readonly record struct Binding(UiKeyCode Code, KeyModifierSet Mods = KeyModifierSet.None)
-    {
-        public bool Matches(UiKey key)
-            => key.Code == Code && key.Mods.HasFlag(Mods);
-    }
 
-    /// <summary>One documented action: its label and the key bindings that trigger it.</summary>
-    public sealed record Entry(ChatAction Action, string Label, params Binding[] Bindings);
+    private readonly Dictionary<ChatAction, Entry> _byAction;
 
     private readonly Entry[] _entries =
     [
@@ -35,15 +27,16 @@ public sealed class ChatKeyMap
         new(ChatAction.Autocomplete, "complete", new Binding(UiKeyCode.Tab)),
         new(ChatAction.Backspace, "backspace", new Binding(UiKeyCode.Backspace)),
         // Clear is bound to Ctrl+L, reported by most frameworks as a character — handled separately.
-        new(ChatAction.Clear, "clear"),
+        new(ChatAction.Clear, "clear")
     ];
-
-    private readonly Dictionary<ChatAction, Entry> _byAction;
 
     public ChatKeyMap()
     {
         _byAction = _entries.ToDictionary(e => e.Action);
     }
+
+    /// <summary>All documented actions (used to render footer/help).</summary>
+    public IReadOnlyList<Entry> All => _entries;
 
     /// <summary>Resolve a key press to an action (first matching entry wins).</summary>
     /// <remarks>
@@ -67,6 +60,13 @@ public sealed class ChatKeyMap
     /// <summary>Get the documented entry for an action.</summary>
     public Entry Get(ChatAction action) => _byAction[action];
 
-    /// <summary>All documented actions (used to render footer/help).</summary>
-    public IReadOnlyList<Entry> All => _entries;
+    /// <summary>Match spec: a key code, optionally gated by required modifiers.</summary>
+    public readonly record struct Binding(UiKeyCode Code, KeyModifierSet Mods = KeyModifierSet.None)
+    {
+        public bool Matches(UiKey key)
+            => key.Code == Code && key.Mods.HasFlag(Mods);
+    }
+
+    /// <summary>One documented action: its label and the key bindings that trigger it.</summary>
+    public sealed record Entry(ChatAction Action, string Label, params Binding[] Bindings);
 }

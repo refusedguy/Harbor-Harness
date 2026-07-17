@@ -49,7 +49,7 @@ internal sealed class ChatChromeView
     public IWidget BuildInput()
     {
         bool focused = Focus == FocusMode.Input;
-        Color border = focused ? Color.Green : Color.Grey;
+        var border = focused ? Color.Green : Color.Grey;
         string mark = focused ? "[bold green]›[/]" : "[grey]›[/]";
 
         string body;

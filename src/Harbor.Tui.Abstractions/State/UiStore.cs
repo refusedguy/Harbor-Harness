@@ -1,8 +1,5 @@
-using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
-
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Declarative UI-driven side-effect. Renderers never call <c>IAgent</c>
 ///     directly; instead they emit effects that the host executes. This keeps the
@@ -35,19 +32,19 @@ public abstract record TuiEffect
 public interface ITuiEffectRunner
 {
     /// <summary>Execute a single effect. May dispatch follow-up events into the store.</summary>
-    void Run(TuiEffect effect);
+    public void Run(TuiEffect effect);
 }
 
 /// <summary>
 ///     Single source of truth for the interactive UI. Owns the immutable
 ///     <see cref="UiState" /> and fans transitions out to subscribers. Framework-free
-    ///     (plain <c>event</c>, no reactive library) so it stays in
+///     (plain <c>event</c>, no reactive library) so it stays in
 ///     <c>Harbor.Tui.Abstractions</c> with zero extra dependencies.
 /// </summary>
 public sealed class UiStore
 {
-    private UiState _state;
     private readonly object _gate = new();
+    private UiState _state;
 
     /// <summary>Construct a store with the initial (empty) state.</summary>
     public UiStore(UiState? initial = null)
@@ -125,10 +122,7 @@ public sealed class UiStore
     }
 
     /// <summary>Bind session chrome (model/provider/agent) into the state.</summary>
-    public void BindSession(string model, string provider, string agentName)
-    {
-        Transition(s => s with { Model = model, Provider = provider, AgentName = agentName });
-    }
+    public void BindSession(string model, string provider, string agentName) => Transition(s => s with { Model = model, Provider = provider, AgentName = agentName });
 
     /// <summary>Reset to a fresh empty state (e.g. on clear-screen).</summary>
     public void Reset() => Transition(_ => new UiState());
@@ -137,7 +131,10 @@ public sealed class UiStore
 /// <summary>Event args carrying the new immutable <see cref="UiState" /> snapshot.</summary>
 public sealed class UiStateChangedEventArgs : EventArgs
 {
-    public UiStateChangedEventArgs(UiState state) => State = state;
+    public UiStateChangedEventArgs(UiState state)
+    {
+        State = state;
+    }
 
     /// <summary>The new UI snapshot after the transition.</summary>
     public UiState State { get; }

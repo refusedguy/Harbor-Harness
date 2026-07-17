@@ -1,10 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions.State;
-
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Default <see cref="ITuiEffectRunner" />. The ONLY place that touches
 ///     <see cref="IAgent" /> / the slash handler. Renderers stay free of
@@ -20,9 +16,9 @@ namespace Harbor.Tui.Abstractions.State;
 public sealed class TuiEffectHost : ITuiEffectRunner
 {
     private readonly IAgent _agent;
+    private readonly CancellationToken _appCt;
     private readonly Func<string, Task>? _slash;
     private readonly UiStore _store;
-    private readonly CancellationToken _appCt;
 
     public TuiEffectHost(IAgent agent, UiStore store, Func<string, Task>? slash = null, CancellationToken appCt = default)
     {
@@ -31,6 +27,9 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _slash = slash;
         _appCt = appCt;
     }
+
+    /// <summary>Slash command list for input autocomplete.</summary>
+    public static ImmutableArray<string> KnownSlashCommands => ChatCommands.Slash;
 
     public void Run(TuiEffect effect)
     {
@@ -52,9 +51,6 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                 break;
         }
     }
-
-    /// <summary>Slash command list for input autocomplete.</summary>
-    public static ImmutableArray<string> KnownSlashCommands => ChatCommands.Slash;
 
     private async Task PromptAsync(string text)
     {

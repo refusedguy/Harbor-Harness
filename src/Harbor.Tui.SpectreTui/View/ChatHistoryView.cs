@@ -3,7 +3,6 @@ using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
 /// <summary>
 ///     Display-row scroll window over committed cache + optional pinned stream.
-///
 ///     ScrollOffset = rows lifted from BOTTOM (0 = live tail).
 /// </summary>
 internal sealed class ChatHistoryView
@@ -11,7 +10,10 @@ internal sealed class ChatHistoryView
     private readonly ChatTranscriptCache _cache;
     private readonly List<TextLine> _streamRows = new(64);
 
-    public ChatHistoryView(ChatTranscriptCache cache) => _cache = cache;
+    public ChatHistoryView(ChatTranscriptCache cache)
+    {
+        _cache = cache;
+    }
 
     public int ScrollOffset { get; set; }
     public string StreamBuffer { get; set; } = string.Empty;
@@ -37,13 +39,13 @@ internal sealed class ChatHistoryView
             if (!string.IsNullOrWhiteSpace(ThinkBuffer))
             {
                 ChatMessageFormatter.AppendRole(
-                    _streamRows, ChatRole.Thinking, ThinkBuffer.Trim(), markdown: false);
+                    _streamRows, ChatRole.Thinking, ThinkBuffer.Trim(), false);
             }
 
             if (!string.IsNullOrWhiteSpace(StreamBuffer))
             {
                 ChatMessageFormatter.AppendRole(
-                    _streamRows, ChatRole.Assistant, StreamBuffer.Trim(), markdown: false);
+                    _streamRows, ChatRole.Assistant, StreamBuffer.Trim(), false);
             }
         }
 

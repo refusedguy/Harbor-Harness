@@ -1,5 +1,4 @@
 namespace Harbor.Tui.Abstractions.State;
-
 /// <summary>
 ///     Abstract key code, free of any specific TUI framework so every renderer
 ///     (Spectre, Plain, Fullscreen, ANSI) maps its native key onto the same type.
@@ -23,7 +22,7 @@ public enum UiKeyCode : byte
     F1,
     F2,
     F3,
-    F4,
+    F4
 }
 
 /// <summary>Modifier set for a <see cref="UiKey" /> (bitwise-combinable).</summary>
@@ -33,7 +32,7 @@ public enum KeyModifierSet : byte
     None = 0,
     Shift = 1,
     Ctrl = 2,
-    Alt = 4,
+    Alt = 4
 }
 
 /// <summary>
