@@ -4,8 +4,9 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.Abstractions.Views;
-using Harbor.Tui.SpectreTui.Components;
+
 using Harbor.Tui.SpectreTui.Helpers;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
@@ -13,17 +14,19 @@ using Spectre.Tui.App;
 namespace Harbor.Tui.SpectreTui;
 /// <summary>
 ///     Full-screen interactive TUI renderer built on the real Spectre.TUI
-///     widget framework (Spectre.Tui + Spectre.Tui.App). A <see cref="ChatScreen" />
-///     owns the application loop via <see cref="Application.RunAsync" /> and
-///     renders chat history, a streaming indicator, an input box and a help
-///     footer using first-class widgets (ScrollViewWidget, BoxWidget,
-///     SpinnerWidget, HelpWidget, Layout).
+///     widget framework. A <see cref="ChatScreen" /> owns the application loop via
+///     <see cref="Application.RunAsync" /> and renders the shared, renderer-agnostic
+///     <see cref="UiState" /> (produced by <see cref="UiReducer" />) as first-class
+///     widgets. All agent I/O is delegated to <see cref="TuiEffectHost" /> — the
+///     screen itself never references <c>IAgent</c> or <c>Harbor.Core</c>.
 /// </summary>
 public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<SpectreTuiRenderer> _logger;
     private ChatScreen? _screen;
     private Func<string, Task>? _slashHandler;
+    private UiStore? _store;
+    private TuiEffectHost? _effects;
 
     public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
     {
@@ -52,13 +55,20 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        _screen?.ApplyEvent(@event);
+        // Single funnel: every agent event goes through the shared pure reducer.
+        _store?.Dispatch(@event);
+        // Keep the history pinned to the newest line unless the user scrolled up.
+        if (_screen is not null && _screen.IsPinnedToBottom)
+            _screen.ScrollToBottom();
         return base.RenderAsync(@event, ct);
     }
 
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
-        _screen = new ChatScreen(agent, _slashHandler, _logger);
+        _store = new UiStore();
+        _effects = new TuiEffectHost(agent, _store, _slashHandler, ct);
+        _store.BindSession(agent.State.Agent.Model, agent.State.Agent.ProviderId, agent.State.Agent.Name.Value);
+        _screen = new ChatScreen(_store, _effects, _logger);
 
         // Use fullscreen mode so the framework drives an alternate screen buffer that
         // is cleared and diffed every frame. Without this the app runs in inline mode
@@ -104,211 +114,135 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     /// </summary>
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
-    /// <summary>The chat screen - owns the Spectre.TUI application loop.</summary>
+    /// <summary>
+    ///     The chat screen - owns the Spectre.TUI application loop and projects
+    ///     <see cref="UiState" /> into widgets. It holds no agent state and performs
+    ///     no I/O: keystrokes become <see cref="InputMsg" /> transitions and input
+    ///     submission becomes a <see cref="TuiEffect" />.
+    /// </summary>
     private sealed class ChatScreen : Screen
     {
-        private readonly IAgent _agent;
-        private readonly ChatState _chat = new();
-        private readonly InputState _input = new();
-        private readonly LayoutBuilder _layout;
+        private readonly UiStore _store;
+        private readonly TuiEffectHost _effects;
         private readonly ILogger _logger;
-        private readonly Func<string, Task>? _slash;
-        private readonly HashSet<string> _slashCommands = new()
-        {
-            "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
-            "/providers", "/sessions", "/tui", "/storage", "/clear"
-        };
-        private decimal _cost;
-        private string _streamBuffer = string.Empty;
+        private readonly LayoutBuilder _layout;
+        private InputModel _input = InputModel.Empty;
+        private ApplicationContext? _app;
+        private int _lastHistoryHeight;
 
-        private bool _streaming;
-        private string _thinkBuffer = string.Empty;
-
-        public ChatScreen(IAgent agent, Func<string, Task>? slash, ILogger logger)
+        public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger)
         {
-            _agent = agent;
-            _slash = slash;
+            _store = store;
+            _effects = effects;
             _logger = logger;
-            _layout = new LayoutBuilder(_chat, _input);
+            _layout = new LayoutBuilder();
         }
 
-        public void ApplyEvent(AgentEvent @event)
-        {
-            _logger.LogDebug("ApplyEvent: {EventType}", @event.GetType().Name);
-            switch (@event)
-            {
-                case AgentStartEvent ase:
-                    _layout.Status = "running";
-                    if (_chat.Count == 0)
-                        foreach (var m in ase.Messages)
-                            if (m is UserMessage u)
-                                _chat.Add("user", u.Content);
-                    break;
-                case MessageStartEvent:
-                    _layout.Status = "running";
-                    _streaming = true;
-                    _streamBuffer = string.Empty;
-                    _thinkBuffer = string.Empty;
-                    break;
-                case MessageUpdateEvent mu:
-                    switch (mu.LlmEvent)
-                    {
-                        case TextDeltaEvent td: _streamBuffer += td.Delta; break;
-                        case ThinkingDeltaEvent thd: _thinkBuffer += thd.Delta; break;
-                        case ToolCallStartEvent tcs: _chat.Add("tool", $"→ {tcs.ToolName}"); break;
-                        case StepFinishEvent sf when sf.Usage is not null:
-                            _layout.TokensIn += sf.Usage.InputTokens;
-                            _layout.TokensOut += sf.Usage.OutputTokens;
-                            _cost += EstimateCost(sf.Usage.InputTokens, sf.Usage.OutputTokens);
-                            _layout.Cost = _cost;
-                            break;
-                    }
-                    break;
-                case MessageEndEvent:
-                    if (!string.IsNullOrEmpty(_thinkBuffer)) _chat.Add("thinking", _thinkBuffer.Trim());
-                    if (!string.IsNullOrEmpty(_streamBuffer)) _chat.Add("assistant", _streamBuffer.Trim());
-                    _streamBuffer = string.Empty;
-                    _thinkBuffer = string.Empty;
-                    _streaming = false;
-                    break;
-                case ToolExecutionStartEvent tes:
-                    string args = tes.Args.GetRawText();
-                    _chat.Add("tool", string.IsNullOrEmpty(args) || args == "{}"
-                        ? $"→ {tes.ToolName}"
-                        : $"→ {tes.ToolName}  [dim]{Escape(args)}[/]");
-                    break;
-                case ToolExecutionEndEvent tee:
-                    string label = tee.IsError ? "[red]✗[/]" : "[green]✓[/]";
-                    string preview = tee.Result.Output.Length > 600
-                        ? tee.Result.Output[..600] + "..." : tee.Result.Output;
-                    _chat.Add("tool-result", $"{label} {Escape(preview.Trim())}");
-                    break;
-                case CompactionStartedEvent: _layout.Status = "compacting"; break;
-                case CompactionCompletedEvent cc:
-                    _layout.Status = "running";
-                    _chat.Add("system", $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens[/]");
-                    break;
-                case AgentErrorEvent err:
-                    _layout.Status = "error";
-                    _chat.Add("error", err.Message);
-                    break;
-                case AgentEndEvent: _layout.Status = "idle"; break;
-            }
+        /// <summary>Pin the history to the newest line (tail-follow) on new activity.</summary>
+        public void ScrollToBottom() => _layout.ScrollToBottom();
 
-            _layout.IsStreaming = _streaming;
-            _layout.StreamBuffer = _streamBuffer;
-            _layout.ThinkBuffer = _thinkBuffer;
-        }
-
-        private static string Escape(string text)
-            => (text ?? string.Empty).Replace("[", "\\[", StringComparison.Ordinal);
-
-        private static decimal EstimateCost(int inTok, int outTok)
-            => inTok / 1_000_000m * 3m + outTok / 1_000_000m * 15m;
+        /// <summary>True when the user has not scrolled back into history.</summary>
+        public bool IsPinnedToBottom => _layout.ScrollOffset == 0;
 
         public override void OnEnter(ApplicationContext context)
         {
-            _layout.Model = _agent.State.Agent.Model;
-            _layout.Provider = _agent.State.Agent.ProviderId;
-            _layout.Agent = _agent.State.Agent.Name.Value;
-            _logger.LogDebug("OnEnter: model={Model} provider={Provider} agent={Agent}", _layout.Model, _layout.Provider, _layout.Agent);
+            _app = context;
+            _logger.LogDebug("OnEnter: model={Model} provider={Provider} agent={Agent}",
+                _store.State.Model, _store.State.Provider, _store.State.AgentName);
         }
 
         public override void OnMessage(ApplicationContext context, ApplicationMessage message)
         {
             if (message is not KeyMessage key) return;
 
-            if (_agent.State.IsRunning)
+            var state = _store.State;
+            if (state.IsAgentRunning)
             {
-                HandleRunningKey(context, key);
+                // While running only abort is accepted.
+                if (key.Key == Key.Escape ||
+                    (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl)))
+                {
+                    _effects.Run(new TuiEffect.AbortAgent());
+                    _store.Transition(s => s.AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"));
+                }
+
                 return;
             }
 
             if (key.Key == Key.Escape)
             {
-                context.Quit();
+                _effects.Run(new TuiEffect.QuitApp());
+                _app?.Quit();
                 return;
             }
 
-            if (key.Character is >= (char)32 and not (char)127)
+            // History scroll (when not editing input history with Up/Down).
+            if (key.Key == Key.PageUp)
             {
-                _input.Append(key.Character.Value);
+                _layout.ScrollBy(+Math.Max(1, _lastHistoryHeight / 2));
+                return;
             }
-            else if (key.Key == Key.Enter)
+            if (key.Key == Key.PageDown)
             {
-                SubmitCurrent(context);
+                _layout.ScrollBy(-Math.Max(1, _lastHistoryHeight / 2));
+                return;
             }
-            else if (key.Key == Key.Backspace)
+
+            if (key.Key == Key.Enter)
             {
-                _input.Backspace();
+                Submit();
+                return;
+            }
+
+            if (key.Key == Key.Backspace)
+            {
+                _input = InputMsg.Update(_input, new InputMsg.Backspace());
             }
             else if (key.Key == Key.Up)
             {
-                _input.NavigateUp();
+                _input = InputMsg.Update(_input, new InputMsg.HistoryUp());
             }
             else if (key.Key == Key.Down)
             {
-                _input.NavigateDown();
+                _input = InputMsg.Update(_input, new InputMsg.HistoryDown());
             }
             else if (key.Key == Key.Tab && _input.Text.StartsWith('/'))
             {
-                Autocomplete();
+                _input = InputMsg.Update(_input, new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands));
             }
             else if (key.Character == 'l' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
             {
-                _chat.Clear();
+                _store.Reset();
             }
-        }
-
-        private void HandleRunningKey(ApplicationContext context, KeyMessage key)
-        {
-            if (key.Key == Key.Escape || key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
+            else if (key.Character is >= (char)32 and not (char)127)
             {
-                _logger.LogWarning("Agent aborted by user");
-                _agent.AbortSource.Cancel();
-                _chat.Add("system", "[yellow]⏹ Aborted.[/]");
-                _ = Task.Run(async () => await _agent.WaitForIdleAsync(CancellationToken.None).ConfigureAwait(false));
+                _input = InputMsg.Update(_input, new InputMsg.Char(key.Character.Value));
             }
         }
 
-        private void SubmitCurrent(ApplicationContext context)
+        private void Submit()
         {
-            string text = _input.Consume();
-            _logger.LogInformation("Submitting: {Text}", text);
-            if (string.IsNullOrWhiteSpace(text)) return;
-            if (text is "exit" or "quit" or ":q")
-            {
-                context.Quit();
-                return;
-            }
+            var (next, submitted) = _input.Consume();
+            _input = next;
+            if (submitted is null) return;
 
-            if (text.StartsWith('/') && _slash is not null)
-            {
-                _ = Task.Run(async () => await _slash(text).ConfigureAwait(false));
-                _chat.Add("system", $"[dim]{Escape(text[1..])}[/]");
-                return;
-            }
-
-            _chat.Add("user", text);
-            _layout.Status = "running";
-            _ = Task.Run(async () => await _agent.PromptAsync(text, CancellationToken.None).ConfigureAwait(false));
+            _logger.LogInformation("Submitting: {Text}", submitted);
+            if (!submitted.StartsWith('/'))
+                _store.Transition(s => s.AddLine(ChatRole.User, submitted));
+            _effects.Run(TuiEffectHost.ToEffect(submitted));
         }
 
-        private void Autocomplete()
+        public override void Update(FrameInfo frame, IRenderBounds bounds)
         {
-            string current = _input.Text;
-            string? match = _slashCommands.FirstOrDefault(c => c.StartsWith(current, StringComparison.OrdinalIgnoreCase));
-            if (match is null) return;
-            _input.Clear();
-            foreach (char c in match) _input.Append(c);
-            _input.Append(' ');
+            // No per-frame mutation needed; state arrives via events.
         }
-
-        public override void Update(FrameInfo frame, IRenderBounds bounds) => _layout.IsReadingInput = !_agent.State.IsRunning;
 
         public override void Render(RenderContext context)
         {
-            var widgets = _layout.BuildWidgets();
+            SyncLayout();
+            var historyArea = _layout.Layout.GetArea(context, "History");
+            _lastHistoryHeight = historyArea.Height > 0 ? historyArea.Height : 0;
+            var widgets = _layout.BuildWidgets(_lastHistoryHeight);
             _logger.LogTrace("Render: {WidgetCount} widgets", widgets.Count);
             foreach ((string name, var widget) in widgets)
             {
@@ -316,6 +250,25 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 if (area.Width > 0 && area.Height > 0)
                     context.Render(widget, area);
             }
+        }
+
+        /// <summary>Project the shared <see cref="UiState" /> + local input into the LayoutBuilder.</summary>
+        private void SyncLayout()
+        {
+            var s = _store.State;
+            _layout.Model = s.Model;
+            _layout.Provider = s.Provider;
+            _layout.Agent = s.AgentName;
+            _layout.Status = s.Status;
+            _layout.TokensIn = (int)s.Cost.TokensIn;
+            _layout.TokensOut = (int)s.Cost.TokensOut;
+            _layout.Cost = s.Cost.CostUsd;
+            _layout.IsStreaming = s.IsStreaming;
+            _layout.StreamBuffer = s.Active.TextBuffer;
+            _layout.ThinkBuffer = s.Active.ThinkBuffer;
+            _layout.IsReadingInput = !s.IsAgentRunning;
+            _layout.SetLines(s.Lines, s.IsStreaming, s.Active);
+            _layout.InputText = _input.Text;
         }
     }
 }
