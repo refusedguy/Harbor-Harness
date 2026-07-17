@@ -6,7 +6,6 @@ using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.Abstractions.Views;
-
 using Harbor.Tui.SpectreTui.Helpers;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
@@ -56,10 +55,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
         // Single funnel: every agent event goes through the shared pure reducer.
-        _store?.Dispatch(@event);
-        // Keep the history pinned to the newest line unless the user scrolled up.
-        if (_screen is not null && _screen.IsPinnedToBottom)
-            _screen.ScrollToBottom();
+        // Scroll "pin to newest" is handled implicitly — the reducer leaves
+        // ScrollOffset untouched for agent events, so an offset of 0 always tails.
+        if (_store is not null)
+            _store.Dispatch(new UiMsg.Agent(@event));
         return base.RenderAsync(@event, ct);
     }
 
@@ -115,10 +114,12 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     /// <summary>
-    ///     The chat screen - owns the Spectre.TUI application loop and projects
-    ///     <see cref="UiState" /> into widgets. It holds no agent state and performs
-    ///     no I/O: keystrokes become <see cref="InputMsg" /> transitions and input
-    ///     submission becomes a <see cref="TuiEffect" />.
+    ///     The chat screen - owns the Spectre.TUI application loop and projects the
+    ///     shared, renderer-agnostic <see cref="UiState" /> into widgets. It holds no
+    ///     state and performs no I/O: every keystroke becomes a <see cref="UiMsg" />
+    ///     dispatched through the single <see cref="UiReducer.Update" />, and any
+    ///     returned <see cref="TuiEffect" /> is run by the host. No reducer logic,
+    ///     no <c>IAgent</c> reference, no direct mutation.
     /// </summary>
     private sealed class ChatScreen : Screen
     {
@@ -127,10 +128,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly ILogger _logger;
         private readonly LayoutBuilder _layout;
         private readonly ChatKeyMap _keyMap = new();
-        private InputModel _input = InputModel.Empty;
         private ApplicationContext? _app;
         private int _lastHistoryHeight;
-        private FocusMode _focus = FocusMode.Input;
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger)
         {
@@ -140,152 +139,61 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             _layout = new LayoutBuilder();
         }
 
-        /// <summary>Pin the history to the newest line (tail-follow) on new activity.</summary>
-        public void ScrollToBottom() => _layout.ScrollToBottom();
-
-        /// <summary>True when the user has not scrolled back into history.</summary>
-        public bool IsPinnedToBottom => _layout.ScrollOffset == 0;
-
         public override void OnEnter(ApplicationContext context)
         {
             _app = context;
+            var s = _store.State;
             _logger.LogDebug("OnEnter: model={Model} provider={Provider} agent={Agent}",
-                _store.State.Model, _store.State.Provider, _store.State.AgentName);
+                s.Model, s.Provider, s.AgentName);
         }
 
         public override void OnMessage(ApplicationContext context, ApplicationMessage message)
         {
             if (message is not KeyMessage key) return;
 
-            var state = _store.State;
+            var uiKey = ToUiKey(key);
+            var action = _keyMap.Resolve(uiKey);
 
-            // While the agent runs, only Abort is accepted (Esc, or Ctrl+C).
-            if (state.IsAgentRunning)
-            {
-                if (_keyMap.Resolve(key) is ChatAction.Abort or ChatAction.Quit)
-                {
-                    _effects.Run(new TuiEffect.AbortAgent());
-                    _store.Transition(s => s.AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"));
-                }
-
-                return;
-            }
-
-            // Plain character input is only accepted when the input box has focus.
-            if (key.Character is >= (char)32 and not (char)127)
-            {
-                if (_focus == FocusMode.Input)
-                    _input = InputMsg.Update(_input, new InputMsg.Char(key.Character.Value));
-                return;
-            }
-
-            // Ctrl+L clears the transcript (framework reports it as a character).
+            // Ctrl+L (clear) and Ctrl+C (abort) are reported as characters by the
+            // framework; special-case them into the same message funnel.
             if (key.Character == 'l' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
-            {
-                _store.Reset();
-                return;
-            }
+                action = ChatAction.Clear;
+            else if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
+                action = ChatAction.Abort;
 
-            // Ctrl+C aborts the running agent (also handled while running below).
-            if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
-            {
-                _effects.Run(new TuiEffect.AbortAgent());
-                _store.Transition(s => s.AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"));
-                return;
-            }
+            if (action == ChatAction.None) return;
 
-            var action = _keyMap.Resolve(key);
-            switch (action)
-            {
-                case ChatAction.Quit:
-                    _effects.Run(new TuiEffect.QuitApp());
-                    _app?.Quit();
-                    return;
+            // The only side-effect the screen is allowed: run the effect the pure
+            // update produced. All state transitions happen inside UiReducer.Update.
+            var effect = _store.Dispatch(new UiMsg.KeyInput(action, uiKey));
+            if (effect is not TuiEffect.None)
+                _effects.Run(effect);
 
-                case ChatAction.Submit:
-                    Submit();
-                    return;
-
-                case ChatAction.ToggleFocus:
-                    _focus = _focus == FocusMode.Input ? FocusMode.Chat : FocusMode.Input;
-                    _layout.Focus = _focus;
-                    return;
-
-                // History scrolling works in both focus modes (wheel arrives as
-                // PageUp/PageDown), so reading never gets stuck.
-                case ChatAction.ScrollUpLine:
-                    _layout.ScrollUp(1);
-                    return;
-                case ChatAction.ScrollDownLine:
-                    _layout.ScrollDown(1);
-                    return;
-                case ChatAction.ScrollUpPage:
-                    _layout.PageUp();
-                    return;
-                case ChatAction.ScrollDownPage:
-                    _layout.PageDown();
-                    return;
-                case ChatAction.ScrollTop:
-                    _layout.ScrollToTop();
-                    return;
-                case ChatAction.ScrollBottom:
-                    _layout.ScrollToBottom();
-                    return;
-
-                // Input-history navigation only when the input box is focused.
-                case ChatAction.Backspace:
-                    if (_focus == FocusMode.Input)
-                        _input = InputMsg.Update(_input, new InputMsg.Backspace());
-                    return;
-
-                case ChatAction.InputHistoryPrev:
-                    if (_focus == FocusMode.Input)
-                        _input = InputMsg.Update(_input, new InputMsg.HistoryUp());
-                    return;
-                case ChatAction.InputHistoryNext:
-                    if (_focus == FocusMode.Input)
-                        _input = InputMsg.Update(_input, new InputMsg.HistoryDown());
-                    return;
-
-                case ChatAction.Autocomplete:
-                    if (_focus == FocusMode.Input && _input.Text.StartsWith('/'))
-                        _input = InputMsg.Update(_input, new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands));
-                    return;
-
-                case ChatAction.Clear:
-                    _store.Reset();
-                    return;
-
-                case ChatAction.Abort:
-                case ChatAction.None:
-                default:
-                    return;
-            }
-        }
-
-        private void Submit()
-        {
-            var (next, submitted) = _input.Consume();
-            _input = next;
-            if (submitted is null) return;
-
-            _logger.LogInformation("Submitting: {Text}", submitted);
-            if (!submitted.StartsWith('/'))
-                _store.Transition(s => s.AddLine(ChatRole.User, submitted));
-            _effects.Run(TuiEffectHost.ToEffect(submitted));
+            // QuitApp is also a hard screen exit (the host only flips ShouldQuit).
+            if (effect is TuiEffect.QuitApp)
+                _app?.Quit();
         }
 
         public override void Update(FrameInfo frame, IRenderBounds bounds)
         {
-            // No per-frame mutation needed; state arrives via events.
+            // No per-frame mutation; state arrives via messages + events.
         }
 
         public override void Render(RenderContext context)
         {
-            SyncLayout();
             var historyArea = _layout.Layout.GetArea(context, "History");
             _lastHistoryHeight = historyArea.Height > 0 ? historyArea.Height : 0;
+
+            // Report measured geometry into the model so scroll clamping/% is pure.
+            _store.Dispatch(new UiMsg.Viewport(_lastHistoryHeight));
+
+            SyncLayout();
             var widgets = _layout.BuildWidgets(_lastHistoryHeight);
+
+            // Feed the measured content height back so TotalLines (and scroll %) updates.
+            if (_layout.TotalLines != _store.State.TotalLines)
+                _store.Dispatch(new UiMsg.HistoryMeasured(_layout.TotalLines));
+
             _logger.LogTrace("Render: {WidgetCount} widgets", widgets.Count);
             foreach ((string name, var widget) in widgets)
             {
@@ -295,7 +203,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             }
         }
 
-        /// <summary>Project the shared <see cref="UiState" /> + local input into the LayoutBuilder.</summary>
+        /// <summary>Project the shared <see cref="UiState" /> into the LayoutBuilder.</summary>
         private void SyncLayout()
         {
             var s = _store.State;
@@ -311,8 +219,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             _layout.ThinkBuffer = s.Active.ThinkBuffer;
             _layout.IsReadingInput = !s.IsAgentRunning;
             _layout.SetLines(s.Lines, s.IsStreaming, s.Active);
-            _layout.InputText = _input.Text;
-            _layout.Focus = _focus;
+            _layout.InputText = s.Input.Text;
+            _layout.Focus = s.Focus;
+            _layout.ScrollOffset = s.ScrollOffset;
+            _layout.TotalLines = s.TotalLines;
+            _layout.ViewportLines = s.ViewportLines;
             _layout.FooterText = BuildFooter();
         }
 
@@ -323,9 +234,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private string BuildFooter()
         {
             string Label(ChatAction a) => _keyMap.Get(a).Label;
-            string mode = _focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
-            string scroll = _layout.TotalLines > _layout.ViewportLines && _layout.ViewportLines > 0
-                ? $"scroll {_layout.ScrollPercent}%"
+            var s = _store.State;
+            string mode = s.Focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
+            string scroll = s.TotalLines > s.ViewportLines && s.ViewportLines > 0
+                ? $"scroll {s.ScrollPercent}%"
                 : "scroll 0%";
             return $"[grey]q[/] {Label(ChatAction.Quit)}  " +
                    $"[grey]F2[/] {Label(ChatAction.ToggleFocus)}  {mode}  " +
@@ -334,5 +246,39 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                    $"[grey]Home/End[/] {Label(ChatAction.ScrollTop)}  " +
                    $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  {scroll}";
         }
+        /// <summary>Map a Spectre.Tui key press onto the framework-neutral <see cref="UiKey" />.</summary>
+        private static UiKey ToUiKey(KeyMessage key)
+        {
+            var mods = KeyModifierSet.None;
+            if (key.Modifiers.HasFlag(KeyModifier.Shift)) mods |= KeyModifierSet.Shift;
+            if (key.Modifiers.HasFlag(KeyModifier.Ctrl)) mods |= KeyModifierSet.Ctrl;
+            if (key.Modifiers.HasFlag(KeyModifier.Alt)) mods |= KeyModifierSet.Alt;
+
+            if (key.Character is >= (char)32 and not (char)127)
+                return UiKey.ForChar(key.Character.Value, mods);
+
+            var code = key.Key switch
+            {
+                Key.Up => UiKeyCode.Up,
+                Key.Down => UiKeyCode.Down,
+                Key.Left => UiKeyCode.Left,
+                Key.Right => UiKeyCode.Right,
+                Key.PageUp => UiKeyCode.PageUp,
+                Key.PageDown => UiKeyCode.PageDown,
+                Key.Home => UiKeyCode.Home,
+                Key.End => UiKeyCode.End,
+                Key.Enter => UiKeyCode.Enter,
+                Key.Escape => UiKeyCode.Escape,
+                Key.Backspace => UiKeyCode.Backspace,
+                Key.Tab => UiKeyCode.Tab,
+                Key.F1 => UiKeyCode.F1,
+                Key.F2 => UiKeyCode.F2,
+                Key.F3 => UiKeyCode.F3,
+                Key.F4 => UiKeyCode.F4,
+                _ => UiKeyCode.None
+            };
+            return new UiKey(code, mods);
+        }
     }
 }
+

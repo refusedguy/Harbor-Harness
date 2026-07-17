@@ -6,27 +6,13 @@ using Spectre.Tui;
 
 namespace Harbor.Tui.SpectreTui.Helpers;
 
-/// <summary>Which region currently owns the keyboard.</summary>
-public enum FocusMode
-{
-    Input,
-    Chat
-}
-
 /// <summary>
-///     Builds the chat screen widget tree from the shared, renderer-agnostic
-///     <see cref="UiState" /> each frame, using real Spectre.TUI widgets
-///     (ScrollViewWidget, BoxWidget, SpinnerWidget, HelpWidget, Layout).
-///     Returns one widget per named <see cref="Layout" /> region; the screen
-///     resolves the region rectangle and renders each widget into it.
+///     Projects the shared, renderer-agnostic <see cref="UiState" /> into a Spectre.TUI
+///     widget tree each frame. Pure view layer: it holds no UI logic, no scroll math,
+///     no focus decisions — all of that lives in <see cref="UiReducer" />. The screen
+///     copies the relevant <see cref="UiState" /> fields into these settable
+///     properties, and <c>BuildWidgets</c> renders them. No <c>IAgent</c>, no effects.
 /// </summary>
-/// <remarks>
-///     <para>
-///         Stateless beyond the per-frame projection values set by the screen in
-///         <c>SyncLayout</c>. No agent logic, no <c>switch (AgentEvent)</c>, no
-///         <c>IAgent</c> reference.
-///     </para>
-/// </remarks>
 internal sealed class LayoutBuilder
 {
     public string Status { get; set; } = "idle";
@@ -42,73 +28,26 @@ internal sealed class LayoutBuilder
     public decimal Cost { get; set; }
     public string InputText { get; set; } = string.Empty;
 
-    /// <summary>Which region currently has keyboard focus.</summary>
+    /// <summary>Keyboard focus owner (mirrored from <see cref="UiState.Focus" />).</summary>
     public FocusMode Focus { get; set; } = FocusMode.Input;
 
     /// <summary>Pre-rendered footer line (assembled by the screen from the keymap).</summary>
     public string FooterText { get; set; } = string.Empty;
 
+    /// <summary>History scroll-back offset, mirrored from <see cref="UiState.ScrollOffset" />.</summary>
+    public int ScrollOffset { get; set; }
+
+    /// <summary>Total wrapped history rows, mirrored from <see cref="UiState.TotalLines" />.</summary>
+    public int TotalLines { get; set; }
+
+    /// <summary>Visible history rows this frame, mirrored from <see cref="UiState.ViewportLines" />.</summary>
+    public int ViewportLines { get; set; }
+
     private ImmutableArray<ChatLine> _lines = ImmutableArray<ChatLine>.Empty;
-    private int _scrollOffset;
-    private int _viewportLines;
-    private int _totalLines;
-
-    public LayoutBuilder() { }
-
-    /// <summary>Current scroll-back offset (0 = pinned to newest line, grows toward the top).</summary>
-    public int ScrollOffset => _scrollOffset;
-
-    /// <summary>Number of history rows currently visible (set each frame by the screen).</summary>
-    public int ViewportLines => _viewportLines;
-
-    /// <summary>Total number of wrapped history rows in the transcript.</summary>
-    public int TotalLines => _totalLines;
-
-    /// <summary>True when the user is viewing the newest line (tail-follow).</summary>
-    public bool IsPinnedToBottom => _scrollOffset == 0;
-
-    /// <summary>How far the history is scrolled, as a percentage (0 = bottom, 100 = top).</summary>
-    public int ScrollPercent
-    {
-        get
-        {
-            int max = Math.Max(0, _totalLines - _viewportLines);
-            if (max == 0) return 0;
-            // _scrollOffset grows toward the top, so flip it for a top-anchored percentage.
-            return (int)Math.Round(100.0 * (_totalLines - _viewportLines - _scrollOffset) / max);
-        }
-    }
-
-    /// <summary>Maximum scroll-back offset given the current viewport and content.</summary>
-    private int MaxScroll => Math.Max(0, _totalLines - _viewportLines);
-
-    /// <summary>Clamp the offset to the valid range and return it.</summary>
-    private int ClampOffset(int offset) => Math.Clamp(offset, 0, MaxScroll);
-
-    /// <summary>Scroll the history by a relative number of lines (positive = up/back, negative = down/toward newest).</summary>
-    public void ScrollBy(int lines) => _scrollOffset = ClampOffset(_scrollOffset + lines);
-
-    /// <summary>Scroll up (back in history) by <paramref name="lines" /> rows.</summary>
-    public void ScrollUp(int lines = 1) => ScrollBy(+Math.Max(0, lines));
-
-    /// <summary>Scroll down (toward newest) by <paramref name="lines" /> rows.</summary>
-    public void ScrollDown(int lines = 1) => ScrollBy(-Math.Max(0, lines));
-
-    /// <summary>Page up with a 2-line overlap so reading continues seamlessly like a browser.</summary>
-    public void PageUp() => ScrollBy(+(Math.Max(1, _viewportLines - 2)));
-
-    /// <summary>Page down with a 2-line overlap so reading continues seamlessly like a browser.</summary>
-    public void PageDown() => ScrollBy(-(Math.Max(1, _viewportLines - 2)));
-
-    /// <summary>Jump to the very top of the transcript.</summary>
-    public void ScrollToTop() => _scrollOffset = MaxScroll;
-
-    /// <summary>Reset scroll to the newest line (tail-follow).</summary>
-    public void ScrollToBottom() => _scrollOffset = 0;
 
     /// <summary>
-    ///     Project the shared UI state (transcript + live streaming) into the
-    ///     builder's per-frame values. Called once per render from the screen.
+    ///     Set the transcript + live streaming content for this frame. Called once
+    ///     per render from the screen's <c>SyncLayout</c>.
     /// </summary>
     public void SetLines(ImmutableArray<ChatLine> lines, bool isStreaming, ActiveMessage active)
     {
@@ -196,23 +135,21 @@ internal sealed class LayoutBuilder
         if (lines.Count == 0)
             lines.Add(TextLine.FromMarkup("[dim]no messages yet…[/]"));
 
-        // Track content + viewport so the screen can clamp scrolling and report
-        // a scroll percentage. `maxHeight <= 0` means the area is unavailable
-        // yet — keep everything and avoid clamping on the first frame.
-        _totalLines = lines.Count;
-        _viewportLines = maxHeight;
+        // Report measured geometry back so the screen can feed it into the model
+        // (UiState.TotalLines / ViewportLines) for scroll clamping + percentage.
+        TotalLines = lines.Count;
+        ViewportLines = maxHeight;
 
-        // Tail-follow: when not scrolled up, show the last `maxHeight` lines.
+        // Tail-follow: ScrollOffset 0 shows the newest lines; the reducer keeps it at
+        // 0 while the user is pinned to the bottom, so this always tails automatically.
         // `maxHeight <= 0` means the area is unavailable yet — show everything.
         if (maxHeight > 0 && lines.Count > maxHeight)
         {
-            int skip = Math.Max(0, lines.Count - maxHeight - _scrollOffset);
+            int skip = Math.Max(0, lines.Count - maxHeight - ScrollOffset);
             if (skip > 0)
                 lines = lines.Skip(skip).ToList();
         }
 
-        // Plain Text widget wraps naturally to the region width; no ScrollViewWidget
-        // needed for a chat tail view.
         var paragraph = new Paragraph().Alignment(Justify.Left);
         paragraph.Lines.AddRange(lines);
         return paragraph;
