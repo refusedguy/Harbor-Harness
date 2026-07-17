@@ -126,9 +126,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly TuiEffectHost _effects;
         private readonly ILogger _logger;
         private readonly LayoutBuilder _layout;
+        private readonly ChatKeyMap _keyMap = new();
         private InputModel _input = InputModel.Empty;
         private ApplicationContext? _app;
         private int _lastHistoryHeight;
+        private FocusMode _focus = FocusMode.Input;
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger)
         {
@@ -156,11 +158,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             if (message is not KeyMessage key) return;
 
             var state = _store.State;
+
+            // While the agent runs, only Abort is accepted (Esc, or Ctrl+C).
             if (state.IsAgentRunning)
             {
-                // While running only abort is accepted.
-                if (key.Key == Key.Escape ||
-                    (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl)))
+                if (_keyMap.Resolve(key) is ChatAction.Abort or ChatAction.Quit)
                 {
                     _effects.Run(new TuiEffect.AbortAgent());
                     _store.Transition(s => s.AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"));
@@ -169,54 +171,95 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 return;
             }
 
-            if (key.Key == Key.Escape)
+            // Plain character input is only accepted when the input box has focus.
+            if (key.Character is >= (char)32 and not (char)127)
             {
-                _effects.Run(new TuiEffect.QuitApp());
-                _app?.Quit();
+                if (_focus == FocusMode.Input)
+                    _input = InputMsg.Update(_input, new InputMsg.Char(key.Character.Value));
                 return;
             }
 
-            // History scroll (when not editing input history with Up/Down).
-            if (key.Key == Key.PageUp)
-            {
-                _layout.ScrollBy(+Math.Max(1, _lastHistoryHeight / 2));
-                return;
-            }
-            if (key.Key == Key.PageDown)
-            {
-                _layout.ScrollBy(-Math.Max(1, _lastHistoryHeight / 2));
-                return;
-            }
-
-            if (key.Key == Key.Enter)
-            {
-                Submit();
-                return;
-            }
-
-            if (key.Key == Key.Backspace)
-            {
-                _input = InputMsg.Update(_input, new InputMsg.Backspace());
-            }
-            else if (key.Key == Key.Up)
-            {
-                _input = InputMsg.Update(_input, new InputMsg.HistoryUp());
-            }
-            else if (key.Key == Key.Down)
-            {
-                _input = InputMsg.Update(_input, new InputMsg.HistoryDown());
-            }
-            else if (key.Key == Key.Tab && _input.Text.StartsWith('/'))
-            {
-                _input = InputMsg.Update(_input, new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands));
-            }
-            else if (key.Character == 'l' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
+            // Ctrl+L clears the transcript (framework reports it as a character).
+            if (key.Character == 'l' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
             {
                 _store.Reset();
+                return;
             }
-            else if (key.Character is >= (char)32 and not (char)127)
+
+            // Ctrl+C aborts the running agent (also handled while running below).
+            if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
             {
-                _input = InputMsg.Update(_input, new InputMsg.Char(key.Character.Value));
+                _effects.Run(new TuiEffect.AbortAgent());
+                _store.Transition(s => s.AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"));
+                return;
+            }
+
+            var action = _keyMap.Resolve(key);
+            switch (action)
+            {
+                case ChatAction.Quit:
+                    _effects.Run(new TuiEffect.QuitApp());
+                    _app?.Quit();
+                    return;
+
+                case ChatAction.Submit:
+                    Submit();
+                    return;
+
+                case ChatAction.ToggleFocus:
+                    _focus = _focus == FocusMode.Input ? FocusMode.Chat : FocusMode.Input;
+                    _layout.Focus = _focus;
+                    return;
+
+                // History scrolling works in both focus modes (wheel arrives as
+                // PageUp/PageDown), so reading never gets stuck.
+                case ChatAction.ScrollUpLine:
+                    _layout.ScrollUp(1);
+                    return;
+                case ChatAction.ScrollDownLine:
+                    _layout.ScrollDown(1);
+                    return;
+                case ChatAction.ScrollUpPage:
+                    _layout.PageUp();
+                    return;
+                case ChatAction.ScrollDownPage:
+                    _layout.PageDown();
+                    return;
+                case ChatAction.ScrollTop:
+                    _layout.ScrollToTop();
+                    return;
+                case ChatAction.ScrollBottom:
+                    _layout.ScrollToBottom();
+                    return;
+
+                // Input-history navigation only when the input box is focused.
+                case ChatAction.Backspace:
+                    if (_focus == FocusMode.Input)
+                        _input = InputMsg.Update(_input, new InputMsg.Backspace());
+                    return;
+
+                case ChatAction.InputHistoryPrev:
+                    if (_focus == FocusMode.Input)
+                        _input = InputMsg.Update(_input, new InputMsg.HistoryUp());
+                    return;
+                case ChatAction.InputHistoryNext:
+                    if (_focus == FocusMode.Input)
+                        _input = InputMsg.Update(_input, new InputMsg.HistoryDown());
+                    return;
+
+                case ChatAction.Autocomplete:
+                    if (_focus == FocusMode.Input && _input.Text.StartsWith('/'))
+                        _input = InputMsg.Update(_input, new InputMsg.Autocomplete(TuiEffectHost.KnownSlashCommands));
+                    return;
+
+                case ChatAction.Clear:
+                    _store.Reset();
+                    return;
+
+                case ChatAction.Abort:
+                case ChatAction.None:
+                default:
+                    return;
             }
         }
 
@@ -269,27 +312,27 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             _layout.IsReadingInput = !s.IsAgentRunning;
             _layout.SetLines(s.Lines, s.IsStreaming, s.Active);
             _layout.InputText = _input.Text;
+            _layout.Focus = _focus;
+            _layout.FooterText = BuildFooter();
+        }
+
+        /// <summary>
+        ///     Assemble the footer from the single keymap source of truth, so the
+        ///     help text can never drift from the actual bindings.
+        /// </summary>
+        private string BuildFooter()
+        {
+            string Label(ChatAction a) => _keyMap.Get(a).Label;
+            string mode = _focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
+            string scroll = _layout.TotalLines > _layout.ViewportLines && _layout.ViewportLines > 0
+                ? $"scroll {_layout.ScrollPercent}%"
+                : "scroll 0%";
+            return $"[grey]q[/] {Label(ChatAction.Quit)}  " +
+                   $"[grey]F2[/] {Label(ChatAction.ToggleFocus)}  {mode}  " +
+                   $"[grey]↑/↓/wheel[/] {Label(ChatAction.ScrollUpLine)}  " +
+                   $"[grey]PgUp/PgDn[/] {Label(ChatAction.ScrollUpPage)}  " +
+                   $"[grey]Home/End[/] {Label(ChatAction.ScrollTop)}  " +
+                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  {scroll}";
         }
     }
-}
-
-/// <summary>Render context shim over the console for non-interactive helpers.</summary>
-internal sealed class SpectreTuiRenderContext : ITuiRenderContext
-{
-    public int Width => Console.WindowWidth;
-    public int Height => Console.WindowHeight;
-    public bool SupportsColor => true;
-    public void Write(string text) => Console.Write(text);
-    public void WriteLine(string? text = null) => Console.WriteLine(text ?? string.Empty);
-    public void WriteColored(string text, TuiColor foreground, TuiColor? background = null)
-        => Console.Write($"\x1b[38;2;{foreground.R};{foreground.G};{foreground.B}m{text}\x1b[0m");
-    public void WriteStyled(string text, TuiStyle style) => Console.Write(text);
-    public void SetCursorPosition(int row, int col) => Console.SetCursorPosition(col, row);
-    public void ClearLine() => Console.Write("\x1b[2K\r");
-    public void Clear() => Console.Write("\x1b[2J\x1b[H");
-    public void HideCursor() => Console.Write("\x1b[?25l");
-    public void ShowCursor() => Console.Write("\x1b[?25h");
-    public void EnterAlternateScreen() => Console.Write("\x1b[?1049h");
-    public void ExitAlternateScreen() => Console.Write("\x1b[?1049l");
-    public void Flush() => Console.Out.Flush();
 }
