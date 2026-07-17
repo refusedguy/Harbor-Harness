@@ -69,12 +69,12 @@ internal class ChatViewProjector
         set => ChatMarkdown.Enabled = value;
     }
 
-    public void SetLines(ImmutableArray<ChatLine> lines, bool isStreaming, ActiveMessage active)
+    public void SetLines(ImmutableArray<ChatLine> lines, bool isStreaming, ActiveMessage active, int historyWidth = 0)
     {
         IsStreaming = isStreaming;
         StreamBuffer = active.TextBuffer ?? string.Empty;
         ThinkBuffer = active.ThinkBuffer ?? string.Empty;
-        _cache.Sync(lines);
+        _cache.Sync(lines, Math.Max(0, historyWidth));
     }
 
     public void InvalidateHistoryCache() => _cache.Clear();

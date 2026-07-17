@@ -17,6 +17,9 @@ internal static class ChatMarkdown
     /// <summary>Default ON so agent #/**/` output is readable.</summary>
     public static bool Enabled { get; set; } = true;
 
+    public static IEnumerable<TextSpan> ToSpans(string text)
+        => ToSpans(text, Color.White);
+
     public static IEnumerable<TextSpan> ToSpans(string text, Color baseColor)
     {
         if (!Enabled)
@@ -58,8 +61,14 @@ internal static class ChatMarkdown
         }
     }
 
+    private const int MaxInlineLength = 4096;
+
     private static IEnumerable<TextSpan> Render(string text, Color baseColor)
     {
+        // Guard against runaway/garbage lines so Inline() stays bounded.
+        if (text.Length > MaxInlineLength)
+            text = text[..MaxInlineLength];
+
         var heading = HeadingRegex.Match(text);
         if (heading.Success)
         {
@@ -119,7 +128,7 @@ internal static class ChatMarkdown
                 }
             }
 
-            if (text[i] == '*' && Peek(text, i, "**") || text[i] == '_' && Peek(text, i, "__"))
+            if ((text[i] == '*' && Peek(text, i, "**")) || (text[i] == '_' && Peek(text, i, "__")))
             {
                 string token = text[i] == '*' ? "**" : "__";
                 int end = text.IndexOf(token, i + 2, StringComparison.Ordinal);
@@ -146,6 +155,8 @@ internal static class ChatMarkdown
             }
 
             int next = IndexOfAny(text, i, '*', '_', '`');
+            if (next <= i) // unmatched delimiter: emit one char, always advance
+                next = i + 1;
             result.Add((text.Substring(i, next - i), new Style(baseColor)));
             i = next;
         }

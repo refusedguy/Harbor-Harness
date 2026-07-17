@@ -276,7 +276,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     _scroll = Math.Clamp(_scroll, 0, maxPrev);
             }
 
-            SyncLayout(state);
+            SyncLayout(state, historyArea.Width);
             _layout.ScrollOffset = _scroll;
 
             var widgets = _layout.BuildWidgets(_viewport);
@@ -318,7 +318,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             }
         }
 
-        private void SyncLayout(UiState s)
+        private void SyncLayout(UiState s, int historyWidth)
         {
             _layout.Model = s.Model;
             _layout.Provider = s.Provider;
@@ -331,7 +331,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             _layout.StreamBuffer = s.Active.TextBuffer;
             _layout.ThinkBuffer = s.Active.ThinkBuffer;
             _layout.IsReadingInput = !s.IsAgentRunning;
-            _layout.SetLines(s.Lines, s.IsStreaming, s.Active);
+            // Panel width minus the body indent ("  ") so the grid never overflows.
+            _layout.SetLines(s.Lines, s.IsStreaming, s.Active, historyWidth - 2);
             _layout.InputText = s.Input.Text;
             _layout.Focus = s.Focus;
             // Do NOT assign TotalLines / ViewportLines / SourceCount —

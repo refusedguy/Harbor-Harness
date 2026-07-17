@@ -8,12 +8,12 @@ namespace Harbor.Tui.SpectreTui.View;
 /// </summary>
 internal static class ChatMessageFormatter
 {
-    public static void AppendRole(List<TextLine> target, ChatRole role, string content, bool markdown)
+    public static void AppendRole(List<TextLine> target, ChatRole role, string content, bool markdown, int maxWidth = 0)
     {
         if (role is not ChatRole.ToolResult)
             target.Add(RoleHeader(role));
 
-        foreach (var line in BodyLines(role, content, markdown))
+        foreach (var line in BodyLines(role, content, markdown, maxWidth))
             target.Add(line);
 
         target.Add(Gap());
@@ -47,28 +47,43 @@ internal static class ChatMessageFormatter
         return line;
     }
 
-    public static IEnumerable<TextLine> BodyLines(ChatRole role, string content, bool markdown)
+    public static IEnumerable<TextLine> BodyLines(ChatRole role, string content, bool markdown, int maxWidth = 0)
     {
         var color = ToColor(role);
         string body = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal);
-        const string indent = "  ";
+        string indent = "  ";
 
-        foreach (string segment in body.Split('\n'))
+        string[] lines = body.Split('\n');
+        bool blockMd = markdown && role is ChatRole.Assistant or ChatRole.User or ChatRole.System;
+
+        int i = 0;
+        while (i < lines.Length)
         {
+            if (blockMd && ChatTableRenderer.IsTableStart(lines, i))
+            {
+                var (tableRows, next) = ChatTableRenderer.Render(lines, i, color, maxWidth);
+                foreach (var r in tableRows)
+                    yield return r;
+                // Advance past the consumed table lines; the while loop increments.
+                i = next;
+                continue;
+            }
+
             var line = new TextLine();
             line.Spans.Add(new TextSpan(indent, new Style(color)));
 
-            if (markdown && role is ChatRole.Assistant or ChatRole.User or ChatRole.System)
+            if (blockMd)
             {
-                foreach (var span in ChatMarkdown.ToSpans(segment, color))
+                foreach (var span in ChatMarkdown.ToSpans(lines[i], color))
                     line.Spans.Add(span);
             }
             else
             {
-                line.Spans.Add(new TextSpan(segment, new Style(color)));
+                line.Spans.Add(new TextSpan(lines[i], new Style(color)));
             }
 
             yield return line;
+            i++;
         }
     }
 
