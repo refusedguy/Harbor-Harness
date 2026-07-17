@@ -8,40 +8,65 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 
 ## Before you start
 
-1. Read [CLAUDE.md](./CLAUDE.md) for code conventions.
+1. Read [CLAUDE.md](./CLAUDE.md) for code conventions (the authoritative conventions file for this repo).
 2. Read [specs/14-architecture-revised.md](./specs/14-architecture-revised.md) for current architecture.
 3. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design.
 4. Run `dotnet build` to make sure the project compiles.
 5. Run `dotnet test` to make sure tests pass.
 
+> **NOTE**: `CLAUDE.md` is the canonical conventions doc and is kept in sync with this
+> file. When updating guidance for AI agents, prefer editing `CLAUDE.md` for conventions
+> and `AGENTS.md` for operational workflow. Cross-reference rather than duplicating.
+
 ## Project structure quick reference
 
 ```
-src/Harbor.Abstractions/              — interfaces, models, events, 7 ValueObjects (zero deps)
-src/Harbor.Core/                      — EventBus, AgentLoop, registries, config, onboarding, compaction
-src/Harbor.Tui.Abstractions/          — MVVM: 4 ViewModels, 4 Views, ITuiRenderContext, ViewRegistry
-src/Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
-src/Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
-src/Harbor.Tui.Spectre/               — Spectre.Console renderer
-src/Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
-src/Harbor.Storage.Jsonl/             — JSONL session store (default)
-src/Harbor.Storage.Memory/            — in-memory store (tests)
-src/Harbor.Storage.Sqlite/            — SQLite store
-src/Harbor.Providers.Anthropic/       — native Anthropic (cache_control, thinking)
-src/Harbor.Providers.OpenAI/          — native OpenAI (Chat + Responses API)
-src/Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
-src/Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter
-src/Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
-src/Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands, FileLogger
+src/ (20 projects)
+  Harbor.Abstractions/              — interfaces, models, events, ValueObjects (zero deps)
+  Harbor.Core/                      — EventBus, AgentLoop, registries, config, onboarding, compaction
+  Harbor.Tui.Abstractions/          — MVVM: ViewModels, Views, ITuiRenderContext, ViewRegistry, BaseTuiRenderer
+  Harbor.Tui.Ansi/                  — ANSI streaming renderer (AOT-compatible fallback)
+  Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
+  Harbor.Tui.Spectre/               — Spectre.Console streaming renderer
+  Harbor.Tui.Spectre.Fullscreen/    — full-screen Spectre live-layout renderer
+  Harbor.Tui.SpectreTui/            — experimental Spectre.TUI widget renderer (CLI DEFAULT)
+  Harbor.Tui.Termina/               — experimental Termina renderer
+  Harbor.Tui.TerminalGui/           — experimental Terminal.Gui v2 renderer
+  Harbor.Tui.RazorConsole/          — experimental RazorConsole template renderer
+  Harbor.Storage.Jsonl/             — JSONL session store (default)
+  Harbor.Storage.Memory/            — in-memory store (tests/ephemeral)
+  Harbor.Storage.Sqlite/            — SQLite store (indexed queries)
+  Harbor.Providers.Anthropic/       — native Anthropic (cache_control, thinking)
+  Harbor.Providers.OpenAI/          — native OpenAI (Chat + Responses API)
+  Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
+  Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter
+  Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
+  Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands, FileLogger
 
 samples/plugins/                      — 4 sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
 providers/                            — 13 JSON LLM provider configs
-specs/                                — 16 design specification documents
+specs/                                — 17 design specification documents (incl. specs/README.md)
 docs/                                 — 7 docs (architecture, benchmarks, build, dev, getting started, plugin dev, roadmap)
-tests/                                — 9 test projects (334 tests) + 1 benchmark project
+tests/                                — 10 test projects + 1 benchmark project (Harbor.Benchmarks)
 ```
 
-**Stats: 334 tests passed, 1 skipped, 0 failed. 0 warnings. 0% unsafe. Spectre.Console 0.57.2.**
+> **TUI renderers**: 8 are registered and selectable via `HARBOR_TUI` (or `harbor tui`):
+> `spectre-tui` (default), `ansi`, `plain`, `spectre`, `fullscreen`, `terminal-gui`,
+> `termina`, `razor`. `Harbor.Tui.Registry` is a stale artifact directory with no
+> `.csproj` — it is not a project and is excluded from the solution.
+
+**Stats (verified 2026-07-17, Harbor v0.4.0-alpha):**
+
+- **20** src projects build (0 errors; `TreatWarningsAsErrors=true` keeps `src/` at **0 warnings**).
+- **469 passed / 10 failed / 1 skipped** across 10 test projects — the suite is currently **RED**
+  (failures in `Harbor.Core.Tests` ×4, `Harbor.Tools.Builtin.Tests` ×1, `Harbor.Tui.Tests` ×5).
+  The 10 failures are runtime assertion failures, not build failures.
+- **106 warnings** exist but are confined to `tests/Harbor.Tui.Tests` (below the
+  treat-as-errors gate), so the overall build still succeeds.
+- **0% unsafe code** (verified by `MA0046` = error). Spectre.Console 0.57.2.
+
+> The "0 failed / 0 warnings" claim in older docs is stale. Treat `dotnet test` red as the
+> current reality until those 10 tests are fixed.
 
 ### Env var quick reference
 
@@ -305,7 +330,7 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 | Cold start (Debug JIT) | **38 ms** |
 | RSS idle | **28 MB** |
 | Binary size | **5 MB** |
-| 242 tests | **~12 s** |
+| 480 tests (469 pass / 10 fail / 1 skip) | **~12 s** |
 | `ProviderRegistry.GetClient` (frozen) | **0.18 µs** |
 | `ToolRegistry.ResolveTools` (4 tools) | **0.42 µs** |
 | `PermissionRuleset.Evaluate` | **0.27 µs** |
@@ -337,7 +362,7 @@ Harbor benchmarks live in `docs/BENCHMARKS.md`. Key numbers:
 6. **Don't use `AssemblyLoadContext` collectible under AOT** — use out-of-process plugins.
 7. **Don't add `Spectre.Console.Cli`** — not AOT-compatible. Use `ConsoleAppFramework` if needed.
 8. **Don't suppress warnings with `#pragma warning disable`** — fix the code or add to `.editorconfig`.
-9. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
+9. **Don't break the build** — `dotnet build` must succeed with 0 warnings in `src/` (treat as errors). `tests/Harbor.Tui.Tests` is currently exempt and carries 106 warnings.
 10. **Don't break tests** — `dotnet test` must pass before commit.
 
 ## Build & test commands
@@ -365,8 +390,9 @@ dotnet run --project src/Harbor.Cli -- models
 ## Testing a change
 
 1. Make the change.
-2. `dotnet build` — must succeed with 0 warnings.
-3. `dotnet test` — all tests must pass (currently 242 passed, 1 skipped).
+2. `dotnet build` — must succeed with 0 warnings in `src/`.
+3. `dotnet test` — the suite is currently RED (469 passed / 10 failed / 1 skipped). Fix or
+   acknowledge any failures you did not introduce before considering work complete.
 4. If you added a new tool — add tests for it.
 5. If you changed an interface — update all implementations.
 6. Run the CLI manually to verify: `dotnet run --project src/Harbor.Cli -- help`.

@@ -26,10 +26,14 @@ src/
 ├── Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter (13 JSON configs)
 ├── Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
 ├── Harbor.Tui.Abstractions/          — MVVM: Views + ViewModels + ITuiRenderContext
-├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
+├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (AOT-compatible fallback)
 ├── Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
 ├── Harbor.Tui.Spectre/               — Spectre.Console renderer
 ├── Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
+├── Harbor.Tui.SpectreTui/            — Spectre.TUI widget renderer (CLI DEFAULT)
+├── Harbor.Tui.Termina/               — experimental Termina renderer
+├── Harbor.Tui.TerminalGui/           — experimental Terminal.Gui v2 renderer
+├── Harbor.Tui.RazorConsole/          — experimental RazorConsole template renderer
 └── Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands
 
 samples/plugins/
@@ -42,20 +46,20 @@ tests/
 ├── Harbor.Abstractions.Tests/        — 35 tests (identifiers, sessions, permissions)
 ├── Harbor.Core.Tests/                — 53 tests (event bus, registries, agent loop, compaction, converter, permissions, system prompt)
 ├── Harbor.Tools.Builtin.Tests/       — 29 tests (all 8 tools + task tool)
-├── Harbor.Storage.Jsonl.Tests/       — 4 tests (JSONL CRUD)
+├── Harbor.Storage.Jsonl.Tests/       — 5 tests (JSONL CRUD)
 ├── Harbor.Storage.Tests/             — 27 tests (Memory + SQLite CRUD)
 ├── Harbor.Providers.Tests/           — 39 tests (models, config, auth, catalog, provider IDs)
 ├── Harbor.Config.Tests/              — 36 tests (config store, auth store, presets, onboarding wizard)
-├── Harbor.Tui.Tests/                 — 104 tests (view models, render context, view registry, builtin views)
-├── Harbor.Tui.E2E.Tests/             — 8 tests (renderer output verification)
-└── Harbor.Benchmarks/                — 7 BenchmarkDotNet benchmarks
+├── Harbor.Tui.Tests/                 — 199 tests (view models, render context, view registry, builtin views) [5 fail]
+├── Harbor.Tui.E2E.Tests/             — 57 tests (renderer output verification)
+└── Harbor.Benchmarks/                — BenchmarkDotNet benchmarks
 
 providers/   — 13 JSON LLM provider configs (embedded + filesystem)
-specs/       — 16 design specification documents
+specs/       — 17 design specification documents (incl. specs/README.md)
 docs/        — architecture, benchmarks, build, dev, getting started, plugin dev, roadmap
 ```
 
-**Total: 334 tests passed, 1 skipped, 0 failed. 0 warnings, 0 errors. 0% unsafe code.**
+**Stats (verified 2026-07-17, Harbor v0.4.0-alpha): 480 tests total — 469 passed / 10 failed / 1 skipped across 10 test projects. `src/` builds with 0 warnings, 0 errors, 0% unsafe code. 106 warnings exist in `tests/Harbor.Tui.Tests` (below the treat-as-errors gate), so the suite is currently RED.**
 
 ## Code conventions
 

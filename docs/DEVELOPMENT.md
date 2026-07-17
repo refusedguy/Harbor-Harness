@@ -266,7 +266,8 @@ Check if `GetScrollback_ReturnsRecentEvents` is hanging — it's skipped by defa
 1. Fork the repo.
 2. Create a branch: `git checkout -b feature/my-feature`.
 3. Make changes following [CLAUDE.md](../CLAUDE.md) conventions.
-4. `dotnet build && dotnet test` — must pass with 0 warnings.
+4. `dotnet build && dotnet test` — must build with 0 warnings in `src/`. The test suite is
+   currently RED (469 passed / 10 failed / 1 skipped); acknowledge pre-existing failures.
 5. Commit with conventional commits: `feat: add X`, `fix: Y`, `docs: Z`.
 6. Open a PR.
 

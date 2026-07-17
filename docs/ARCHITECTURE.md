@@ -8,29 +8,47 @@
 2. **NativeAOT-ready** — Core can be AOT-compiled; TUI runs JIT.
 3. **Low memory** — <30MB RSS idle target (vs 1GB+ for Node.js equivalents).
 4. **Plugin-extensible** — tools, providers, agents, UI all extensible.
-5. **Testable** — 65+ unit tests, interfaces make mocking easy.
+5. **Testable** — 480 tests across 10 projects, interfaces make mocking easy.
 
 ## Solution structure
 
 ```
-Harbor.sln
-├── src/
+Harbor.slnx
+├── src/  (20 projects)
 │   ├── Harbor.Abstractions/         (zero deps, only CSharpFunctionalExtensions)
-│   ├── Harbor.Core/                 (DI, EventBus, AgentLoop, registries)
+│   ├── Harbor.Core/                 (DI, EventBus, AgentLoop, registries, config)
 │   ├── Harbor.Storage.Jsonl/        (JSONL session store)
+│   ├── Harbor.Storage.Memory/       (in-memory store)
+│   ├── Harbor.Storage.Sqlite/       (SQLite store)
+│   ├── Harbor.Providers.Anthropic/  (native Anthropic)
+│   ├── Harbor.Providers.OpenAI/     (native OpenAI)
+│   ├── Harbor.Providers.Ollama/     (native Ollama)
 │   ├── Harbor.Providers.OpenAiCompatible/ (generic LLM client)
-│   ├── Harbor.Tools.Builtin/        (7 builtin tools)
+│   ├── Harbor.Tools.Builtin/        (8 builtin tools)
 │   ├── Harbor.Tui.Abstractions/     (TUI interfaces)
 │   ├── Harbor.Tui.Ansi/             (ANSI streaming renderer)
+│   ├── Harbor.Tui.Plain/            (plain text renderer)
+│   ├── Harbor.Tui.Spectre/          (Spectre.Console renderer)
+│   ├── Harbor.Tui.Spectre.Fullscreen/ (full-screen Spectre renderer)
+│   ├── Harbor.Tui.SpectreTui/       (Spectre.TUI widget renderer, CLI default)
+│   ├── Harbor.Tui.Termina/          (experimental Termina renderer)
+│   ├── Harbor.Tui.TerminalGui/      (experimental Terminal.Gui v2 renderer)
+│   ├── Harbor.Tui.RazorConsole/     (experimental RazorConsole renderer)
 │   └── Harbor.Cli/                  (entry point, wiring)
-├── tests/
+├── tests/  (10 test projects + 1 benchmark project)
 │   ├── Harbor.Abstractions.Tests/   (35 tests)
-│   ├── Harbor.Core.Tests/           (10 tests)
-│   ├── Harbor.Tools.Builtin.Tests/  (16 tests)
-│   └── Harbor.Storage.Jsonl.Tests/  (5 tests)
+│   ├── Harbor.Core.Tests/           (53 tests, 4 fail / 1 skip)
+│   ├── Harbor.Tools.Builtin.Tests/  (29 tests, 1 fail)
+│   ├── Harbor.Storage.Jsonl.Tests/  (5 tests)
+│   ├── Harbor.Providers.Tests/      (39 tests)
+│   ├── Harbor.Storage.Tests/        (27 tests)
+│   ├── Harbor.Config.Tests/         (36 tests)
+│   ├── Harbor.Tui.Tests/            (199 tests, 5 fail)
+│   ├── Harbor.Tui.E2E.Tests/        (57 tests)
+│   └── Harbor.Benchmarks/           (BenchmarkDotNet, no tests)
 ├── providers/                       (13 JSON LLM provider configs)
-├── specs/                           (16 design documents)
-└── docs/                            (architecture, development guides)
+├── specs/                           (17 design documents, incl. specs/README.md)
+└── docs/                            (architecture, development, build, plugin dev, benchmarks, roadmap, getting started)
 ```
 
 ## Layered architecture
@@ -218,7 +236,7 @@ Provider config is JSON:
 | RSS idle | <30MB | Core only |
 | Binary size | ~5-7MB | NativeAOT, stripped |
 | Token-to-screen latency | <35ms | LLM network dominates |
-| Test execution | <2s | 65 tests in ~300ms |
+| Test execution | <15s | 480 tests (469 pass / 10 fail / 1 skip) in ~12s |
 
 ## Future architecture (v0.7+)
 
@@ -245,7 +263,7 @@ See [specs/14-architecture-revised.md](../specs/14-architecture-revised.md) for 
 
 ## References
 
-- [Specifications](../specs/README.md) — 16 detailed design documents.
+- [Specifications](../specs/README.md) — 17 detailed design documents.
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.
 - [Development Guide](./DEVELOPMENT.md) — how to contribute.

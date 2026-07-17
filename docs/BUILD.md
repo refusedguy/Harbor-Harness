@@ -39,7 +39,7 @@ dotnet test tests/Harbor.Abstractions.Tests --filter "FullyQualifiedName~Identif
 
 Tests use [TUnit](https://github.com/thomhurst/TUnit) — fastest .NET test framework, source-generated.
 
-Current test status: **65 passed, 1 skipped** across 4 test projects.
+Current test status: **469 passed, 10 failed, 1 skipped** across 10 test projects (currently RED — the 10 failures are pre-existing runtime assertion failures).
 
 ## Run the CLI
 
@@ -181,7 +181,7 @@ jobs:
 
 ```
 harbor/
-├── src/                          # 12 source projects
+├── src/                          # 20 source projects
 │   ├── Harbor.Abstractions/      # interfaces, models (zero deps)
 │   ├── Harbor.Core/              # base implementations
 │   ├── Harbor.Storage.Jsonl/     # JSONL session store
@@ -191,20 +191,25 @@ harbor/
 │   ├── Harbor.Providers.OpenAI/       # native OpenAI
 │   ├── Harbor.Providers.Ollama/       # native Ollama
 │   ├── Harbor.Providers.OpenAiCompatible/ # generic OpenAI-compat
-│   ├── Harbor.Tools.Builtin/     # 7 builtin tools + task tool
+│   ├── Harbor.Tools.Builtin/     # 8 builtin tools (incl. task tool)
 │   ├── Harbor.Tui.Abstractions/  # TUI interfaces
-│   ├── Harbor.Tui.Ansi/          # ANSI streaming renderer
+│   ├── Harbor.Tui.Ansi/          # ANSI streaming renderer (AOT fallback)
 │   ├── Harbor.Tui.Plain/         # plain text renderer
 │   ├── Harbor.Tui.Spectre/       # Spectre.Console renderer
+│   ├── Harbor.Tui.Spectre.Fullscreen/ # full-screen Spectre renderer
+│   ├── Harbor.Tui.SpectreTui/    # Spectre.TUI widget renderer (default)
+│   ├── Harbor.Tui.Termina/       # experimental Termina renderer
+│   ├── Harbor.Tui.TerminalGui/   # experimental Terminal.Gui v2 renderer
+│   ├── Harbor.Tui.RazorConsole/  # experimental RazorConsole renderer
 │   └── Harbor.Cli/               # entry point
 ├── samples/plugins/              # 4 sample plugins
 │   ├── Harbor.Plugin.WebSearch/
 │   ├── Harbor.Plugin.TodoWrite/
 │   ├── Harbor.Plugin.GitTools/
 │   └── Harbor.Plugin.FileTree/
-├── tests/                        # 4 test projects (65 tests)
+├── tests/                        # 10 test projects (480 tests, 469 pass / 10 fail / 1 skip) + 1 benchmark
 ├── providers/                    # 13 JSON provider configs
-├── specs/                        # 16 design documents
+├── specs/                        # 17 design documents (incl. specs/README.md)
 └── docs/                         # user + dev guides
 ```
 

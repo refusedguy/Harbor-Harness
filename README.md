@@ -5,7 +5,7 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
-[![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-469%20pass%20%2F%2010%20fail-red)]()
 [![Providers](https://img.shields.io/badge/providers-13-blue)]()
 [![Plugins](https://img.shields.io/badge/plugins-4%20samples-orange)]()
 [![E2E](https://img.shields.io/badge/e2e-verified-brightgreen)]()
@@ -15,13 +15,13 @@ Harbor is a from-scratch reimagining of AI coding agents (kilocode, opencode, pi
 ## ✨ Key features
 
 - **4 native LLM providers** + 13 JSON-config providers:
-  - Native: `Anthropic` (cache_control, extended thinking), `OpenAI` (Chat + Responses API for o1/o3), `Ollama` (local NDJSON)
+  - Native: `Anthropic` (cache_control, extended thinking), `OpenAI` (Chat + Responses API for o1/o3), `Ollama` (local NDJSON), `OpenAiCompatible` (generic adapter)
   - JSON: OpenRouter, Kilo Code (with **FREE** models), DeepSeek, Groq, Mistral, xAI, Together, Fireworks, Cerebras, vLLM, + all OpenAI-compat
 - **3 storage backends**: `Jsonl` (default, zero deps), `Memory` (tests), `Sqlite` (indexed queries)
-- **3 TUI renderers**: `Ansi` (default streaming), `Plain` (no colors, for pipes), `Spectre` (rich panels/tables)
+- **8 TUI renderers**: `spectre-tui` (default), `ansi`, `plain`, `spectre`, `fullscreen`, `terminal-gui`, `termina`, `razor` (last 3 experimental)
 - **8 builtin tools**: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task` (sub-agent delegation)
+- **3 agents**: `code`, `plan`, `explore` (explore is a sub-agent)
 - **4 sample plugins**: `WebSearch`, `TodoWrite`, `GitTools`, `FileTree`
-- **Sub-agents**: `code`, `plan`, `explore` — each with own permissions and context
 - **Plugin system**: `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` — extend without modifying core
 - **Event bus**: pub/sub decoupling — subscribe to agent events from TUI, loggers, plugins
 - **Permission system**: `allow|ask|deny` per tool per glob pattern
@@ -30,8 +30,8 @@ Harbor is a from-scratch reimagining of AI coding agents (kilocode, opencode, pi
 - **Performance-obsessed**: `FrozenDictionary` registries, `ArrayPool`, `IReadOnlyCollection` APIs, zero boxing
 - **CSharpFunctionalExtensions**: `Result<T>` for errors, `ValueObject` for IDs
 - **CommunityToolkit.Mvvm**: source-generated `ObservableObject` + `[ObservableProperty]` + `[RelayCommand]` in TUI view models
-- **TUnit tests**: 242 tests, source-generated, fastest .NET framework
-- **Zero unsafe code**: 100% safe, no `unsafe` blocks
+- **TUnit tests**: 480 tests across 10 projects (currently 469 pass / 10 fail / 1 skip), source-generated, fastest .NET framework
+- **Zero unsafe code**: 100% safe, no `unsafe` blocks (verified by `MA0046` = error)
 - **Comprehensive analyzers**: Roslynator, Sonar, Microsoft.NetAnalyzers, Meziantou, AsyncFixer, ReflectionAnalyzers, BannedApiAnalyzers
 - **NativeAOT-ready**: core can be AOT-compiled (TUI runs JIT separately)
 - **Fully XML-documented**: every public API in `Harbor.Abstractions`, `Harbor.Core`, and `Harbor.Tui.Abstractions` ships with `<summary>`/`<param>`/`<returns>`/`<remarks>` XML doc comments
@@ -150,14 +150,19 @@ See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for the full methodology and raw 
 | Test project | Tests | Duration |
 |---|---|---|
 | `Harbor.Abstractions.Tests` | 35 | ~1.4 s |
-| `Harbor.Core.Tests` | 10 (1 skipped) | ~1.0 s |
-| `Harbor.Tools.Builtin.Tests` | 16 | ~1.6 s |
+| `Harbor.Core.Tests` | 53 (4 fail, 1 skip) | ~1.0 s |
+| `Harbor.Tools.Builtin.Tests` | 29 (1 fail) | ~1.6 s |
 | `Harbor.Storage.Jsonl.Tests` | 5 | ~1.2 s |
 | `Harbor.Providers.Tests` | 39 | ~1.6 s |
 | `Harbor.Storage.Tests` | 27 | ~2.2 s |
 | `Harbor.Config.Tests` | 36 | ~1.6 s |
-| `Harbor.Tui.Tests` | 75 | ~1.5 s |
-| **Total** | **242** | **~12 s** |
+| `Harbor.Tui.Tests` | 199 (5 fail) | ~1.5 s |
+| `Harbor.Tui.E2E.Tests` | 57 | ~1.0 s |
+| **Total** | **480 (469 pass / 10 fail / 1 skip)** | **~12 s** |
+
+> The suite is currently **RED** (10 runtime assertion failures across `Harbor.Core.Tests`,
+> `Harbor.Tools.Builtin.Tests`, and `Harbor.Tui.Tests`). They are pre-existing and tracked,
+> not regressions from a clean build. `src/` builds with **0 warnings**.
 
 All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, single-threaded runs.
 
@@ -167,7 +172,7 @@ All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, singl
 ┌────────────────────────────────────────────────────────────────────────┐
 │                          HARBOR SOLUTION                               │
 │                                                                        │
-│  src/  (16 projects)                                                  │
+│  src/  (20 projects)                                                  │
 │  ├── Harbor.Abstractions/         — interfaces, models, events         │
 │  │                                    (XML-documented, zero deps)     │
 │  ├── Harbor.Core/                 — EventBus, AgentLoop, registries    │
@@ -182,9 +187,14 @@ All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, singl
 │  ├── Harbor.Providers.Ollama/     — native Ollama (NDJSON)             │
 │  ├── Harbor.Providers.OpenAiCompatible/ — generic adapter              │
 │  ├── Harbor.Tools.Builtin/        — 8 tools (read/write/edit/.../task) │
-│  ├── Harbor.Tui.Ansi/             — ANSI streaming renderer            │
+│  ├── Harbor.Tui.Ansi/             — ANSI streaming renderer (AOT fallback)│
 │  ├── Harbor.Tui.Plain/            — plain text renderer                │
 │  ├── Harbor.Tui.Spectre/          — Spectre.Console renderer           │
+│  ├── Harbor.Tui.Spectre.Fullscreen/ — full-screen Spectre renderer     │
+│  ├── Harbor.Tui.SpectreTui/       — Spectre.TUI widget renderer (DEFAULT)│
+│  ├── Harbor.Tui.Termina/          — experimental Termina renderer      │
+│  ├── Harbor.Tui.TerminalGui/      — experimental Terminal.Gui renderer │
+│  ├── Harbor.Tui.RazorConsole/     — experimental RazorConsole renderer │
 │  └── Harbor.Cli/                  — entry point, DI wiring             │
 │                                                                        │
 │  samples/plugins/  (4 sample plugins)                                 │
@@ -193,22 +203,28 @@ All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, singl
 │  ├── Harbor.Plugin.GitTools/      — safe git wrapper                   │
 │  └── Harbor.Plugin.FileTree/      — directory tree visualization       │
 │                                                                        │
-│  tests/  (8 test projects, 242 tests)                                 │
+│  tests/  (10 test projects, 480 tests)                               │
 │  ├── Harbor.Abstractions.Tests/   — 35 tests                           │
-│  ├── Harbor.Core.Tests/           — 9 passed, 1 skipped                │
-│  ├── Harbor.Tools.Builtin.Tests/  — 16 tests                           │
+│  ├── Harbor.Core.Tests/           — 53 tests (4 fail, 1 skip)          │
+│  ├── Harbor.Tools.Builtin.Tests/  — 29 tests (1 fail)                  │
 │  ├── Harbor.Storage.Jsonl.Tests/  — 5 tests                            │
 │  ├── Harbor.Providers.Tests/      — 39 tests                           │
 │  ├── Harbor.Storage.Tests/        — 27 tests                           │
 │  ├── Harbor.Config.Tests/         — 36 tests                           │
-│  └── Harbor.Tui.Tests/            — 75 tests                           │
+│  ├── Harbor.Tui.Tests/            — 199 tests (5 fail)                 │
+│  ├── Harbor.Tui.E2E.Tests/        — 57 tests                           │
+│  └── Harbor.Benchmarks/           — BenchmarkDotNet project (no tests) │
 │                                                                        │
 │  providers/  (13 JSON LLM provider configs)                           │
-│  specs/      (16 design documents)                                    │
+│  specs/      (17 design documents, incl. specs/README.md)             │
 │  docs/       (architecture, getting started, build, plugin dev,        │
-│              benchmarks)                                              │
+│              benchmarks, development, roadmap)                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **TUI renderers**: 8 are selectable via `HARBOR_TUI` (or `harbor tui`). The CLI default is
+> `spectre-tui`; `ansi` is the AOT-compatible fallback. `Harbor.Tui.Registry` is a stale
+> artifact directory with no `.csproj` and is excluded from the solution.
 
 ### Data flow
 
@@ -322,8 +338,8 @@ var names = tools
 ```
 
 > Harbor does not yet ship a hard dependency on ZLinq — the existing manual-loop
-> approach is sufficient for v0.2. The recommendation above is for **new** hot-path
-code. Add `ZLinq` to a project's `<PackageReference>` only when a benchmark justifies it.
+> approach is sufficient for v0.4. The recommendation above is for **new** hot-path
+> code. Add `ZLinq` to a project's `<PackageReference>` only when a benchmark justifies it.
 
 ### SOLID
 
@@ -347,7 +363,7 @@ code. Add `ZLinq` to a project's `<PackageReference>` only when a benchmark just
 | Cold start | <50 ms | **38 ms** | Core only, JIT Debug |
 | RSS idle | <30 MB | **28 MB** | Core (TUI adds ~50 MB) |
 | Binary size | ~5 MB | **5 MB** | Single-file, framework-dependent |
-| Test execution | <15 s | **~12 s** | 242 tests |
+| Test execution | <15 s | **~12 s** | 480 tests (469 pass / 10 fail) |
 | Tool call latency | <5 ms | **<2 ms** | Excluding external I/O |
 | LLM token-to-screen | <35 ms | **~20 ms** | LLM network dominates |
 
@@ -383,7 +399,7 @@ code. Add `ZLinq` to a project's `<PackageReference>` only when a benchmark just
 
 ### Design specs
 
-- [Specifications](./specs/README.md) — 16 detailed design documents covering architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks, repo analysis, risks, roadmap.
+- [Specifications](./specs/README.md) — 17 detailed design documents covering architecture, plugins, providers, tools, sessions, MCP, TUI, NativeAOT, benchmarks, repo analysis, risks, roadmap.
 
 ## 🧪 Testing
 
@@ -395,28 +411,32 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) — fastest .NET test fram
 
 ```
 Harbor.Abstractions.Tests   — 35 passed
-Harbor.Core.Tests           — 9 passed, 1 skipped
-Harbor.Tools.Builtin.Tests  — 16 passed
+Harbor.Core.Tests           — 49 passed, 4 failed, 1 skipped
+Harbor.Tools.Builtin.Tests  — 28 passed, 1 failed
 Harbor.Storage.Jsonl.Tests  — 5 passed
 Harbor.Providers.Tests      — 39 passed
 Harbor.Storage.Tests        — 27 passed
 Harbor.Config.Tests         — 36 passed
-Harbor.Tui.Tests            — 75 passed
-──────────────────────────────────────────────────────
-Total: 242 passed, 1 skipped
+Harbor.Tui.Tests            — 194 passed, 5 failed
+Harbor.Tui.E2E.Tests        — 57 passed
+─────────────────────────────────────────────────────
+Total: 469 passed, 10 failed, 1 skipped (480 total)
 ```
+
+> The suite is currently **RED**. The 10 failures are pre-existing runtime assertion
+> failures (not build failures). See `AGENTS.md` for the breakdown and a caveat that the
+> old "0 failed" claim is stale.
 
 ## 🛣️ Roadmap
 
-See [specs/12-roadmap.md](./specs/12-roadmap.md) for the full plan.
+See [specs/12-roadmap.md](./specs/12-roadmap.md) and [docs/ROADMAP.md](./docs/ROADMAP.md) for the full plan.
 
-- ✅ **v0.2 (current)** — Core agent loop, 4 native + 13 JSON providers, 8 tools, 3 storages, 3 TUIs, 4 sample plugins, sub-agent infrastructure, full XML docs
-- 🚧 **v0.3** — Plugin loading from DLLs (AssemblyLoadContext for JIT), improved sub-agent wiring, ZLinq in remaining hot paths
-- 📋 **v0.4** — MCP client, OAuth flows (Anthropic Pro, OpenAI Codex, GitHub Copilot)
-- 📋 **v0.5** — Skills system (markdown), LSP integration (30+ languages)
-- 📋 **v0.6** — Session branching/snapshot/revert
-- 📋 **v0.7** — Client-server mode (HTTP+SSE, two-process architecture)
-- 📋 **v0.8** — NativeAOT release build for core
+- ✅ **v0.4 (current)** — Core agent loop, 4 native + 13 JSON providers, 8 tools, 3 storages, 8 TUI renderers, 4 sample plugins, sub-agent infrastructure, full XML docs
+- 🚧 **v0.5** — Plugin loading from DLLs (AssemblyLoadContext for JIT), improved sub-agent wiring, TUI plugins, ZLinq in remaining hot paths
+- 📋 **v0.6** — MCP client, OAuth flows (Anthropic Pro, OpenAI Codex, GitHub Copilot)
+- 📋 **v0.7** — Skills system (markdown), LSP integration (30+ languages)
+- 📋 **v0.8** — Session branching/snapshot/revert
+- 📋 **v0.9** — Client-server mode (HTTP+SSE, two-process architecture)
 - 📋 **v1.0** — Production-ready, multi-platform binaries, plugin marketplace
 
 ## 📄 License

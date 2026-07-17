@@ -9,16 +9,16 @@
 - **Architecture**: Abstractions-first, EventBus, AgentLoop, Plugin system
 - **Providers**: 4 native (Anthropic, OpenAI, Ollama, OpenAiCompatible) + 13 JSON configs
 - **Storage**: 3 backends (Jsonl, Memory, Sqlite)
-- **TUI**: 4 renderers (Ansi, Plain, Spectre, Fullscreen) with MVVM (CommunityToolkit.Mvvm)
+- **TUI**: 8 renderers (`spectre-tui` default, `ansi` AOT fallback, `plain`, `spectre`, `fullscreen`, `terminal-gui`, `termina`, `razor`) with MVVM (CommunityToolkit.Mvvm)
 - **Tools**: 8 builtin (read, write, edit, bash, glob, grep, ls, task)
 - **Plugins**: 4 samples (WebSearch, TodoWrite, GitTools, FileTree)
 - **Config**: JSON-based config with onboarding wizard, AuthStore with env var fallback
 - **Performance**: ZLinq, NonBlocking dictionaries, FrozenDictionary, ArrayPool, StringBuilderPool, Channel<T>, ImmutableArray, StringPool, MemoryPack attributes
 - **Patterns**: Strategy, Registry, Observer, Builder, Adapter, Command, Specification, ValueObject, Factory, Plugin, Repository, Chain of Responsibility
 - **ROP**: Result<T> throughout Core for error handling
-- **Tests**: 247 passed, 1 skipped, 0 failed (9 test projects + benchmarks)
+- **Tests**: 469 passed, 10 failed, 1 skipped (10 test projects + benchmarks) — suite currently RED
 - **E2E verified**: Kilocode `tencent/hy3:free` works end-to-end
-- **Analyzers**: 7 analyzer packages, 0% unsafe, 0 warnings
+- **Analyzers**: 7 analyzer packages, 0% unsafe, 0 warnings in `src/` (106 test-project warnings exempt)
 - **Libraries**: Spectre.Console 0.57.2, CommunityToolkit 8.4.0, ZLinq 1.5.6, MemoryPack 1.10.0
 
 ---
@@ -121,7 +121,7 @@
 | RSS active (10K msg) | ~80MB | <100MB |
 | Binary size | N/A (JIT) | ~5-7MB (AOT) |
 | Token-to-screen | ~35ms | <20ms |
-| Tests | 247 | 500+ |
+| Tests | 480 (469 pass / 10 fail) | 500+ |
 | Build warnings | 0 | 0 |
 | Unsafe code | 0% | 0% |
 
