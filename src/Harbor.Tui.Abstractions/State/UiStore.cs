@@ -94,9 +94,11 @@ public sealed class UiStore
     /// </summary>
     public TuiEffect Dispatch(UiMsg msg)
     {
-        (UiState next, TuiEffect effect) = UiReducer.Update(_state, msg);
+        UiState next;
+        TuiEffect effect;
         lock (_gate)
         {
+            (next, effect) = UiReducer.Update(_state, msg);
             _state = next;
         }
 

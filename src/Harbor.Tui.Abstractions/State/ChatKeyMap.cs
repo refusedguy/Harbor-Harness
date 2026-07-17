@@ -46,10 +46,22 @@ public sealed class ChatKeyMap
     }
 
     /// <summary>Resolve a key press to an action (first matching entry wins).</summary>
+    /// <remarks>
+    ///     Entry order defines priority: explicit bindings are matched before the
+    ///     implicit printable-character rule, so a key like 'q' with no binding still
+    ///     falls through to <see cref="ChatAction.Char" /> and reaches the input box.
+    /// </remarks>
     public ChatAction Resolve(UiKey key)
     {
         var match = _entries.FirstOrDefault(e => e.Bindings.Any(b => b.Matches(key)));
-        return match != null ? match.Action : ChatAction.None;
+        if (match != null)
+            return match.Action;
+
+        // Any printable character (no special binding) is an input character.
+        if (key.Code == UiKeyCode.Char && key.Character is not null)
+            return ChatAction.Char;
+
+        return ChatAction.None;
     }
 
     /// <summary>Get the documented entry for an action.</summary>

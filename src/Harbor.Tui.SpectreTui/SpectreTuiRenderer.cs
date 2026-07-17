@@ -151,6 +151,13 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         {
             if (message is not KeyMessage key) return;
 
+            // A newline delivered as a character (multi-line paste) must not be
+            // treated as the Enter key — otherwise pasting text with line breaks
+            // auto-submits the moment the first newline arrives. A real Enter press
+            // arrives as Key.Enter with a '\r' (or no character), so only that submits.
+            if (key.Key == Key.Enter && key.Character is '\n')
+                return;
+
             var uiKey = ToUiKey(key);
             var action = _keyMap.Resolve(uiKey);
 

@@ -146,6 +146,23 @@ public sealed record UiState
     /// <summary>Return a snapshot with the keyboard focus replaced.</summary>
     public UiState SetFocus(FocusMode focus) => this with { Focus = focus };
 
+    /// <summary>
+    ///     Return a snapshot with the transcript, live message, input, and scroll
+    ///     state cleared. Session chrome (model/provider/agent/cost/status) is
+    ///     preserved so a clear-screen does not wipe the active session identity.
+    /// </summary>
+    public UiState ClearTranscript() => this with
+    {
+        Lines = ImmutableArray<ChatLine>.Empty,
+        Active = ActiveMessage.Empty,
+        IsStreaming = false,
+        Input = InputModel.Empty,
+        ScrollOffset = 0,
+        TotalLines = 0,
+        ViewportLines = 0,
+        Status = IsAgentRunning ? "running" : "idle"
+    };
+
     /// <summary>Return a snapshot with the history scroll offset clamped to valid range.</summary>
     public UiState SetScroll(int offset)
     {

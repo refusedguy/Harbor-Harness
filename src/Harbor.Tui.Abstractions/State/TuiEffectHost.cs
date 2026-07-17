@@ -19,13 +19,6 @@ namespace Harbor.Tui.Abstractions.State;
 /// </remarks>
 public sealed class TuiEffectHost : ITuiEffectRunner
 {
-    private static readonly ImmutableArray<string> SlashCommands = ImmutableArray.Create(
-        "/help", "/exit", "/setup", "/auth", "/model", "/agent", "/config",
-        "/providers", "/sessions", "/tui", "/storage", "/clear");
-
-    private static readonly ImmutableHashSet<string> ExitWords =
-        ImmutableHashSet.Create(StringComparer.OrdinalIgnoreCase, "exit", "quit", ":q");
-
     private readonly IAgent _agent;
     private readonly Func<string, Task>? _slash;
     private readonly UiStore _store;
@@ -61,7 +54,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     }
 
     /// <summary>Slash command list for input autocomplete.</summary>
-    public static ImmutableArray<string> KnownSlashCommands => SlashCommands;
+    public static ImmutableArray<string> KnownSlashCommands => ChatCommands.Slash;
 
     private async Task PromptAsync(string text)
     {
@@ -111,16 +104,5 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
 
         _store.Transition(s => s with { IsAgentRunning = false, Status = "idle" });
-    }
-
-    /// <summary>Map a submitted input line to an effect (prompt / slash / quit).</summary>
-    public static TuiEffect ToEffect(string text)
-    {
-        var trimmed = text.Trim();
-        if (ExitWords.Contains(trimmed))
-            return new TuiEffect.QuitApp();
-        if (trimmed.StartsWith('/'))
-            return new TuiEffect.RunSlash(trimmed);
-        return new TuiEffect.PromptAgent(trimmed);
     }
 }

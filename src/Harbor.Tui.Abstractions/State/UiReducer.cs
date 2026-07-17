@@ -108,7 +108,7 @@ public static class UiReducer
     private static UiState OnCompactionCompleted(UiState state, CompactionCompletedEvent cc) =>
         state
             .AddLine(ChatRole.System,
-                $"[dim]compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens[/]")
+                $"compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens")
             .WithStatus("running");
 
     // ── formatting helpers (escaping) ─────────────────────────────────────
@@ -154,19 +154,36 @@ public static class UiReducer
 
     private static (UiState State, TuiEffect Effect) UpdateKey(UiState state, UiMsg.KeyInput k)
     {
-        // While the agent runs, only Abort is accepted.
-        if (state.IsAgentRunning && k.Action != ChatAction.Abort)
-            return (state, new TuiEffect.None());
+        // While the agent runs most input is suppressed, but a useful subset must still
+        // pass through: abort, scroll, and focus toggle. Everything that edits/commits
+        // input is blocked so the running prompt is never disturbed.
+        if (state.IsAgentRunning)
+        {
+            // Escape during a run is an abort (not a quit) — see keymap note below.
+            if (k.Action is ChatAction.Quit or ChatAction.Abort)
+                return TransitionAbort(state);
 
+            if (k.Action is ChatAction.ScrollUpLine or ChatAction.ScrollDownLine
+                or ChatAction.ScrollUpPage or ChatAction.ScrollDownPage
+                or ChatAction.ScrollTop or ChatAction.ScrollBottom
+                or ChatAction.ToggleFocus)
+                return UpdateKeyAllowed(state, k);
+
+            return (state, new TuiEffect.None());
+        }
+
+        return UpdateKeyAllowed(state, k);
+    }
+
+    private static (UiState State, TuiEffect Effect) UpdateKeyAllowed(UiState state, UiMsg.KeyInput k)
+    {
         switch (k.Action)
         {
             case ChatAction.Quit:
                 return (state, new TuiEffect.QuitApp());
 
             case ChatAction.Abort:
-                return (state
-                        .AddLine(ChatRole.System, "[yellow]⏹ Aborted.[/]"),
-                    new TuiEffect.AbortAgent());
+                return TransitionAbort(state);
 
             case ChatAction.Submit:
             {
@@ -175,11 +192,7 @@ public static class UiReducer
                 if (submitted is null)
                     return (next, new TuiEffect.None());
 
-                if (submitted.StartsWith('/'))
-                    return (next, new TuiEffect.RunSlash(submitted));
-
-                next = next.AddLine(ChatRole.User, submitted);
-                return (next, new TuiEffect.PromptAgent(submitted));
+                return ClassifySubmit(next, submitted);
             }
 
             case ChatAction.ToggleFocus:
@@ -224,11 +237,48 @@ public static class UiReducer
                     : (state, new TuiEffect.None());
 
             case ChatAction.Clear:
-                return (new UiState(), new TuiEffect.None());
+                return (state.ClearTranscript(), new TuiEffect.None());
 
             case ChatAction.None:
             default:
                 return (state, new TuiEffect.None());
         }
+    }
+
+    /// <summary>
+    ///     Classify a submitted (already consumed) input line into the effect that
+    ///     should run. Single source of truth shared by the reducer and the effect
+    ///     host so exit words, slash commands, and prompts behave identically wherever
+    ///     a line is submitted.
+    /// </summary>
+    private static (UiState State, TuiEffect Effect) ClassifySubmit(UiState state, string submitted)
+    {
+        var trimmed = submitted.Trim();
+        if (ChatCommands.ExitWords.Contains(trimmed))
+            return (state, new TuiEffect.QuitApp());
+
+        if (trimmed.StartsWith('/'))
+            return (state, new TuiEffect.RunSlash(trimmed));
+
+        return (state.AddLine(ChatRole.User, submitted), new TuiEffect.PromptAgent(submitted));
+    }
+
+    /// <summary>
+    ///     Start an abort: emit a plain system note and the host effect that cancels
+    ///     the running agent. Streaming buffers are cleared so a half-rendered message
+    ///     does not linger until <see cref="AgentEndEvent" /> arrives. Colour is the
+    ///     renderer's responsibility (driven by <see cref="ChatRole" />), so the text
+    ///     here is markup-free.
+    /// </summary>
+    private static (UiState State, TuiEffect Effect) TransitionAbort(UiState state)
+    {
+        var next = state
+            .AddLine(ChatRole.System, "Aborted.")
+            with
+            {
+                IsStreaming = false,
+                Active = ActiveMessage.Empty
+            };
+        return (next, new TuiEffect.AbortAgent());
     }
 }

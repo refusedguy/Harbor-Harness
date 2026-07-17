@@ -46,6 +46,16 @@ internal sealed class LayoutBuilder
     private ImmutableArray<ChatLine> _lines = ImmutableArray<ChatLine>.Empty;
 
     /// <summary>
+    ///     Absolute index of the first visible history line while the user is
+    ///     scrolled away from the bottom. Frozen during streaming so newly appended
+    ///     lines do not push the view downward ("scroll jump").
+    /// </summary>
+    private int _frozenTop = -1;
+
+    /// <summary>Last reported scroll offset, used to detect user-initiated scroll.</summary>
+    private int _prevScrollOffset;
+
+    /// <summary>
     ///     Set the transcript + live streaming content for this frame. Called once
     ///     per render from the screen's <c>SyncLayout</c>.
     /// </summary>
@@ -55,6 +65,13 @@ internal sealed class LayoutBuilder
         IsStreaming = isStreaming;
         StreamBuffer = active.TextBuffer;
         ThinkBuffer = active.ThinkBuffer;
+
+        // When the user actively changes the scroll position (not during streaming),
+        // re-anchor the frozen top to their new position so the view stays put while
+        // the agent appends content.
+        if (ScrollOffset != _prevScrollOffset && !isStreaming)
+            _frozenTop = Math.Max(0, lines.Length - ViewportLines - ScrollOffset);
+        _prevScrollOffset = ScrollOffset;
     }
 
     public Layout Layout { get; } = new Layout("Root").SplitRows(
@@ -145,7 +162,12 @@ internal sealed class LayoutBuilder
         // `maxHeight <= 0` means the area is unavailable yet — show everything.
         if (maxHeight > 0 && lines.Count > maxHeight)
         {
-            int skip = Math.Max(0, lines.Count - maxHeight - ScrollOffset);
+            // While the user is scrolled up, freeze the top line so streamed content
+            // does not shove the view downward. When pinned to the bottom (offset 0)
+            // the view simply tails the newest lines.
+            int skip = ScrollOffset == 0
+                ? lines.Count - maxHeight
+                : Math.Clamp(_frozenTop, 0, lines.Count - maxHeight);
             if (skip > 0)
                 lines = lines.Skip(skip).ToList();
         }
@@ -192,14 +214,96 @@ internal sealed class LayoutBuilder
         for (int i = 0; i < segments.Length; i++)
         {
             var line = new TextLine();
-            // The role prefix is our own markup; the body is raw agent output that
-            // may contain '[' or ']' (code, tables) and must NOT be parsed as markup.
             line.Spans.Add(new TextSpan(i == 0 ? prefix : "  ", new Style(color)));
-            line.Spans.Add(new TextSpan(segments[i], new Style(color)));
+            // Render inline markdown (bold/italic/code/headings) as styled spans so
+            // the raw markup tokens are stripped and the text reads cleanly.
+            line.Spans.AddRange(RenderMarkdown(segments[i], color, role));
             result.Add(line);
         }
 
         return result;
+    }
+
+    /// <summary>
+    ///     Convert a single line of agent output into styled spans, interpreting the
+    ///     common inline markdown tokens. The base <paramref name="baseColor" /> is used
+    ///     for plain text; headings get a distinct colour. Spans are merged when
+    ///     adjacent styles are identical to keep allocations low.
+    /// </summary>
+    private static IEnumerable<TextSpan> RenderMarkdown(string text, Color baseColor, ChatRole role)
+    {
+        // Heading: a line starting with 1-3 '#' followed by space.
+        var heading = System.Text.RegularExpressions.Regex.Match(text, @"^\s{0,3}(#{1,3})\s+(.*)$");
+        if (heading.Success)
+        {
+            yield return new TextSpan(heading.Groups[2].Value, new Style(Color.Yellow, null, Decoration.Bold));
+            yield break;
+        }
+
+        var result = new List<(string Text, Style Style)>();
+        int i = 0;
+        while (i < text.Length)
+        {
+            // Fenced code span: `code`
+            if (text[i] == '`' && i + 1 < text.Length && text[i + 1] != '`')
+            {
+                int end = text.IndexOf('`', i + 1);
+                if (end > i)
+                {
+                    result.Add((text.Substring(i + 1, end - i - 1), new Style(Color.Grey)));
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            // Bold **text** or __text__
+            if ((text[i] == '*' && Peek(text, i, "**")) || (text[i] == '_' && Peek(text, i, "__")))
+            {
+                string token = text[i] == '*' ? "**" : "__";
+                int end = text.IndexOf(token, i + 2, StringComparison.Ordinal);
+                if (end > i)
+                {
+                    result.Add((text.Substring(i + 2, end - i - 2), new Style(baseColor, null, Decoration.Bold)));
+                    i = end + 2;
+                    continue;
+                }
+            }
+
+            // Italic *text* or _text_
+            if (text[i] == '*' || text[i] == '_')
+            {
+                char c = text[i];
+                int end = text.IndexOf(c, i + 1);
+                if (end > i && (end == text.Length - 1 || text[end + 1] != c))
+                {
+                    result.Add((text.Substring(i + 1, end - i - 1), new Style(baseColor, null, Decoration.Italic)));
+                    i = end + 1;
+                    continue;
+                }
+            }
+
+            // Plain run up to the next special char.
+            int next = NextSpecial(text, i);
+            result.Add((text.Substring(i, next - i), new Style(baseColor)));
+            i = next;
+        }
+
+        foreach (var (t, s) in result)
+            yield return new TextSpan(t, s);
+    }
+
+    private static bool Peek(string text, int i, string token)
+        => i + token.Length <= text.Length && text.Substring(i, token.Length) == token;
+
+    private static int NextSpecial(string text, int start)
+    {
+        int best = text.Length;
+        foreach (var c in new[] { '*', '_', '`' })
+        {
+            int idx = text.IndexOf(c, start);
+            if (idx >= 0 && idx < best) best = idx;
+        }
+        return best;
     }
 
     private static string Escape(string text)
