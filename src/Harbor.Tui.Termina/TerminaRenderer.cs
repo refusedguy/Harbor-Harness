@@ -5,12 +5,23 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using R3;
+using Termina.Hosting;
+using Termina.Terminal;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tui.Termina;
+
+/// <summary>
+///     A single rendered chat line carrying its role color. The <see cref="ChatBridge" /> emits
+///     these so the page can append role-appropriate, color-coded text to the streaming node.
+/// </summary>
+public sealed record ChatLine(string Text, Color? Color = null, bool NewLineBefore = false);
+
 /// <summary>
 ///     Full-screen interactive TUI renderer built on Termina 0.15.0 (R3-reactive MVVM).
 ///     Termina owns the application loop via the Generic Host; the renderer drives the agent
@@ -41,7 +52,8 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
     {
         try
         {
-            _context.WriteColored("⚓ Harbor (Termina) - interactive TUI\n\n", TuiColor.Cyan);
+            // Intentionally do NOT write a banner here: Termina owns the screen and
+            // any raw Console.Write during interactive startup corrupts the layout.
             return base.InitializeAsync(ct);
         }
         catch (Exception ex)
@@ -56,13 +68,38 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         return base.RenderAsync(@event, ct);
     }
 
-    public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
+    /// <summary>
+    ///     Suppress placement-driven rendering — Termina's <see cref="ChatPage" /> owns the
+    ///     display and subscribes to the shared <see cref="ChatBridge" />. The base class would
+    ///     otherwise write status/history lines straight to the console and corrupt the screen.
+    /// </summary>
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
+
+    public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
-        _bridge = host.GetRequiredService<ChatBridge>();
+        _bridge = new ChatBridge(_logger);
         _bridge.Agent = agent;
         _bridge.SlashHandler = _slashHandler;
 
-        return Task.FromResult(0);
+        _logger.LogInformation("Starting Termina host with route /chat");
+
+        var terminaHost = new HostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(_bridge);
+                services.AddTermina("/chat", termina => termina.RegisterRoute<ChatPage, ChatViewModel>("/chat"));
+            })
+            .ConfigureLogging(logging =>
+            {
+                // Clear all providers to prevent console logging from interfering
+                // with Termina's terminal handling.
+                logging.ClearProviders();
+                logging.SetMinimumLevel(LogLevel.Warning);
+            })
+            .Build();
+
+        await terminaHost.RunAsync(ct).ConfigureAwait(false);
+        return 0;
     }
 
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
@@ -104,68 +141,130 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 /// </summary>
 public sealed class ChatBridge : IDisposable
 {
-    private readonly Subject<string> _outputStream = new();
+    private readonly Subject<ChatLine> _outputStream = new();
+    private readonly ILogger _logger;
+    private bool _awaitingAssistantLabel = true;
+
+    public ChatBridge(ILogger logger)
+    {
+        _logger = logger;
+    }
 
     public IAgent? Agent { get; set; }
 
     public Func<string, Task>? SlashHandler { get; set; }
 
-    public Observable<string> OutputStream => _outputStream;
+    public Observable<ChatLine> OutputStream => _outputStream;
 
-    public void Push(AgentEvent @event) => _outputStream.OnNext(FormatLine(@event));
+    public void Push(AgentEvent @event)
+    {
+        foreach (var line in FormatLines(@event))
+        {
+            _logger.LogDebug("Push event: {EventType} -> {LineLength} chars", @event.GetType().Name, line.Text.Length);
+            _outputStream.OnNext(line);
+        }
+    }
 
-    public void PushLine(string line) => _outputStream.OnNext(line);
+    public void PushLine(string line, Color? color = null)
+    {
+        _logger.LogDebug("PushLine: {Line}", line);
+        _outputStream.OnNext(new ChatLine(line, color));
+    }
 
     public void Submit(string prompt)
     {
-        if (Agent is null) return;
-
-        if (prompt.StartsWith('/') && SlashHandler is not null)
+        if (Agent is null)
         {
-            SlashHandler(prompt).GetAwaiter().GetResult();
+            _logger.LogDebug("Submit called but Agent is null — ignoring");
             return;
         }
 
-        PushLine($"You: {prompt}");
-        Agent.PromptAsync(prompt, CancellationToken.None).GetAwaiter().GetResult();
+        if (prompt.StartsWith('/') && SlashHandler is not null)
+        {
+            _logger.LogDebug("Executing slash command: {Command}", prompt);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await SlashHandler(prompt).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Slash command failed: {Command}", prompt);
+                }
+            });
+            return;
+        }
+
+        _logger.LogDebug("Submitting prompt to agent ({Length} chars)", prompt.Length);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Agent.PromptAsync(prompt, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Agent prompt failed");
+                PushLine($"error: {ex.Message}\n", Color.Red);
+            }
+        });
     }
 
-    private static string FormatLine(AgentEvent @event)
+    private IEnumerable<ChatLine> FormatLines(AgentEvent @event)
     {
         switch (@event)
         {
-            case AgentStartEvent ase:
-                var seed = new StringBuilder();
-                foreach (var m in ase.Messages)
-                    if (m is UserMessage u)
-                        seed.Append($"You: {u.Content}\n");
-                return seed.ToString();
+            case AgentStartEvent or TurnStartEvent:
+                _awaitingAssistantLabel = true;
+                yield break;
             case MessageUpdateEvent mu:
-                return mu.LlmEvent switch
+                switch (mu.LlmEvent)
                 {
-                    TextDeltaEvent td => td.Delta,
-                    ThinkingDeltaEvent thd => $"🧠 {thd.Delta}",
-                    ToolCallStartEvent tcs => $"\n→ {tcs.ToolName}\n",
-                    _ => string.Empty
-                };
+                    case TextDeltaEvent td:
+                        if (_awaitingAssistantLabel)
+                        {
+                            _awaitingAssistantLabel = false;
+                            yield return new ChatLine("Harbor: ", Color.Cyan, true);
+                        }
+                        yield return new ChatLine(td.Delta, Color.Cyan);
+                        break;
+                    case ThinkingDeltaEvent thd:
+                        yield return new ChatLine($"🧠 {thd.Delta}", Color.Magenta);
+                        break;
+                    case ToolCallStartEvent:
+                        _awaitingAssistantLabel = true;
+                        yield return new ChatLine("\n→ calling tool…\n", Color.Yellow);
+                        break;
+                }
+                yield break;
             case MessageEndEvent:
-                return "\n";
+                _awaitingAssistantLabel = true;
+                yield return new ChatLine("\n", null);
+                yield break;
             case ToolExecutionStartEvent tes:
                 var args = tes.Args.GetRawText();
-                return string.IsNullOrEmpty(args) || args == "{}"
-                    ? $"→ {tes.ToolName}\n"
-                    : $"→ {tes.ToolName}  {args}\n";
+                yield return new ChatLine(
+                    string.IsNullOrEmpty(args) || args == "{}"
+                        ? $"→ {tes.ToolName}\n"
+                        : $"→ {tes.ToolName}  {args}\n",
+                    Color.Yellow);
+                yield break;
             case ToolExecutionEndEvent tee:
                 var label = tee.IsError ? "✗" : "✓";
                 var preview = tee.Result.Output.Length > 600
                     ? tee.Result.Output[..600] + "..." : tee.Result.Output;
-                return $"{label} {preview.Trim()}\n";
+                yield return new ChatLine($"{label} {preview.Trim()}\n", tee.IsError ? Color.Red : Color.Gray);
+                yield break;
             case CompactionCompletedEvent cc:
-                return $"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens]\n";
+                yield return new ChatLine(
+                    $"[compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens]\n",
+                    Color.DarkGray);
+                yield break;
             case AgentErrorEvent err:
-                return $"error: {err.Message}\n";
-            default:
-                return string.Empty;
+                _awaitingAssistantLabel = true;
+                yield return new ChatLine($"error: {err.Message}\n", Color.Red, true);
+                yield break;
         }
     }
 

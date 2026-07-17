@@ -13,7 +13,11 @@
   <ItemGroup>
     <PackageReference Include="Termina" Version="0.15.0" />
     <PackageReference Include="Termina.Generators" Version="0.15.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.Tests" />
   </ItemGroup>
   <Target Name="RemoveTerminaGenerators" BeforeTargets="CoreCompile">
     <ItemGroup>
