@@ -15,4 +15,7 @@
     <PackageReference Include="Terminal.Gui" Version="2.4.17" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.Tests" />
+  </ItemGroup>
 </Project>
