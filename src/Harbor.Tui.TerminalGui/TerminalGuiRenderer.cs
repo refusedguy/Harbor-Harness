@@ -27,7 +27,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     private readonly ILogger<TerminalGuiRenderer> _logger;
     private Func<string, Task>? _slashHandler;
     private IApplication? _app;
-    private TextView? _output;
     private TerminalGuiScreen? _screen;
 
     /// <inheritdoc />
@@ -89,7 +88,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             Width = Dim.Fill(),
             Height = Dim.Fill()
         };
-        _screen.AttachWindow(window);
 
         var output = new TextView
         {
@@ -118,7 +116,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             CanFocus = false
         };
 
-        _output = output;
         _screen.Attach(output, statusBar);
 
         output.Title = "conversation";
@@ -144,7 +141,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         // Render initial state so the screen isn't blank. All agent-driven UI
         // updates are marshalled onto the Terminal.Gui main thread (see
         // TerminalGuiScreen.ApplyEvent) so the screen repaints correctly.
-        _screen.RenderFull();
+        _screen.Invalidate();
 
         _app.Run(window);
         _app.Dispose();
@@ -202,14 +199,10 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         private readonly List<(string Role, string Text)> _chat = new();
         private TextView? _output;
         private Label? _statusBar;
-        private Window? _window;
         private bool _streaming;
         private string _streamBuffer = string.Empty;
         private string _thinkBuffer = string.Empty;
-        private int _renderedThinkLen;
-        private int _renderedStreamLen;
-        private bool _thinkLabeled;
-        private bool _streamLabeled;
+        private bool _flushQueued;
         private decimal _cost;
         private int _tokensIn;
         private int _tokensOut;
@@ -225,8 +218,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
         public void Attach(TextView output, Label statusBar) => (_output, _statusBar) = (output, statusBar);
 
-        public void AttachWindow(Window window) => _window = window;
-
         public void ApplyEvent(AgentEvent @event)
         {
             _logger.LogDebug("ApplyEvent: {EventType}", @event.GetType().Name);
@@ -238,18 +229,14 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                         foreach (var m in ase.Messages)
                             if (m is UserMessage u) Add("user", u.Content);
                     else
-                        UpdateStatus();
+                        Invalidate();
                     break;
                 case MessageStartEvent:
                     _status = "running";
                     _streaming = true;
                     _streamBuffer = string.Empty;
                     _thinkBuffer = string.Empty;
-                    _renderedThinkLen = 0;
-                    _renderedStreamLen = 0;
-                    _thinkLabeled = false;
-                    _streamLabeled = false;
-                    UpdateStatus();
+                    Invalidate();
                     break;
                 case MessageUpdateEvent mu:
                     switch (mu.LlmEvent)
@@ -261,7 +248,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                             _tokensIn += sf.Usage.InputTokens;
                             _tokensOut += sf.Usage.OutputTokens;
                             _cost += EstimateCost(sf.Usage.InputTokens, sf.Usage.OutputTokens);
-                            UpdateStatus();
+                            Invalidate();
                             break;
                     }
                     break;
@@ -270,10 +257,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     if (!string.IsNullOrEmpty(_streamBuffer)) Add("assistant", _streamBuffer.Trim());
                     _streamBuffer = string.Empty;
                     _thinkBuffer = string.Empty;
-                    _renderedThinkLen = 0;
-                    _renderedStreamLen = 0;
-                    _thinkLabeled = false;
-                    _streamLabeled = false;
                     _streaming = false;
                     _status = "generating…".Equals(_status, StringComparison.Ordinal) ? "running" : _status;
                     break;
@@ -291,7 +274,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     break;
                 case CompactionStartedEvent:
                     _status = "compacting";
-                    UpdateStatus();
+                    Invalidate();
                     break;
                 case CompactionCompletedEvent cc:
                     _status = "running";
@@ -303,16 +286,16 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     break;
                 case AgentEndEvent:
                     _status = "idle";
-                    UpdateStatus();
+                    Invalidate();
                     break;
             }
 
-            // During streaming, append only the newly arrived delta text to the
-            // TextView so the framework redraws incrementally. A full snapshot
-            // rebuild is reserved for structural changes (see Add / MessageEnd).
+            // During streaming, queue the newly arrived delta for a throttled flush
+            // instead of touching the TextView on every token. This keeps the main
+            // loop free to process key input so typing stays responsive.
             if (_streaming)
             {
-                AppendStreamDelta();
+                QueueStreamDelta();
             }
         }
 
@@ -335,7 +318,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
             Add("user", text);
             _status = "running";
-            UpdateStatus();
+            Invalidate();
             _ = Task.Run(async () =>
             {
                 try { await _agent.PromptAsync(text, CancellationToken.None).ConfigureAwait(false); }
@@ -350,74 +333,51 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         private void Add(string role, string text)
         {
             _chat.Add((role, text));
-            RenderFull();
+            Invalidate();
         }
 
         /// <summary>
-        ///     Appends only the not-yet-drawn portion of the live streaming/thinking
-        ///     buffers to the <see cref="_output" /> TextView. This keeps per-token UI
-        ///     work minimal so typing stays responsive while the model streams.
+        ///     Marks the screen dirty. Coalesces every state change (chat append, status
+        ///     change, stream delta) into a single throttled repaint on the main thread, so a
+        ///     burst of agent events can never queue more than one repaint at a time and the
+        ///     main loop stays free to process key input — this is what kept typing laggy.
+        ///     <see cref="BuildSnapshot" /> already includes the live stream buffers, so the
+        ///     single repaint renders both chat and status with no duplication.
         /// </summary>
-        private void AppendStreamDelta()
+        internal void Invalidate()
         {
-            var sb = new StringBuilder();
-
-            if (_thinkBuffer.Length > _renderedThinkLen)
-            {
-                if (!_thinkLabeled)
-                {
-                    sb.Append("\n  🧠 ");
-                    _thinkLabeled = true;
-                }
-
-                sb.Append(_thinkBuffer[_renderedThinkLen..]);
-                _renderedThinkLen = _thinkBuffer.Length;
-            }
-
-            if (_streamBuffer.Length > _renderedStreamLen)
-            {
-                if (!_streamLabeled)
-                {
-                    sb.Append("\n🤖 ");
-                    _streamLabeled = true;
-                }
-
-                sb.Append(_streamBuffer[_renderedStreamLen..]);
-                _renderedStreamLen = _streamBuffer.Length;
-            }
-
-            if (sb.Length == 0) return;
-
-            var delta = sb.ToString();
-            InvokeOnMainThread(() => AppendToOutput(delta));
-        }
-
-        private void AppendToOutput(string text)
-        {
-            if (_output is null) return;
-            _output.MoveEnd();
-            _output.InsertText(text);
-        }
-
-        internal void RenderFull()
-        {
-            _logger.LogTrace("Rendering full chat ({Count} messages)", _chat.Count);
-            var snapshot = BuildSnapshot();
-
-            // Agent events arrive on a background thread. Marshal the UI mutation
-            // onto the Terminal.Gui main thread so the screen repaints; if we're
-            // already on it, just apply directly.
-            InvokeOnMainThread(() => ApplySnapshot(snapshot));
-        }
-
-        private void UpdateStatus()
-        {
+            if (_flushQueued) return;
+            _flushQueued = true;
             InvokeOnMainThread(() =>
             {
-                var line = $"status: {_status} | agent: {_agent.State.Agent.Name.Value} | model: {_agent.State.Agent.Model} | ${_cost:F4} | {_tokensIn}↑ {_tokensOut}↓";
-                if (_statusBar is not null) _statusBar.Text = line;
-                if (_window is not null) _window.Title = $"⚓ Harbor — {_status}";
+                _flushQueued = false;
+                ApplySnapshot(BuildSnapshot());
             });
+        }
+
+        /// <summary>
+        ///     Marks the live streaming/thinking buffers dirty and requests a coalesced
+        ///     repaint (same path as <see cref="Invalidate" />), so we never call Invoke per
+        ///     token.
+        /// </summary>
+        private void QueueStreamDelta()
+        {
+            Invalidate();
+        }
+
+        private void ApplySnapshot(string snapshot)
+        {
+            if (_output is not null)
+            {
+                _output.Text = snapshot;
+                _output.MoveEnd();
+            }
+
+            // The status bar is the single source of truth for agent state. The window
+            // title stays static ("⚓ Harbor") to avoid showing two status lines with
+            // potentially divergent state.
+            if (_statusBar is not null)
+                _statusBar.Text = $"status: {_status} | agent: {_agent.State.Agent.Name.Value} | model: {_agent.State.Agent.Model} | ${_cost:F4} | {_tokensIn}↑ {_tokensOut}↓";
         }
 
         private void InvokeOnMainThread(Action action)
@@ -431,7 +391,6 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         private string BuildSnapshot()
         {
             var sb = new StringBuilder();
-            sb.Append($"status: {_status} | agent: {_agent.State.Agent.Name.Value} | model: {_agent.State.Agent.Model} | ${_cost:F4} | {_tokensIn}↑ {_tokensOut}↓\n\n");
             foreach (var (role, text) in _chat)
             {
                 sb.Append(role switch
@@ -447,18 +406,14 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                 });
             }
 
+            // Live streaming/thinking text is appended separately (see FlushStream),
+            // so it is not double-rendered here.
+            if (!string.IsNullOrEmpty(_thinkBuffer))
+                sb.Append($"  🧠 {_thinkBuffer.Trim()}\n");
+            if (!string.IsNullOrEmpty(_streamBuffer))
+                sb.Append($"🤖 {_streamBuffer.Trim()}\n");
+
             return sb.ToString();
-        }
-
-        private void ApplySnapshot(string snapshot)
-        {
-            if (_output is not null)
-            {
-                _output.Text = snapshot;
-                _output.MoveEnd();
-            }
-
-            UpdateStatus();
         }
 
         private static decimal EstimateCost(int inTok, int outTok)
@@ -486,3 +441,4 @@ internal sealed class TerminalGuiRenderContext : ITuiRenderContext
     public void ExitAlternateScreen() => Console.Write("\x1b[?1049l");
     public void Flush() => Console.Out.Flush();
 }
+
