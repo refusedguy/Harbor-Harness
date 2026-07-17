@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -48,9 +49,16 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
     /// <inheritdoc />
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)
     {
+        _logger.LogDebug("RenderAsync: {EventType}", @event.GetType().Name);
         _bridge?.ApplyEvent(@event);
         return base.RenderAsync(@event, ct);
     }
+
+    /// <summary>
+    ///     Suppress placement-driven rendering — RazorConsole handles its own
+    ///     display through the <see cref="ChatTui" /> component tree.
+    /// </summary>
+    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event) => false;
 
     /// <summary>
     ///     Run the interactive chat loop. Builds a generic host configured with the
@@ -63,14 +71,20 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
     /// <returns>Exit code (0 = ok).</returns>
     public async Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
+        _logger.LogInformation("Starting RazorConsole host");
         _bridge = new ChatBridge(agent, _slashHandler, _logger);
 
-        _host = Host.CreateDefaultBuilder()
+        _host = new HostBuilder()
             .UseRazorConsole<ChatTui>()
             .ConfigureServices(services =>
             {
                 services.AddSingleton(_bridge);
                 services.Configure<ConsoleAppOptions>(ConfigureConsoleAppOptions);
+            })
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.SetMinimumLevel(LogLevel.Warning);
             })
             .Build();
 
@@ -125,17 +139,54 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
 
     private static void ConfigureConsoleAppOptions(ConsoleAppOptions o)
     {
-        o.AutoClearConsole = false;
+        // AutoClearConsole must be enabled so each render repaints the full frame
+        // and old content is wiped — otherwise streamed output simply appends and
+        // the lines overlap.
+        o.AutoClearConsole = true;
         o.EnableTerminalResizing = true;
     }
 }
 
 /// <summary>
-///     A single line in the chat transcript.
+///     A single line in the chat transcript. The <see cref="Role" /> carries the
+///     semantic origin of the line so the <see cref="ChatTui" /> component can pick a
+///     consistent label, prefix and color (user / assistant / tool / tool-result /
+///     thinking / system / error).
 /// </summary>
-/// <param name="IsUser">Whether the line was authored by the user.</param>
+/// <param name="Role">The semantic role of the line.</param>
 /// <param name="Text">The plain text to display (the component applies color by role).</param>
-public sealed record ChatLine(bool IsUser, string Text);
+public sealed record ChatLine(string Role, string Text)
+{
+    /// <summary>Whether the line was authored by the user (backward-compatible helper).</summary>
+    public bool IsUser => Role == ChatRoles.User;
+}
+
+/// <summary>
+///     Well-known semantic roles for <see cref="ChatLine.Role" />.
+/// </summary>
+public static class ChatRoles
+{
+    /// <summary>A line authored by the user.</summary>
+    public const string User = "user";
+
+    /// <summary>Assistant (model) reply text.</summary>
+    public const string Assistant = "assistant";
+
+    /// <summary>A tool invocation line.</summary>
+    public const string Tool = "tool";
+
+    /// <summary>The result/output of a tool invocation.</summary>
+    public const string ToolResult = "tool-result";
+
+    /// <summary>Model "thinking" / reasoning text.</summary>
+    public const string Thinking = "thinking";
+
+    /// <summary>System / informational lines (e.g. compaction notices, slash echoes).</summary>
+    public const string System = "system";
+
+    /// <summary>Error lines.</summary>
+    public const string Error = "error";
+}
 
 /// <summary>
 ///     Shared observable state bridging the agent, the slash-command handler and the
@@ -178,6 +229,15 @@ public sealed class ChatBridge
     /// <summary>Whether a prompt is currently in flight.</summary>
     public bool IsRunning { get; private set; }
 
+    /// <summary>Whether the model is actively streaming a reply this turn.</summary>
+    public bool IsStreaming { get; private set; }
+
+    /// <summary>The partial assistant reply streamed so far this turn (live preview).</summary>
+    public string StreamBuffer => _streamBuffer;
+
+    /// <summary>The partial "thinking" text streamed so far this turn (live preview).</summary>
+    public string ThinkBuffer => _thinkBuffer;
+
     /// <summary>Human-readable status (idle / running / compacting / error).</summary>
     public string Status { get; private set; }
 
@@ -208,6 +268,7 @@ public sealed class ChatBridge
         }
 
         var trimmed = text.Trim();
+        _logger.LogInformation("Submitting: {Text}", trimmed);
 
         if (trimmed is "exit" or "quit" or "q" or ":q")
         {
@@ -222,19 +283,19 @@ public sealed class ChatBridge
             try
             {
                 await Slash(trimmed).ConfigureAwait(false);
-                PushLine(false, trimmed);
+                PushLine(ChatRoles.System, trimmed);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Slash command failed: {Command}", trimmed);
                 Status = "error";
-                PushLine(false, ex.Message);
+                PushLine(ChatRoles.Error, ex.Message);
             }
 
             return;
         }
 
-        PushLine(true, trimmed);
+        PushLine(ChatRoles.User, trimmed);
         IsRunning = true;
         Status = "running";
         RaiseChanged();
@@ -245,7 +306,7 @@ public sealed class ChatBridge
             if (result.IsFailure)
             {
                 Status = "error";
-                PushLine(false, result.Error);
+                PushLine(ChatRoles.Error, result.Error);
             }
         }
         catch (OperationCanceledException ex)
@@ -256,7 +317,7 @@ public sealed class ChatBridge
         {
             _logger.LogError(ex, "Prompt failed");
             Status = "error";
-            PushLine(false, ex.Message);
+            PushLine(ChatRoles.Error, ex.Message);
         }
         finally
         {
@@ -273,11 +334,11 @@ public sealed class ChatBridge
     /// <summary>
     ///     Append a line to the transcript and notify subscribers.
     /// </summary>
-    /// <param name="isUser">Whether the line is a user line.</param>
+    /// <param name="role">The semantic role of the line (see <see cref="ChatRoles" />).</param>
     /// <param name="text">The line text.</param>
-    public void PushLine(bool isUser, string text)
+    public void PushLine(string role, string text)
     {
-        _messages.Add(new ChatLine(isUser, text));
+        _messages.Add(new ChatLine(role, text));
         RaiseChanged();
     }
 
@@ -288,6 +349,7 @@ public sealed class ChatBridge
     /// <param name="event">The agent event.</param>
     public void ApplyEvent(AgentEvent @event)
     {
+        _logger.LogDebug("ApplyEvent: {EventType}", @event.GetType().Name);
         switch (@event)
         {
             case AgentStartEvent ase:
@@ -298,7 +360,7 @@ public sealed class ChatBridge
                     {
                         if (m is UserMessage u)
                         {
-                            _messages.Add(new ChatLine(true, u.Content));
+                            _messages.Add(new ChatLine(ChatRoles.User, u.Content));
                         }
                     }
                 }
@@ -306,6 +368,7 @@ public sealed class ChatBridge
                 break;
             case MessageStartEvent:
                 Status = "running";
+                IsStreaming = true;
                 _streamBuffer = string.Empty;
                 _thinkBuffer = string.Empty;
                 break;
@@ -319,20 +382,21 @@ public sealed class ChatBridge
                         _thinkBuffer += thd.Delta;
                         break;
                     case ToolCallStartEvent tcs:
-                        _messages.Add(new ChatLine(false, $"-> {tcs.ToolName}"));
+                        _messages.Add(new ChatLine(ChatRoles.Tool, tcs.ToolName));
                         break;
                 }
 
                 break;
             case MessageEndEvent:
+                IsStreaming = false;
                 if (!string.IsNullOrWhiteSpace(_thinkBuffer))
                 {
-                    _messages.Add(new ChatLine(false, _thinkBuffer.Trim()));
+                    _messages.Add(new ChatLine(ChatRoles.Thinking, _thinkBuffer.Trim()));
                 }
 
                 if (!string.IsNullOrWhiteSpace(_streamBuffer))
                 {
-                    _messages.Add(new ChatLine(false, _streamBuffer.Trim()));
+                    _messages.Add(new ChatLine(ChatRoles.Assistant, _streamBuffer.Trim()));
                 }
 
                 _streamBuffer = string.Empty;
@@ -340,37 +404,43 @@ public sealed class ChatBridge
                 break;
             case ToolExecutionStartEvent tes:
                 var args = tes.Args.GetRawText();
-                _messages.Add(new ChatLine(false, string.IsNullOrEmpty(args) || args == "{}"
-                    ? $"-> {tes.ToolName}"
-                    : $"-> {tes.ToolName} {args}"));
+                _messages.Add(new ChatLine(ChatRoles.Tool, string.IsNullOrEmpty(args) || args == "{}"
+                    ? tes.ToolName
+                    : $"{tes.ToolName} {args}"));
                 break;
             case ToolExecutionEndEvent tee:
-                var label = tee.IsError ? "x" : "v";
                 var output = tee.Result.Output;
                 var preview = output.Length > 600 ? output[..600] + "..." : output;
-                _messages.Add(new ChatLine(false, $"{label} {preview.Trim()}"));
+                _messages.Add(new ChatLine(ChatRoles.ToolResult,
+                    $"{(tee.IsError ? "✗" : "✓")} {preview.Trim()}"));
                 break;
             case CompactionStartedEvent:
                 Status = "compacting";
                 break;
             case CompactionCompletedEvent cc:
                 Status = "running";
-                _messages.Add(new ChatLine(false,
+                _messages.Add(new ChatLine(ChatRoles.System,
                     $"compacted: pruned {cc.PrunedMessageCount} msgs, saved ~{cc.TokensSaved} tokens"));
                 break;
             case AgentErrorEvent err:
                 Status = "error";
-                _messages.Add(new ChatLine(false, err.Message));
+                IsStreaming = false;
+                _messages.Add(new ChatLine(ChatRoles.Error, err.Message));
                 break;
             case AgentEndEvent:
                 Status = "idle";
+                IsStreaming = false;
                 break;
         }
 
         RaiseChanged();
     }
 
-    private void RaiseChanged() => StateChanged?.Invoke(this, EventArgs.Empty);
+    private void RaiseChanged()
+    {
+        _logger.LogTrace("RaiseChanged");
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
 }
 
 /// <summary>

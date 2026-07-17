@@ -6,26 +6,87 @@
 @implements IDisposable
 
 <Rows>
-    <Panel Title="@($"Harbor - {Harbor.AgentName} - {Harbor.Provider}/{Harbor.Model} - {Harbor.Status}")"
-           BorderColor="@Color.Grey">
+    <Panel Title="@PanelTitle"
+           TitleColor="@Color.Cyan1"
+           BorderColor="@StatusColor"
+           Expand="true">
         <ViewHeightScrollable LinesToRender="20">
             <Rows>
+                @if (Harbor.Messages.Count == 0 && !Harbor.IsStreaming)
+                {
+                    <Markup Content="No messages yet - type below to start chatting."
+                            Foreground="@Color.Grey"
+                            Decoration="Decoration.Italic" />
+                }
+
                 @foreach (var m in Harbor.Messages)
                 {
-                    <Markup Content="@m.Text" Foreground="@(m.IsUser ? Color.Green : Color.Blue)" />
+                    @Message(m.Role, m.Text)
+                }
+
+                @if (Harbor.IsStreaming)
+                {
+                    @if (!string.IsNullOrWhiteSpace(Harbor.ThinkBuffer))
+                    {
+                        @Message("thinking", Harbor.ThinkBuffer.Trim())
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Harbor.StreamBuffer))
+                    {
+                        @Message("assistant", Harbor.StreamBuffer.Trim())
+                    }
+                    else if (string.IsNullOrWhiteSpace(Harbor.ThinkBuffer))
+                    {
+                        <Newline />
+                        <Markup Content="Harbor is thinking..."
+                                Foreground="@Color.Grey"
+                                Decoration="Decoration.Italic" />
+                    }
                 }
             </Rows>
         </ViewHeightScrollable>
     </Panel>
 
     <TextInput @bind-Value="_input"
-               Placeholder="Message Harbor... (exit to quit)"
+               Label=">"
+               LabelColor="@Color.Green"
+               Placeholder="Message Harbor..."
+               PlaceholderColor="@Color.Grey"
+               BorderColor="@Color.Grey"
+               FocusedBorderColor="@Color.Cyan1"
                OnSubmit="Submit"
                Expand="true" />
+
+    <Markup Content="exit to quit  ·  /help for commands  ·  Enter to send"
+            Foreground="@Color.Grey"
+            Decoration="Decoration.Dim" />
 </Rows>
 
 @code {
     private string _input = string.Empty;
+
+    private string PanelTitle =>
+        $"Harbor · {Harbor.AgentName} · {Harbor.Provider}/{Harbor.Model} · {Harbor.Status}";
+
+    private Color StatusColor => Harbor.Status switch
+    {
+        "running" => Color.Cyan1,
+        "compacting" => Color.Yellow,
+        "error" => Color.Red,
+        _ => Color.Grey
+    };
+
+    private static (string Label, Color LabelColor, Color TextColor) RoleStyle(string role) => role switch
+    {
+        "user" => ("You", Color.Green, Color.White),
+        "assistant" => ("Harbor", Color.Cyan1, Color.Grey85),
+        "tool" => ("tool", Color.Blue, Color.Grey74),
+        "tool-result" => ("  ↳", Color.Grey, Color.Grey58),
+        "thinking" => ("think", Color.Grey, Color.Grey54),
+        "system" => ("sys", Color.Grey, Color.Grey62),
+        "error" => ("error", Color.Red, Color.Red1),
+        _ => ("·", Color.Grey, Color.Grey)
+    };
 
     protected override void OnInitialized()
     {
@@ -46,4 +107,16 @@
     {
         Harbor.StateChanged -= OnStateChanged;
     }
+}
+
+@{
+    RenderFragment Message(string role, string text) =>
+        @<Rows>
+            @{ var style = RoleStyle(role); }
+            <Newline />
+            <Columns Expand="false">
+                <Markup Content="@style.Label" Foreground="@style.LabelColor" Decoration="Decoration.Bold" />
+                <Markup Content="@text" Foreground="@style.TextColor" />
+            </Columns>
+        </Rows>;
 }
