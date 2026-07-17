@@ -46,16 +46,6 @@ internal sealed class LayoutBuilder
     private ImmutableArray<ChatLine> _lines = ImmutableArray<ChatLine>.Empty;
 
     /// <summary>
-    ///     Absolute index of the first visible history line while the user is
-    ///     scrolled away from the bottom. Frozen during streaming so newly appended
-    ///     lines do not push the view downward ("scroll jump").
-    /// </summary>
-    private int _frozenTop = -1;
-
-    /// <summary>Last reported scroll offset, used to detect user-initiated scroll.</summary>
-    private int _prevScrollOffset;
-
-    /// <summary>
     ///     Set the transcript + live streaming content for this frame. Called once
     ///     per render from the screen's <c>SyncLayout</c>.
     /// </summary>
@@ -65,13 +55,6 @@ internal sealed class LayoutBuilder
         IsStreaming = isStreaming;
         StreamBuffer = active.TextBuffer;
         ThinkBuffer = active.ThinkBuffer;
-
-        // When the user actively changes the scroll position (not during streaming),
-        // re-anchor the frozen top to their new position so the view stays put while
-        // the agent appends content.
-        if (ScrollOffset != _prevScrollOffset && !isStreaming)
-            _frozenTop = Math.Max(0, lines.Length - ViewportLines - ScrollOffset);
-        _prevScrollOffset = ScrollOffset;
     }
 
     public Layout Layout { get; } = new Layout("Root").SplitRows(
@@ -129,8 +112,22 @@ internal sealed class LayoutBuilder
 
     private IWidget BuildHistory(int maxHeight)
     {
-        var lines = new List<TextLine>();
+        // Build only the visible window of ChatLines. Scrolling is expressed as
+        // ScrollOffset = number of wrapped rows lifted up from the tail (0 = bottom).
+        // We slice the SOURCE lines before expanding them into TextLines so we never
+        // allocate/style rows that are off-screen — this keeps long transcripts fast.
+        var source = _lines;
 
+        int total = source.Length;
+        int top = 0;
+        if (maxHeight > 0 && total > maxHeight)
+        {
+            top = Math.Clamp(ScrollOffset == 0
+                ? total - maxHeight
+                : Math.Min(ScrollOffset, total - 1), 0, total - 1);
+        }
+
+        var lines = new List<TextLine>();
         void AppendRole(ChatRole role, string content)
         {
             foreach (var block in RoleLines(role, content))
@@ -138,8 +135,8 @@ internal sealed class LayoutBuilder
             lines.Add(Blank());
         }
 
-        foreach (var entry in _lines)
-            AppendRole(entry.Role, entry.Text);
+        for (int i = top; i < total; i++)
+            AppendRole(source[i].Role, source[i].Text);
 
         if (IsStreaming)
         {
@@ -156,21 +153,6 @@ internal sealed class LayoutBuilder
         // (UiState.TotalLines / ViewportLines) for scroll clamping + percentage.
         TotalLines = lines.Count;
         ViewportLines = maxHeight;
-
-        // Tail-follow: ScrollOffset 0 shows the newest lines; the reducer keeps it at
-        // 0 while the user is pinned to the bottom, so this always tails automatically.
-        // `maxHeight <= 0` means the area is unavailable yet — show everything.
-        if (maxHeight > 0 && lines.Count > maxHeight)
-        {
-            // While the user is scrolled up, freeze the top line so streamed content
-            // does not shove the view downward. When pinned to the bottom (offset 0)
-            // the view simply tails the newest lines.
-            int skip = ScrollOffset == 0
-                ? lines.Count - maxHeight
-                : Math.Clamp(_frozenTop, 0, lines.Count - maxHeight);
-            if (skip > 0)
-                lines = lines.Skip(skip).ToList();
-        }
 
         var paragraph = new Paragraph().Alignment(Justify.Left);
         paragraph.Lines.AddRange(lines);
@@ -203,6 +185,20 @@ internal sealed class LayoutBuilder
         _ => "  "
     };
 
+    // Opt-in rendering of inline markdown (bold/italic/code/headings) as styled spans.
+    // OFF by default: the markdown scan runs on every visible line each frame and can
+    // stall the UI during long streamed responses, so it stays behind a feature flag
+    // until it is proven cheap enough to enable unconditionally.
+    public static bool RenderMarkdownEnabled { get; set; }
+
+    private static readonly System.Text.RegularExpressions.Regex HeadingRegex =
+        new(@"^\s{0,3}(#{1,3})\s+(.*)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    // The transcript is immutable, so a rendered line's text never changes. Cache the
+    // parsed spans per text so we don't re-run the markdown scan on every frame (the
+    // screen re-renders several times per second during streaming).
+    private static readonly Dictionary<string, List<TextSpan>> MarkdownCache = new(256);
+
     private static IEnumerable<TextLine> RoleLines(ChatRole role, string content)
     {
         var color = RoleColor(role);
@@ -215,25 +211,47 @@ internal sealed class LayoutBuilder
         {
             var line = new TextLine();
             line.Spans.Add(new TextSpan(i == 0 ? prefix : "  ", new Style(color)));
-            // Render inline markdown (bold/italic/code/headings) as styled spans so
-            // the raw markup tokens are stripped and the text reads cleanly.
-            line.Spans.AddRange(RenderMarkdown(segments[i], color, role));
+            // When markdown rendering is disabled the body is emitted verbatim (no
+            // parsing cost); otherwise it is scanned into styled spans.
+            if (RenderMarkdownEnabled)
+                line.Spans.AddRange(GetMarkdownSpans(segments[i], color));
+            else
+                line.Spans.Add(new TextSpan(segments[i], new Style(color)));
             result.Add(line);
         }
 
         return result;
     }
 
+    private static List<TextSpan> GetMarkdownSpans(string text, Color baseColor)
+    {
+        lock (MarkdownCache)
+        {
+            if (MarkdownCache.TryGetValue(text, out var cached))
+                return cached;
+        }
+
+        var spans = RenderMarkdown(text, baseColor).ToList();
+
+        lock (MarkdownCache)
+        {
+            if (MarkdownCache.Count > 1024)
+                MarkdownCache.Clear();
+            MarkdownCache[text] = spans;
+        }
+
+        return spans;
+    }
+
     /// <summary>
     ///     Convert a single line of agent output into styled spans, interpreting the
     ///     common inline markdown tokens. The base <paramref name="baseColor" /> is used
-    ///     for plain text; headings get a distinct colour. Spans are merged when
-    ///     adjacent styles are identical to keep allocations low.
+    ///     for plain text; headings get a distinct colour.
     /// </summary>
-    private static IEnumerable<TextSpan> RenderMarkdown(string text, Color baseColor, ChatRole role)
+    private static IEnumerable<TextSpan> RenderMarkdown(string text, Color baseColor)
     {
         // Heading: a line starting with 1-3 '#' followed by space.
-        var heading = System.Text.RegularExpressions.Regex.Match(text, @"^\s{0,3}(#{1,3})\s+(.*)$");
+        var heading = HeadingRegex.Match(text);
         if (heading.Success)
         {
             yield return new TextSpan(heading.Groups[2].Value, new Style(Color.Yellow, null, Decoration.Bold));
@@ -283,7 +301,7 @@ internal sealed class LayoutBuilder
             }
 
             // Plain run up to the next special char.
-            int next = NextSpecial(text, i);
+            int next = IndexOfAny(text, i, '*', '_', '`');
             result.Add((text.Substring(i, next - i), new Style(baseColor)));
             i = next;
         }
@@ -292,19 +310,19 @@ internal sealed class LayoutBuilder
             yield return new TextSpan(t, s);
     }
 
-    private static bool Peek(string text, int i, string token)
-        => i + token.Length <= text.Length && text.Substring(i, token.Length) == token;
-
-    private static int NextSpecial(string text, int start)
+    private static int IndexOfAny(string text, int start, params char[] chars)
     {
         int best = text.Length;
-        foreach (var c in new[] { '*', '_', '`' })
+        foreach (var c in chars)
         {
             int idx = text.IndexOf(c, start);
             if (idx >= 0 && idx < best) best = idx;
         }
         return best;
     }
+
+    private static bool Peek(string text, int i, string token)
+        => i + token.Length <= text.Length && text.Substring(i, token.Length) == token;
 
     private static string Escape(string text)
         => (text ?? string.Empty)

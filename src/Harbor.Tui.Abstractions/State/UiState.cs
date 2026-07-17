@@ -111,15 +111,15 @@ public sealed record UiState
     /// <summary>Total number of wrapped history rows (reported by the renderer).</summary>
     public int TotalLines { get; init; }
 
-    /// <summary>How far the history is scrolled, as a percentage (0 = bottom, 100 = top).</summary>
+    /// <summary>How far the history is scrolled, as a percentage (0 = bottom/live, 100 = top).</summary>
     public int ScrollPercent
     {
         get
         {
             int max = Math.Max(0, TotalLines - ViewportLines);
             if (max == 0) return 0;
-            // ScrollOffset grows toward the top, so flip it for a top-anchored percentage.
-            return (int)Math.Round(100.0 * (TotalLines - ViewportLines - ScrollOffset) / max);
+            // ScrollOffset is rows lifted from the tail (0 = bottom).
+            return (int)Math.Round(100.0 * ScrollOffset / max);
         }
     }
 
