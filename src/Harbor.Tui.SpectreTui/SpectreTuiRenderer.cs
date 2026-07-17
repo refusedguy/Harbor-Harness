@@ -129,7 +129,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly LayoutBuilder _layout;
         private readonly ChatKeyMap _keyMap = new();
         private ApplicationContext? _app;
-        private int _lastHistoryHeight;
+
+        // Scroll + measured geometry are kept LOCAL to the screen. Pushing them into
+        // UiState every frame (via Dispatch) created a render→dispatch→render loop
+        // that stalled the UI on long transcripts. The model stays the source of truth
+        // for content; the screen owns pixel-level scroll position.
+        private int _scroll;          // rows lifted from the tail; 0 = bottom (live)
+        private int _viewport;        // measured history height (rows)
+        private bool _wasRunning;     // track agent run transitions to reset scroll
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger)
         {
@@ -170,6 +177,11 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
             if (action == ChatAction.None) return;
 
+            // Scroll is handled locally (no store round-trip) and is always allowed,
+            // including while the agent streams — watching the output scroll is core UX.
+            if (HandleLocalScroll(action))
+                return;
+
             // The only side-effect the screen is allowed: run the effect the pure
             // update produced. All state transitions happen inside UiReducer.Update.
             var effect = _store.Dispatch(new UiMsg.KeyInput(action, uiKey));
@@ -181,6 +193,23 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 _app?.Quit();
         }
 
+        /// <summary>Apply a scroll action to the local scroll position. Returns true if handled.</summary>
+        private bool HandleLocalScroll(ChatAction action)
+        {
+            int page = Math.Max(1, _viewport - 2);
+            switch (action)
+            {
+                case ChatAction.ScrollUpLine:   _scroll++; break;
+                case ChatAction.ScrollDownLine: _scroll = Math.Max(0, _scroll - 1); break;
+                case ChatAction.ScrollUpPage:   _scroll += page; break;
+                case ChatAction.ScrollDownPage: _scroll = Math.Max(0, _scroll - page); break;
+                case ChatAction.ScrollTop:      _scroll = int.MaxValue; break;
+                case ChatAction.ScrollBottom:   _scroll = 0; break;
+                default: return false;
+            }
+            return true;
+        }
+
         public override void Update(FrameInfo frame, IRenderBounds bounds)
         {
             // No per-frame mutation; state arrives via messages + events.
@@ -189,17 +218,22 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         public override void Render(RenderContext context)
         {
             var historyArea = _layout.Layout.GetArea(context, "History");
-            _lastHistoryHeight = historyArea.Height > 0 ? historyArea.Height : 0;
+            _viewport = historyArea.Height > 0 ? historyArea.Height : 0;
 
-            // Report measured geometry into the model so scroll clamping/% is pure.
-            _store.Dispatch(new UiMsg.Viewport(_lastHistoryHeight));
+            // Reset scroll to the live tail whenever a new agent run starts, so the
+            // user is not left staring at a frozen old position while new output streams.
+            var state = _store.State;
+            if (state.IsAgentRunning && !_wasRunning)
+                _scroll = 0;
+            _wasRunning = state.IsAgentRunning;
 
             SyncLayout();
-            var widgets = _layout.BuildWidgets(_lastHistoryHeight);
+            var widgets = _layout.BuildWidgets(_viewport);
 
-            // Feed the measured content height back so TotalLines (and scroll %) updates.
-            if (_layout.TotalLines != _store.State.TotalLines)
-                _store.Dispatch(new UiMsg.HistoryMeasured(_layout.TotalLines));
+            // Clamp the local scroll to the now-measured content height so repeated
+            // PageUp/Home can never push the offset past the top of the transcript.
+            int maxScroll = Math.Max(0, _layout.TotalLines - _viewport);
+            if (_scroll > maxScroll) _scroll = maxScroll;
 
             _logger.LogTrace("Render: {WidgetCount} widgets", widgets.Count);
             foreach ((string name, var widget) in widgets)
@@ -228,9 +262,10 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             _layout.SetLines(s.Lines, s.IsStreaming, s.Active);
             _layout.InputText = s.Input.Text;
             _layout.Focus = s.Focus;
-            _layout.ScrollOffset = s.ScrollOffset;
-            _layout.TotalLines = s.TotalLines;
-            _layout.ViewportLines = s.ViewportLines;
+            // Scroll + geometry are local to the screen (see fields); we only feed the
+            // measured viewport so the layout can clamp + compute the percentage.
+            _layout.ScrollOffset = _scroll;
+            _layout.ViewportLines = _viewport;
             _layout.FooterText = BuildFooter();
         }
 
@@ -243,8 +278,9 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             string Label(ChatAction a) => _keyMap.Get(a).Label;
             var s = _store.State;
             string mode = s.Focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
-            string scroll = s.TotalLines > s.ViewportLines && s.ViewportLines > 0
-                ? $"scroll {s.ScrollPercent}%"
+            int max = Math.Max(0, _layout.TotalLines - _viewport);
+            string scroll = max > 0
+                ? $"scroll {(_scroll * 100 / max)}%"
                 : "scroll 0%";
             return $"[grey]q[/] {Label(ChatAction.Quit)}  " +
                    $"[grey]F2[/] {Label(ChatAction.ToggleFocus)}  {mode}  " +
