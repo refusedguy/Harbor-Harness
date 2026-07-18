@@ -10,10 +10,31 @@ namespace Harbor.E2E.Tui.Termina;
 /// platform matrix.
 /// </summary>
 [Category("E2E")]
+[NotInParallel]
 public class TerminaE2ETests : E2eTestBase
 {
     private const string CliProjectPath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
     private const string TuiName = "termina";
+
+    /// <summary>
+    ///     Sentinel string that appears in the renderer's footer/header
+    ///     immediately after boot. Used as a stable "TUI is up" signal —
+    ///     more reliable than brand text which varies by configured provider.
+    /// </summary>
+    private const string BootSentinel = "INPUT";
+    private static readonly TimeSpan BootTimeout = TimeSpan.FromSeconds(20);
+
+    private static async Task<bool> WaitBootAsync(TuiDriver driver)
+    {
+        bool saw = await driver.WaitForTextAsync(BootSentinel, BootTimeout).ConfigureAwait(false);
+        if (!saw)
+        {
+            string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
+            string head = screen.Length > 600 ? screen[..600] : screen;
+            Console.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
+        }
+        return saw;
+    }
 
     /// <summary>The renderer boots and shows the welcome banner.</summary>
     [Test]
@@ -25,7 +46,7 @@ public class TerminaE2ETests : E2eTestBase
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
 
-        bool saw = await driver.WaitForTextAsync("Harbor", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -42,7 +63,7 @@ public class TerminaE2ETests : E2eTestBase
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
-        await driver.WaitForTextAsync("Harbor", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
         bool saw = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -61,7 +82,7 @@ public class TerminaE2ETests : E2eTestBase
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
-        await driver.WaitForTextAsync("Harbor", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
         await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);

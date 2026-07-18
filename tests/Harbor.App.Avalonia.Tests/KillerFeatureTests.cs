@@ -279,4 +279,102 @@ public class KillerFeatureTests
         vm.IsExpanded = true;
         await Assert.That(vm.IsExpanded).IsTrue();
     }
+
+    // ── Task A2: MarkdownRenderer + CodeBlock (ORCA feature steal) ─
+    //
+    // These tests cover the new markdown rendering + code-block controls.
+    // The controls are UserControls — creating them outside an Avalonia
+    // Application is safe as long as we don't trigger Render() (which
+    // walks Application.Current.Resources). We verify property defaults
+    // + assignment + that setting Markdown to non-empty triggers a
+    // re-render without throwing.
+
+    [Test]
+    public async Task MarkdownRenderer_Default_Markdown_IsEmpty()
+    {
+        var ctrl = new MarkdownRenderer();
+        await Assert.That(ctrl.Markdown).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task MarkdownRenderer_CanSet_Markdown()
+    {
+        var ctrl = new MarkdownRenderer();
+        ctrl.Markdown = "# Hello world";
+        await Assert.That(ctrl.Markdown).IsEqualTo("# Hello world");
+    }
+
+    [Test]
+    public async Task MarkdownRenderer_SetMarkdown_DoesNotThrow()
+    {
+        // Setting Markdown triggers Render() which parses with Markdig +
+        // walks the AST. Even without an Application (headless test),
+        // TryFindBrush falls back to the supplied fallback brushes — the
+        // render path must not throw NullReferenceException.
+        var ctrl = new MarkdownRenderer();
+        ctrl.Markdown = "# Heading\n\nParagraph with **bold** and *italic* and `code`.\n\n- bullet 1\n- bullet 2\n\n```csharp\nvar x = 1;\n```\n";
+        await Assert.That(ctrl.Markdown.Length).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task MarkdownRenderer_EmptyMarkdown_ClearsChildren()
+    {
+        var ctrl = new MarkdownRenderer();
+        ctrl.Markdown = "# Hello";
+        ctrl.Markdown = string.Empty;
+        // After clearing, Markdown should be empty and the control should
+        // not have thrown.
+        await Assert.That(ctrl.Markdown).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task CodeBlock_Default_Code_IsEmpty()
+    {
+        var ctrl = new CodeBlock();
+        await Assert.That(ctrl.Code).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task CodeBlock_Default_Language_IsEmpty()
+    {
+        var ctrl = new CodeBlock();
+        await Assert.That(ctrl.Language).IsEqualTo(string.Empty);
+    }
+
+    [Test]
+    public async Task CodeBlock_CanSet_Code()
+    {
+        var ctrl = new CodeBlock();
+        ctrl.Code = "var x = 1;";
+        await Assert.That(ctrl.Code).IsEqualTo("var x = 1;");
+    }
+
+    [Test]
+    public async Task CodeBlock_CanSet_Language()
+    {
+        var ctrl = new CodeBlock();
+        ctrl.Language = "csharp";
+        await Assert.That(ctrl.Language).IsEqualTo("csharp");
+    }
+
+    [Test]
+    public async Task CodeBlock_SetCode_DoesNotThrow()
+    {
+        // Setting Code triggers RenderCode() which tokenizes the source.
+        // The tokenizer uses TryFindBrush fallbacks when no Application is
+        // available — must not throw.
+        var ctrl = new CodeBlock();
+        ctrl.Language = "csharp";
+        ctrl.Code = "/// <summary>\n/// Sample.\n/// </summary>\npublic class Foo { /* block */ }\nstring s = \"hello\";\nint n = 42;\n";
+        await Assert.That(ctrl.Code.Length).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task CodeBlock_SetCode_WithUnknownLanguage_DoesNotThrow()
+    {
+        var ctrl = new CodeBlock();
+        ctrl.Language = "unknown-lang";
+        ctrl.Code = "some random text without keywords";
+        await Assert.That(ctrl.Code.Length).IsGreaterThan(0);
+    }
 }

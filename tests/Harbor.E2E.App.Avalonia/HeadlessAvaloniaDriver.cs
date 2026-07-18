@@ -572,6 +572,12 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 vm.IsProviderBrowserOpen = false;
                 vm.IsDiffOpen = false;
                 vm.IsTokenUsageOpen = false;
+                // Clear the chat transcript + reset the UiStore so the next
+                // test starts from a clean status (idle, no agent running).
+                // Without this, a previous test that triggered the agent loop
+                // (e.g. SendMessage_AddsToChatHistory) leaves StatusText="running"
+                // for every subsequent test.
+                try { vm.Chat.ClearCommand.Execute(null); } catch { }
                 vm.SwitchViewCommand.Execute("chat");
             }
         }).GetAwaiter().GetResult();
