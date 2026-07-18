@@ -34,6 +34,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>

@@ -54,8 +54,12 @@ public sealed class StorageLayerTests
             collected.Add(s);
 
         await Assert.That(collected.Count).IsEqualTo(2);
-        await Assert.That(collected[0].Path.EndsWith("a.cs")).IsTrue();
-        await Assert.That(collected[1].Path.EndsWith("b.cs")).IsTrue();
+        // NOTE: Directory.GetFiles order is filesystem-dependent (not sorted on
+        // Linux). Assert that BOTH expected files were collected, without
+        // assuming a specific order.
+        var paths = collected.Select(c => c.Path).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        await Assert.That(paths[0].EndsWith("a.cs")).IsTrue();
+        await Assert.That(paths[1].EndsWith("b.cs")).IsTrue();
     }
 
     /// <summary>
