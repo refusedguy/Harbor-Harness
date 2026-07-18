@@ -1,6 +1,5 @@
 using Microsoft.CodeAnalysis;
-using Harbor.Plugins.Runtime.Storage;
-namespace Harbor.Plugins.Runtime.Compilation;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Compiles a single <see cref="PluginScript" /> into a loaded

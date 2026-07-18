@@ -1,10 +1,11 @@
-using Harbor.Plugins.Runtime.Compilation;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
-using Harbor.Plugins.Runtime.Storage;
+using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Compilation;
+using Harbor.Plugins.Instantiation;
+using Harbor.Plugins.Registration;
+using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Plugins.Runtime.Hosting;
+namespace Harbor.Plugins.Hosting;
 
 /// <summary>
 ///     Fluent builder for <see cref="PluginHost" />. Wires up the four layers

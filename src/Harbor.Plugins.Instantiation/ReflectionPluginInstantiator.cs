@@ -1,7 +1,7 @@
+using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using Harbor.Abstractions.Plugins;
-using Harbor.Plugins.Runtime.Compilation;
-namespace Harbor.Plugins.Runtime.Instantiation;
+namespace Harbor.Plugins.Instantiation;
 
 /// <summary>
 ///     Default <see cref="IPluginInstantiator" />. Uses plain reflection to find

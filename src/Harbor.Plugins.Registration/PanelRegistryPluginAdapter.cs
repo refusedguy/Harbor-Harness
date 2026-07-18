@@ -1,6 +1,7 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Tui.Abstractions.Panels;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime;
+namespace Harbor.Plugins.Registration;
 
 /// <summary>
 ///     Adapter that lets an <see cref="ITuiPanelPlugin" /> register panels through the

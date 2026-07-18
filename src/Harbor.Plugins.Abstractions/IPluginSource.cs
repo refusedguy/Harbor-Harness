@@ -1,4 +1,4 @@
-namespace Harbor.Plugins.Runtime.Storage;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Async-stream source of <see cref="PluginScript" /> wrappers. Each implementation

@@ -1,7 +1,8 @@
+using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime;
+namespace Harbor.Plugins.Compilation;
 
 /// <summary>
 ///     Collects <see cref="MetadataReference" />s for the Roslyn compilation by snapshotting

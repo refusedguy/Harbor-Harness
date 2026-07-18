@@ -1,7 +1,7 @@
+using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
-using Harbor.Plugins.Runtime.Storage;
-namespace Harbor.Plugins.Runtime.Compilation;
+namespace Harbor.Plugins.Compilation;
 
 /// <summary>
 ///     <see cref="IPluginCompiler" /> decorator that caches compiled assemblies on disk

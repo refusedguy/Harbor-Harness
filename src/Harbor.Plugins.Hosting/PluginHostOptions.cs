@@ -1,4 +1,5 @@
-namespace Harbor.Plugins.Runtime.Hosting;
+using Harbor.Plugins.Abstractions;
+namespace Harbor.Plugins.Hosting;
 
 /// <summary>
 ///     Tunable options for <see cref="PluginHost" />. Built up by

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-namespace Harbor.Plugins.Runtime;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Immutable wrapper around a single CS-source plugin file: its on-disk path, raw source

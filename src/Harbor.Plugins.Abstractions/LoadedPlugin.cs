@@ -1,5 +1,5 @@
 using Harbor.Abstractions.Plugins;
-namespace Harbor.Plugins.Runtime.Instantiation;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     A live <see cref="IPlugin" /> instance plus the metadata the registration layer

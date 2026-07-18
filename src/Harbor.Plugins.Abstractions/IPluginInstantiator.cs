@@ -1,5 +1,4 @@
-using Harbor.Plugins.Runtime.Compilation;
-namespace Harbor.Plugins.Runtime.Instantiation;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Reflects over a <see cref="CompiledPluginAssembly" />, finds public

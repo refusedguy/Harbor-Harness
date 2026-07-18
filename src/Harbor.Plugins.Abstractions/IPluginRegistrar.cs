@@ -1,5 +1,4 @@
-using Harbor.Plugins.Runtime.Instantiation;
-namespace Harbor.Plugins.Runtime.Registration;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Wires a live <see cref="LoadedPlugin" /> into the host's registries. This is the

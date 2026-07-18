@@ -1,3 +1,4 @@
+using Harbor.Plugins.Abstractions;
 using Microsoft.CodeAnalysis;
 namespace Harbor.Plugins.Runtime;
 

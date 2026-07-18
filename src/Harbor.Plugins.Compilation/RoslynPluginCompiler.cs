@@ -1,8 +1,8 @@
+using Harbor.Plugins.Abstractions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
-using Harbor.Plugins.Runtime.Storage;
-namespace Harbor.Plugins.Runtime.Compilation;
+namespace Harbor.Plugins.Compilation;
 
 /// <summary>
 ///     <see cref="IPluginCompiler" /> that compiles CS source via

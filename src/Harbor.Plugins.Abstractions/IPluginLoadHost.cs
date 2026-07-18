@@ -8,7 +8,7 @@ using Harbor.Tui.Abstractions.Plugins;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     Sink that the Roslyn-based CS plugin loader calls into when a plugin contributes

@@ -1,13 +1,14 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Runtime.Instantiation;
+using Harbor.Plugins.Instantiation;
 using Harbor.Tui.Abstractions.Panels;
 using Harbor.Tui.Abstractions.Plugins;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime.Registration;
+namespace Harbor.Plugins.Registration;
 
 /// <summary>
 ///     Default <see cref="IPluginRegistrar" />. Builds a <see cref="PluginContext" />,

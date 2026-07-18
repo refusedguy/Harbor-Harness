@@ -1,6 +1,7 @@
-using Harbor.Plugins.Runtime.Instantiation;
+using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Instantiation;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime.Registration;
+namespace Harbor.Plugins.Registration;
 
 /// <summary>
 ///     <see cref="IPluginRegistrar" /> decorator that isolates failures per plugin.

@@ -1,5 +1,5 @@
 using System.Reflection;
-namespace Harbor.Plugins.Runtime.Compilation;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     A successfully-compiled plugin assembly, plus the metadata needed by downstream

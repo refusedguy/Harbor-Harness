@@ -1,9 +1,10 @@
-using Harbor.Plugins.Runtime.Compilation;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
-using Harbor.Plugins.Runtime.Storage;
+using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Compilation;
+using Harbor.Plugins.Instantiation;
+using Harbor.Plugins.Registration;
+using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Plugins.Runtime.Hosting;
+namespace Harbor.Plugins.Hosting;
 
 /// <summary>
 ///     Composition root for the layered plugin runtime. Iterates the supplied

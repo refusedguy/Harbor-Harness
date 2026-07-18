@@ -1,3 +1,4 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Plugins.Runtime;
 

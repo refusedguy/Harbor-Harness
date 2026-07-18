@@ -1,5 +1,6 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Plugins;
-namespace Harbor.Plugins.Runtime.Instantiation;
+namespace Harbor.Plugins.Instantiation;
 
 /// <summary>
 ///     Lifecycle helpers for live <see cref="IPlugin" /> instances. The registration
