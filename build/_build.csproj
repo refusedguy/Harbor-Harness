@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    _build.csproj - NUKE build entry point.
+
+    Lives in build/ (NOT src/, apps/, or tests/) so the solution-wide
+    Directory.Build.props / targets / CPM analyzers don't apply. Instead, the
+    sibling build/Directory.Build.props gives NUKE a permissive environment
+    (analyzers OFF, CPM OFF, TreatWarningsAsErrors OFF).
+
+    Run via the bootstrap scripts:
+        ./build.sh Compile          [Linux / macOS]
+        build.ps1 Compile           [Windows PowerShell]
+
+    Or directly:
+        dotnet run project=build Compile
+
+    The Build.cs class defines targets: Clean, Restore, Compile, Test,
+    ArchitectureTests, PublishCliMinimal, PublishCliFull, PublishSingleFile,
+    PublishAot, PublishAvalonia, PublishBlazor, PublishAll.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NukeTelemetryVersion>1</NukeTelemetryVersion>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <NoWarn>$(NoWarn);CS0649;CS0169;CS8618</NoWarn>
+    <RootNamespace>Harbor.Build</RootNamespace>
+    <AssemblyName>_build</AssemblyName>
+
+    <!--
+      Disable Central Package Management for THIS project only. The solution-
+      wide Directory.Packages.props enables CPM; NUKE is a build tool, not
+      a shipped assembly, so we let it pin its own dep chain inline.
+    -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nuke.Common" Version="9.0.4" />
+  </ItemGroup>
+
+</Project>

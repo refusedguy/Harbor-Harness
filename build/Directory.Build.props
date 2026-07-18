@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  build/Directory.Build.props — NUKE-specific overrides.
+
+  This file is picked up ONLY by projects under build/ (i.e. _build.csproj).
+  It overrides the solution-wide Directory.Build.props to give NUKE a
+  permissive build environment:
+
+    - TreatWarningsAsErrors=false   (NUKE's generated code triggers CS0649 / CS0169)
+    - GenerateDocumentationFile=false (NUKE bootstrap, not shipped)
+    - ManagePackageVersionsCentrally=false  (NUKE pins its own dep chain;
+      letting CPM try to pin transitively causes NU1701+NU1603 noise)
+    - All analyzers OFF             (NUKE generates a Build.cs scaffold we
+      don't want to lint)
+
+  We do NOT import the parent Directory.Build.props — the build project is a
+  tool, not part of the solution proper, and inheriting solution-wide
+  strictness would force analyzers / TreatWarningsAsErrors onto code we
+  don't own.
+-->
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- NUKE bootstrap is a tool, not a shipped assembly. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS0649;CS0169;CS1591;CA1416</NoWarn>
+
+    <!-- Don't let CPM reject NUKE's transitive deps. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+
+    <!-- NUKE controls its own version + telemetry. -->
+    <NukeTelemetryVersion>1</NukeTelemetryVersion>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <RunAnalyzers>false</RunAnalyzers>
+    <AnalysisLevel>none</AnalysisLevel>
+  </PropertyGroup>
+
+  <!-- Explicitly opt out of every analyzer pulled in by the solution-wide
+       Directory.Build.props. The build/ project lives OUTSIDE src|tests|apps
+       and shouldn't inherit solution-wide analyzer PackageReferences. -->
+  <ItemGroup>
+    <PackageReference Remove="Roslynator.Analyzers"/>
+    <PackageReference Remove="SonarAnalyzer.CSharp"/>
+    <PackageReference Remove="Microsoft.CodeAnalysis.NetAnalyzers"/>
+    <PackageReference Remove="AsyncFixer"/>
+    <PackageReference Remove="ReflectionAnalyzers"/>
+    <PackageReference Remove="Microsoft.CodeAnalysis.BannedApiAnalyzers"/>
+    <PackageReference Remove="Meziantou.Analyzer"/>
+  </ItemGroup>
+
+</Project>
