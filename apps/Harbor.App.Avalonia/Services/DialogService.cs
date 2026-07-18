@@ -229,4 +229,17 @@ public enum ToastKind
 }
 
 /// <summary>One toast notification. Immutable.</summary>
-public sealed record ToastNotification(Guid Id, string Message, ToastKind Kind, DateTimeOffset CreatedAt);
+public sealed record ToastNotification(Guid Id, string Message, ToastKind Kind, DateTimeOffset CreatedAt)
+{
+    /// <summary>
+    ///     Convenience constructor that auto-fills the <see cref="Id"/>
+    ///     (new GUID) and <see cref="CreatedAt"/> (now). Used by code that
+    ///     just wants to push a toast without tracking the metadata — the
+    ///     4-arg record constructor is still available for tests that want
+    ///     deterministic ids.
+    /// </summary>
+    /// <param name="message">Toast body text.</param>
+    /// <param name="kind">Toast kind (Info, Success, Warning, Error).</param>
+    public ToastNotification(string message, ToastKind kind)
+        : this(Guid.NewGuid(), message, kind, DateTimeOffset.UtcNow) { }
+}

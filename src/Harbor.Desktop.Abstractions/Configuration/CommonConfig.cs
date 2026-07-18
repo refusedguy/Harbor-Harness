@@ -73,6 +73,17 @@ public sealed record CommonConfig
     /// </summary>
     public bool OnboardingCompleted { get; init; } = false;
 
+    /// <summary>
+    ///     Cross-app UI theme preference: <c>"dark"</c>, <c>"light"</c>, or
+    ///     <c>"system"</c> (default). Each app's <c>ThemeService</c> reads this
+    ///     on startup AND when Settings changes it — so picking "light" in the
+    ///     CLI makes the Avalonia app open in light mode too. Individual apps
+    ///     may keep their own per-app override (e.g.
+    ///     <c>AvaloniaConfig.Theme</c>), but the shared value is the source of
+    ///     truth for "what did the user pick globally".
+    /// </summary>
+    public string Theme { get; init; } = "system";
+
     // ── API keys ──────────────────────────────────────────────────────────
 
     /// <summary>

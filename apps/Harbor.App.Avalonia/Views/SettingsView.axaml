@@ -2,66 +2,129 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Harbor.App.Avalonia.Views.SettingsView">
 
+    <!--
+        Settings modal — overlay with a centered card.
+
+        Layout:
+          • Backdrop: 50% black scrim that captures clicks (so a click
+            outside the card reads as "dismiss").
+          • Card: 640×560, padded, rounded, surface-tinted background.
+          • Sections, each a labeled StackPanel:
+              - Theme (dark / light / system) — ComboBox, applied immediately
+                on selection AND on Save.
+              - Default provider — TextBox (ollama / openai / anthropic / …).
+              - Default model — TextBox (provider-specific model id).
+              - Font family — TextBox (Inter default).
+              - Storage backend — ComboBox (memory / jsonl / sqlite).
+              - Log level — ComboBox (trace / debug / info / warning / error).
+              - Ollama host — TextBox (URL).
+              - Onboarding re-run — button.
+          • Footer: Cancel (revert + close) + Save (persist + close).
+    -->
+
     <Border Background="#80000000" ZIndex="200">
-        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
-                Width="600" Height="520" Padding="16">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="12"
+                Width="640" Height="560" Padding="20"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 16 40 0 #80000000">
             <Grid RowDefinitions="Auto,*,Auto">
 
-                <TextBlock Grid.Row="0" Text="Settings" FontSize="16" FontWeight="Bold"
-                           Foreground="{StaticResource MochaBlue}" Margin="0,0,0,12"/>
-
-                <StackPanel Grid.Row="1" Spacing="14">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Model (provider/model)" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <TextBox Text="{Binding Model, Mode=TwoWay}" PlaceholderText="ollama/qwen2.5-coder:7b"/>
+                <!-- Header -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Settings" FontSize="18" FontWeight="Bold"
+                                   Foreground="{StaticResource MochaBlue}"/>
+                        <TextBlock Text="Persists to ~/.harbor/config.json + ~/.harbor/avalonia.json"
+                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </StackPanel>
+                    <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
+                            Click="Close_Click" ToolTip.Tip="Close (Esc)"/>
+                </Grid>
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Storage backend" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <ComboBox SelectedItem="{Binding Storage, Mode=TwoWay}">
-                            <ComboBoxItem Content="memory"/>
-                            <ComboBoxItem Content="jsonl"/>
-                        </ComboBox>
-                    </StackPanel>
+                <!-- Scrollable settings -->
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="14">
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Log level" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}">
-                            <ComboBoxItem Content="Trace"/>
-                            <ComboBoxItem Content="Debug"/>
-                            <ComboBoxItem Content="Information"/>
-                            <ComboBoxItem Content="Warning"/>
-                            <ComboBoxItem Content="Error"/>
-                        </ComboBox>
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Ollama host" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434"/>
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Theme" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <CheckBox Content="Dark (Mocha)" IsChecked="{Binding IsDarkTheme, Mode=TwoWay}"/>
-                            <Button Classes="Subtle" Content="Apply" Command="{Binding ApplyThemeCommand}"/>
+                        <!-- Theme -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Theme" Classes="Label"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ComboBox SelectedItem="{Binding Theme, Mode=TwoWay}" MinWidth="180">
+                                    <ComboBoxItem Content="dark"/>
+                                    <ComboBoxItem Content="light"/>
+                                    <ComboBoxItem Content="system"/>
+                                </ComboBox>
+                                <Button Classes="Subtle" Content="Preview" Command="{Binding ApplyThemeCommand}"
+                                        ToolTip.Tip="Apply the theme immediately without saving."/>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
 
-                    <Separator Margin="0,4"/>
+                        <Separator Margin="0,2"/>
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Onboarding" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <!-- Default provider -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Default provider" Classes="Label"/>
+                            <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
+                                     PlaceholderText="ollama, openai, anthropic, …"/>
+                        </StackPanel>
+
+                        <!-- Default model -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Default model" Classes="Label"/>
+                            <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                                     PlaceholderText="qwen2.5-coder:7b, gpt-4o, claude-sonnet-4, …"/>
+                        </StackPanel>
+
+                        <!-- Font family -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Font family" Classes="Label"/>
+                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"/>
+                        </StackPanel>
+
+                        <!-- Storage backend -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Storage backend" Classes="Label"/>
+                            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180">
+                                <ComboBoxItem Content="memory"/>
+                                <ComboBoxItem Content="jsonl"/>
+                                <ComboBoxItem Content="sqlite"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Log level -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Log level" Classes="Label"/>
+                            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180">
+                                <ComboBoxItem Content="trace"/>
+                                <ComboBoxItem Content="debug"/>
+                                <ComboBoxItem Content="info"/>
+                                <ComboBoxItem Content="warning"/>
+                                <ComboBoxItem Content="error"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Ollama host -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Ollama host" Classes="Label"/>
+                            <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434"/>
+                        </StackPanel>
+
+                        <Separator Margin="0,2"/>
+
+                        <!-- Onboarding -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Onboarding" Classes="Label"/>
                             <Button Classes="Subtle" Content="Re-run setup wizard"
                                     Command="{Binding RerunOnboardingCommand}"
                                     ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard."/>
                         </StackPanel>
                     </StackPanel>
-                </StackPanel>
+                </ScrollViewer>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-                    <Button Classes="Subtle" Content="Close (Esc)" Click="Close_Click"/>
+                <!-- Footer -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                            Spacing="8" Margin="0,12,0,0">
+                    <Button Classes="Subtle" Content="Cancel" Command="{Binding CancelCommand}" Click="Close_Click"/>
                     <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click"/>
                 </StackPanel>
             </Grid>
