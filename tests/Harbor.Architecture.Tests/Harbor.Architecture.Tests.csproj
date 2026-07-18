@@ -22,8 +22,8 @@
     the layering rules still run even if NetArchTest ever fails to restore.
   -->
   <ItemGroup>
-    <PackageReference Include="NetArchTest.Rules" Version="1.3.2"/>
-    <PackageReference Include="TUnit.Assertions" Version="0.50.0"/>
+    <PackageReference Include="NetArchTest.Rules"/>
+    <PackageReference Include="TUnit.Assertions"/>
   </ItemGroup>
 
   <!--
@@ -36,7 +36,7 @@
     <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting\Harbor.Scripting.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>

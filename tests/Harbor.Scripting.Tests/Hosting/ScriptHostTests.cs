@@ -1,4 +1,5 @@
 // Hosting layer tests — ScriptHost orchestrates engine + store + compiler.
+using Harbor.Scripting.Abstractions;
 using Harbor.Scripting.Bridge;
 using Harbor.Scripting.Compilation;
 using Harbor.Scripting.Engines;

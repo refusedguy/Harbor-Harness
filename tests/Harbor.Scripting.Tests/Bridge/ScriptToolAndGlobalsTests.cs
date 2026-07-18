@@ -1,4 +1,5 @@
 // Bridge layer tests — ScriptTool + ScriptGlobals + ScriptGlobalsExtensions.
+using Harbor.Scripting.Abstractions;
 using Harbor.Scripting.Bridge;
 using Harbor.Abstractions.Models;
 namespace Harbor.Scripting.Tests.Bridge;

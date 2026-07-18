@@ -1,7 +1,9 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Abstractions.State;
 using Harbor.Core.Agents;
-using Harbor.Plugins.Runtime.Hosting;
+using Harbor.Plugins.Hosting;
+using Harbor.Scripting.Abstractions;
 using Harbor.Scripting.Bridge;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.Anthropic;
@@ -303,6 +305,15 @@ public class LayerDependencyTests
     [Test]
     public async Task AllExpectedHarborAssembliesAreLoaded()
     {
+        // Sanity probe: touch a type from Harbor.Scripting.Abstractions AND
+        // Harbor.Plugins.Runtime so their assemblies are force-loaded into the
+        // AppDomain before the inventory runs. (Both are leaf-level projects
+        // referenced transitively by the test csproj but not touched by any
+        // typeof() probe in the per-assembly tests above; without this nudge
+        // they may not yet be loaded when this sanity check runs.)
+        _ = typeof(ScriptGlobals).Assembly.GetName().Name;
+        _ = typeof(Harbor.Plugins.Runtime.CompiledPlugin).Assembly.GetName().Name;
+
         var loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
         // Update this list when adding a new Harbor project. The test exists to
         // catch a regression where a ProjectReference is accidentally removed
@@ -314,7 +325,10 @@ public class LayerDependencyTests
             "Harbor.Tui.Abstractions",
             "Harbor.Core",
             "Harbor.Plugins.Runtime",
-            "Harbor.Scripting",
+            // Harbor.Scripting was split into Abstractions/Bridge/Engines/Hosting/
+            // Storage/Compilation — the leaf-level Abstractions is the smallest
+            // sanity-check probe (loaded transitively via Harbor.Scripting.Hosting).
+            "Harbor.Scripting.Abstractions",
             "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic",
             "Harbor.Providers.OpenAI",

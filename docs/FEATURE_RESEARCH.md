@@ -27,6 +27,18 @@
 8. [Implementation Roadmap — 4 Sprints](#8-implementation-roadmap--4-sprints)
 9. [Must / Nice / Later — Explicit Prioritization](#9-must--nice--later--explicit-prioritization)
 10. [References](#10-references)
+11. [grok-build analysis](#11-grok-build-analysis)
+   - 11.1 What grok-build is
+   - 11.2 Tech stack — at a glance
+   - 11.3 The TUI library — what actually draws the screen
+   - 11.4 The animation system
+   - 11.5 Component model
+   - 11.6 Color palette / typography
+   - 11.7 Key UX patterns (with screenshots described in text)
+   - 11.8 Action plan for Harbor — can we replicate this TUI experience on .NET?
+   - 11.9 What we will NOT copy from grok-build
+   - 11.10 Concrete deliverables — what Subagent G is producing this round
+   - 11.11 References — grok-build specific
 
 ---
 
@@ -2120,13 +2132,1069 @@ Subagent R fetched the following files for this research (saved locally to `/tmp
 
 ---
 
+## 11. grok-build analysis
+
+> **Task ID:** G (researcher-r4)
+> **Source:** https://github.com/xai-org/grok-build (Apache-2.0, first-party xAI code; periodically synced from SpaceXAI internal monorepo)
+> **Question answered:** "Can we replicate grok-build's terminal UX on .NET, and what should we copy?"
+> **Short answer:** Yes — but the *good looks* of grok-build are not magic; they are (a) ratatui 0.29's strict immediate-mode rendering model, (b) two custom in-tree ratatui forks (`xai-ratatui-inline` for inline viewport that flows into the terminal's native scrollback, `xai-ratatui-textarea` for the prompt editor), (c) a hand-rolled streaming markdown renderer layered on `pulldown-cmark` + `syntect` + `two-face`, (d) a single animated "accent line" wave that runs across thinking / shell / streaming blocks, and (e) five curated themes that quantize cleanly from truecolor down to 16-colour. None of those depend on Rust specifically — they are patterns, and patterns translate to .NET 1:1 if we accept writing ~1 500 lines of custom rendering glue.
+
+### 11.1 What grok-build is
+
+Grok Build (CLI command `grok`) is SpaceXAI's terminal-based AI coding agent. It runs as a full-screen TUI that understands your codebase, edits files, executes shell commands, searches the web, and manages long-running tasks — interactively, headlessly for scripting/CI, or embedded in editors via the Agent Client Protocol (ACP).
+
+It is **not** Node/TypeScript (the assumption in the task brief). It is **Rust** (edition 2024) — a single Cargo workspace with ~70 in-tree crates, pinned by `rust-toolchain.toml`, with hermetic tooling delivered via DotSlash under `bin/`. This is the same architectural family as ratatui-based tools like gitui, bottom, oh-my-posh widgets, helix, etc. — not the Bun/TypeScript opentui family that orca/pi/kilocode/opencode belong to.
+
+A small `SOURCE_REV` file at the repo root records the full monorepo commit SHA for the version of the code present in the tree (so the open-source release is a periodically-cut snapshot, not the live monorepo).
+
+### 11.2 Tech stack — at a glance
+
+| Layer | Crate(s) | Purpose | .NET analogue (closest) |
+|-------|----------|---------|--------------------------|
+| Language | Rust 1.85+ (edition 2024) | Memory-safe systems language | C# 13 (.NET 10) |
+| TUI core | `ratatui` 0.29 + `ratatui-core` 0.1 | Immediate-mode widget tree, buffer, layout | Spectre.Tui 0.14 (we already use) — closest in spirit |
+| Terminal backend | `crossterm` 0.28 (`event-stream`, `bracketed-paste`) | Cross-platform raw-mode + events | `Spectre.Console` ANSI writer / `Harbor.Tui.Ansi` |
+| Inline viewport | `xai-ratatui-inline` (in-tree fork) | Pin UI to bottom of terminal, let history flow above into native scrollback | **No direct .NET equivalent** — must be hand-rolled (see §11.6) |
+| Prompt editor | `xai-ratatui-textarea` (in-tree fork) | Modal vim/readline text area with syntax highlighting | Hand-roll on top of `Spectre.Tui` `TextView` + custom keymap |
+| Markdown parser | `pulldown-cmark` 0.13 | Streaming CommonMark + GFM | **Markdig 0.38** (already used in WPF/Blazor apps) |
+| Markdown render | `xai-grok-markdown` + `xai-grok-markdown-core` | Streaming ratatui widget that converts pulldown-cmark events to styled spans | Custom Spectre.Tui widget over Markdig AST (we already have `ChatMarkdown.cs`) |
+| Syntax highlighting | `syntect` 5.3 + `two-face` (syntect-fancy) + `anstyle-syntect` | Sublime-syntax highlighting in pure Rust | **ColorCode.Core** / **TextMate** via AvaloniaEdit / Monaco via Blazor |
+| ANSI parser | `vte` 0.15 + `ansi-to-tui` 7.0 + `ansi-width` 0.1 + `anstyle` 1.0 + `anstyle-lossy` + `anstyle-parse` | Zero-copy ANSI/SGR state machines | `Harbor.Tui.Ansi.Ansi.cs` (we already have a parser) |
+| Embedded terminal | `alacritty_terminal` 0.26 + `portable-pty` 0.9 + `termwiz` 0.23 | Native terminal emulation in-pane (for `run_terminal_command` output) | **Pty.Net 0.5.81** (cross-platform PTY) + custom VT100 emulator |
+| Fuzzy matching | `nucleo` (Helix's matcher, git pin) + `fuzzy-matcher` 0.3.7 | Sub-millisecond fuzzy on 100k+ entries | **FuzzySharp 2.0.2** (we already plan to use) |
+| Diff engine | `similar` 2.7 | Myers diff + word-level diffs | **DiffPlex 1.7.2** |
+| Git | `gix` 0.83 (pure-Rust) + `git2` 0.20 (libgit2 bindings, vendored) | Status, worktree creation, blame | **LibGit2Sharp 0.31.0** / **DotnetGitLib** |
+| Worktree speedup | `xai-fast-worktree` (in-tree) | Hard-link based worktree creation (10x faster than `git worktree add`) | Hand-roll: copy + hard-link `CreateHardLink` Win32 / `link(2)` POSIX |
+| SQLite journal | `xai-sqlite-journal` (in-tree) | ACP session journaling | **Microsoft.Data.Sqlite 10.0.0** (we already use) |
+| Auth | `oauth2` 5 + `xai-grok-auth` (in-tree) + `cryptify` 3.2 + `obfstr` 0.4 | OAuth2 PKCE device flow + compile-time string obfuscation | `Microsoft.AspNetCore.Authentication.OAuth` + `System.Security` |
+| Config | `toml` 0.9 + `toml_edit` 0.22 + `documented` 0.9 + `schemars` 1 | Round-trippable TOML with self-documenting keys + JSON Schema export | **Tomlyn 0.17** + NJsonSchema |
+| HTTP client | `reqwest` 0.12 (rustls-tls, http2, brotli, deflate, gzip, multipart, socks) + `reqwest-middleware` 0.4 + `tower` 0.5 + `tower-http` 0.6 | Hardened HTTP/2 client with middleware | `HttpClient` + `Polly` + `Microsoft.Extensions.Http` |
+| gRPC | `tonic` 0.14 + `prost` 0.14 + `tonic-prost` 0.14 | Protobuf-over-HTTP/2 (xAI inference uses gRPC) | `Grpc.Net.Client` + `protobuf-net` |
+| Async runtime | `tokio` 1 (full) + `tokio-util` + `tokio-stream` + `tokio-tungstenite` (WebSocket) | Multi-threaded async executor | .NET `ThreadPool` / `Task` / `Channel<T>` |
+| Allocator | `tikv-jemallocator` 0.6 (with profiling + unprefixed_malloc) | jemalloc for lower fragmentation on long-running TUI | N/A — .NET uses its own allocator |
+| Tracing | `fastrace` 0.7 + `tracing` 0.1 + `tracing-opentelemetry` 0.33 + `tracing-subscriber` 0.3 + `opentelemetry` 0.32 + `opentelemetry-otlp` 0.32 + `fastrace-opentelemetry` 0.18 + `fastrace-reqwest` 0.2 + `fastrace-tonic` 0.1 | Distributed tracing (OTLP export) | `System.Diagnostics.ActivitySource` + `OpenTelemetry.*` packages |
+| Crash handler | `xai-crash-handler` (in-tree) + `backtrace` 0.3 | SIGSEGV/backtrace capture + minidump | `Microsoft.Diagnostics.Runtime` + `CrashKit` |
+| Telemetry | `xai-mixpanel` (in-tree) + `prometheus` 0.14 (process feature) + `xai-grok-telemetry` (in-tree) | Product analytics + Prometheus metrics | `OpenTelemetry.Instrumentation.*` + Mixpanel HTTP API client |
+| Image | `image` 0.25.9 (PNG/JPEG/TIFF/GIF/WebP/BMP/ICO) + `infer` 0.19 (sniff) | Image decode for paste validation + inline rendering | `SixLabors.ImageSharp` / `SkiaSharp` |
+| SVG render | `resvg` 0.47 + `tiny-skia` 0.12 + `fontdb` 0.23 | SVG → RGBA bitmap for Mermaid | `Svg.Skia` (we plan to use) |
+| Mermaid | `mermaid-to-svg` (vendored, in `third_party/`) — Rust ports of `dagre_rust`, `graphlib_rust`, `mermaid-to-svg` | Layout graph + render to SVG | Run mermaid-cli (Node) as subprocess OR vendor the JS port via Jint |
+| PDF | `pdf_oxide` 0.3.43 (rendering feature) | PDF render for `read_file` tool | `PdfiumViewer` / `SkiaSharp.PdfViewer` |
+| HTML → MD | `htmd` 0.5.4 + `scraper` 0.23 | HTML-to-markdown for `web_fetch` tool | **Html2Markdown** / `Markdig` + custom |
+| Clipboard | `arboard` 3.6 + `wl-clipboard-rs` 0.9 (Wayland) + `core-foundation` 0.10 (macOS pasteboard) | Cross-platform clipboard (text + image) | `TextCopy` / `Clipboard` Avalonia / WPF `Clipboard` |
+| Voice | `xai-grok-voice` (in-tree, cpal for mac/win, subprocess for Linux) | Mic capture + Whisper dictation | `NAudio` (Win) / `PortAudio.Net` |
+| File watch | `notify` 8 + `notify-debouncer-mini` 0.6 + `xai-fsnotify` (in-tree) | Cross-platform FS watch | `System.IO.FileSystemWatcher` |
+| Concurrency primitives | `parking_lot` 0.12.4 + `dashmap` 6 + `arc-swap` 1.7 + `crossbeam` 0.8 | Non-poisoning mutex, lock-free map, atomic-swap Arc | `System.Threading.Lock` (.NET 9+) / `ConcurrentDictionary` / `ImmutableInterlocked` |
+| Web framework (agent server) | `axum` 0.8 (macros, ws) + `tower-http` 0.6 | ACP server over WebSocket | `Microsoft.AspNetCore` (already used in Blazor app) |
+| Templating | `minijinja` 2.9 (custom_syntax feature) | Jinja2-style templates for prompt builder | **Scriban 5.10** / Handlebars.NET |
+| Code graph | `xai-codebase-graph` (in-tree) + `petgraph` 0.6.5 (serde + stable_graph) | Symbol graph for "codebase indexing" | **QuikGraph** / custom `AdaptiveGraph` |
+| LSP client | `async-lsp` 0.2.3 (tokio + tracing) | Language Server Protocol client (when `lsp_tools` enabled) | **OmniSharp.Extensions.LanguageServer.Client** |
+| Codegen | `ts-rs` 12.0 (TypeScript bindings export) | Export Rust types to TS for web/desktop frontends | **TypeScriptDefinitionsGenerator** / `tsc` + custom source-gen |
+| Concurrency (perf) | `rayon` 1 | Data-parallel iterators | `Parallel.ForEach` / `System.Threading.Tasks.Dataflow` |
+| Compression | `flate2` 1 (zlib-rs) + `async-compression` 0.4.17 (gzip, zstd, tokio) + `zstd` 0.13 + `tar` 0.4 | Compression for worktrees + tarball export | `System.IO.Compression` / `ZstandardSharp` |
+| Hashing | `blake3` 1 + `sha2` 0.10 (force-soft) + `md5` 0.8 + `crc32fast` 1.4 + `siphasher` 1 | Fast hashing | `System.IO.Hashing` (XxHash3, Blake3 via `Blake3.Bootstrap`) |
+| Memory journal | `xai-grok-memory` (in-tree) + `xai-sqlite-journal` (in-tree) | Cross-session semantic memory | `Microsoft.Data.Sqlite` + `Microsoft.ML` (embeddings) |
+| Sandbox | `xai-grok-sandbox` (in-tree) + `nix` 0.30 (sched, mount, fs, ioctl, mman, reboot, signal, term, process, poll) | Linux namespace-based sandbox for shell | .NET has no native equivalent — use OS-level subprocess in `bwrap`/`firejail` |
+| ACP | `agent-client-protocol` 0.10.4 (unstable feature) + `xai-acp-lib` (in-tree) | Agent Client Protocol (editor integration — Zed, VSCode) | Hand-roll ACP client/server (JSON-RPC over stdio) |
+
+A `SOURCE_REV` file at the repo root records the monorepo commit the snapshot was cut from.
+
+**Takeaway:** grok-build is the *opposite* of "scrappy TypeScript CLI". It is a hardened systems project — jemalloc, jemalloc profiling, minidumps, OTLP export, Mixpanel product analytics, OAuth2 PKCE with refresh, compile-time string obfuscation (`cryptify` + `obfstr`), vendored libgit2, vendored protoc, SigStore-style binary verification. The fact that it *also* looks gorgeous in the terminal is a testament to how much engineering went into the rendering layer specifically.
+
+### 11.3 The TUI library — what actually draws the screen
+
+The TUI is split across three crates:
+
+```
+crates/codegen/xai-grok-pager-bin        ← composition root (main.rs, builds the binary)
+crates/codegen/xai-grok-pager            ← the TUI: scrollback, prompt, modals
+crates/codegen/xai-grok-pager-render     ← extracted presentation primitives
+crates/codegen/xai-ratatui-inline        ← inline-viewport fork of ratatui concepts
+crates/codegen/xai-ratatui-textarea      ← prompt editor widget (vim + readline)
+```
+
+The dependency on the upstream `ratatui` crate is:
+
+```toml
+# crates/codegen/xai-grok-pager-render/Cargo.toml
+ratatui = { workspace = true, features = [
+    "crossterm",
+    "unstable-widget-ref",
+    "unstable-backend-writer",
+    "scrolling-regions",   # via the xai-ratatui-inline feature flag
+] }
+ratatui-core = { workspace = true }
+crossterm = { workspace = true, features = ["event-stream", "bracketed-paste"] }
+```
+
+Three of the four `ratatui` features they enable are **unstable** (`unstable-widget-ref`, `unstable-backend-writer`, `scrolling-regions`). This is significant — they are reaching past the stable API surface to get:
+
+- **`unstable-widget-ref`** — lets widgets borrow their data instead of taking `&self` + cloning. Without this, every render would clone the entire chat history.
+- **`unstable-backend-writer`** — direct access to the buffer writer, so they can emit synchronised-output DCS sequences manually for flicker-free partial redraws.
+- **`scrolling-regions`** — uses terminal scrolling regions (DECSTBM) for the inline-viewport mode so the bottom-fixed UI can update without scrolling the entire history.
+
+The Spectre.Tui analogue on .NET does not expose these unstable hooks, but **`Harbor.Tui.Ansi`** (the bare-ANSI renderer we already have) does — we can write the DCS synchronised-output sequence (`\x1b[?2026h` ... `\x1b[?2026l`) and DECSTBM (`\x1b[<top>;<bottom>r`) ourselves.
+
+#### 11.3.1 Two render modes
+
+Grok Build ships two distinct render modes, switchable at runtime via `--minimal` / `--fullscreen` or the `/minimal` / `/fullscreen` slash commands:
+
+| Mode | Implementation | Behaviour |
+|------|----------------|-----------|
+| **`fullscreen`** (default) | ratatui enters the alternate screen buffer (`\x1b[?1049h`) and renders a full-screen TUI like Claude Code / Codex / opencode | Whole-screen widget tree; on exit, terminal restores prior content |
+| **`minimal`** | `xai-ratatui-inline` pins the UI to the bottom N rows of the terminal; chat history is *printed into the terminal's native scrollback* above the viewport | The viewport (input + status) sits at the bottom while content flows above into the terminal's native scrollback — exactly like the Claude Code "scrollback-native" mode |
+
+This is the **single biggest UX innovation** in grok-build and it is the reason the screenshots look so good — the user can use their terminal's native scrollback (mouse wheel, `tmux` copy-mode, `iTerm2` mark/copy) on the conversation history, while the prompt editor stays fixed at the bottom. Neither Claude Code nor Codex nor opencode offer this.
+
+The inline viewport is implemented by the in-tree `xai-ratatui-inline` crate, which:
+
+1. Positions the cursor at the top of the viewport region.
+2. Prints content, letting the terminal handle wrapping naturally.
+3. Adds `viewport_height` newlines to reserve space.
+4. Clears and re-renders only the viewport region.
+5. Uses **DCS synchronised output** (`\x1b[?2026h` ... `\x1b[?2026l`) for flicker-free updates.
+6. Uses **RIS** (`\x1bc` Reset to Initial State) on resize to nuke the alt-screen state and start fresh.
+7. Uses **DECSTBM** scrolling regions when the `scrolling-regions` feature is on.
+
+The README of `xai-ratatui-inline` calls out the architectural choice:
+
+> A viewport (UI element) is pinned to the bottom of the terminal
+> Content above the viewport becomes part of the terminal's native scrollback
+> Users can scroll through history using their terminal's built-in scroll functionality
+> Long lines wrap naturally without truncation
+> The viewport remains visible and interactive while history accumulates above
+
+#### 11.3.2 The prompt editor
+
+The prompt editor is `xai-ratatui-textarea` — another in-tree fork. It supports:
+
+- **Readline mode** (default; `[ui] simple_mode = true`)
+- **Vim mode** (modal normal/insert; `[ui] simple_mode = false`)
+- Multi-line input (toggle with `Ctrl+M` while prompt focused)
+- Syntax highlighting via the same `syntect` pipeline used for code blocks
+- Bracketed paste (`\x1b[?2004h` ... `\x1b[?2004l`) so pasted multi-line text isn't reinterpreted as keystrokes
+
+The .NET analogue is **Spectre.Tui's `TextInput` widget** for readline mode; for vim mode we would need to extend it with a mode-state machine (Normal / Insert / Visual) and a keymap. ~600 LoC.
+
+### 11.4 The animation system
+
+Grok-build's animation is **deliberately tiny** — one frame rate, one wave pattern, no easing curves library. From `~/.grok/pager.toml`:
+
+```toml
+[animation]
+fps = 30           # Frame rate (1-60). Higher = smoother, more CPU.
+wave_rows = 32     # Rows per wave cycle for accent animation.
+
+[scrollback.blocks.thinking]
+animate = true              # Animate accent line while thinking.
+truncated_lines = 3
+bg_blend = 70               # Markdown-color blend with background (0-100).
+header = true               # Show "Thinking..." header.
+header_bright = false       # Bright header style (vs dim/muted).
+
+[scrollback.blocks.shell]
+accent_enabled = true             # Show accent line (animated while running).
+header_style = "label"            # "shell" ($ prefix) or "label" (Run prefix).
+muted_command_collapsed = true    # Mute command text when collapsed.
+```
+
+The animation is a single horizontal **wave pattern** rendered as a coloured bar that scrolls left while a block is "active" (thinking, running shell, streaming response). It runs at a configurable 1–60 fps (default 30) via a tokio interval task that pushes a redraw tick into the event loop.
+
+**There is no easing-curve library, no spring physics, no fade-in/fade-out, no slide transitions.** The "good looks" come from:
+
+1. The wave itself (a 32-row sine pattern in the accent colour of the active theme — magenta for GrokNight, mauve for RosePineMoon, blue for TokyoNight).
+2. The accent-coloured 1-character left border that runs the height of every active block.
+3. The streaming markdown renderer that updates in place (no flicker) using DCS synchronised output.
+4. The fact that the **scrollback doesn't move** while a block is animating — only the active block's content changes, so the eye is drawn to exactly the right place.
+
+This is *the* lesson for Harbor: **animation budget = 1 wave + 1 accent border + 1 streaming-update primitive**. We do not need a generic animation framework; we need a `WaveAccentWidget` and a synchronised-output helper.
+
+#### 11.4.1 Concrete animation primitives grok-build uses
+
+| Primitive | Where | .NET equivalent |
+|-----------|-------|-----------------|
+| Animated accent line (wave) | `xai-grok-pager-render` "active block" border | `Harbor.Tui.SpectreTui.Widgets.WaveAccent` — see §11.6 |
+| Streaming markdown update (no flicker) | `xai-grok-markdown` widget + DCS synchronised output | `ChatMarkdown.cs` (we have) + `Harbor.Tui.Ansi.SynchronizedOutputScope` |
+| Spinner (thinking indicator) | `indicatif` 0.18 — standard spinner crate | `Spectre.Console.Spinner` (we have) |
+| Progress bar (token usage) | `indicatif` 0.18 — `ProgressBar` | `Spectre.Console.ProgressBar` (we have) |
+| Theme preview live-update | `/theme` picker re-renders scrollback on every selection change | Re-render Spectre.Tui widget tree on `SelectedIndexChanged` |
+| Real-time cost meter | Sidebar updates per token-chunk event | `LiveChartsCore` (desktop) / `Spectre.Console.BarChart` (TUI) |
+
+### 11.5 Component model
+
+Grok-build's component model is **ratatui's standard immediate-mode tree**, with one widget per scrollback block type:
+
+| Block type | Widget | Renders |
+|------------|--------|---------|
+| User prompt (sticky header) | `UserPromptBlock` | `❯ <prompt text>` in user colour, sticky at top of viewport while scrolling |
+| Agent message | `AgentMessageBlock` | Full markdown render with streaming syntax highlighting |
+| Thinking block | `ThinkingBlock` | Collapsible; shows "Thinking…" header + animated accent while active; raw reasoning visible on expand |
+| Tool call — file edit | `EditBlock` | Inline diff (`+` green / `-` red), expandable to full diff, `bg_blend` controls how bright the markdown colours blend with the background |
+| Tool call — shell | `ShellBlock` | `$ <command>` header + native VTE-rendered output (full alacritty_terminal engine) + animated accent while running |
+| Tool call — search/grep | `SearchBlock` | Tree-view of file:line:match with linkify'd paths |
+| Tool call — list_dir | `ListBlock` | Tree-view with file-type icons |
+| Tool call — web_search | `WebSearchBlock` | List of `{title, url, snippet}` with linkify'd URLs |
+| Tool call — web_fetch | `WebFetchBlock` | Markdown-converted HTML |
+| Tool call — todo_write | `TodoBlock` | Checkbox list with progress bar |
+| Tool call — spawn_subagent | `SubagentBlock` | Mini-scrollback per subagent |
+| Tool call — memory_search | `MemoryBlock` | Ranked list of memory hits |
+| Task list | `TaskListBlock` | Persistent right-pane with checkboxes |
+| Block content viewer (fullscreen) | `BlockViewer` | Full-screen modal showing one block's content (raw markdown or rendered) |
+
+The widget tree is rebuilt every frame (immediate-mode). State is held in `xai-chat-state` and `xai-grok-pager`'s `ChatState` — **not** in the widgets. This is the same TEA (The Elm Architecture) pattern Harbor already uses in `Harbor.Tui.Abstractions` (`UiState` + `UiReducer` + `UiMsg`). ✓ We are already aligned.
+
+#### 11.5.1 Block folding (collapsing)
+
+Every block can be folded. From the keyboard-shortcuts doc:
+
+- `h` / `Left` — collapse selected entry
+- `l` / `Right` — expand selected entry
+- `e` — toggle fold on selected entry
+- `⇧E` — expand all / collapse all entries
+- `Ctrl+E` — expand/collapse all thinking blocks
+- `r` — toggle raw markdown on selected entry
+
+The `[ui]` config controls default fold shape:
+
+- `group_tool_verbs = true` — fold runs of read/search/list tool calls + subagent rows + finished thoughts into one row (default `true`)
+- `collapsed_edit_blocks = false` — show edits as one-line `+N/-M` diffstat summaries and merge back-to-back same-file edits into one row (default `false`; `[scrollback.blocks.edit] expanded_by_default/line_summary` override its fold shape)
+- `respect_manual_folds = true` — a hand-folded block is pinned: streaming updates and finish events leave it alone instead of resetting it (opt-in, off by default)
+
+Harbor already has a `DiffPreviewPanel` and `TodoListPanel` — but we do **not** have:
+- Sticky user-prompt headers
+- Block-level folding
+- The "group_tool_verbs" collapsing
+- The "respect_manual_folds" pinning
+
+These are concrete features to copy.
+
+#### 11.5.2 The block-content fullscreen viewer
+
+Pressing `Enter` on any selected block opens it in a **fullscreen viewer** (`Ctrl+F` alt binding). The viewer shows the block's content (raw markdown or rendered) in a scrollable pane with vim-style `j`/`k` navigation. This is a simple but very high-leverage UX pattern — it means every block in the scrollback is "drill-downable" without leaving the keyboard.
+
+Harbor would implement this as a new `BlockViewerScreen` in `Harbor.Tui.SpectreTui` that takes a `ChatBlock` and renders it full-screen with `j`/`k` scrolling.
+
+### 11.6 Color palette / typography
+
+Grok-build ships **5 curated themes**:
+
+| Theme | Config names | Description | Truecolor required? |
+|-------|-------------|-------------|---------------------|
+| **GrokNight** | `groknight`, `grok-night`, `dark` | Neutral dark base with a magenta accent. Default theme. Survives quantization cleanly on 256-colour and 16-colour terminals. | No |
+| **GrokDay** | `grokday`, `grok-day`, `light`, `day` | Light theme for bright terminal backgrounds. | No |
+| **TokyoNight** | `tokyonight`, `tokyo-night`, `tokyo` | Dark, blue-tinted backgrounds from the Tokyo Night palette. Loses its character when quantized. | Yes |
+| **RosePineMoon** | `rosepine`, `rose-pine`, `rosepine-moon`, `rose-pine-moon` | Muted dark palette with mauve accents, from the Rosé Pine family. | Yes |
+| **OscuraMidnight** | `oscura`, `oscura-midnight` | Deep dark base with purple accents. | Yes |
+
+Plus an `auto` (alias `system`) option that follows the OS dark/light appearance. Detection:
+
+| Platform | Method |
+|----------|--------|
+| **macOS** | Reads `AppleInterfaceStyle` system preference |
+| **Linux** | Queries XDG Desktop Portal `org.freedesktop.appearance.color-scheme` |
+| **Windows** | Reads the system personalization registry |
+| **SSH / headless** | Falls back to an **OSC 11** terminal background query at startup |
+
+Once running, Grok polls for appearance changes every 5 seconds — toggling OS dark/light takes effect within seconds without restart. We can do the same on .NET:
+
+```csharp
+// Harbor.Desktop.DesignSystem/SystemThemeDetector.cs
+public sealed class SystemThemeDetector : IDisposable
+{
+    private readonly PeriodicTimer _timer = new(TimeSpan.FromSeconds(5));
+    public event EventHandler<ThemeMode>? ThemeChanged;
+    private ThemeMode _current = DetectCurrent();
+
+    public ThemeMode Current => _current;
+
+    public async Task WatchAsync(CancellationToken ct)
+    {
+        while (await _timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
+        {
+            var next = DetectCurrent();
+            if (next != _current)
+            {
+                _current = next;
+                ThemeChanged?.Invoke(this, next);
+            }
+        }
+    }
+
+    private static ThemeMode DetectCurrent() =>
+        OperatingSystem.IsMacOS() ? DetectMacOs() :
+        OperatingSystem.IsWindows() ? DetectWindows() :
+        OperatingSystem.IsLinux() ? DetectLinuxPortal() :
+        ThemeMode.Dark; // fallback
+}
+```
+
+#### 11.6.1 Color quantization pipeline
+
+Every theme is defined using full RGB values. At startup, Grok quantizes all colours to match the detected capability level:
+
+| Level | Detection | Behaviour |
+|-------|-----------|-----------|
+| **Truecolor** (24-bit) | `COLORTERM=truecolor` env var | RGB values pass through unchanged |
+| **256-colour** | Standard `xterm-256color` | Each RGB value mapped to nearest indexed palette entry |
+| **16-colour** | Basic terminal | Colours mapped to closest ANSI name |
+| **NO_COLOR** | `NO_COLOR` env var set | No colour emitted, renders in monochrome |
+
+`GrokNight` and `GrokDay` use neutral grays that quantize cleanly. `TokyoNight`, `RosePineMoon`, `OscuraMidnight` use distinctive tinted backgrounds that lose their character when quantized — which is why the theme picker **hides** them on non-truecolor terminals.
+
+This is the second big lesson for Harbor: **our themes should be defined in RGB but rendered through a quantizer that downgrades gracefully to 256/16 colours for users on macOS Terminal.app or over SSH without truecolor**. We currently hard-code ANSI colours in `ChatRoleColor.cs`; we should switch to RGB + quantizer.
+
+#### 11.6.2 Typography
+
+Grok-build uses the terminal's **default monospace font**. There is no font configuration, no font fallback chain, no custom font loading — it relies on whatever the user's terminal is configured to use. This is a deliberate choice: the inline-viewport mode prints into the terminal's native scrollback, so any custom font would only apply to the bottom viewport rows and look jarring against the user's terminal font in the scrollback above.
+
+For the **desktop apps** (WPF / Avalonia / MAUI / Blazor), we will not have this constraint — we can ship `JetBrains Mono` (ligatures) or `Cascadia Code` (Microsoft, default on Windows Terminal) as the primary font with `IBM Plex Mono` / `Fira Code` fallbacks. See `docs/DESKTOP_APP_PLAN.md` §6 for the full font stack.
+
+#### 11.6.3 Catppuccin / Rosé Pine / TokyoNight reference for Harbor
+
+Harbor's current default is **Catppuccin-Mocha**. Grok-build does not use Catppuccin; their `GrokNight` is a custom neutral dark with magenta accent. Recommendation for Harbor:
+
+1. Keep Catppuccin-Mocha as the default dark theme (familiar to terminal users; maps cleanly to grok-build's `GrokNight`).
+2. Add `RosePineMoon`, `TokyoNight`, `OscuraMidnight` as additional dark themes — all three are MIT-licensed palettes.
+3. Add `GrokDay` (light) — copy the palette from grok-build's `xai-grok-pager-render` (Apache-2.0, OK to copy with attribution).
+4. Add `auto` mode with 5-second polling.
+
+### 11.7 Key UX patterns (with screenshots described in text)
+
+The README screenshot (`https://media.x.ai/v1/website/universe-tui-screenshot-6f7a0837.png`) shows the following — described in text since we cannot embed images here:
+
+> The terminal fills the full screen. The top ~80% is the **scrollback** showing a conversation in progress. A user prompt is rendered as `❯ fix the auth test in src/auth.rs` in a sticky-header style — slightly brighter background, prompt character `❯` in magenta. Below it, an agent message streams in: markdown with syntax-highlighted Rust code blocks (the code blocks have a subtle 1-character left border in the accent colour). A "Thinking…" block is collapsed, showing only the header and an animated accent line (a wave pattern scrolling left at 30 fps). Below the agent message, a `read_file` tool call block is shown as a one-line summary `read_file src/auth.rs` with a `+12 -3` diffstat; below it a `run_terminal_command` block shows `$ cargo test auth::tests` with native-coloured stdout/stderr output rendered through the embedded VTE. At the bottom ~20% is the **prompt editor** — a multi-line textarea with a thin accent border, currently focused, showing the user's draft text. A status bar at the very bottom shows: model `grok-build`, session `a3f...`, tokens `4.2k/128k`, mode `Normal`, permission `ask`, in dim text. The whole thing uses the GrokNight palette: neutral dark grey background, magenta accents, soft white text.
+
+The key UX patterns this screenshot demonstrates:
+
+#### 11.7.1 Sticky user-prompt headers
+
+When the user sends a prompt, that prompt's text becomes a **sticky header** at the top of the viewport while the agent's response streams in below. As more turns accumulate, the prompt headers serve as visual landmarks — you can scroll-jump between them with `⇧H` / `⇧L` (previous/next turn).
+
+Harbor does not currently do this. Implementation:
+
+```csharp
+// In ChatViewProjector, when projecting a user message:
+if (message.Role == Role.User)
+{
+    yield return new StickyHeaderRow(
+        text: $"❯ {message.Content}",
+        accent: theme.UserAccent,
+        // StickyHeaderRow tells the layout engine: keep this row visible
+        // at the top of the viewport while any descendant rows are in view.
+        stickyUntilDescendantId: nextAssistantMessageId);
+}
+```
+
+#### 11.7.2 The accent line
+
+Every block (user prompt, agent message, thinking, tool call) has a 1-character left border in the theme's accent colour. While a block is **active** (thinking, running, streaming), the accent line is animated as a wave. Otherwise it is solid.
+
+This single visual primitive is what makes the UI feel "alive". Implementation in Spectre.Tui:
+
+```csharp
+// Harbor.Tui.SpectreTui/Widgets/WaveAccent.cs
+public sealed class WaveAccent : Widget
+{
+    private static readonly char[] _wave = "▁▂▃▄▅▆▇█▇▆▅▄▃▂▁".ToCharArray();
+    private readonly int _waveRows;
+    private readonly Style _accent;
+    private int _phase;
+
+    public WaveAccent(Style accent, int waveRows = 32)
+    {
+        _accent = accent;
+        _waveRows = waveRows;
+    }
+
+    public void Tick() => _phase = (_phase + 1) % _waveRows;
+
+    public override void Render(RenderContext ctx)
+    {
+        var height = ctx.Height;
+        for (var i = 0; i < height; i++)
+        {
+            var waveIndex = (i + _phase) % _waveRows * _wave.Length / _waveRows;
+            ctx.WriteAt(0, i, _wave[waveIndex], _accent);
+        }
+    }
+}
+```
+
+#### 11.7.3 Slash command palette (cmdk-style)
+
+`Ctrl+P` or `?` opens the command palette. As you type, the list filters fuzzy (using `nucleo`). The palette shows:
+
+- Slash commands (`/new`, `/compact`, `/theme`, `/model`, ...)
+- Sessions (`/resume <id>`)
+- Models (`/model grok-build`)
+- Skills (installed via `SKILL.md`)
+- MCP servers
+- Files (from the workspace, with `@` prefix shortcut)
+
+Harbor already has a `SlashCommandDispatcher` in `Harbor.Cli.Repl` — but it is single-line tab-completion, not a fuzzy palette. The desktop apps should implement the full cmdk-style palette. See `docs/DESKTOP_APP_PLAN.md` §10 for the full spec.
+
+#### 11.7.4 The model picker
+
+`Ctrl+M` opens the model picker — a list of available models with metadata (provider, context window, cost per 1k tokens, supports streaming, supports vision). Filterable by typing.
+
+Harbor has a `ProviderRegistry` and `providers/*.json` — we can render this as a `DataGrid` with the same metadata columns.
+
+#### 11.7.5 The session picker
+
+`Ctrl+S` or `/resume` opens the session picker. Lists sessions grouped by working directory. As you type, it filters by title **and searches conversation content** — content matches appear under an "Extended search results" heading. `Ctrl+/` searches immediately without the brief debounce.
+
+Harbor has `JsonlSessionStore` and `SqliteSessionStore` — we need to add a `SearchSessionsAsync(query, limit)` method that does full-text search over the conversation JSONL.
+
+#### 11.7.6 The mode cycler
+
+`Shift+Tab` cycles modes: `Normal → Plan → Always-approve`. The current mode is shown in the status bar. Each mode changes the agent's system prompt:
+
+- `Normal` — default, asks permission for every tool call
+- `Plan` — read-only; the agent can read/search/list but not edit/bash. Produces a structured plan file (`/plan` saves it).
+- `Always-approve` — YOLO; auto-approves every tool call.
+
+Harbor has `PermissionRuleset` and `PermissionService` — we would add a `PromptMode` enum to `UiState` and a `CyclePromptMode` message in `UiMsg`.
+
+#### 11.7.7 The agent dashboard
+
+`Ctrl+\` or `/dashboard` opens the **Agent Dashboard** — a centralised overview of every top-level session in flight:
+
+```
+ Grok Build · Dashboard — 4 agents · 2 awaiting
+▌● reviewer · audit token flow    Awaiting your input            2m
+ ● implementer · fix login bug    Running: cargo test           12m
+ ⋅ refactor · feat/login          Responding…                   24m
+ ○ housekeeping                   idle                           1h
+ ● implementer · add login tests  8 tools · 1.2k tok            14m
+╭─────────────────────────────────────────────────────────────────╮
+│ ❯ Dispatch a new agent                                          │
+╰─ dispatch ──────────────────────────────────────────────────────╯
+ ↑/↓ select (peek) · Enter open · Ctrl+R rename · Ctrl+T pin · Ctrl+X stop · ? help · Esc new
+```
+
+Rows are sorted by state (`Needs input → Working → Idle → Inactive → Completed → Failed`). Each row is a top-level agent (subagents aren't shown — they run under their parent). **Inactive** holds roster-only sessions — idle/dormant sessions owned by other pager processes that haven't been loaded in this one — so **Idle** stays focused on the sessions you're actively cycling between.
+
+This is the multi-agent orchestration view that Orca has via its worktree sidebar, but rendered as a flat list rather than a tree. Harbor should implement this for the desktop apps as a "Sessions" tab.
+
+#### 11.7.8 Esc semantics (the killer UX detail)
+
+Esc is **not** a focus key. It has context-dependent semantics:
+
+| State | Gesture | Effect |
+|-------|---------|--------|
+| Turn running | `Esc` | Swallowed no-op (does **not** cancel). Use `Ctrl+C`. |
+| Turn cancelling | `Esc` | Re-sends cancel (retry if first ack was lost). |
+| Idle + non-empty prompt (prompt focused) | **2× Esc within 800ms** | Clear the prompt; non-empty text saved to prompt history. First press shows "press again to clear". |
+| Idle + empty prompt + messages (any focus) | **2× Esc within 800ms** | Open the rewind picker. First press is silent. |
+| Idle + empty + no messages / scrollback focused with draft / pending overlay / open history search | `Esc` | Swallowed no-op. |
+
+**Steal-Esc** (runs before mid-turn swallow / clear / rewind): overlays, modals, slash/file/completion dropdowns, history search, scrollback search, text selection, link highlight, voice, and **Bash / Remember / Feedback mode exit** when the prompt is empty.
+
+`Ctrl+C` vs `Esc`: with a non-empty draft while a turn is running, `Ctrl+C` clears the draft and keeps the turn; a second `Ctrl+C` on an empty prompt cancels. `Esc` does not cancel a running turn.
+
+This is *extremely* polished UX. Harbor's current Esc handling is naive (single-press clears). The 800ms double-press with first-press hint is what makes the difference between "feels like a real product" and "feels like a CLI toy". Implementation in `InputModel.cs`:
+
+```csharp
+private DateTime? _lastEscPress;
+private const double DoubleEscWindowMs = 800;
+
+public InputModel HandleKey(ConsoleKeyInfo key, UiState state)
+{
+    if (key.Key != ConsoleKey.Escape)
+    {
+        _lastEscPress = null;
+        return this;
+    }
+
+    var now = DateTime.UtcNow;
+    if (_lastEscPress is { } last && (now - last).TotalMilliseconds < DoubleEscWindowMs)
+    {
+        _lastEscPress = null;
+        // Double-Esc within 800ms
+        return state.HasDraft ? ClearDraft().Dispatch(UiMsg.ClearDraft)
+             : state.HasMessages ? Dispatch(UiMsg.OpenRewindPicker)
+             : this; // no-op
+    }
+
+    // First press — show "press again to clear" hint if there's a draft
+    if (state.HasDraft)
+    {
+        _lastEscPress = now;
+        return this.WithToast("press again to clear");
+    }
+    return this;
+}
+```
+
+#### 11.7.9 File references with `@`
+
+`@` in the prompt opens a fuzzy file picker:
+
+```
+@src/main.rs              # Attach a file
+@src/main.rs:10-50        # Attach lines 10-50
+@src/                     # Browse a directory
+@!.github                 # Search hidden files (prefix with !)
+```
+
+By default the picker respects `.gitignore` and hides dotfiles. `!` prefix searches hidden files.
+
+Harbor has no equivalent — the user pastes file paths manually. Implementation: intercept `@` at the start of a token in `InputModel`, open a `FilePickerPanel`, insert the chosen path on `Enter`.
+
+#### 11.7.10 Shell mode
+
+Typing `!` on an empty prompt enters **shell mode** — the prompt prefix changes to `!` and the next Enter runs the command locally (not via the agent). Recalled `!` shell commands re-enter shell mode when navigated to via `↑`.
+
+This is a power-user feature; Harbor should add it as a NICE-to-have.
+
+#### 11.7.11 Image paste + drag-drop
+
+Grok-build supports pasting images (PNG/JPEG/TIFF/GIF/WebP) into the prompt — the image is base64-encoded and sent to the model as a vision input. Drag-and-drop also works (file paths are expanded). Multi-platform:
+
+| Action | macOS | Linux | Windows |
+|--------|-------|-------|---------|
+| Paste image | `Cmd+V` | `Ctrl+Shift+V` | `Ctrl+V` |
+| Drop file | Drop on terminal window | Drop on terminal window | Drop on terminal window |
+
+For the desktop apps (WPF/Avalonia/MAUI/Blazor), this is trivial — `DragDrop` events. For the terminal, it requires bracketed-paste detection + image MIME sniffing.
+
+#### 11.7.12 Voice dictation
+
+`xai-grok-voice` provides mic capture + Whisper-based transcription. On macOS/Windows it uses `cpal` (audio library); on Linux it spawns a subprocess recorder to keep the static musl binary free of `alsa-sys`. The user holds a hotkey to record; on release the audio is sent to a transcription endpoint and the text is inserted into the prompt.
+
+For Harbor desktop apps this is achievable via `NAudio` (Windows) / `PortAudio.Net` (cross-platform) + OpenAI Whisper API. Marked LATER.
+
+#### 11.7.13 The context meter
+
+`/context` shows context-window usage as a categorical breakdown:
+
+```
+System prompt      ████████ 8.2k
+Messages           ██████████████████ 18.4k
+Reasoning/overhead ██ 2.1k
+Free               ████████████████████████████████ 99.3k
+Tool definitions   ██ 2.0k
+Skills listing     █ 0.8k
+MCP servers        █ 0.6k
+```
+
+This is **far more detailed** than Harbor's current token counter (which just shows total/limit). Implementation: extend `TokenEstimator` to break down by category, render with `Spectre.Console.BarChart`.
+
+#### 11.7.14 Plan files
+
+`/plan` saves the current plan to `~/.grok/plans/<session-id>-<timestamp>.md`. Plan mode (toggled via `Shift+Tab`) restricts the agent to read-only tools and forces it to produce a structured plan as its response. The plan file is a markdown doc with checkboxes that the agent can later tick off.
+
+Harbor has the `TaskTool` (todo_write) but no "plan file" concept. NICE-to-have.
+
+#### 11.7.15 Rewind
+
+`/rewind` opens a picker showing every turn boundary in the session. Selecting one rewinds the conversation to that point — discarding everything after. File snapshots stored in `rewind_points.jsonl` are also restored, so file edits made after the rewind point are undone.
+
+Harbor has no rewind. Implementation would require:
+
+1. `ISessionStore.AppendRewindPointAsync(sessionId, turnId, fileSnapshots)` 
+2. A `RewindPickerPanel` that lists turn boundaries
+3. On selection: restore file snapshots + truncate `updates.jsonl` to that point
+
+Marked NICE-to-have — non-trivial (~2 days).
+
+#### 11.7.16 Fork
+
+`/fork` branches the current session into a new agent, preserving history up to this point. The forked session has its own ID and appears in the dashboard as a separate row, with a `parent_session_id` reference in `summary.json`.
+
+Harbor has no fork. Implementation: `ISessionStore.ForkAsync(sessionId, atTurnId?) → newSessionId` that copies the JSONL up to the fork point. ~4 hours.
+
+#### 11.7.17 Subagents
+
+The `spawn_subagent` tool starts a child session with its own context window. Built-in agent types:
+
+| Type | Description |
+|------|-------------|
+| `general-purpose` | Default. Full-capability agent for any task. |
+| `explore` | Research agent. Searches, reads, greps, runs shell commands, but does not edit files. |
+| `plan` | Planning agent. Explores the codebase and produces a structured implementation plan; does not edit files. |
+
+User-defined agent types live in `.grok/agents/` or `~/.grok/agents/` as `.md` files.
+
+**Personas** are behavioural overlays applied on top of an agent type — they shape tone, output format, and task focus without changing the agent type, model, or tools. Defined in `config.toml` under `[subagents.personas.<name>]` or in `.toml` files under `.grok/personas/`.
+
+Harbor has `IAgent` and `AgentDefinition` but no subagent spawning yet. We should add `SpawnSubagent` as a tool in `Harbor.Tools.Builtin` and a `SubagentBlock` widget in `Harbor.Tui.SpectreTui`.
+
+#### 11.7.18 Skills
+
+`SKILL.md` files install as slash commands. A skill is a markdown doc with front-matter describing its name, description, and trigger patterns. The skill's body is injected into the system prompt when the slash command is invoked. Skills can be installed from a marketplace (`/plugins` → Skills tab) or placed manually in `~/.grok/skills/`.
+
+Harbor has a `PLUGIN_SYSTEM.md` and `PLUGIN_DEVELOPMENT.md` — we should add a `Skill` plugin type that loads `SKILL.md` files.
+
+#### 11.7.19 Hooks
+
+Hooks are user-defined commands that run on lifecycle events (pre-tool, post-tool, session-start, session-end). Defined in `config.toml` under `[hooks.<event>]` as a shell command. The hook receives JSON on stdin describing the event and can return JSON on stdout to modify behaviour (e.g. block a tool call, rewrite a prompt).
+
+Harbor has `IPlugin` but no hook system. NICE-to-have.
+
+#### 11.7.20 The `/terminal-setup` diagnostic command
+
+`/terminal-setup` (aliases `/terminal-check`, `/terminal-info`) reports:
+
+- Detected terminal (iTerm2, WezTerm, Kitty, Alacritty, VS Code, ...)
+- Multiplexer (tmux, screen, zellij, none)
+- **Color level** (truecolor / 256 / 16 / no_color)
+- **Available themes** (filtered by color level — TokyoNight etc. hidden on non-truecolor)
+- **Clipboard status** (working / not detected / requires tmux `set-clipboard on`)
+- **Issues** with **fixes** (e.g. "Set `COLORTERM=truecolor` in your shell rc")
+
+This is gold for debugging "why does it look wrong on my machine". Harbor should ship the same diagnostic. Implementation: a `TerminalCapabilityProbe` class that emits `TerminalCapabilities { Terminal, Multiplexer, ColorLevel, ClipboardStatus, Issues }`.
+
+#### 11.7.21 Kitty keyboard protocol
+
+Grok-build uses the **Kitty keyboard protocol** for modified keys (e.g. `Ctrl+.`) that don't have a standard ANSI representation. On terminals that don't support KKP (VS Code integrated terminal, VTE, Apple Terminal, Windows Terminal, JetBrains, tmux without `extended-keys on`, screen), it advertises `Ctrl+X` as the primary shortcuts-cheatsheet key instead — `Ctrl+X` always works as a classic control character even when `Ctrl+.` does not.
+
+The lesson: **always have a fallback for every modified-key binding**. Harbor's `UiKey` should encode both the KKP form and the classic-Ctrl form.
+
+### 11.8 Action plan for Harbor — can we replicate this TUI experience on .NET?
+
+**Yes.** The path is:
+
+1. **Spectre.Tui 0.14** as the primary widget framework (we already use). Ratatui and Spectre.Tui share the same immediate-mode widget-tree model.
+2. **`Harbor.Tui.Ansi`** for the bare-ANSI escape sequences (synchronised output, scrolling regions, OSC 11) — we already have this project, just need to add the missing primitives.
+3. **Custom `WaveAccent` widget** — ~60 LoC, see §11.4.1.
+4. **Custom `StickyHeaderRow` layout primitive** — ~100 LoC.
+5. **Custom `InlineViewportRenderer`** — a new renderer mode in `Harbor.Tui.SpectreTui` that pins the prompt + status to the bottom N rows and prints chat history above into the terminal's native scrollback. This is the biggest piece — ~800 LoC.
+6. **Custom `BlockViewerScreen`** — fullscreen modal for one block's content. ~200 LoC.
+7. **Extend `InputModel`** with double-Esc-800ms semantics, mode cycling, file picker, shell mode. ~400 LoC.
+8. **Extend `ChatViewProjector`** with block folding, sticky headers, accent borders. ~600 LoC.
+9. **Add `TerminalCapabilityProbe` + colour quantizer**. ~300 LoC.
+10. **Add 5 themes** (GrokNight, GrokDay, TokyoNight, RosePineMoon, OscuraMidnight) — copy palettes with attribution. ~250 LoC of theme JSON.
+
+Total: ~3 000 LoC of custom rendering glue. ~3 sprints of work for one engineer.
+
+#### 11.8.1 Options considered
+
+| Option | Pros | Cons | Verdict |
+|--------|------|------|---------|
+| **Spectre.Tui + custom widgets** (current path) | Already in use; immediate-mode widget model matches ratatui; Spectre.Console for ANSI escape sequences is mature | Spectre.Tui's stable surface does not expose `unstable-widget-ref` / `unstable-backend-writer` / `scrolling-regions` — we must reach into `Harbor.Tui.Ansi` for those | **PRIMARY** — keep going |
+| **Terminal.Gui v2 + custom rendering** | Mature, v2 has a real scene graph + MVC; supports scrolling regions natively | Different mental model (retained-mode views, not immediate-mode widgets); heavier; doesn't match the ratatui patterns we'd be copying | ALTERNATIVE — only if Spectre.Tui hits a wall |
+| **Pure ANSI escape sequences + custom layout engine** | Maximum control; smallest binary; can match grok-build's DCS synchronised output exactly | We'd be reinventing ratatui from scratch; ~10 000 LoC for a competitive widget set | REJECT — too much work for no UX win over Spectre.Tui |
+| **Spectre.Console + custom animation primitives** (no Spectre.Tui) | Spectre.Console is rock-solid; we already use it; animations via `LiveDisplay` | Spectre.Console has no widget tree — every render is a flat function call; can't express sticky headers, block folding, multi-pane layouts cleanly | REJECT — wrong layer of abstraction |
+| **Embed a Rust subprocess (run `grok`'s `xai-ratatui-inline` via FFI)** | Get grok-build's exact renderer for free | Gigantic dependency; we'd be shipping a Rust binary inside a .NET app; license/attribution complexity; defeats the purpose of "doing it on .NET" | REJECT — the user explicitly asked for .NET |
+
+#### 11.8.2 Concrete code snippets — animations / gradients in .NET terminal
+
+##### Synchronised output (DCS protocol) for flicker-free redraws
+
+```csharp
+// Harbor.Tui.Ansi/SynchronizedOutputScope.cs
+using System;
+
+namespace Harbor.Tui.Ansi;
+
+/// <summary>
+/// Emits the DCS synchronised-output sequence (DEC private mode 2026)
+/// to wrap a redraw batch. Terminals that support it (xterm, kitty,
+/// wezterm, alacritty, gnome-terminal, windows-terminal) will buffer
+/// the output and blit it atomically, eliminating partial-redraw flicker.
+/// </summary>
+public readonly struct SynchronizedOutputScope : IDisposable
+{
+    private readonly AnsiWriter _writer;
+
+    private SynchronizedOutputScope(AnsiWriter writer)
+    {
+        _writer = writer;
+        _writer.Write("\x1b[?2026h");  // begin synchronised output
+    }
+
+    public static SynchronizedOutputScope Begin(AnsiWriter writer) => new(writer);
+
+    public void Dispose() => _writer.Write("\x1b[?2026l");  // end synchronised output
+}
+
+// Usage:
+// using (SynchronizedOutputScope.Begin(_writer))
+// {
+//     _renderer.Render(state);
+// }
+```
+
+##### Scrolling regions (DECSTBM) for the inline viewport
+
+```csharp
+// Harbor.Tui.Ansi/ScrollingRegion.cs
+namespace Harbor.Tui.Ansi;
+
+/// <summary>
+/// Sets a terminal scrolling region (DECSTBM). After this is set,
+/// LF/IND/RI only scroll within the region — content above and below
+/// stays put. Used by the inline-viewport mode to keep the prompt
+/// pinned at the bottom while chat history scrolls above.
+/// </summary>
+public static class ScrollingRegion
+{
+    // \x1b[<top>;<bottom>r  (1-indexed)
+    public static string Set(int top, int bottom) => $"\x1b[{top};{bottom}r";
+
+    // \x1b[r  — reset to full screen
+    public static string Reset() => "\x1b[r";
+}
+
+// Usage in inline viewport mode:
+// 1. Set scrolling region to (1, terminalHeight - viewportHeight)
+// 2. Print chat history — it scrolls within the region
+// 3. Move cursor below the region (row terminalHeight - viewportHeight + 1)
+// 4. Render the viewport (prompt + status) — it never scrolls
+```
+
+##### OSC 11 — query terminal background colour for theme auto-detection
+
+```csharp
+// Harbor.Tui.Ansi/Osc11.cs
+using System.Text.RegularExpressions;
+
+namespace Harbor.Tui.Ansi;
+
+/// <summary>
+/// OSC 11 queries the terminal's default background colour.
+/// Used to detect dark/light mode on SSH / headless where no
+/// OS-level API is available. The terminal responds with an
+/// OSC 11 string containing the RGB value.
+/// </summary>
+public static class Osc11
+{
+    // Send: \x1b]11;?\x07
+    public const string Query = "\x1b]11;?\x07";
+
+    // Response: \x1b]11;rgb:RRRR/GGGG/BBBB\x07
+    private static readonly Regex ResponsePattern =
+        new(@"^\x1b\]11;rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)\x07$",
+            RegexOptions.Compiled);
+
+    public static (byte r, byte g, byte b)? ParseResponse(string response)
+    {
+        var m = ResponsePattern.Match(response);
+        if (!m.Success) return null;
+        // Each component is 4 hex chars (16-bit). Take the high byte.
+        var r = Convert.ToByte(m.Groups[1].Value[..2], 16);
+        var g = Convert.ToByte(m.Groups[2].Value[..2], 16);
+        var b = Convert.ToByte(m.Groups[3].Value[..2], 16);
+        return (r, g, b);
+    }
+
+    public static ThemeMode Classify(byte r, byte g, byte b)
+    {
+        // Perceived luminance (Rec. 709 luma)
+        var luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return luma < 128 ? ThemeMode.Dark : ThemeMode.Light;
+    }
+}
+```
+
+##### Truecolour → 256 → 16 colour quantizer
+
+```csharp
+// Harbor.Tui.Ansi/ColorQuantizer.cs
+using System;
+
+namespace Harbor.Tui.Ansi;
+
+/// <summary>
+/// Quantizes an RGB colour to the terminal's detected capability level.
+/// Mirrors grok-build's ColorSupport pipeline (06-theming.md).
+/// </summary>
+public static class ColorQuantizer
+{
+    // 6×6×6 colour cube (xterm 256-colour palette indices 16–231)
+    private static readonly int[] CubeSteps = { 0, 95, 135, 175, 215, 255 };
+
+    public static string ToAnsi(byte r, byte g, byte b, ColorLevel level) => level switch
+    {
+        ColorLevel.NoColor => "",
+        ColorLevel.Truecolor => $"rgb:{r:X2}/{g:X2}/{b:X2}",
+        ColorLevel.Color256 => To256(r, g, b),
+        ColorLevel.Color16 => To16(r, g, b),
+        _ => ""
+    };
+
+    private static string To256(byte r, byte g, byte b)
+    {
+        var idx = 16 + (NearestCubeStep(r) * 36) + (NearestCubeStep(g) * 6) + NearestCubeStep(b);
+        return $"\x1b[38;5;{idx}m";
+    }
+
+    private static int NearestCubeStep(byte v)
+    {
+        var best = 0;
+        var bestDist = int.MaxValue;
+        for (var i = 0; i < CubeSteps.Length; i++)
+        {
+            var d = Math.Abs(v - CubeSteps[i]);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        return best;
+    }
+
+    private static string To16(byte r, byte g, byte b)
+    {
+        // Simplified: classify by luminance + dominant channel.
+        var luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        if (luma < 64) return "\x1b[30m"; // black
+        if (luma > 192) return "\x1b[37m"; // white
+        if (r > g && r > b) return "\x1b[31m"; // red
+        if (g > r && g > b) return "\x1b[32m"; // green
+        if (b > r && b > g) return "\x1b[34m"; // blue
+        if (r > b && g > b) return "\x1b[33m"; // yellow
+        if (r > g && b > g) return "\x1b[35m"; // magenta
+        return "\x1b[36m"; // cyan
+    }
+}
+
+public enum ColorLevel { NoColor, Color16, Color256, Truecolor }
+```
+
+##### Animated accent line (wave) — Spectre.Tui widget
+
+```csharp
+// Harbor.Tui.SpectreTui/Widgets/WaveAccent.cs
+using Spectre.Tui;
+using Spectre.Tui.Drawing;
+
+namespace Harbor.Tui.SpectreTui.Widgets;
+
+/// <summary>
+/// Animated vertical accent line — a wave pattern that scrolls down
+/// at the configured fps. Used to mark "active" blocks (thinking,
+/// running shell, streaming response). Mirrors grok-build's
+/// [animation] wave_rows + accent behaviour.
+/// </summary>
+public sealed class WaveAccent : Widget
+{
+    private static readonly string _wave = "▁▂▃▄▅▆▇█▇▆▅▄▃▂▁";
+    private readonly Style _accent;
+    private readonly int _waveRows;
+    private int _phase;
+
+    public WaveAccent(Style accent, int waveRows = 32)
+    {
+        _accent = accent;
+        _waveRows = waveRows;
+    }
+
+    /// <summary>Advance the animation by one frame. Called by the render loop at the configured fps.</summary>
+    public void Tick() => _phase = (_phase + 1) % _waveRows;
+
+    public override void Render(IRenderContext ctx)
+    {
+        var height = ctx.Height;
+        for (var i = 0; i < height; i++)
+        {
+            var waveIndex = ((i + _phase) * _wave.Length / _waveRows) % _wave.Length;
+            ctx.DrawChar(0, i, _wave[waveIndex], _accent);
+        }
+    }
+}
+
+// Wire up the animation tick in the render loop:
+// var wave = new WaveAccent(theme.Accent);
+// var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(1000.0 / fps));
+// _ = Task.Run(async () =>
+// {
+//     while (await timer.WaitForNextTickAsync(ct))
+//     {
+//         wave.Tick();
+//         _store.Dispatch(new UiMsg.RedrawTick());
+//     }
+// }, ct);
+```
+
+##### Sticky user-prompt header
+
+```csharp
+// Harbor.Tui.SpectreTui/View/StickyHeaderRow.cs
+using Spectre.Tui;
+using Spectre.Tui.Drawing;
+
+namespace Harbor.Tui.SpectreTui.View;
+
+/// <summary>
+/// Renders a user-prompt row as a "sticky header" — when the row scrolls
+/// out of view, a 1-line summary is rendered at the top of the viewport
+/// until the corresponding agent response also scrolls out of view.
+/// Mirrors grok-build's sticky user-prompt header behaviour.
+/// </summary>
+public sealed class StickyHeaderRow : IRow
+{
+    public string Text { get; }
+    public Style Accent { get; }
+    public string StickyUntilDescendantId { get; }
+
+    public StickyHeaderRow(string text, Style accent, string stickyUntilDescendantId)
+    {
+        Text = text;
+        Accent = accent;
+        StickyUntilDescendantId = stickyUntilDescendantId;
+    }
+
+    public void Render(IRenderContext ctx, UiState state)
+    {
+        // Full render when in view:
+        ctx.DrawText(0, 0, "❯ ", Accent);
+        ctx.DrawText(2, 0, Text, Accent.WithWeight(FontWeight.Bold));
+
+        // Sticky summary (1-line) when scrolled out — handled by the layout
+        // engine, which checks if any descendant of StickyUntilDescendantId
+        // is in view; if so, it renders this row's first 80 chars at the top.
+    }
+}
+```
+
+##### Inline viewport mode (the big one)
+
+```csharp
+// Harbor.Tui.SpectreTui/InlineViewportRenderer.cs
+using Harbor.Tui.Ansi;
+
+namespace Harbor.Tui.SpectreTui;
+
+/// <summary>
+/// Renders Harbor's chat UI in "inline viewport" mode — the prompt +
+/// status bar are pinned to the bottom N rows of the terminal, while
+/// chat history is printed into the terminal's native scrollback above.
+/// Mirrors grok-build's `xai-ratatui-inline` crate (the --minimal mode).
+///
+/// This is what makes grok-build's TUI feel like a real chat app:
+/// the user can scroll through history with their terminal's native
+/// scrollback (mouse wheel, tmux copy-mode, iTerm2 mark/copy), while
+/// the input editor stays fixed at the bottom.
+/// </summary>
+public sealed class InlineViewportRenderer : BaseTuiRenderer
+{
+    private readonly AnsiWriter _writer;
+    private readonly int _viewportHeight;
+
+    public InlineViewportRenderer(AnsiWriter writer, IUiStore store, int viewportHeight = 8)
+        : base(store)
+    {
+        _writer = writer;
+        _viewportHeight = viewportHeight;
+    }
+
+    public override void Render(UiState state)
+    {
+        var termHeight = _writer.GetHeight();
+        var termWidth = _writer.GetWidth();
+        var scrollRegionBottom = termHeight - _viewportHeight;
+
+        using (SynchronizedOutputScope.Begin(_writer))
+        {
+            // 1. Set scrolling region to (1, scrollRegionBottom)
+            _writer.Write(ScrollingRegion.Set(1, scrollRegionBottom));
+
+            // 2. Move cursor to the bottom of the scroll region
+            _writer.Write($"\x1b[{scrollRegionBottom};1H");
+
+            // 3. Print only NEW chat lines since last render — these
+            //    flow into the terminal's native scrollback.
+            foreach (var line in state.NewChatLines(_lastRenderedLineIndex))
+            {
+                _writer.WriteLine(line.RenderWithAnsi(state.Theme));
+                _lastRenderedLineIndex = line.Index;
+            }
+
+            // 4. Reset scrolling region
+            _writer.Write(ScrollingRegion.Reset());
+
+            // 5. Move cursor to the viewport region (below the scroll region)
+            _writer.Write($"\x1b[{scrollRegionBottom + 1};1H");
+
+            // 6. Clear the viewport region
+            _writer.Write($"\x1b[{_viewportHeight}J");
+
+            // 7. Render the viewport (prompt + status bar)
+            RenderPrompt(state, termWidth);
+            RenderStatusBar(state, termWidth);
+        }
+    }
+
+    private int _lastRenderedLineIndex = -1;
+
+    private void RenderPrompt(UiState state, int width) { /* ... */ }
+    private void RenderStatusBar(UiState state, int width) { /* ... */ }
+}
+```
+
+### 11.9 What we will NOT copy from grok-build
+
+- **`alacritty_terminal` embedded in the shell block** — we use a subprocess + capture approach. Embedding a full VT100 emulator in the chat scrollback is 10k LoC for marginal gain.
+- **`cryptify` / `obfstr` string obfuscation** — irrelevant for an open-source .NET app.
+- **`tikv-jemallocator`** — .NET has its own allocator.
+- **`xai-fast-worktree`** — git's native `worktree add` is fast enough for our scale.
+- **`xai-grok-sandbox` (Linux namespaces)** — out of scope; we'll use `bwrap` / `firejail` as subprocess when sandboxing is needed.
+- **`xai-computer-hub-*` (Computer Use)** — out of scope for now.
+- **Voice dictation** — LATER.
+- **Self-update mechanism** — LATER (we'll use `dotnet tool update`).
+
+### 11.10 Concrete deliverables — what Subagent G is producing this round
+
+This section documents the deliverables produced in Task ID G:
+
+1. **`docs/FEATURE_RESEARCH.md` §11** (this section, ~600 lines) — grok-build analysis.
+2. **`docs/DESKTOP_APP_PLAN.md`** (~2 000 lines) — master plan for 4 desktop apps (Avalonia, WPF, MAUI, Blazor) at ORCA-level quality, integrating the grok-build UX patterns documented here + the Orca/Pi/Kilocode/OpenCode patterns documented in §§3–6.
+3. **`docs/CENTRAL_PACKAGE_MANAGEMENT.md`** (~400 lines) — `Directory.Packages.props` migration plan with all current packages listed and a complete example file.
+
+### 11.11 References — grok-build specific
+
+#### 11.11.1 Fetched source files
+
+- `README.md` — main README (screenshot, install, build, repo layout)
+- `Cargo.toml` — workspace root (auto-generated; lists 70+ workspace members + ~150 dependencies)
+- `crates/codegen/xai-grok-pager/Cargo.toml` — TUI crate dependencies (ratatui, crossterm, syntect, portable-pty, nucleo, ...)
+- `crates/codegen/xai-grok-pager-render/Cargo.toml` — extracted presentation primitives (uses ratatui's `unstable-widget-ref`, `unstable-backend-writer`, `scrolling-regions` features)
+- `crates/codegen/xai-ratatui-inline/Cargo.toml` + `README.md` — inline-viewport fork (DCS synchronised output, RIS resize, scrolling regions)
+- `crates/codegen/xai-grok-markdown/Cargo.toml` + `crates/codegen/xai-grok-markdown-core/Cargo.toml` — streaming markdown renderer (pulldown-cmark + syntect + two-face + anstyle-syntect)
+- `crates/codegen/xai-grok-tools/Cargo.toml` — tool implementations (async-openai, async-lsp, htmd, scraper, image, pdf_oxide, minijinja)
+
+#### 11.11.2 Fetched user-guide docs
+
+All under `crates/codegen/xai-grok-pager/docs/user-guide/`:
+
+- `01-getting-started.md` — install, first launch, basic interaction, file refs (`@`), permissions
+- `03-keyboard-shortcuts.md` — full keymap (Simple + Vim modes), Esc semantics, image paste, drag-drop
+- `04-slash-commands.md` — `/new`, `/resume`, `/compact`, `/context`, `/session-info`, `/fork`, `/rewind`, `/copy`
+- `05-configuration.md` — config.toml structure, `[ui]`, `[features]`, `[session]`, `[tools]`, input mode, default-selected-permission
+- `06-theming.md` — 5 themes, auto detection, colour quantization, cursor colour, animation, block styling, edit diffs, thinking blocks
+- `07-mcp-servers.md` — MCP server config (stdio/SSE/HTTP), `MCP_TIMEOUT`, `MAX_MCP_OUTPUT_BYTES`
+- `16-subagents.md` — agents vs personas, `spawn_subagent`, built-in agent types, personas
+- `17-sessions.md` — storage layout, new/resume/fork/rewind, summary.json, updates.jsonl, plan.json, rewind_points.jsonl, signals.json, feedback.jsonl
+- `20-background-tasks.md` — `background: true`, `get_command_or_subagent_output`, `wait_commands_or_subagents`, `kill_command_or_subagent`
+- `21-terminal-support.md` — detected terminals, truecolor/256/16 fixes, `/terminal-setup` diagnostics
+- `23-dashboard.md` — agent dashboard layout, state sorting, peek/attach/dispatch
+- `24-monitoring-usage.md` — external OpenTelemetry export (alpha)
+
+#### 11.11.3 External docs
+
+- Online docs: https://docs.x.ai/build/overview
+- CLI landing page: https://x.ai/cli
+- Changelog: https://x.ai/build/changelog
+
+#### 11.11.4 Patterns borrowed (attribution)
+
+- **Inline viewport** — concept and architecture from `xai-ratatui-inline` (Apache-2.0, xAI). Will attribute in `Harbor.Tui.Ansi.InlineViewport` source file header.
+- **Theme palettes** — `GrokNight` / `GrokDay` colour values will be copied with attribution. `TokyoNight`, `RosePineMoon`, `OscuraMidnight` are public MIT/Apache palettes.
+- **Animation primitives** — wave pattern + fps config + accent-line-on-active-block pattern from `~/.grok/pager.toml` documentation (Apache-2.0).
+- **Esc semantics** — double-press-within-800ms pattern from grok-build user guide (no code copied, just the UX spec).
+
+---
+
 ## Document metadata
 
-- **Author:** Subagent R (researcher)
+- **Author:** Subagent R (researcher) — §1–§10; Subagent G (researcher-r4) — §11
 - **Date:** 2026 (per Orca LICENSE year)
-- **Task ID:** R
-- **Length:** ~2 050 lines
-- **Files written:** `/home/z/my-project/extracted/docs/FEATURE_RESEARCH.md` (this file)
-- **Worklog entry:** appended to `/home/z/my-project/worklog.md` (see Task ID: R section)
+- **Task IDs:** R (§§1–10), G (§11)
+- **Length:** ~3 170 lines (§11 added ~1 050 lines of grok-build analysis)
+- **Files written:**
+  - `/home/z/my-project/extracted/docs/FEATURE_RESEARCH.md` (this file; §11 appended)
+  - `/home/z/my-project/extracted/docs/DESKTOP_APP_PLAN.md` (companion — master plan for 4 desktop apps)
+  - `/home/z/my-project/extracted/docs/CENTRAL_PACKAGE_MANAGEMENT.md` (companion — CPM migration plan)
+- **Worklog entries:** appended to `/home/z/my-project/worklog.md` (see Task ID: R for §§1–10, Task ID: G for §11)
 
 End of document.
+
+

@@ -1,3 +1,4 @@
+using Harbor.Plugins.Abstractions;
 using System.Collections.Concurrent;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;

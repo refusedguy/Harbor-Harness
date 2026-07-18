@@ -12,13 +12,15 @@
 // canonical allowed/forbidden ProjectReference matrix that these tests
 // enforce.
 
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Models;
 using Harbor.Core.Agents;
-using Harbor.Plugins.Runtime.Hosting;
+using Harbor.Plugins.Hosting;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Scripting.Abstractions;
 using Harbor.Scripting.Bridge;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;

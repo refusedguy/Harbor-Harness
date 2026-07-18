@@ -10,20 +10,20 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CSharpFunctionalExtensions" Version="3.7.0"/>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0"/>
-    <PackageReference Include="MemoryPack" Version="1.10.0"/>
-    <PackageReference Include="ZLinq" Version="1.5.6"/>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
+    <PackageReference Include="CommunityToolkit.HighPerformance"/>
+    <PackageReference Include="MemoryPack"/>
+    <PackageReference Include="ZLinq"/>
     <!--
       ZLinq.DropInGenerator emits source-generated extension methods that take
       priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
       below, this makes every LINQ call site in Harbor.Abstractions resolve to
       ZLinq's zero-allocation pipeline without rewriting call sites.
     -->
-    <PackageReference Include="ZLinq.DropInGenerator" Version="1.5.6">
+    <PackageReference Include="ZLinq.DropInGenerator">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>

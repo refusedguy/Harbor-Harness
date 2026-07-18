@@ -1,8 +1,9 @@
+using Harbor.Plugins.Abstractions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
+using Harbor.Plugins.Instantiation;
+using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

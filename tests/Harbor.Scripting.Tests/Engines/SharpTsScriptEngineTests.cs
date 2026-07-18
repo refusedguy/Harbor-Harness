@@ -4,6 +4,7 @@
 // are about absence-handling. When `sharpts` IS on PATH, the same tests
 // exercise the real subprocess path (covered by the integration smoke test
 // at the bottom, gated on IsAvailable).
+using Harbor.Scripting.Abstractions;
 using Harbor.Scripting.Bridge;
 using Harbor.Scripting.Engines;
 using Microsoft.Extensions.Logging.Abstractions;

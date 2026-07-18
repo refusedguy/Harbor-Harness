@@ -5,6 +5,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
+using Harbor.Plugins.Abstractions;
 using Harbor.Tui.Abstractions.Panels;
 using Harbor.Tui.Abstractions.Plugins;
 using Microsoft.Extensions.Configuration;

@@ -1,6 +1,7 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Plugins;
-using Harbor.Plugins.Runtime.Compilation;
-using Harbor.Plugins.Runtime.Instantiation;
+using Harbor.Plugins.Compilation;
+using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
