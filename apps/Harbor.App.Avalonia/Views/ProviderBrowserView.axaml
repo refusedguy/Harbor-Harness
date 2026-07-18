@@ -28,9 +28,24 @@
 
                     <!-- Model list -->
                     <Border Grid.Column="1" Classes="Card" Margin="8,0,0,0">
-                        <Grid RowDefinitions="Auto,*">
+                        <Grid RowDefinitions="Auto,Auto,*">
                             <TextBlock Grid.Row="0" Text="Models" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <ScrollViewer Grid.Row="1">
+
+                            <!-- Loading spinner + error message -->
+                            <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
+                                <TextBlock Text="Loading models…" FontSize="11"
+                                           Foreground="{StaticResource MochaOverlay2}"/>
+                                <ProgressBar IsIndeterminate="True" Height="2"/>
+                            </StackPanel>
+                            <Border Grid.Row="1" Background="{StaticResource MochaSurface0}"
+                                    CornerRadius="4" Padding="8" Margin="0,0,0,8"
+                                    IsVisible="{Binding ErrorMessage}">
+                                <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
+                                           Foreground="{StaticResource MochaPeach}"
+                                           TextWrapping="Wrap"/>
+                            </Border>
+
+                            <ScrollViewer Grid.Row="2">
                                 <ItemsControl ItemsSource="{Binding Models}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="vm:ModelRowViewModel">

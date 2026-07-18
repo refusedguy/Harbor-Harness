@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,6 +15,25 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     UI thread and projects them into an observable chat-line collection. User input is
 ///     forwarded through <see cref="TuiEffectHost"/> so the agent loop runs out-of-band.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Task R1 — Tool-call cards:</b> alongside the existing
+///         <see cref="Lines"/> transcript, this view-model now also
+///         projects <see cref="ChatRole.Tool"/> /
+///         <see cref="ChatRole.ToolResult"/> lines into
+///         <see cref="ToolCalls"/> — an observable collection of
+///         <see cref="ToolCallViewModel"/> cards. Each tool call is
+///         coalesced: the start event creates a card in
+///         <see cref="ToolCallStatus.Running"/> state; the matching
+///         result event completes it (Success/Error + duration).
+///     </para>
+///     <para>
+///         Coalescing is keyed on <c>ToolName + index</c> — the simplest
+///         stable key that works without a real correlation id from
+///         <c>AgentEvent</c>. A future refactor should thread a real
+///         <c>ToolCallId</c> through <c>UiState</c>.
+///     </para>
+/// </remarks>
 public sealed partial class ChatViewModel : ObservableObject
 {
     private readonly UiStore _store;
@@ -22,6 +42,8 @@ public sealed partial class ChatViewModel : ObservableObject
     private readonly ILogger<ChatViewModel> _logger;
     private readonly ToastService _toasts;
     private int _renderedLineCount;
+    private readonly Dictionary<string, ToolCallViewModel> _toolCallById = new();
+    private readonly Stopwatch _toolCallStopwatch = new();
 
     private readonly EventHandler<UiState> _onStoreChanged;
 
@@ -49,6 +71,13 @@ public sealed partial class ChatViewModel : ObservableObject
 
     /// <summary>Visible chat lines.</summary>
     public ObservableCollection<ChatLineViewModel> Lines { get; } = new();
+
+    /// <summary>
+    ///     Visible tool-call cards (one per tool invocation). Updated
+    ///     incrementally as <see cref="ChatRole.Tool"/> /
+    ///     <see cref="ChatRole.ToolResult"/> lines arrive.
+    /// </summary>
+    public ObservableCollection<ToolCallViewModel> ToolCalls { get; } = new();
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -83,7 +112,16 @@ public sealed partial class ChatViewModel : ObservableObject
             while (_renderedLineCount < state.Lines.Length)
             {
                 var line = state.Lines[_renderedLineCount];
-                Lines.Add(new ChatLineViewModel(line.Role, line.Text));
+                // Tool / ToolResult lines are projected into ToolCalls
+                // cards instead of (or in addition to) the transcript.
+                if (line.Role is ChatRole.Tool or ChatRole.ToolResult)
+                {
+                    ProjectToolLine(line, _renderedLineCount);
+                }
+                else
+                {
+                    Lines.Add(new ChatLineViewModel(line.Role, line.Text));
+                }
                 _renderedLineCount++;
             }
 
@@ -92,6 +130,118 @@ public sealed partial class ChatViewModel : ObservableObject
             StreamingBuffer = state.Active.TextBuffer;
         });
     }
+
+    /// <summary>
+    ///     Project a <see cref="ChatRole.Tool"/> (start) or
+    ///     <see cref="ChatRole.ToolResult"/> (end) line into a
+    ///     <see cref="ToolCallViewModel"/> card. Coalesces start/end
+    ///     pairs by tool name + index.
+    /// </summary>
+    private void ProjectToolLine(ChatLine line, int lineIndex)
+    {
+        // Parse "tool_name: args" or "tool_name: result" — best-effort.
+        // The agent loop formats these; we tolerate any shape.
+        string text = line.Text ?? string.Empty;
+        string toolName = text;
+        string payload = string.Empty;
+        int colon = text.IndexOf(':');
+        if (colon > 0)
+        {
+            toolName = text[..colon].Trim();
+            payload = text[(colon + 1)..].Trim();
+        }
+
+        // Coalescing key — tool name + line index parity. Two adjacent
+        // Tool/ToolResult lines for the same tool name pair up.
+        string id = $"{toolName}-{lineIndex / 2}";
+
+        if (line.Role == ChatRole.Tool)
+        {
+            // Start event — create a running card.
+            if (!_toolCallById.TryGetValue(id, out var card))
+            {
+                card = new ToolCallViewModel
+                {
+                    Id = id,
+                    ToolName = toolName,
+                    IconText = IconForTool(toolName),
+                    Status = ToolCallStatus.Running,
+                    ArgsPreview = TruncateForPreview(payload),
+                    IsExpanded = false,
+                };
+                _toolCallById[id] = card;
+                ToolCalls.Add(card);
+                _toolCallStopwatch.Restart();
+            }
+        }
+        else // ChatRole.ToolResult
+        {
+            // End event — complete the matching card. Fall back to the
+            // most recent running card if the coalescing key missed.
+            ToolCallViewModel? card = null;
+            if (_toolCallById.TryGetValue(id, out card))
+            {
+                // Found by id — use it.
+            }
+            else
+            {
+                // Fall back: find the most-recently-added running card.
+                card = ToolCalls.LastOrDefault(c => c.Status == ToolCallStatus.Running);
+                if (card is not null)
+                {
+                    _toolCallById[id] = card;
+                }
+            }
+
+            if (card is not null)
+            {
+                bool isError = payload.StartsWith("error", StringComparison.OrdinalIgnoreCase)
+                    || payload.StartsWith("fail", StringComparison.OrdinalIgnoreCase);
+                card.Complete(
+                    status: isError ? ToolCallStatus.Error : ToolCallStatus.Success,
+                    resultPreview: TruncateForPreview(payload),
+                    duration: _toolCallStopwatch.Elapsed);
+            }
+            else
+            {
+                // No matching start — create a completed card standalone.
+                var standalone = new ToolCallViewModel
+                {
+                    Id = id,
+                    ToolName = toolName,
+                    IconText = IconForTool(toolName),
+                    Status = ToolCallStatus.Success,
+                    ResultPreview = TruncateForPreview(payload),
+                };
+                _toolCallById[id] = standalone;
+                ToolCalls.Add(standalone);
+            }
+        }
+    }
+
+    private static string TruncateForPreview(string text, int max = 800)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        return text.Length <= max ? text : text[..max] + "…";
+    }
+
+    private static string IconForTool(string toolName) => toolName.ToLowerInvariant() switch
+    {
+        "read" => "📖",
+        "write" => "✍️",
+        "edit" => "✏️",
+        "patch" => "🩹",
+        "bash" or "sh" => "🖥️",
+        "grep" or "ripgrep" => "🔍",
+        "glob" => "🌐",
+        "ls" => "📁",
+        "tree" => "🌲",
+        "webfetch" or "fetch" => "🌐",
+        "task" => "📋",
+        "notebook" => "📓",
+        "mcp" => "🔌",
+        _ => "🔧",
+    };
 
     /// <summary>Submit the current input text. Plain Enter (handled in view) triggers this.</summary>
     [RelayCommand]
@@ -136,6 +286,8 @@ public sealed partial class ChatViewModel : ObservableObject
     {
         _store.Reset();
         Lines.Clear();
+        ToolCalls.Clear();
+        _toolCallById.Clear();
         _renderedLineCount = 0;
     }
 }

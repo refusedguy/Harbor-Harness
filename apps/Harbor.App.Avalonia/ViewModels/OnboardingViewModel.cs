@@ -1,0 +1,312 @@
+using System.Collections.ObjectModel;
+using System.Collections.Immutable;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Harbor.App.Avalonia.Services;
+using Harbor.Desktop.Abstractions.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace Harbor.App.Avalonia.ViewModels;
+
+/// <summary>
+///     First-launch onboarding wizard view-model. Walks the user through
+///     provider selection → API key entry → default model → theme → done,
+///     then persists the result to <see cref="ICommonConfigStore"/> and
+///     raises <see cref="Completed"/> so <c>App.axaml.cs</c> can swap to the
+///     main window. Non-blocking: every network call is async with a 5-second
+///     timeout and is cancellable when the user closes the wizard.
+/// </summary>
+public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
+{
+    /// <summary>Number of steps in the wizard (1-based index, used by the view).</summary>
+    public const int TotalSteps = 5;
+
+    private readonly ICommonConfigStore _configStore;
+    private readonly ThemeService _theme;
+    private readonly ToastService _toasts;
+    private readonly ILogger<OnboardingViewModel> _logger;
+    private readonly CancellationTokenSource _wizardCts = new();
+
+    /// <summary>Construct the onboarding wizard view-model.</summary>
+    public OnboardingViewModel(
+        ICommonConfigStore configStore,
+        ThemeService theme,
+        ToastService toasts,
+        ILogger<OnboardingViewModel> logger)
+    {
+        _configStore = configStore;
+        _theme = theme;
+        _toasts = toasts;
+        _logger = logger;
+
+        // Static catalogue of providers the wizard knows about. Each entry
+        // declares whether an API key is required (Ollama is the only one that
+        // doesn't need one). The user picks a subset via checkboxes; the
+        // wizard then collects keys + a default model + theme.
+        Providers =
+        [
+            new OnboardingProviderOption("anthropic",  "Anthropic",   "ANTHROPIC_API_KEY",   requiresKey: true,  defaultModel: "claude-sonnet-4-20250514"),
+            new OnboardingProviderOption("openai",     "OpenAI",      "OPENAI_API_KEY",      requiresKey: true,  defaultModel: "gpt-4o"),
+            new OnboardingProviderOption("openrouter", "OpenRouter",  "OPENROUTER_API_KEY",  requiresKey: true,  defaultModel: "anthropic/claude-sonnet-4"),
+            new OnboardingProviderOption("deepseek",   "DeepSeek",    "DEEPSEEK_API_KEY",    requiresKey: true,  defaultModel: "deepseek-chat"),
+            new OnboardingProviderOption("groq",       "Groq",        "GROQ_API_KEY",        requiresKey: true,  defaultModel: "llama-3.3-70b-versatile"),
+            new OnboardingProviderOption("mistral",    "Mistral",     "MISTRAL_API_KEY",     requiresKey: true,  defaultModel: "mistral-large-latest"),
+            new OnboardingProviderOption("xai",        "xAI",         "XAI_API_KEY",         requiresKey: true,  defaultModel: "grok-3"),
+            new OnboardingProviderOption("together",   "Together AI", "TOGETHER_API_KEY",    requiresKey: true,  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+            new OnboardingProviderOption("fireworks",  "Fireworks",   "FIREWORKS_API_KEY",   requiresKey: true,  defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct"),
+            new OnboardingProviderOption("cerebras",   "Cerebras",    "CEREBRAS_API_KEY",    requiresKey: true,  defaultModel: "llama-3.3-70b"),
+            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILOCODE_API_KEY",    requiresKey: true,  defaultModel: "kilocode/sonnet"),
+            new OnboardingProviderOption("ollama",     "Ollama (local)", null,               requiresKey: false, defaultModel: "qwen2.5-coder:7b"),
+        ];
+
+        // Default-select Ollama (works offline, no key needed) so the user
+        // can finish onboarding without typing anything.
+        Providers.First(p => p.Id == "ollama").IsSelected = true;
+        RefreshSelectedProvider();
+    }
+
+    /// <summary>
+    ///     Dispose the wizard's cancellation token source. Called by the
+    ///     <see cref="OnboardingWindow"/> when it closes — prevents the CTS
+    ///     from leaking across re-runs of the wizard.
+    /// </summary>
+    public void Dispose()
+    {
+        _wizardCts.Cancel();
+        _wizardCts.Dispose();
+    }
+
+    /// <summary>Provider catalogue shown on step 2.</summary>
+    public ObservableCollection<OnboardingProviderOption> Providers { get; }
+
+    /// <summary>Selected provider for the "default model" dropdown on step 4.</summary>
+    [ObservableProperty]
+    private OnboardingProviderOption? _selectedProvider;
+
+    /// <summary>The current step (1..TotalSteps).</summary>
+    [ObservableProperty]
+    private int _currentStep = 1;
+
+    /// <summary>API key currently being entered for the provider on step 3.</summary>
+    [ObservableProperty]
+    private string _apiKey = string.Empty;
+
+    /// <summary>Default model id typed/selected on step 4.</summary>
+    [ObservableProperty]
+    private string _defaultModel = string.Empty;
+
+    /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
+    [ObservableProperty]
+    private string _themeChoice = "dark";
+
+    /// <summary>Status text shown while testing/saving (e.g. "Saving…").</summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
+    /// <summary>True while a background operation (save/test) is running.</summary>
+    [ObservableProperty]
+    private bool _isBusy;
+
+    /// <summary>True when the wizard has finished and the view should close.</summary>
+    [ObservableProperty]
+    private bool _isCompleted;
+
+    /// <summary>Raised when the user completes onboarding. App.axaml.cs swaps to MainWindow.</summary>
+    public event EventHandler? Completed;
+
+    /// <summary>Human-readable title for the current step.</summary>
+    public string StepTitle => CurrentStep switch
+    {
+        1 => "Welcome to Harbor",
+        2 => "Choose your providers",
+        3 => "Enter API key",
+        4 => "Default model",
+        5 => "Theme",
+        _ => "Onboarding",
+    };
+
+    /// <summary>True when the user can advance to the next step.</summary>
+    public bool CanAdvance => CurrentStep switch
+    {
+        2 => Providers.Any(p => p.IsSelected),
+        3 => SelectedProvider is null || !SelectedProvider.RequiresKey || !string.IsNullOrWhiteSpace(ApiKey),
+        4 => !string.IsNullOrWhiteSpace(DefaultModel),
+        _ => true,
+    };
+
+    /// <summary>Advance to the next step (or complete on step 5).</summary>
+    [RelayCommand]
+    private void Next()
+    {
+        if (!CanAdvance) return;
+        if (CurrentStep >= TotalSteps)
+        {
+            _ = FinishAsync();
+            return;
+        }
+
+        // Pre-fill the API key + default model fields when entering those steps
+        // so the user only has to confirm/edit.
+        if (CurrentStep == 2 && SelectedProvider is not null)
+        {
+            DefaultModel = SelectedProvider.DefaultModel;
+        }
+
+        CurrentStep++;
+        OnPropertyChanged(nameof(CanAdvance));
+    }
+
+    /// <summary>Go back to the previous step (no-op on step 1).</summary>
+    [RelayCommand]
+    private void Back()
+    {
+        if (CurrentStep <= 1) return;
+        CurrentStep--;
+        OnPropertyChanged(nameof(CanAdvance));
+    }
+
+    /// <summary>Skip onboarding entirely — closes the wizard without saving.</summary>
+    [RelayCommand]
+    private void Skip()
+    {
+        _wizardCts.Cancel();
+        IsCompleted = true;
+        Completed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Recompute <see cref="SelectedProvider"/> + CanAdvance after step-2 checkbox toggles.</summary>
+    [RelayCommand]
+    private void RefreshSelectedProvider()
+    {
+        SelectedProvider = Providers.FirstOrDefault(p => p.IsSelected)
+            ?? Providers.FirstOrDefault();
+        if (SelectedProvider is not null && string.IsNullOrEmpty(DefaultModel))
+        {
+            DefaultModel = SelectedProvider.DefaultModel;
+        }
+        OnPropertyChanged(nameof(CanAdvance));
+    }
+
+    /// <summary>
+    ///     Persist the onboarding result to <c>~/.harbor/config.json</c> and
+    ///     raise <see cref="Completed"/>. Non-blocking: returns immediately
+    ///     on the UI thread; the await chain is fire-and-forget.
+    /// </summary>
+    private async Task FinishAsync()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        StatusText = "Saving configuration…";
+        try
+        {
+            // Build the API-key dictionary from the selected providers. Ollama
+            // (and any provider with RequiresKey=false) gets no entry.
+            var keysBuilder = ImmutableDictionary.CreateBuilder<string, string>();
+            foreach (var p in Providers.Where(p => p.IsSelected && p.RequiresKey))
+            {
+                // The view binds the ApiKey field to the currently-selected
+                // provider on step 3. We accept the typed value for that one
+                // and leave any others blank (the user can add them later in
+                // Settings). For the common single-provider onboarding flow
+                // this is sufficient.
+                if (p == SelectedProvider && !string.IsNullOrWhiteSpace(ApiKey))
+                {
+                    keysBuilder.Add(p.Id, ApiKey.Trim());
+                }
+            }
+
+            var provider = SelectedProvider?.Id ?? "ollama";
+            var model = string.IsNullOrWhiteSpace(DefaultModel)
+                ? (SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b")
+                : DefaultModel.Trim();
+
+            var updateResult = await _configStore.UpdateAsync(cfg => cfg with
+            {
+                OnboardingCompleted = true,
+                ApiKeys = keysBuilder.ToImmutable(),
+                DefaultProvider = provider,
+                DefaultModel = model,
+                StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend,
+            }, _wizardCts.Token).ConfigureAwait(true);
+
+            if (updateResult.IsFailure)
+            {
+                _logger.LogError("Onboarding save failed: {Error}", updateResult.Error);
+                _toasts.Show($"Could not save configuration: {updateResult.Error}", ToastKind.Error);
+                StatusText = string.Empty;
+                return;
+            }
+
+            // Apply the chosen theme immediately so the main window opens
+            // with it (and the user sees their choice reflected).
+            switch ((ThemeChoice ?? "dark").ToLowerInvariant())
+            {
+                case "light":
+                    _theme.ApplyLight();
+                    break;
+                case "system":
+                    _logger.LogInformation("Onboarding theme 'system' — leaving default (dark) active.");
+                    break;
+                default:
+                    _theme.ApplyDark();
+                    break;
+            }
+
+            _toasts.Show("Onboarding complete — welcome to Harbor!", ToastKind.Success);
+            IsCompleted = true;
+            Completed?.Invoke(this, EventArgs.Empty);
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogInformation(ex, "Onboarding cancelled by user.");
+            StatusText = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Onboarding finish failed");
+            _toasts.Show($"Onboarding failed: {ex.Message}", ToastKind.Error);
+            StatusText = string.Empty;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+}
+
+/// <summary>
+///     One provider row on step 2 of the onboarding wizard. Bindable:
+///     <see cref="IsSelected"/> is a two-way checkbox; the wizard reads the
+///     checked set on <c>Next</c>.
+/// </summary>
+public sealed partial class OnboardingProviderOption : ObservableObject
+{
+    /// <summary>Provider id (matches <c>CommonConfig.ApiKeys</c> keys + provider JSON files).</summary>
+    public string Id { get; }
+
+    /// <summary>Human-readable display name.</summary>
+    public string DisplayName { get; }
+
+    /// <summary>Name of the env var that holds the API key (shown as a hint), or null when no key is needed.</summary>
+    public string? AuthEnvVar { get; }
+
+    /// <summary>True when this provider requires an API key (i.e. not Ollama).</summary>
+    public bool RequiresKey { get; }
+
+    /// <summary>Suggested default model id for this provider.</summary>
+    public string DefaultModel { get; }
+
+    /// <summary>Construct a provider option.</summary>
+    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel)
+    {
+        Id = id;
+        DisplayName = displayName;
+        AuthEnvVar = authEnvVar;
+        RequiresKey = requiresKey;
+        DefaultModel = defaultModel;
+    }
+
+    /// <summary>Two-way bound checkbox state.</summary>
+    [ObservableProperty]
+    private bool _isSelected;
+}

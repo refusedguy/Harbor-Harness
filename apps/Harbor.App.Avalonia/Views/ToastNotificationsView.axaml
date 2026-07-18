@@ -12,7 +12,8 @@
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
             <DataTemplate DataType="srv:ToastNotification">
-                <Border Background="{StaticResource MochaSurface0}"
+                <Border Classes="ToastCard"
+                        Background="{StaticResource MochaSurface0}"
                         CornerRadius="6"
                         Padding="12,8"
                         BorderBrush="{StaticResource MochaSurface2}"

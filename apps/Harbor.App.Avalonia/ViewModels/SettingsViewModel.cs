@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels;
@@ -16,13 +17,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ThemeService _theme;
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly ToastService _toasts;
+    private readonly ICommonConfigStore _commonConfigStore;
 
     /// <summary>Construct the settings view-model.</summary>
-    public SettingsViewModel(ThemeService theme, ILogger<SettingsViewModel> logger, ToastService toasts)
+    public SettingsViewModel(
+        ThemeService theme,
+        ILogger<SettingsViewModel> logger,
+        ToastService toasts,
+        ICommonConfigStore commonConfigStore)
     {
         _theme = theme;
         _logger = logger;
         _toasts = toasts;
+        _commonConfigStore = commonConfigStore;
         Model = Environment.GetEnvironmentVariable("HARBOR_MODEL") ?? "ollama/qwen2.5-coder:7b";
         Storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "memory";
         LogLevel = Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL") ?? "Information";
@@ -61,5 +68,32 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void ApplyTheme()
     {
         if (IsDarkTheme) _theme.ApplyDark(); else _theme.ApplyLight();
+    }
+
+    /// <summary>
+    ///     Re-run the first-launch onboarding wizard. Sets
+    ///     <see cref="CommonConfig.OnboardingCompleted"/> back to <c>false</c>
+    ///     and persists it, then asks the user to restart. On next launch
+    ///     <c>App.OnFrameworkInitializationCompleted</c> will detect the flag
+    ///     is false and show <c>OnboardingWindow</c> again.
+    /// </summary>
+    [RelayCommand]
+    private async Task RerunOnboardingAsync()
+    {
+        var result = await _commonConfigStore.UpdateAsync(cfg => cfg with
+        {
+            OnboardingCompleted = false,
+        }).ConfigureAwait(true);
+
+        if (result.IsSuccess)
+        {
+            _toasts.Show("Onboarding reset — restart Harbor to run the wizard again.", ToastKind.Success);
+            _logger.LogInformation("Onboarding reset by user — restart required.");
+        }
+        else
+        {
+            _toasts.Show($"Could not reset onboarding: {result.Error}", ToastKind.Error);
+            _logger.LogError("Onboarding reset failed: {Error}", result.Error);
+        }
     }
 }

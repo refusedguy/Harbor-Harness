@@ -1,0 +1,156 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+        xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+        x:Class="Harbor.App.Avalonia.Views.OnboardingWindow"
+        Title="Harbor — Welcome"
+        Width="640" Height="560"
+        MinWidth="560" MinHeight="480"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource AppBackgroundBrush}"
+        FontFamily="{StaticResource UiFont}">
+
+    <Window.Resources>
+        <views:EqualityConverter x:Key="EqualityConv"/>
+        <views:InequalityConverter x:Key="InequalityConv"/>
+        <views:FinishLabelConverter x:Key="FinishLabelConv"/>
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="24">
+
+        <!-- ─── Header: step title + progress hint ─── -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,Auto" Margin="0,0,0,16">
+            <TextBlock Grid.Row="0" Text="{Binding StepTitle}" FontSize="20" FontWeight="Bold"
+                       Foreground="{StaticResource MochaBlue}"/>
+            <TextBlock Grid.Row="1" Margin="0,8,0,0" FontSize="11"
+                       Foreground="{StaticResource TextSubtleBrush}"
+                       Text="{Binding CurrentStep, StringFormat='Step {0} of 5'}"/>
+        </Grid>
+
+        <!-- ─── Body: changes per step ─── -->
+        <Border Grid.Row="1" Background="{StaticResource MochaMantle}" CornerRadius="8" Padding="20">
+          <!-- Avalonia 11.2 Border.Child is single-content; use a Panel as
+               a stacking container so each step's StackPanel can be shown/
+               hidden independently via IsVisible without conflicting with
+               Border's single-child contract. -->
+          <Panel>
+
+            <!-- Step 1: Welcome -->
+            <StackPanel IsVisible="{Binding CurrentStep, Converter={StaticResource EqualityConv}, ConverterParameter=1}"
+                        Spacing="12">
+                <TextBlock Text="⚓ Harbor" FontSize="28" FontWeight="Bold"
+                           Foreground="{StaticResource MochaMauve}"/>
+                <TextBlock Text="Your local-first AI coding agent."
+                           FontSize="14" Foreground="{StaticResource MochaText}"/>
+                <TextBlock Text="This wizard takes about a minute and sets up your first provider, default model, and theme. You can change any of this later in Settings."
+                           TextWrapping="Wrap" Foreground="{StaticResource TextSubtleBrush}"/>
+                <TextBlock Text="Tip: pick Ollama if you want to run models locally — no API key required."
+                           TextWrapping="Wrap" Foreground="{StaticResource MochaGreen}" FontSize="12"/>
+            </StackPanel>
+
+            <!-- Step 2: Provider selection -->
+            <StackPanel IsVisible="{Binding CurrentStep, Converter={StaticResource EqualityConv}, ConverterParameter=2}"
+                        Spacing="6">
+                <TextBlock Text="Select at least one provider:" Margin="0,0,0,8"
+                           Foreground="{StaticResource TextSubtleBrush}" FontSize="12"/>
+                <ScrollViewer Height="300">
+                    <ItemsControl ItemsSource="{Binding Providers}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:OnboardingProviderOption">
+                                <Border Background="{StaticResource MochaSurface0}" CornerRadius="6"
+                                        Padding="10,8" Margin="0,2">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}"
+                                                  Click="Provider_Checkbox_Changed"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="1">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding AuthEnvVar, StringFormat='env: {0}'}"
+                                                       FontSize="11" Foreground="{StaticResource MochaOverlay2}"
+                                                       IsVisible="{Binding RequiresKey}"/>
+                                            <TextBlock Text="local — no key required"
+                                                       FontSize="11" Foreground="{StaticResource MochaGreen}"
+                                                       IsVisible="{Binding !RequiresKey}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding DefaultModel}"
+                                                   FontSize="10" Foreground="{StaticResource MochaOverlay2}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+
+            <!-- Step 3: API key -->
+            <StackPanel IsVisible="{Binding CurrentStep, Converter={StaticResource EqualityConv}, ConverterParameter=3}"
+                        Spacing="12">
+                <TextBlock Text="Enter your API key for the selected provider:"
+                           Foreground="{StaticResource TextSubtleBrush}" FontSize="12"/>
+                <TextBlock Text="{Binding SelectedProvider.DisplayName}" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource MochaBlue}"/>
+                <TextBlock IsVisible="{Binding SelectedProvider.RequiresKey}"
+                           Text="{Binding SelectedProvider.AuthEnvVar, StringFormat='Will be saved to the {0} field in ~/.harbor/config.json'}"
+                           FontSize="11" Foreground="{StaticResource MochaOverlay2}" TextWrapping="Wrap"/>
+                <TextBox IsVisible="{Binding SelectedProvider.RequiresKey}"
+                         Text="{Binding ApiKey, Mode=TwoWay}"
+                         Watermark="sk-…"
+                         PasswordChar="•"/>
+                <TextBlock IsVisible="{Binding !SelectedProvider.RequiresKey}"
+                           Text="This provider doesn't need an API key. Click Next to continue."
+                           TextWrapping="Wrap" Foreground="{StaticResource MochaGreen}"/>
+            </StackPanel>
+
+            <!-- Step 4: Default model -->
+            <StackPanel IsVisible="{Binding CurrentStep, Converter={StaticResource EqualityConv}, ConverterParameter=4}"
+                        Spacing="12">
+                <TextBlock Text="Pick the default model for new sessions:"
+                           Foreground="{StaticResource TextSubtleBrush}" FontSize="12"/>
+                <TextBlock Text="{Binding SelectedProvider.DisplayName, StringFormat='Provider: {0}'}"
+                           FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource MochaBlue}"/>
+                <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                         Watermark="model id"/>
+                <TextBlock Text="You can switch models anytime with /model or in Settings."
+                           FontSize="11" Foreground="{StaticResource MochaOverlay2}" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Step 5: Theme -->
+            <StackPanel IsVisible="{Binding CurrentStep, Converter={StaticResource EqualityConv}, ConverterParameter=5}"
+                        Spacing="14">
+                <TextBlock Text="Choose your theme:" Foreground="{StaticResource TextSubtleBrush}" FontSize="12"/>
+                <RadioButton Content="🌙 Dark (Catppuccin Mocha)" GroupName="Theme"
+                             IsChecked="{Binding ThemeChoice, Converter={StaticResource EqualityConv}, ConverterParameter=dark, Mode=TwoWay}"/>
+                <RadioButton Content="☀ Light (Catppuccin Latte)" GroupName="Theme"
+                             IsChecked="{Binding ThemeChoice, Converter={StaticResource EqualityConv}, ConverterParameter=light, Mode=TwoWay}"/>
+                <RadioButton Content="🖥 System" GroupName="Theme"
+                             IsChecked="{Binding ThemeChoice, Converter={StaticResource EqualityConv}, ConverterParameter=system, Mode=TwoWay}"/>
+                <TextBlock Text="Click Finish to save and start using Harbor."
+                           FontSize="11" Foreground="{StaticResource MochaOverlay2}" TextWrapping="Wrap"/>
+            </StackPanel>
+
+          </Panel>
+        </Border>
+
+        <!-- ─── Footer: nav buttons ─── -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,16,0,0">
+
+            <Button Grid.Column="0" Classes="Subtle" Content="Skip"
+                    Command="{Binding SkipCommand}"
+                    ToolTip.Tip="Skip onboarding — opens the main window with defaults"/>
+            <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{StaticResource MochaOverlay2}" FontSize="11"/>
+
+            <Button Grid.Column="2" Classes="Subtle" Content="← Back"
+                    Command="{Binding BackCommand}"
+                    Margin="0,0,8,0"
+                    IsVisible="{Binding CurrentStep, Converter={StaticResource InequalityConv}, ConverterParameter=1}"/>
+            <Button Grid.Column="3" Classes="Primary"
+                    Content="{Binding CurrentStep, Converter={StaticResource FinishLabelConv}}"
+                    Command="{Binding NextCommand}"
+                    IsEnabled="{Binding CanAdvance}"/>
+        </Grid>
+    </Grid>
+</Window>

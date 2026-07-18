@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Ui.Framework.State;
@@ -11,6 +11,16 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     Token-usage chart view-model. Records a snapshot per turn (input/output tokens
 ///     + cost) and exposes them as bar-chart rows for the <c>TokenUsageView</c>.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Task R1 — Sparkline:</b> in addition to the existing
+///         per-turn bar chart, this view-model now exposes
+///         <see cref="RecentOutputTokens"/> — a list of the last 30
+///         turns' output-token counts, suitable for binding to the
+///         <c>Sparkline</c> control in the status bar. Updates live as
+///         <see cref="RecordUsage"/> adds new bars.
+///     </para>
+/// </remarks>
 public sealed partial class TokenUsageViewModel : ObservableObject
 {
     private readonly ILogger<TokenUsageViewModel> _logger;
@@ -27,6 +37,12 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     /// <summary>One bar per turn.</summary>
     public ObservableCollection<TokenUsageBarViewModel> Bars { get; } = new();
 
+    /// <summary>
+    ///     Recent output-token counts (last 30 turns), exposed for the
+    ///     status-bar sparkline. Capped to keep the sparkline compact.
+    /// </summary>
+    public ObservableCollection<double> RecentOutputTokens { get; } = new();
+
     [ObservableProperty]
     private long _totalTokensIn;
 
@@ -38,6 +54,14 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 
     /// <summary>Sample the current UiState and append a new bar when tokens changed.</summary>
     /// <param name="state">Current UI snapshot.</param>
+    /// <remarks>
+    ///     This method is called from <see cref="MainViewModel.OnStoreChanged"/>,
+    ///     which itself runs inside a <c>Dispatcher.UIThread.Post</c> — so we
+    ///     are already on the UI thread when this is invoked. No inner
+    ///     marshaling needed (and trying to Post again would break headless
+    ///     tests where no dispatcher is pumping). Callers from a background
+    ///     thread are responsible for marshaling.
+    /// </remarks>
     public void RecordUsage(UiState state)
     {
         if (state.Cost.TokensIn == _lastTokensIn && state.Cost.TokensOut == _lastTokensOut) return;
@@ -51,15 +75,19 @@ public sealed partial class TokenUsageViewModel : ObservableObject
             return;
         }
         _turnIndex++;
-        Dispatcher.UIThread.Post(() =>
-        {
-            Bars.Add(new TokenUsageBarViewModel(_turnIndex, deltaIn, deltaOut, state.Cost.CostUsd));
-            // Cap the chart to last 50 turns.
-            while (Bars.Count > 50) Bars.RemoveAt(0);
-            TotalTokensIn = state.Cost.TokensIn;
-            TotalTokensOut = state.Cost.TokensOut;
-            TotalCostUsd = state.Cost.CostUsd;
-        });
+
+        Bars.Add(new TokenUsageBarViewModel(_turnIndex, deltaIn, deltaOut, state.Cost.CostUsd));
+        // Cap the chart to last 50 turns.
+        while (Bars.Count > 50) Bars.RemoveAt(0);
+
+        // Sparkline series — cap at 30 for compact status-bar display.
+        RecentOutputTokens.Add(deltaOut);
+        while (RecentOutputTokens.Count > 30) RecentOutputTokens.RemoveAt(0);
+
+        TotalTokensIn = state.Cost.TokensIn;
+        TotalTokensOut = state.Cost.TokensOut;
+        TotalCostUsd = state.Cost.CostUsd;
+
         _lastTokensIn = state.Cost.TokensIn;
         _lastTokensOut = state.Cost.TokensOut;
     }
@@ -69,6 +97,7 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     private void Clear()
     {
         Bars.Clear();
+        RecentOutputTokens.Clear();
         _turnIndex = 0;
         _lastTokensIn = 0;
         _lastTokensOut = 0;

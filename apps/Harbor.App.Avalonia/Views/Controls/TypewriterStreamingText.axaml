@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Controls.TypewriterStreamingText">
+
+    <!--
+        TypewriterStreamingText — streaming chat text with an animated
+        blinking cursor (▋) at the tail.
+
+        Killer-feature port: every chat UI (Orca, ChatGPT, Claude) shows
+        a blinking cursor during streaming — Harbor's pre-R1 streaming
+        buffer was a static TextBlock that looked frozen.
+
+        Bind `Text` to the streaming buffer and `IsStreaming` to the
+        active-streaming flag. Cursor blinks at ~1.9 Hz (530 ms on/off)
+        while streaming and disappears when idle.
+    -->
+
+    <StackPanel Orientation="Horizontal">
+        <TextBlock Text="{Binding Text, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=UserControl}}"
+                   TextWrapping="Wrap"
+                   TextTrimming="CharacterEllipsis"
+                   MaxWidth="900"
+                   FontFamily="{StaticResource CodeFont}"
+                   FontSize="11"
+                   Foreground="{DynamicResource MochaSubtext0}"
+                   VerticalAlignment="Center"/>
+        <TextBlock x:Name="BlinkCursor"
+                   Text="▋"
+                   FontFamily="{StaticResource CodeFont}"
+                   FontSize="11"
+                   Foreground="{DynamicResource MochaPeach}"
+                   FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Margin="1,0,0,0"
+                   Classes="BlinkingCursor"/>
+    </StackPanel>
+</UserControl>

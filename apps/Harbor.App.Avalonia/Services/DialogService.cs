@@ -158,7 +158,7 @@ public sealed class DialogService
             CanResize = false,
             ShowInTaskbar = false,
         };
-        var box = new TextBox { Text = defaultValue, Watermark = message };
+        var box = new TextBox { Text = defaultValue, PlaceholderText = message };
         var ok = new Button { Content = "OK", Classes = { "Primary" }, Padding = new Thickness(20, 6) };
         var cancel = new Button { Content = "Cancel", Padding = new Thickness(20, 6) };
         ok.Click += (_, _) => dialog.Close(box.Text);

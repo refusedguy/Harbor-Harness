@@ -2,35 +2,54 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              x:Class="Harbor.App.Avalonia.Views.ChatView">
 
-    <Grid RowDefinitions="*,Auto,Auto">
+    <Grid RowDefinitions="*,Auto,Auto,Auto">
 
         <!-- Chat history -->
         <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Lines}" Padding="12,8">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:ChatLineViewModel">
-                        <Grid Margin="0,4" ColumnDefinitions="100,*">
-                            <Border Grid.Column="0" Background="{StaticResource MochaCrust}"
-                                    CornerRadius="4" Padding="6,2" VerticalAlignment="Top"
-                                    HorizontalAlignment="Left">
-                                <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
-                                           FontSize="11" FontWeight="SemiBold"
+            <StackPanel>
+                <!-- Tool-call cards (Task R1 — killer feature #2).
+                     Rendered above the transcript so tool calls are
+                     visually distinct from text lines. Each card
+                     collapses to a single header row by default. -->
+                <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,4,12,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:ToolCallViewModel">
+                            <ctrl:ToolCallCardView/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Text transcript (non-tool lines) -->
+                <ItemsControl ItemsSource="{Binding Lines}" Padding="12,4">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:ChatLineViewModel">
+                            <Grid Margin="0,4" ColumnDefinitions="100,*">
+                                <Border Grid.Column="0" Background="{StaticResource MochaCrust}"
+                                        CornerRadius="4" Padding="6,2" VerticalAlignment="Top"
+                                        HorizontalAlignment="Left">
+                                    <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
+                                           Margin="10,0,0,0"
+                                           FontFamily="{StaticResource CodeFont}"
+                                           FontSize="13"
                                            Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
-                            </Border>
-                            <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
-                                       Margin="10,0,0,0"
-                                       FontFamily="{StaticResource CodeFont}"
-                                       FontSize="13"
-                                       Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </ScrollViewer>
 
-        <!-- Streaming buffer -->
+        <!-- Streaming buffer — Task R1 killer feature #1: animated
+             typewriter cursor. The TypewriterStreamingText control
+             blinks a ▋ at the tail of the streaming buffer while
+             IsStreaming is true. -->
         <Border Grid.Row="1" Background="{StaticResource MochaCrust}" CornerRadius="6"
                 Padding="10,6" Margin="12,4,12,2"
                 IsVisible="{Binding IsStreaming}">
@@ -39,10 +58,10 @@
                 <TextBlock Text="● streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
                            FontFamily="{StaticResource CodeFont}" FontSize="11"
                            VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding StreamingBuffer}" Foreground="{StaticResource MochaSubtext0}"
-                           TextTrimming="CharacterEllipsis"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           MaxWidth="900" VerticalAlignment="Center"/>
+                <ctrl:TypewriterStreamingText
+                    Text="{Binding StreamingBuffer}"
+                    IsStreaming="{Binding IsStreaming}"
+                    VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
@@ -59,7 +78,7 @@
         </Border>
 
         <!-- Input -->
-        <Grid Grid.Row="2" Margin="12,4,12,8" ColumnDefinitions="*,Auto,Auto">
+        <Grid Grid.Row="3" Margin="12,4,12,8" ColumnDefinitions="*,Auto,Auto">
             <TextBox Grid.Column="0"
                      Text="{Binding InputText, Mode=TwoWay}"
                      Watermark="Message Harbor…  (Enter to send, Shift+Enter for newline)"

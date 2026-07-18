@@ -198,7 +198,15 @@ internal static class AppHost
         var providerRegistry = new ProviderRegistry(loggerFactory.CreateLogger<ProviderRegistry>());
         var pb = new ProviderRegistryBuilder(providerRegistry);
         pb.AddProvider("ollama", () => new OllamaLlmClient(
-            new HttpClient { BaseAddress = new Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434") },
+            new HttpClient
+            {
+                BaseAddress = new Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434"),
+                // 10s timeout — the default 100s makes the UI feel frozen when
+                // Ollama isn't running. The ProviderBrowserViewModel adds its
+                // own 5s cancellation token on top, so a missing Ollama is
+                // surfaced as a quick "no models" rather than a 100s hang.
+                Timeout = TimeSpan.FromSeconds(10),
+            },
             new OllamaConfig(),
             loggerFactory.CreateLogger<OllamaLlmClient>()));
         providerRegistry.Freeze();
@@ -291,6 +299,10 @@ internal static class AppHost
         builder.Services.AddTransient<CodeEditorViewModel>();
         builder.Services.AddTransient<DiffViewModel>();
         builder.Services.AddTransient<TokenUsageViewModel>();
+        // Onboarding VM is transient — created fresh each time the wizard runs
+        // (first launch, or re-run from Settings). Holds per-run state (current
+        // step, typed API key) that we explicitly want to discard on close.
+        builder.Services.AddTransient<OnboardingViewModel>();
 
         var host = builder.Build();
 

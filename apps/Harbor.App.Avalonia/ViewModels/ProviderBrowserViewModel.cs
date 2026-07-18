@@ -13,8 +13,18 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 public sealed partial class ProviderBrowserViewModel : ObservableObject
 {
+    /// <summary>
+    ///     Hard cap on how long a single model-list fetch may take. The
+    ///     default 100s HttpClient timeout made the UI feel frozen when a
+    ///     provider (typically Ollama) wasn't running. Five seconds is long
+    ///     enough for a healthy local provider to respond, short enough that
+    ///     the user doesn't think the app hung.
+    /// </summary>
+    public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
+
     private readonly IProviderRegistry _providers;
     private readonly ILogger<ProviderBrowserViewModel> _logger;
+    private CancellationTokenSource? _loadCts;
 
     /// <summary>Construct the provider browser view-model.</summary>
     public ProviderBrowserViewModel(IProviderRegistry providers, ILogger<ProviderBrowserViewModel> logger)
@@ -35,11 +45,25 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading;
 
+    /// <summary>
+    ///     Error message shown in the UI when a model fetch fails (e.g. "Ollama
+    ///     not running on http://localhost:11434 — start it with `ollama serve`.").
+    /// </summary>
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
     /// <summary>Load providers from the registry.</summary>
     [RelayCommand]
     private async Task LoadProvidersAsync()
     {
+        // Cancel any in-flight load (e.g. the user re-opened the browser
+        // while a previous fetch was still running).
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+
         IsLoading = true;
+        ErrorMessage = string.Empty;
         Providers.Clear();
         foreach (var id in _providers.GetRegisteredProviderIds().Select(p => p.Value))
         {
@@ -53,16 +77,28 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
         IsLoading = false;
     }
 
-    /// <summary>Load models for the selected provider.</summary>
+    /// <summary>Load models for the selected provider, with a 5-second timeout.</summary>
+    /// <param name="row">The provider row to load models for. No-op when null.</param>
     [RelayCommand]
     private async Task LoadModelsAsync(ProviderRowViewModel? row)
     {
         if (row is null) return;
+
+        // Cancel any previous load. The shared CTS means opening the browser
+        // and then immediately picking a different provider cancels the first
+        // fetch — no orphaned Task.Runs piling up behind the UI.
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+
+        var cts = new CancellationTokenSource(ModelFetchTimeout);
+        _loadCts = cts;
+
         IsLoading = true;
+        ErrorMessage = string.Empty;
         Models.Clear();
         try
         {
-            var result = await _providers.GetAllModelsAsync().ConfigureAwait(false);
+            var result = await _providers.GetAllModelsAsync(cts.Token).ConfigureAwait(true);
             if (result.IsSuccess)
             {
                 foreach (var m in result.Value.Where(m => m.ProviderId == row.Id))
@@ -72,19 +108,34 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
                         m.SupportsReasoning, m.SupportsVision, m.SupportsToolUse,
                         m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion));
                 }
+
+                if (Models.Count == 0)
+                {
+                    ErrorMessage = $"No models returned by provider '{row.Id}'. " +
+                                   "If this is a local provider (e.g. Ollama), make sure it's running.";
+                }
             }
             else
             {
                 _logger.LogWarning("GetAllModelsAsync failed: {Error}", result.Error);
+                ErrorMessage = result.Error;
             }
+        }
+        catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
+        {
+            _logger.LogInformation(ex, "Model fetch for {Provider} cancelled/timed out after {Timeout}s",
+                row.Id, ModelFetchTimeout.TotalSeconds);
+            ErrorMessage = $"Timed out after {ModelFetchTimeout.TotalSeconds:F0}s — is '{row.Id}' running?";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "LoadModelsAsync exception");
+            ErrorMessage = ex.Message;
         }
         finally
         {
             IsLoading = false;
+            cts.Dispose();
         }
     }
 }

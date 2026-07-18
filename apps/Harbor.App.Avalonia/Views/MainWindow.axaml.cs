@@ -10,7 +10,10 @@ namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Main window code-behind. Hosts the shell layout and the global keyboard
 ///     shortcuts (Ctrl+P / Ctrl+Shift+P / Ctrl+B / Ctrl+Shift+T / Ctrl+O / Ctrl+S /
-///     Ctrl+L / Ctrl+Enter / Esc).
+///     Ctrl+L / Ctrl+Enter / Esc). Disposes the bound <see cref="MainViewModel"/>
+///     on close so the UiStore subscription + toast continuations are torn down
+///     cleanly — without this, the dispatcher subscription can keep the UI
+///     thread busy after the window is gone (the "window won't close" hang).
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -24,6 +27,19 @@ public partial class MainWindow : Window
         // is available yet (design-time previewer, or first-run before the config
         // file is written).
         ApplyConfiguredGeometry();
+
+        // Dispose the MainViewModel when the window closes — this unsubscribes
+        // the UiStore → dispatcher bridge and prevents background toast
+        // continuations from racing the window teardown. Coupled with
+        // App.OnShutdownRequested (which stops the IHost), this fixes the
+        // "window hangs and won't close" symptom the user reported.
+        Closing += (_, _) =>
+        {
+            if (DataContext is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        };
     }
 
     /// <summary>

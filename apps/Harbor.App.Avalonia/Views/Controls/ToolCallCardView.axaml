@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             x:Class="Harbor.App.Avalonia.Views.Controls.ToolCallCardView">
+
+    <!--
+        ToolCallCardView — collapsible card for a single tool call.
+
+        Killer-feature port: every coding-agent UI (Orca, Opencode, Pi,
+        Kilocode) renders tool calls as expandable cards with a status
+        pill + duration + args/result sections. Harbor pre-R1 rendered
+        tool calls as flat ChatRole.Tool / ChatRole.ToolResult lines —
+        unreadable for any tool with multi-line output.
+
+        The card slide-ins from the left via a RenderTransform
+        transition defined in AppStyles.axaml (Border.ToolCallCard).
+    -->
+
+    <Border Classes="ToolCallCard"
+            Background="{StaticResource MochaSurface0}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="10,6"
+            Margin="0,2">
+        <Grid RowDefinitions="Auto,Auto">
+
+            <!-- Header: icon + name + status pill + duration -->
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding IconText}"
+                           FontSize="13"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ToolName}"
+                           FontWeight="SemiBold"
+                           FontFamily="{StaticResource CodeFont}"
+                           FontSize="12"
+                           Margin="6,0,8,0"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+                <Border Grid.Column="2"
+                        Background="{Binding StatusBackgroundBrush}"
+                        CornerRadius="3"
+                        Padding="6,1"
+                        VerticalAlignment="Center">
+                    <TextBlock Text="{Binding StatusPill}"
+                               FontSize="10"
+                               FontFamily="{StaticResource CodeFont}"
+                               Foreground="{StaticResource MochaCrust}"/>
+                </Border>
+                <TextBlock Grid.Column="3"
+                           Text="{Binding DurationText}"
+                           FontSize="10"
+                           Foreground="{StaticResource MochaOverlay2}"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Expandable body: args + result -->
+            <Expander Grid.Row="1"
+                      IsExpanded="{Binding IsExpanded}"
+                      Header="details"
+                      Margin="0,4,0,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Args"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource MochaOverlay2}"/>
+                    <Border Background="{StaticResource MochaCrust}"
+                            CornerRadius="4"
+                            Padding="8,4">
+                        <TextBlock Text="{Binding ArgsPreview}"
+                                   FontFamily="{StaticResource CodeFont}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MochaSubtext0}"/>
+                    </Border>
+                    <TextBlock Text="Result"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource MochaOverlay2}"
+                               Margin="0,4,0,0"/>
+                    <Border Background="{StaticResource MochaCrust}"
+                            CornerRadius="4"
+                            Padding="8,4">
+                        <TextBlock Text="{Binding ResultPreview}"
+                                   FontFamily="{StaticResource CodeFont}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MochaSubtext0}"/>
+                    </Border>
+                </StackPanel>
+            </Expander>
+        </Grid>
+    </Border>
+</UserControl>

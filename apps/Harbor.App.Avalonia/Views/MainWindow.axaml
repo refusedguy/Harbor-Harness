@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+        xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
         xmlns:ui="clr-namespace:Harbor.App.Avalonia"
         x:Class="Harbor.App.Avalonia.Views.MainWindow"
         Title="Harbor — AI Coding Agent"
@@ -139,7 +140,7 @@
 
         <!-- ════════════ Status bar ════════════ -->
         <Border Grid.Row="2" Classes="StatusBar">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto">
                 <!-- Status dot + text -->
                 <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
                          Fill="{Binding StatusBrushKey, Converter={StaticResource BrushKeyConv}}"/>
@@ -157,10 +158,22 @@
                 <TextBlock Grid.Column="4" Text="{Binding TokensIn, StringFormat='{}↓ {0:N0}'}"
                            Foreground="{StaticResource MochaSky}" Margin="0,0,12,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="5" Text="{Binding TokensOut, StringFormat='{}↑ {0:N0}'}"
-                           Foreground="{StaticResource MochaPeach}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="6" Text="{Binding CostUsd, StringFormat='{}${0:F4}'}"
+                           Foreground="{StaticResource MochaPeach}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+
+                <!-- Task R1 — killer feature #4: live token-usage sparkline.
+                     80×16 px inline chart of the last 30 turns' output-token
+                     counts. Updates live as the agent runs. Ports the
+                     sparkline pattern from Opencode + Kilocode. -->
+                <ctrl:Sparkline Grid.Column="6"
+                                Values="{Binding TokenUsage.RecentOutputTokens}"
+                                Width="80" Height="16"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Recent output tokens per turn"/>
+
+                <TextBlock Grid.Column="7" Text="{Binding CostUsd, StringFormat='{}${0:F4}'}"
                            Foreground="{StaticResource MochaYellow}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="7" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
+                <TextBlock Grid.Column="8" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
                            Foreground="{StaticResource TextSubtleBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
