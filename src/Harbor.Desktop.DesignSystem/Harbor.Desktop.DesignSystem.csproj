@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Desktop.DesignSystem — theme tokens as pure C# constants and a
+    Dictionary<string,string> representation for theme switching. NO XAML, NO
+    UI framework deps. Each platform app converts the (byte r, byte g, byte b)
+    tuples / hex strings to its own color type at startup.
+
+    Dependency rule (enforced by Harbor.Architecture.Tests):
+      ✅ Harbor.Desktop.Abstractions (for RgbColor)
+      ✅ Microsoft.Extensions.Logging.Abstractions
+      ❌ NO Avalonia / WPF / MAUI / Blazor / System.Drawing
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Desktop.DesignSystem</PackageId>
+    <Description>Harbor desktop design system — Catppuccin theme tokens as pure C# constants for Avalonia/WPF/MAUI/Blazor apps.</Description>
+    <PackageTags>harbor;desktop;design-system;theme;catppuccin</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!-- Meziantou MA0046 insists on EventArgs-derived payload types; the
+         ThemeChanged event uses EventHandler<ThemeKind> intentionally to
+         match the IThemeService contract in Harbor.Desktop.Abstractions
+         (which suppresses MA0046 for the same reason). -->
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

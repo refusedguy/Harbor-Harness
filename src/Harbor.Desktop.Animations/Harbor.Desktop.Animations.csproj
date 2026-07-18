@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Desktop.Animations — cross-platform animation helpers (easing
+    functions, durations, transition record types). No UI framework deps;
+    each platform app uses these constants to configure its own animation
+    primitives (Avalonia Transitions, WPF Storyboards, MAUI Animation,
+    Blazor CSS transitions).
+
+    Dependency rule (enforced by Harbor.Architecture.Tests):
+      ✅ Harbor.Desktop.Abstractions (for RgbColor used in ColorTransition)
+      ❌ NO Avalonia / WPF / MAUI / Blazor
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Desktop.Animations</PackageId>
+    <Description>Harbor desktop animations — cross-platform easing functions, durations, and transition records.</Description>
+    <PackageTags>harbor;desktop;animations;cross-platform</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!--
+      AnimationTokens (durations + easing-curve name constants) lives in
+      Harbor.Desktop.DesignSystem per the design-system README. Animations
+      re-exports them as TimeSpan via AnimationDurations and resolves the
+      easing-name strings to delegates via EasingFunctions.
+    -->
+    <ProjectReference Include="..\Harbor.Desktop.DesignSystem\Harbor.Desktop.DesignSystem.csproj"/>
+  </ItemGroup>
+
+</Project>
