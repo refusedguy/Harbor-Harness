@@ -380,6 +380,38 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Run an arbitrary void delegate on the UI thread. Use this from
+    ///     tests that need to mutate dispatcher-affine state (e.g. invoke a
+    ///     view-model command) without returning a value.
+    /// </summary>
+    /// <param name="action">The delegate to execute on the UI thread.</param>
+    public void OnUIThread(Action action)
+    {
+        Dispatcher.UIThread
+            .InvokeAsync(action)
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <summary>
+    ///     Find the first <see cref="RadioButton"/> whose
+    ///     <see cref="ContentControl.Content"/> stringifies to
+    ///     <paramref name="text"/> (case-sensitive, trimmed). Used to locate
+    ///     the "💬 Chat" / "📝 Code" tab toggle buttons in the main window's
+    ///     tab strip.
+    /// </summary>
+    public RadioButton? FindRadioButtonByText(string text)
+    {
+        return Dispatcher.UIThread
+            .InvokeAsync<RadioButton?>(() =>
+                FindFirst<RadioButton>(MainWindow, b =>
+                    b.Content is { } c &&
+                    string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)))
+            .GetAwaiter()
+            .GetResult();
+    }
+
+    /// <summary>
     ///     Find the first <see cref="Button"/> whose <see cref="ContentControl.Content"/>
     ///     stringifies to <paramref name="text"/> (case-sensitive, trimmed).
     ///     Used to locate the "Send ▶" button which has no x:Name in ChatView.axaml.
@@ -428,10 +460,26 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     ///     has one; otherwise raise the <see cref="Button.Click"/> routed event.
     ///     Either path triggers the bound view-model action.
     /// </summary>
+    /// <remarks>
+    ///     For <see cref="RadioButton"/> (which has no Command by default and
+    ///     toggles <c>IsChecked</c> via the <c>OnClick</c> virtual rather than
+    ///     the routed <c>ClickEvent</c>), we set <c>IsChecked = true</c>
+    ///     directly. This is the path of least surprise in headless mode —
+    ///     raising the routed Click event doesn't always invoke OnClick in
+    ///     the headless renderer, leaving the radio button's state unchanged.
+    /// </remarks>
     public async Task ClickAsync(Button button)
     {
         Dispatcher.UIThread.InvokeAsync(() =>
         {
+            if (button is RadioButton rb)
+            {
+                // Setting IsChecked=true fires the TwoWay binding that pushes
+                // the ConverterParameter back to the source (e.g. ActiveView).
+                rb.IsChecked = true;
+                return;
+            }
+
             if (button.Command is { } cmd && cmd.CanExecute(null))
             {
                 cmd.Execute(null);

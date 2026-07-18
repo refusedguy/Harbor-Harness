@@ -34,18 +34,21 @@ namespace Harbor.E2E.App.Avalonia;
 ///         VLM) can SEE what the UI looks like without running the app.
 ///     </para>
 ///     <para>
+///         <b>Navigation coverage:</b> each test drives a DIFFERENT visible
+///         state of the shell — chat default, typed input, send-enabled,
+///         message-sent, code-editor view, diff modal, onboarding. This
+///         guarantees every screenshot's pixels differ (verified by md5sum
+///         in the post-run check), so a VLM reviewer can SEE the test
+///         actually navigated rather than guessing from a static frame.
+///     </para>
+///     <para>
 ///         <b>Concurrency:</b> tagged <c>[NotInParallel]</c> because the driver
 ///         mutates <c>$HOME</c> (process-wide env var) and shares the
 ///         process-wide Avalonia <see cref="Application"/> singleton.
 ///     </para>
-///     <para>
-///         <b>Screenshots:</b> numbered <c>01-main-window.png</c>,
-///         <c>02-brand.png</c>, … so a sorted directory listing shows the
-///         visual narrative in test order.
-///     </para>
 /// </remarks>
 [NotInParallel]
-public class AvaloniaUiTests
+public sealed class AvaloniaUiTests
 {
     /// <summary>
     ///     Directory where PNGs are written. Defaults to
@@ -124,40 +127,46 @@ public class AvaloniaUiTests
         => _driver ?? throw new InvalidOperationException("SetupTestAsync did not run.");
 
     /// <summary>
-    ///     The app boots without crashing and the main window is non-null.
-    ///     Captures <c>01-main-window.png</c> — the baseline visual check.
+    ///     The app boots without crashing, the main window is non-null, and the
+    ///     Chat tab is the default active view (InputBox visible + "Start a
+    ///     conversation" placeholder shown). Captures <c>01-chat-default.png</c>
+    ///     — the baseline visual check that the chat is showing, NOT the diff
+    ///     viewer or code editor.
     /// </summary>
     [Test]
     [Category("E2E")]
-    public async Task MainWindow_OpensWithoutCrash()
+    public async Task MainWindow_ShowsChatByDefault()
     {
-        var screenshot = await Driver.ScreenshotAsync("01-main-window").ConfigureAwait(false);
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // The chat input must be visible (the bug we're guarding against: the
+        // chat tab existing but not being the default active view, with the
+        // input hidden behind the diff/code viewer).
+        var input = Driver.FindControlByName<TextBox>("InputBox");
+        await Assert.That(input).IsNotNull();
+        var inputVisible = Driver.OnUIThread(() => input!.IsVisible);
+        await Assert.That(inputVisible).IsTrue();
+
+        // The empty-state placeholder "Start a conversation" must be visible
+        // — proves the chat history area is showing (not the code editor's
+        // "No file open" placeholder).
+        bool sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(3))
+            .ConfigureAwait(false);
+        await Assert.That(sawPlaceholder).IsTrue();
+
+        var screenshot = await Driver.ScreenshotAsync("01-chat-default").ConfigureAwait(false);
         await Assert.That(File.Exists(screenshot)).IsTrue();
-        // The PNG must be non-trivial — at least 5KB means actual pixels were
-        // rendered, not just an empty bitmap header.
         var size = new FileInfo(screenshot).Length;
         await Assert.That(size).IsGreaterThan(5_000);
         await Assert.That(Driver.MainWindow).IsNotNull();
     }
 
     /// <summary>
-    ///     The sidebar brand "⚓ Harbor" appears in the rendered window.
-    ///     Captures <c>02-brand.png</c> after waiting for the brand text.
-    /// </summary>
-    [Test]
-    [Category("E2E")]
-    public async Task Sidebar_ShowsHarborBrand()
-    {
-        // The sidebar shows "⚓ Harbor" in the top-left brand TextBlock.
-        bool saw = await Driver.WaitForTextAsync("Harbor", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-        await Assert.That(saw).IsTrue();
-        await Driver.ScreenshotAsync("02-brand").ConfigureAwait(false);
-    }
-
-    /// <summary>
     ///     The chat input TextBox exists (x:Name="InputBox" in ChatView.axaml),
     ///     accepts typed text, and reflects it in its Text property.
-    ///     Captures <c>03-input-typed.png</c> showing the typed text in the box.
+    ///     Captures <c>02-input-typed.png</c> showing the typed text in the box
+    ///     — visually distinct from <c>01-chat-default.png</c> because the
+    ///     input row now contains text.
     /// </summary>
     [Test]
     [Category("E2E")]
@@ -167,86 +176,151 @@ public class AvaloniaUiTests
         var input = Driver.FindControlByName<TextBox>("InputBox");
         await Assert.That(input).IsNotNull();
 
-        // Set the text AND read it back in the SAME OnUIThread call. This
-        // avoids any MainLoop pumping between set and read, which was causing
-        // a flaky race where deferred TwoWay binding updates from the previous
-        // SendButton test reverted the TextBox to "test prompt" before we
-        // could read the typed value.
-        var typedText = Driver.OnUIThread(() =>
-        {
-            input!.Text = "Hello from E2E — typing into the real input box!";
-            input!.CaretIndex = input!.Text.Length;
-            // Read back IMMEDIATELY — same dispatcher cycle, no chance for
-            // deferred binding updates to intervene.
-            return input!.Text;
-        });
-        await Assert.That(typedText).IsEqualTo("Hello from E2E — typing into the real input box!");
+        // Use TypeAsync (which invalidates the visual) so the typed text
+        // actually shows up in the rendered PNG, not just in the .Text property.
+        await Driver.TypeAsync(input!, "Hello world — typing into the chat!").ConfigureAwait(false);
 
-        await Driver.ScreenshotAsync("03-input-typed").ConfigureAwait(false);
+        // Read back on the UI thread — TextBox.Text is dispatcher-affine.
+        var typedText = Driver.OnUIThread(() => input!.Text);
+        await Assert.That(typedText).IsEqualTo("Hello world — typing into the chat!");
+
+        await Driver.ScreenshotAsync("02-input-typed").ConfigureAwait(false);
     }
 
     /// <summary>
     ///     The Send button (the <c>Button Classes="Primary" Content="Send ▶"</c>
-    ///     in ChatView.axaml) exists and is enabled when the input has text.
-    ///     Captures <c>04-send-button.png</c>.
+    ///     in ChatView.axaml) is enabled when the input has text and disabled
+    ///     when empty. Captures <c>03-send-enabled.png</c> showing the enabled
+    ///     Send button with the typed text still in the input.
     /// </summary>
     [Test]
     [Category("E2E")]
-    public async Task SendButton_ExistsAndIsEnabled()
+    public async Task SendButton_EnabledAfterInput()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        // Type something so SendCommand.CanExecute returns true (most chat
-        // VMs disable send when the input is empty).
-        var input = Driver.FindControlByName<TextBox>("InputBox");
-        if (input is not null)
-        {
-            await Driver.TypeAsync(input, "test prompt").ConfigureAwait(false);
-        }
+        // Initially the Send button should be disabled (empty input).
+        // NOTE: we check IsEffectivelyEnabled (not IsEnabled) because Avalonia
+        // 12.1's Button routes ICommand.CanExecute through IsEnabledCore, which
+        // only affects IsEffectivelyEnabled — IsEnabled itself stays at its
+        // default of True. Checking IsEnabled would always pass regardless of
+        // the command's CanExecute state.
+        var sendEmpty = Driver.FindButtonByText("Send ▶");
+        await Assert.That(sendEmpty).IsNotNull();
+        var enabledEmpty = Driver.OnUIThread(() => sendEmpty!.IsEffectivelyEnabled);
+        await Assert.That(enabledEmpty).IsFalse();
 
+        // Type something — Send should now be enabled.
+        var input = Driver.FindControlByName<TextBox>("InputBox");
+        await Driver.TypeAsync(input!, "test message for send button").ConfigureAwait(false);
+
+        var send = Driver.FindButtonByText("Send ▶");
+        var isEnabled = Driver.OnUIThread(() => send!.IsEffectivelyEnabled);
+        await Assert.That(isEnabled).IsTrue();
+
+        await Driver.ScreenshotAsync("03-send-enabled").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Clicking the Send button with text in the input posts the user
+    ///     message to the chat history. Captures <c>04-message-sent.png</c>
+    ///     showing the user's message rendered as a chat bubble in the
+    ///     transcript — visually distinct because the empty-state placeholder
+    ///     is gone and a real chat row appears.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task SendMessage_AddsToChatHistory()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        var input = Driver.FindControlByName<TextBox>("InputBox");
         var send = Driver.FindButtonByText("Send ▶");
         await Assert.That(send).IsNotNull();
 
-        // Read IsEnabled on the UI thread — InputElement.IsEnabled is a
-        // dispatcher-affine AvaloniaObject property and throws
-        // "calling thread cannot access this object" when read from
-        // a non-UI thread.
-        var isEnabled = Driver.OnUIThread(() => send!.IsEnabled);
-        await Assert.That(isEnabled).IsTrue();
-        await Driver.ScreenshotAsync("04-send-button").ConfigureAwait(false);
+        await Driver.TypeAsync(input!, "Hello AI!").ConfigureAwait(false);
+        await Driver.ClickAsync(send!).ConfigureAwait(false);
+
+        // The user's message must appear in the chat history.
+        bool sawMessage = await Driver.WaitForTextAsync("Hello AI!", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawMessage).IsTrue();
+
+        // After send, the input is cleared.
+        var inputText = Driver.OnUIThread(() => input!.Text);
+        await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
+
+        await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     The session sidebar shows the "Search sessions…" watermark TextBox
-    ///     and the new-session "+" button. Captures <c>05-session-sidebar.png</c>.
+    ///     Clicking the "Code" tab switches the center pane to the code editor
+    ///     view (showing "No file open — press Ctrl+O to open a file.").
+    ///     Captures <c>05-code-view.png</c> — visually distinct because the
+    ///     center pane now shows the code editor's empty-state instead of the
+    ///     chat placeholder.
     /// </summary>
     [Test]
     [Category("E2E")]
-    public async Task SessionSidebar_ShowsSearchBox()
+    public async Task SwitchToCodeView_ShowsCodeEditor()
     {
-        // The sidebar TextBox has Watermark="Search sessions…". The watermark
-        // is rendered as a TextBlock inside the TextBox template, so it shows
-        // up in GetAllVisibleText when the TextBox is empty.
-        bool sawWatermark = await Driver.WaitForTextAsync("Search sessions", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-        await Assert.That(sawWatermark).IsTrue();
-        await Driver.ScreenshotAsync("05-session-sidebar").ConfigureAwait(false);
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // Click the "Code" tab via the bound RadioButton. SwitchViewCommand
+        // is invoked through the TwoWay IsChecked → ActiveView binding.
+        var codeTab = Driver.FindRadioButtonByText("📝 Code");
+        await Assert.That(codeTab).IsNotNull();
+        await Driver.ClickAsync(codeTab!).ConfigureAwait(false);
+
+        // The code editor's empty-state placeholder must be visible.
+        bool sawCodePlaceholder = await Driver.WaitForTextAsync("No file open", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawCodePlaceholder).IsTrue();
+
+        // ActiveView must be "code" on the view-model.
+        var activeView = Driver.OnUIThread(() =>
+            (Driver.MainWindow.DataContext as MainViewModel)?.ActiveView);
+        await Assert.That(activeView).IsEqualTo("code");
+
+        await Driver.ScreenshotAsync("05-code-view").ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     The status bar shows the configured provider + model. The default
-    ///     (from our temp config.json) is "ollama" + "qwen2.5-coder:7b".
-    ///     Captures <c>06-status-bar.png</c>.
+    ///     Opening the Diff viewer modal (via MainViewModel.OpenDiffCommand)
+    ///     renders the "Diff viewer" header. Captures <c>06-diff-modal.png</c>
+    ///     — visually distinct because the modal overlay is rendered on top
+    ///     of the main shell.
     /// </summary>
     [Test]
     [Category("E2E")]
-    public async Task StatusBar_ShowsProviderAndModel()
+    public async Task OpenDiffModal_RendersDiffViewer()
     {
-        // The MainViewModel formats the status bar from AgentLabel + ModelLabel.
-        // With default provider=ollama, model=qwen2.5-coder:7b, the bar should
-        // contain "ollama".
-        bool saw = await Driver.WaitForTextAsync("ollama", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-        await Assert.That(saw).IsTrue();
-        await Driver.ScreenshotAsync("06-status-bar").ConfigureAwait(false);
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // Open the diff modal via the view-model command (equivalent to
+        // View → Diff menu item or pressing the command palette entry).
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.OpenDiffCommand.Execute(null);
+            }
+        });
+
+        bool sawDiff = await Driver.WaitForTextAsync("Diff viewer", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawDiff).IsTrue();
+
+        await Driver.ScreenshotAsync("06-diff-modal").ConfigureAwait(false);
+
+        // Close it so the next test starts clean.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.IsDiffOpen = false;
+            }
+        });
     }
 
     /// <summary>
