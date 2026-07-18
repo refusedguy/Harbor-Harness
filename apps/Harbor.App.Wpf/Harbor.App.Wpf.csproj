@@ -38,6 +38,12 @@
     <NoWarn>$(NoWarn);MA0046;MA0051</NoWarn>
   </PropertyGroup>
 
+  <!-- Expose internals to the DI test project. App.BuildHost is private; the
+       test uses App.OnStartup-equivalent wiring via a public hook on App. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Wpf.Tests"/>
+  </ItemGroup>
+
   <!-- App depends on Abstractions + Core (via DI). Infrastructure impls are
        pulled in transitively through Harbor.Cli.Hosting's HostBuilder is NOT
        used here (we build our own WPF host) — but we still want the option to
@@ -45,7 +51,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <!--
       In-memory session store (Harbor.Storage.Memory) — used by the
       standalone desktop shell so the app runs without persistent storage.

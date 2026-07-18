@@ -1,4 +1,3 @@
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
@@ -11,6 +10,8 @@ using Harbor.Core.Onboarding;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+#if !HARBOR_MINIMAL
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
@@ -18,24 +19,37 @@ using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Storage;
 using Harbor.Providers.Anthropic;
-using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
-using Harbor.Storage.Jsonl;
-using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
-using Harbor.Tools.Builtin;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Panels;
 using Harbor.Tui.Ansi;
-using Harbor.Tui.Plain;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Spectre;
 using Harbor.Tui.Spectre.Fullscreen;
 using Harbor.Tui.Termina;
 using Harbor.Tui.TerminalGui;
+#endif
+using Harbor.Providers.Ollama;
+using Harbor.Storage.Jsonl;
+using Harbor.Storage.Memory;
+using Harbor.Tools.Builtin;
+using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Tui.Plain;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+// A3 (DI analyzers) added Excubo.Analyzers.DependencyInjection rules
+// DI014 (BuildServiceProvider should be disposed) and DI016 (don't call
+// BuildServiceProvider during composition). The HostBuilder pattern
+// constructs a temporary ServiceProvider deliberately so the eagerly
+// constructed ToolRegistry/ProviderRegistry/AgentRegistry see the same
+// ILoggerFactory / IEventBus that the final ServiceProvider will use —
+// this is the documented pattern from sub-agent 1 (Plugins.Runtime) and
+// is preserved until a full async-HostBuilder refactor lands.
+#pragma warning disable DI014, DI016
+#if !HARBOR_MINIMAL
+using Excubo.Analyzers.DependencyInjection;
+#endif
 namespace Harbor.Cli.Hosting;
 /// <summary>
 ///     DI host configuration — single responsibility: wire services.
@@ -46,6 +60,37 @@ internal static class HostBuilder
     private static ILoggerFactory _loggerFactory = null!;
     private static ILogger _logger = null!;
 
+    // Each [Exposes(typeof(T))] declaration below is enforced by
+    // Excubo.Analyzers.DependencyInjectionValidation (rules EDI01–EDI04) and
+    // exercised by Harbor.App.Cli.Tests/HostBuilderDiTests.cs which builds the
+    // host and asserts every [Exposes] type is resolvable from the resulting
+    // IServiceProvider. Keep this list in sync with the actual services.AddXxx
+    // calls in RegisterCore / RegisterRegistries / RegisterStorage / RegisterTui.
+    //
+    // Note: under HARBOR_MINIMAL the Excubo attributes are intentionally
+    // omitted (the package is conditionally referenced) — the DI tests still
+    // resolve these services, they just don't have the compile-time check.
+#if !HARBOR_MINIMAL
+    [Exposes(typeof(IConfigStore))]
+    [Exposes(typeof(AuthStore))]
+    [Exposes(typeof(OnboardingWizard))]
+    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(IEventBus))]
+    [Exposes(typeof(ISystemPromptBuilder))]
+    [Exposes(typeof(MessageConverter))]
+    [Exposes(typeof(IAgentLoop))]
+    [Exposes(typeof(IAgent))]
+    [Exposes(typeof(IAgentRegistry))]
+    [Exposes(typeof(IToolRegistry))]
+    [Exposes(typeof(IProviderRegistry))]
+    [Exposes(typeof(IMcpRegistry))]
+    [Exposes(typeof(PanelRegistry))]
+    [Exposes(typeof(IPanelRegistry))]
+    [Exposes(typeof(ICompactionService))]
+    [Exposes(typeof(IPermissionService))]
+    [Exposes(typeof(ISessionStore))]
+    [Exposes(typeof(ITuiRenderer))]
+#endif
     public static IHost Build(params string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -66,10 +111,15 @@ internal static class HostBuilder
 
         _logger.LogInformation("Building host");
         RegisterCore(builder);
+        // HTTP clients must be registered BEFORE RegisterRegistries because
+        // CreateProviderRegistry resolves IHttpClientFactory from the temporary
+        // ServiceProvider to wire named clients (anthropic, openai, ollama).
+        // Registering them after would throw at host-build time — caught by
+        // Harbor.App.Cli.Tests/HostBuilderDiTests.cs.
+        RegisterHttpClients(builder);
         RegisterRegistries(builder, harborDir);
         RegisterStorage(builder, sessionsDir, sqlitePath);
         RegisterTui(builder);
-        RegisterHttpClients(builder);
         return builder.Build();
     }
 
@@ -126,7 +176,11 @@ internal static class HostBuilder
         // not populated by the default AgentLoop, so we can't rely on late resolution).
         var mcpRegistry = new InMemoryMcpRegistry(
             loggerFactory.CreateLogger<InMemoryMcpRegistry>());
-        var toolRegistry = CreateToolRegistry(tempSp, mcpRegistry);
+        // Pass agentRegistry directly to CreateToolRegistry — it isn't registered in
+        // builder.Services until AFTER this call (line ~252), so resolving via
+        // tempSp.GetRequiredService<IAgentRegistry>() would throw. The DI test
+        // (HostBuilderDiTests.Build_Registers_ISessionStore) caught this.
+        var toolRegistry = CreateToolRegistry(tempSp, mcpRegistry, agentRegistry);
         var providerRegistry = CreateProviderRegistry(tempSp, harborDir, config);
         var eventBus = tempSp.GetRequiredService<IEventBus>();
         // The host-owned PanelRegistry. Plugin-contributed IPanelProviders land here
@@ -135,6 +189,7 @@ internal static class HostBuilder
         var panelRegistry = new PanelRegistry(
             loggerFactory.CreateLogger<PanelRegistry>());
 
+#if !HARBOR_MINIMAL
         // Run the CS-source plugin loader. Adds tools / providers / agents / TUI plugins
         // contributed via Roslyn-compiled .cs files in ~/.harbor/plugins/ or
         // <cwd>/.harbor/plugins/.
@@ -143,6 +198,10 @@ internal static class HostBuilder
         // compilation (CachingCompiler over RoslynPluginCompiler) → instantiation
         // (ReflectionPluginInstantiator) → registration (SafePluginRegistrar over
         // PluginRegistrar). Each layer is independently swappable.
+        //
+        // EXCLUDED from HARBOR_MINIMAL builds — the entire Harbor.Plugins.* stack
+        // is removed from the project reference graph, so the plugin host can't be
+        // constructed. See apps/Harbor.App.Cli/Harbor.App.Cli.csproj.
         var pluginHost = new PluginLoadHost(
             services: builder.Services,
             configuration: builder.Configuration,
@@ -188,6 +247,9 @@ internal static class HostBuilder
         {
             _logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
         }
+#else
+        _logger.LogInformation("HARBOR_MINIMAL build — plugin runtime disabled");
+#endif
 
         // Re-freeze the registries so post-Build() lookups hit the frozen O(1) snapshot.
         // Plugins added entries via Register which invalidated the previous snapshot.
@@ -236,7 +298,7 @@ internal static class HostBuilder
         return registry;
     }
 
-    private static ToolRegistry CreateToolRegistry(IServiceProvider sp, IMcpRegistry mcpRegistry)
+    private static ToolRegistry CreateToolRegistry(IServiceProvider sp, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry);
@@ -248,7 +310,9 @@ internal static class HostBuilder
         tb.AddTool(() => new GlobTool(loggerFactory.CreateLogger<GlobTool>()));
         tb.AddTool(() => new GrepTool(loggerFactory.CreateLogger<GrepTool>()));
         tb.AddTool(() => new LsTool(loggerFactory.CreateLogger<LsTool>()));
-        tb.AddTool(new TaskTool(sp.GetRequiredService<IAgentRegistry>(), loggerFactory.CreateLogger<TaskTool>()));
+        // agentRegistry is passed in directly (see call site) because the DI
+        // registration happens after this method returns.
+        tb.AddTool(new TaskTool(agentRegistry, loggerFactory.CreateLogger<TaskTool>()));
 
         // ── Extended builtin tools (see docs/TOOLS_CATALOG.md) ──
         // WebFetch: parallel HTTP fetch + HTML→markdown conversion (no deps).
@@ -280,7 +344,13 @@ internal static class HostBuilder
         var authStore = sp.GetRequiredService<AuthStore>();
         string cacheDir = Path.Combine(harborDir, "cache", "providers");
 
-        // Native providers
+        // Ollama is always available (kept in minimal builds).
+        pb.AddProvider("ollama", () => new OllamaLlmClient(
+            httpFactory.CreateClient("ollama"), new OllamaConfig(),
+            loggerFactory.CreateLogger<OllamaLlmClient>()));
+
+#if !HARBOR_MINIMAL
+        // Native providers — Anthropic + OpenAI excluded from minimal builds.
         pb.AddProvider("anthropic", () => new AnthropicLlmClient(
             httpFactory.CreateClient("anthropic"), new AnthropicConfig(),
             new ConfigAuthResolver(authStore, "anthropic"),
@@ -289,12 +359,11 @@ internal static class HostBuilder
             httpFactory.CreateClient("openai"), new OpenAIConfig(),
             new ConfigAuthResolver(authStore, "openai"),
             loggerFactory.CreateLogger<OpenAILlmClient>()));
-        pb.AddProvider("ollama", () => new OllamaLlmClient(
-            httpFactory.CreateClient("ollama"), new OllamaConfig(),
-            loggerFactory.CreateLogger<OllamaLlmClient>()));
 
-        // JSON + embedded providers
+        // JSON + embedded OpenAI-compatible providers — excluded from minimal builds
+        // (Pulls in Harbor.Providers.OpenAiCompatible types).
         ProviderRegistration.RegisterJsonProviders(pb, httpFactory, loggerFactory, cacheDir, authStore);
+#endif
 
         registry.Freeze();
         _logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
@@ -308,7 +377,9 @@ internal static class HostBuilder
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
         {
             "memory" => new MemorySessionStore(),
+#if !HARBOR_MINIMAL
             "sqlite" => new SqliteSessionStore(sqlitePath, sp.GetRequiredService<ILogger<SqliteSessionStore>>()),
+#endif
             _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>())
         });
     }
@@ -321,10 +392,17 @@ internal static class HostBuilder
 #pragma warning restore RS0030
 
         string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "spectre-tui";
+#if HARBOR_MINIMAL
+        // Minimal builds ship only PlainTuiRenderer; force the default to "plain".
+        tui = "plain";
+        _logger.LogInformation("TUI renderer: {Tui} (HARBOR_MINIMAL forces plain)", tui);
+#else
         _logger.LogInformation("TUI renderer: {Tui}", tui);
+#endif
         builder.Services.AddSingleton<ITuiRenderer>(sp => tui.ToLowerInvariant() switch
         {
             "plain" => new PlainTuiRenderer(),
+#if !HARBOR_MINIMAL
             "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
             "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
             "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(
@@ -346,17 +424,25 @@ internal static class HostBuilder
             // "sixel"          => new Harbor.Tui.Sixel.SixelTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Sixel.SixelTuiRenderer>>()),
             // "notifications"  => new Harbor.Tui.Notifications.NotificationTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Notifications.NotificationTuiRenderer>>()),
 
+            // AnsiTuiRenderer is the only non-Plain fallback in full builds.
             _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
+#else
+            _ => new PlainTuiRenderer()
+#endif
         });
     }
 
     private static void RegisterHttpClients(HostApplicationBuilder builder)
     {
         _logger.LogInformation("Registering HTTP clients");
+        builder.Services.AddHttpClient("ollama");
+#if !HARBOR_MINIMAL
         builder.Services.AddHttpClient("anthropic");
         builder.Services.AddHttpClient("openai");
-        builder.Services.AddHttpClient("ollama");
         builder.Services.AddHttpClient("providers");
         builder.Services.AddHttpClient("default");
+#else
+        _logger.LogInformation("HARBOR_MINIMAL — registered only the ollama HTTP client");
+#endif
     }
 }

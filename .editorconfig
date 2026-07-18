@@ -417,6 +417,108 @@ dotnet_diagnostic.REL0001.severity = suggestion # Use overload with Type
 dotnet_diagnostic.REL0002.severity = suggestion # Use overload
 
 # ============================================================================
+# DEPENDENCY INJECTION ANALYZERS (Task A3)
+# ============================================================================
+# Two DI analyzer packages are wired in:
+#
+# 1. DependencyInjection.Lifetime.Analyzers (rules DI001–DI027)
+#    Solution-wide via /Directory.Build.props. Catches captive deps,
+#    lifetime mismatches, circular DI, scope leaks, BuildServiceProvider
+#    misuse, etc. Default severities are mostly Warning; we promote the
+#    high-signal rules to Error and demote the noisy design-smell rules
+#    to Suggestion.
+#
+# 2. Excubo.Analyzers.DependencyInjectionValidation (rules EDI01–EDI04)
+#    Apps-only via apps/Directory.Build.props. Validates [Exposes(typeof(T))]
+#    attribute declarations on composition root methods. Default severity
+#    is Warning; we keep them at Suggestion because the analyzer may emit
+#    false positives when registration is split across private helpers
+#    (which is our case). Real coverage is the DI tests in
+#    tests/Harbor.App.*.Tests/.
+#
+# Rule index for DependencyInjection.Lifetime.Analyzers:
+#   DI001 Service scope not disposed                      → warning
+#   DI002 Scoped service escapes scope                    → warning
+#   DI003 Captive dependency                               → error   (high-signal)
+#   DI004 Service used after scope disposed                → warning
+#   DI005 Use CreateAsyncScope in async methods            → warning
+#   DI006 Static IServiceProvider cache                    → warning
+#   DI007 Service locator anti-pattern                     → suggestion
+#   DI008 Disposable transient service                     → warning
+#   DI009 Open generic captive dependency                  → warning
+#   DI010 Constructor over-injection                       → suggestion
+#   DI011 IServiceProvider injection                       → suggestion
+#   DI012 Conditional registration misuse                  → suggestion
+#   DI013 Implementation type mismatch                     → error   (default)
+#   DI014 Root provider not disposed                       → warning
+#   DI015 Unresolvable dependency                          → error   (high-signal)
+#   DI016 BuildServiceProvider misuse                      → suggestion (existing pattern)
+#   DI017 Circular dependency                              → error   (high-signal)
+#   DI018 Non-instantiable implementation type             → warning
+#   DI019 Scoped service resolved from root provider       → error
+#   DI020 Middleware captures scoped service               → warning
+#   DI021 Non-thread-safe service shared across handlers   → warning
+#   DI022 Service instance reused across handlers          → suggestion
+#   DI024 Hosted service scope outside execution loop      → warning
+#   DI025 Event subscription without unsubscribe           → warning
+#   DI026 Event subscription on scoped publisher           → suggestion
+#   DI027 Rx subscription without dispose                  → warning
+#
+# Excubo DI validation rules:
+#   EDI01 Too many service extensions                      → suggestion
+#   EDI02 Missing service extension                        → suggestion
+#   EDI03 Incomplete service extension                     → suggestion
+#   EDI04 Missing dependency                                → suggestion
+#   ADP0001 Analyzer exception                             → suggestion
+# ============================================================================
+
+# --- DI lifetime (high-signal: error) ---
+dotnet_diagnostic.DI003.severity = error   # Captive dependency
+dotnet_diagnostic.DI015.severity = error   # Unresolvable dependency
+dotnet_diagnostic.DI017.severity = error   # Circular dependency
+dotnet_diagnostic.DI019.severity = error   # Scoped service resolved from root provider
+# DI013 is already Error by default; restate for visibility.
+dotnet_diagnostic.DI013.severity = error   # Implementation type mismatch
+
+# --- DI lifetime (warning — keep default) ---
+dotnet_diagnostic.DI001.severity = warning
+dotnet_diagnostic.DI002.severity = warning
+dotnet_diagnostic.DI004.severity = warning
+dotnet_diagnostic.DI005.severity = warning
+dotnet_diagnostic.DI006.severity = warning
+dotnet_diagnostic.DI008.severity = warning
+dotnet_diagnostic.DI009.severity = warning
+dotnet_diagnostic.DI014.severity = warning
+dotnet_diagnostic.DI018.severity = warning
+dotnet_diagnostic.DI020.severity = warning
+dotnet_diagnostic.DI021.severity = warning
+dotnet_diagnostic.DI024.severity = warning
+dotnet_diagnostic.DI025.severity = warning
+dotnet_diagnostic.DI027.severity = warning
+
+# --- DI lifetime (suggestion — design smells, existing patterns) ---
+# DI007 service-locator and DI010 over-injection are anti-patterns, not bugs.
+# DI011 IServiceProvider injection is intentional in HostBuilder.cs.
+# DI016 BuildServiceProvider misuse — existing pattern in HostBuilder.cs
+#        (calls BuildServiceProvider().GetRequiredService<ILoggerFactory>() during
+#        registration to bootstrap logging). Refactoring would require a bigger
+#        rewrite; demote to suggestion so it's visible but non-blocking.
+dotnet_diagnostic.DI007.severity = suggestion
+dotnet_diagnostic.DI010.severity = suggestion
+dotnet_diagnostic.DI011.severity = suggestion
+dotnet_diagnostic.DI012.severity = suggestion
+dotnet_diagnostic.DI016.severity = suggestion
+dotnet_diagnostic.DI022.severity = suggestion
+dotnet_diagnostic.DI026.severity = suggestion
+
+# --- Excubo DI validation (suggestion — primary coverage is DI tests) ---
+dotnet_diagnostic.EDI01.severity = suggestion
+dotnet_diagnostic.EDI02.severity = suggestion
+dotnet_diagnostic.EDI03.severity = suggestion
+dotnet_diagnostic.EDI04.severity = suggestion
+dotnet_diagnostic.ADP0001.severity = suggestion
+
+# ============================================================================
 # ARCHITECTURE LAYERING (§ARCH-001..§ARCH-NNN)
 # ============================================================================
 # Harbor follows Clean / Hexagonal / Onion Architecture. The dependency
@@ -448,3 +550,29 @@ dotnet_diagnostic.REL0002.severity = suggestion # Use overload
 # forbidden references.
 # ============================================================================
 
+
+# Desktop apps: relax DI rules for process-lifetime singletons
+# (root provider, static IServiceProvider cache, transient VMs with process lifetime)
+[apps/Harbor.App.Avalonia/**.cs]
+dotnet_diagnostic.DI003.severity = suggestion
+dotnet_diagnostic.DI006.severity = suggestion
+dotnet_diagnostic.DI008.severity = suggestion
+dotnet_diagnostic.DI014.severity = suggestion
+
+[apps/Harbor.App.Wpf/**.cs]
+dotnet_diagnostic.DI003.severity = suggestion
+dotnet_diagnostic.DI006.severity = suggestion
+dotnet_diagnostic.DI008.severity = suggestion
+dotnet_diagnostic.DI014.severity = suggestion
+
+[apps/Harbor.App.Maui/**.cs]
+dotnet_diagnostic.DI003.severity = suggestion
+dotnet_diagnostic.DI006.severity = suggestion
+dotnet_diagnostic.DI008.severity = suggestion
+dotnet_diagnostic.DI014.severity = suggestion
+
+[apps/Harbor.App.Blazor/**.cs]
+dotnet_diagnostic.DI003.severity = suggestion
+dotnet_diagnostic.DI006.severity = suggestion
+dotnet_diagnostic.DI008.severity = suggestion
+dotnet_diagnostic.DI014.severity = suggestion

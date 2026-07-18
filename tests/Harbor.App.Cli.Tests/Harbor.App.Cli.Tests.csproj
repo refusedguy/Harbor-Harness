@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Cli.Tests — DI registration tests for the CLI composition root.
+
+    Builds the host via Harbor.Cli.Hosting.HostBuilder.Build() and asserts that
+    every service declared with [Exposes(typeof(T))] on that method is actually
+    resolvable from the resulting IServiceProvider. This catches:
+
+      * Missing registrations (forgot to services.AddXxx<T>())
+      * Lifetime mistakes that break resolution (e.g. captive dependency that
+        throws at resolve time)
+      * Wrong interface wiring (registered IX but not IY)
+
+    The companion compile-time check is Excubo.Analyzers.DependencyInjectionValidation
+    (rules EDI01–EDI04, configured in /etc/Directory.Build.props + .editorconfig).
+    The companion runtime check is DependencyInjection.Lifetime.Analyzers
+    (DI001–DI027, configured in .editorconfig).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- DI tests intentionally probe runtime wiring; relax TreatWarningsAsErrors
+         so the build doesn't fail on incidental analyzer warnings from the app
+         project's internal helper types. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CA1707;S2931;S3881</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      TUnit is auto-included by the .NET 10 SDK when <IsTestProject>true</IsTestProject>
+      is set in tests/Directory.Build.props (so we don't list it explicitly here —
+      adding it would cause NU1504 DuplicatePackageReference).
+      Microsoft.NET.Test.Sdk is the test host adapter — required for `dotnet test`
+      to discover and run the TUnit engine. Microsoft.Extensions.* are duplicated
+      from Harbor.App.Cli's transitive graph so the tests don't break if the app
+      project drops a reference later (defense-in-depth for the DI surface).
+    -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+  </ItemGroup>
+
+</Project>

@@ -12,10 +12,7 @@ artifacts/
 *.cache
 *.log
 *.tlog
-*.binlog
 
-## Build log artifacts (MSBuild binary logs)
-ds.binlog
 ## Visual Studio / Rider / VSCode
 .vs/
 .vscode/

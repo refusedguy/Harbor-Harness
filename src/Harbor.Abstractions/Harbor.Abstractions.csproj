@@ -1,13 +1,53 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Harbor.Abstractions — THIN FACADE.
+
+    After the round-6 architecture split, this project contains ONLY:
+      - Interface contracts (Tools, Providers, Sessions, Agents, Events, Tui,
+        Plugins namespaces)
+      - ZLinqDropInAssemblyAttribute (assembly-level source generator config)
+      - GlobalUsings.cs
+
+    Domain models, value objects, events, and permission rules live in
+    Harbor.Domain. Infrastructure helpers (ArrayPool, StringBuilderPool,
+    FrozenSet materializers, MemoryPack round-trip helpers) live in
+    Harbor.Extensions.
+
+    This project references both via <ProjectReference>, so consumers that
+    reference Harbor.Abstractions continue to see the full surface area
+    transitively — no consumer code needs to change. The split enforces a
+    cleaner Clean Architecture dependency direction:
+
+        Harbor.Domain       → 0                (pure models, value objects)
+        Harbor.Extensions   → Harbor.Domain    (helpers using domain types)
+        Harbor.Abstractions → Harbor.Domain    (interfaces reference domain types)
+                          + → Harbor.Extensions (exposes pool helpers transitively)
+
+    All existing namespaces are preserved in the moved files (e.g. files in
+    Harbor.Domain/Models still declare `namespace Harbor.Abstractions.Models;`),
+    so `using Harbor.Abstractions.Models;` continues to resolve.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Abstractions</PackageId>
-    <Description>Harbor abstractions — interfaces, models, events. Zero-dependency contract package.</Description>
-    <PackageTags>harbor;ai;agent;abstractions</PackageTags>
+    <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Domain (models) and Harbor.Extensions (pooling helpers) transitively.</Description>
+    <PackageTags>harbor;ai;agent;abstractions;interfaces</PackageTags>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!--
+    Facade: pull in the domain models and the infrastructure helpers. Any
+    consumer that references Harbor.Abstractions gets these transitively,
+    so `using Harbor.Abstractions.Models;` etc. keep resolving without
+    changes.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>

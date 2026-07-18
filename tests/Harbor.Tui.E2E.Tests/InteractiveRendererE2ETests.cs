@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
+using Harbor.Terminal.Abstractions;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.SpectreTui;
 using Harbor.Tui.Termina;

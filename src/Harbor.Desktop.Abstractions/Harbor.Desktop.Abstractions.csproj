@@ -5,7 +5,7 @@
     every Harbor desktop app (Avalonia, WPF, MAUI, Blazor).
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
-      ✅ Harbor.Abstractions, Harbor.Core, Harbor.Tui.Abstractions
+      ✅ Harbor.Abstractions, Harbor.Core, Harbor.Terminal.Abstractions
       ✅ CommunityToolkit.Mvvm (source-gen MVVM)
       ✅ Microsoft.Extensions.Logging.Abstractions
       ❌ NO Avalonia / WPF / MAUI / Blazor / WindowsBase / System.Drawing
@@ -32,7 +32,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -5,8 +5,8 @@ using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Instantiation;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Terminal.Abstractions.Plugins;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
 

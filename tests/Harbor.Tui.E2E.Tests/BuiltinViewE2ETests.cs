@@ -1,6 +1,6 @@
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.ViewModels;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.Terminal.Abstractions.Views;
 namespace Harbor.Tui.E2E.Tests;
 /// <summary>
 ///     End-to-end view tests: instantiate each builtin view, bind a populated

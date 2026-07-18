@@ -2,7 +2,7 @@
 
   <!--
     Harbor.App.Avalonia — standalone ORCA-level desktop GUI for Harbor.
-    Composition root: depends on Harbor.Abstractions + Harbor.Tui.Abstractions + Harbor.Core +
+    Composition root: depends on Harbor.Abstractions + Harbor.Terminal.Abstractions + Harbor.Core +
     Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama + Harbor.Providers.OpenAiCompatible.
     Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 11.2
     desktop lifetime with Catppuccin-Mocha dark theme, code editor (AvaloniaEdit), streaming chat,
@@ -34,10 +34,16 @@
     <NoWarn>$(NoWarn);MA0046</NoWarn>
   </PropertyGroup>
 
+  <!-- Expose internals to the DI test project so it can call AppHost.BuildAsync
+       directly and assert every expected service is resolvable. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Composition-root references: the app wires Harbor services, exactly like Harbor.Cli. -->
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>

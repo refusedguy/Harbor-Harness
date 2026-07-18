@@ -9,6 +9,7 @@ using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
 using Harbor.Storage.Memory;
+using Excubo.Analyzers.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Maui;
@@ -40,6 +41,19 @@ public static class MauiProgram
     ///     configured <see cref="MauiApp"/>.
     /// </summary>
     /// <returns>A configured <see cref="MauiApp"/> instance.</returns>
+    // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
+    // (EDI01–EDI04). MAUI workload is not on Linux CI so Harbor.App.Maui.Tests is a
+    // skeleton project that compiles only on Windows/macOS (see PLAN.md).
+    [Exposes(typeof(IEventBus))]
+    [Exposes(typeof(IProviderRegistry))]
+    [Exposes(typeof(IToolRegistry))]
+    [Exposes(typeof(IAgentRegistry))]
+    [Exposes(typeof(IPermissionService))]
+    [Exposes(typeof(ISessionStore))]
+    [Exposes(typeof(ISystemPromptBuilder))]
+    [Exposes(typeof(ICompactionService))]
+    [Exposes(typeof(AgentLoop))]
+    [Exposes(typeof(IAgent))]
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
@@ -59,8 +73,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPermissionService, PermissionService>();
         builder.Services.AddSingleton<ISessionStore, MemorySessionStore>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
+        builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
+        builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<ICompactionService, CompactionService>();
-        builder.Services.AddSingleton<AgentLoop>();
+        builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
         builder.Services.AddLogging();
 

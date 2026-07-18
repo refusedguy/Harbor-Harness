@@ -27,8 +27,8 @@
          Storage, Compilation, Instantiation, Registration). -->
     <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
     <!-- Tui.Abstractions is needed because CsPluginLoader.cs references
-         Harbor.Tui.Abstractions.Plugins.ITuiPlugin for legacy logging. -->
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+         Harbor.Terminal.Abstractions.Plugins.ITuiPlugin for legacy logging. -->
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

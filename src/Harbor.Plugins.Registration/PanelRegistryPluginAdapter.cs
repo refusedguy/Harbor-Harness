@@ -1,5 +1,5 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Tui.Abstractions.Panels;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
 

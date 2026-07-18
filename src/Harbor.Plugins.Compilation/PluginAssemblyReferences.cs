@@ -88,7 +88,7 @@ public sealed class PluginAssemblyReferences
         EnsureReference(refs, seen, typeof(Microsoft.Extensions.Logging.ILogger).Assembly);
         EnsureReference(refs, seen, typeof(System.Linq.Enumerable).Assembly);
         EnsureReference(refs, seen, typeof(System.Collections.Generic.Dictionary<,>).Assembly);
-        EnsureReference(refs, seen, typeof(Harbor.Tui.Abstractions.Plugins.ITuiPlugin).Assembly);
+        EnsureReference(refs, seen, typeof(Harbor.Terminal.Abstractions.Plugins.ITuiPlugin).Assembly);
         EnsureReference(refs, seen, typeof(CSharpFunctionalExtensions.Result).Assembly);
         EnsureReference(refs, seen, typeof(System.Threading.Tasks.Task).Assembly);
         EnsureReference(refs, seen, typeof(System.Threading.CancellationToken).Assembly);

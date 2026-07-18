@@ -1,6 +1,6 @@
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Ansi;
 /// <summary>

@@ -1,5 +1,7 @@
+#if !HARBOR_MINIMAL
 using Harbor.Scripting.Abstractions;
 using Harbor.Plugins.Abstractions;
+#endif
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
@@ -11,12 +13,14 @@ using Harbor.Cli.Logging;
 using Harbor.Cli.Repl;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
+#if !HARBOR_MINIMAL
 using Harbor.Scripting.Bridge;
 using Harbor.Scripting.Compilation;
 using Harbor.Scripting.Engines;
 using Harbor.Scripting.Hosting;
 using Harbor.Scripting.Storage;
-using Harbor.Tui.Abstractions;
+#endif
+using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli;
@@ -132,7 +136,14 @@ public static class Program
         {
             return CSharpFunctionalExtensions.Result.Success();
         }
-
+#if HARBOR_MINIMAL
+        // Minimal build excludes the entire Harbor.Scripting.* stack —
+        // --script is reported as unsupported rather than silently ignored.
+        _ = services;
+        _logger.LogWarning("--script flag ignored: HARBOR_MINIMAL build excludes the scripting stack");
+        return CSharpFunctionalExtensions.Result.Failure(
+            "Scripting is disabled in this minimal build. Use the full build (./build.sh PublishCliFull) to enable --script.");
+#else
         var tools = services.GetRequiredService<IToolRegistry>();
         var providers = services.GetRequiredService<IProviderRegistry>();
         var agents = services.GetRequiredService<IAgentRegistry>();
@@ -179,6 +190,7 @@ public static class Program
         return result.IsSuccess
             ? CSharpFunctionalExtensions.Result.Success()
             : CSharpFunctionalExtensions.Result.Failure(result.Error ?? "Script evaluation failed.");
+#endif
     }
 
     /// <summary>

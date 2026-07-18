@@ -8,7 +8,7 @@ using Harbor.Cli.Commands;
 using Harbor.Cli.Hosting;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
-using Harbor.Tui.Abstractions;
+using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Repl;

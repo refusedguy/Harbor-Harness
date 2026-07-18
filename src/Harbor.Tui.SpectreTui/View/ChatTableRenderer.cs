@@ -1,4 +1,4 @@
-using Harbor.Tui.Abstractions.Rendering;
+using Harbor.Terminal.Abstractions.Rendering;
 using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;

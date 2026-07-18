@@ -117,6 +117,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- DI lifetime analyzer (DI001 captive dependency, DI002 lifetime mismatch,
+         DI003 circular dependency, DI004 transient disposed by singleton).
+         Solution-wide: every project that consumes Microsoft.Extensions.DependencyInjection
+         gets checked. Severity is configured in .editorconfig (default = warning). -->
+    <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

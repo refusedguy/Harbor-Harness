@@ -142,6 +142,32 @@
 
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
     <PackageVersion Include="Termina.Generators" Version="0.15.0" />
+
+    <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
+    <!--
+      NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/
+      project uses a local Directory.Build.props that disables analyzers,
+      TreatWarningsAsErrors, and CPM-transitive pinning so the bootstrap
+      project can build cleanly even when the solution-wide strict settings
+      would otherwise reject NUKE's generated code.
+    -->
+    <PackageVersion Include="Nuke.Common" Version="9.0.4" />
+
+    <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
+    <!--
+      DependencyInjection.Lifetime.Analyzers (DI001–DI005) detects captive
+      dependencies, lifetime mismatches, and circular DI graphs at compile time.
+      Consumed solution-wide via Directory.Build.props so every project that
+      references Microsoft.Extensions.DependencyInjection gets checked.
+
+      Excubo.Analyzers.DependencyInjectionValidation (DIV0xx) provides
+      `[Exposes(typeof(T))]` attribute validation: declares which services a
+      composition root should register and fails build if any are missing.
+      The matching Excubo.Analyzers.Annotations package contains the attribute.
+    -->
+    <PackageVersion Include="DependencyInjection.Lifetime.Analyzers" Version="2.18.24" />
+    <PackageVersion Include="Excubo.Analyzers.DependencyInjectionValidation" Version="1.0.33" />
+    <PackageVersion Include="Excubo.Analyzers.Annotations" Version="1.0.1" />
   </ItemGroup>
 
 </Project>

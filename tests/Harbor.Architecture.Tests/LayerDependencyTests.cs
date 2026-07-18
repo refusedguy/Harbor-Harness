@@ -1,6 +1,6 @@
 using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Harbor.Core.Agents;        // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
 using Harbor.Core.Tools;        // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
 using Harbor.Plugins.Hosting;
@@ -52,7 +52,7 @@ namespace Harbor.Architecture.Tests;
 public class LayerDependencyTests
 {
     // The set of "Application or Infrastructure" Harbor assemblies that the Domain
-    // layer (Harbor.Abstractions, Harbor.Tui.Abstractions) must NOT reference.
+    // layer (Harbor.Abstractions, Harbor.Terminal.Abstractions) must NOT reference.
     // Harbor.Application and Harbor.Registries are Application-layer assemblies
     // that the Domain layer must also not reference.
     private static readonly string[] NonDomainHarborAssemblies =
@@ -98,7 +98,7 @@ public class LayerDependencyTests
     }
 
     /// <summary>
-    ///     Harbor.Tui.Abstractions (Domain) may reference Harbor.Abstractions but
+    ///     Harbor.Terminal.Abstractions (Domain) may reference Harbor.Abstractions but
     ///     nothing else from Harbor.
     /// </summary>
     [Test]
@@ -128,7 +128,7 @@ public class LayerDependencyTests
         [
             "Harbor.Core",
             "Harbor.Registries",
-            "Harbor.Tui.Abstractions",
+            "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
             "Harbor.Plugins.Abstractions",
             "Harbor.Plugins.Storage",
@@ -173,7 +173,7 @@ public class LayerDependencyTests
         [
             "Harbor.Core",
             "Harbor.Application",
-            "Harbor.Tui.Abstractions",
+            "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
             "Harbor.Plugins.Abstractions",
             "Harbor.Plugins.Storage",
@@ -205,7 +205,7 @@ public class LayerDependencyTests
     /// <summary>
     ///     Harbor.Core (now a thin backward-compat facade) may reference
     ///     Harbor.Application + Harbor.Registries + Harbor.Abstractions but NOT
-    ///     Harbor.Tui.Abstractions (TUI vocabulary stays out of the agent harness)
+    ///     Harbor.Terminal.Abstractions (TUI vocabulary stays out of the agent harness)
     ///     and NOT any Infrastructure / Presentation project. The facade must not
     ///     reach past the Application/Registries layers it forwards.
     /// </summary>
@@ -222,7 +222,7 @@ public class LayerDependencyTests
                 "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
         string[] forbidden =
         [
-            "Harbor.Tui.Abstractions",
+            "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
             "Harbor.Plugins.Abstractions",
             "Harbor.Plugins.Storage",
@@ -253,7 +253,7 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Harbor.Plugins.Runtime (Application) may reference Harbor.Abstractions
-    ///     and Harbor.Tui.Abstractions (it needs ITuiPlugin for plugin-contributed
+    ///     and Harbor.Terminal.Abstractions (it needs ITuiPlugin for plugin-contributed
     ///     panels) but NOT Harbor.Core / Harbor.Application / Harbor.Registries
     ///     (Application must not cross-reference), NOT Harbor.Scripting, NOT
     ///     Infrastructure, NOT Presentation.
@@ -285,7 +285,7 @@ public class LayerDependencyTests
     /// <summary>
     ///     Harbor.Scripting (Application) may reference Harbor.Abstractions only —
     ///     NOT Harbor.Core / Harbor.Application / Harbor.Registries, NOT
-    ///     Harbor.Tui.Abstractions, NOT sibling Application, NOT Infrastructure.
+    ///     Harbor.Terminal.Abstractions, NOT sibling Application, NOT Infrastructure.
     /// </summary>
     [Test]
     public async Task Scripting_ReferencesOnlyAbstractions()
@@ -296,7 +296,7 @@ public class LayerDependencyTests
             "Harbor.Core",
             "Harbor.Application",
             "Harbor.Registries",
-            "Harbor.Tui.Abstractions",
+            "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
             "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic",
@@ -325,7 +325,7 @@ public class LayerDependencyTests
             NonDomainNonSelfHarborAssemblies
                 .Concat(new[]
                 {
-                    "Harbor.Tui.Abstractions",
+                    "Harbor.Terminal.Abstractions",
                     "Harbor.Providers.OpenAiCompatible",
                     "Harbor.Providers.Anthropic",
                     "Harbor.Providers.OpenAI",
@@ -353,7 +353,7 @@ public class LayerDependencyTests
             NonDomainNonSelfHarborAssemblies
                 .Concat(new[]
                 {
-                    "Harbor.Tui.Abstractions",
+                    "Harbor.Terminal.Abstractions",
                     "Harbor.Providers.OpenAiCompatible",
                     "Harbor.Providers.Anthropic",
                     "Harbor.Providers.OpenAI",
@@ -381,7 +381,7 @@ public class LayerDependencyTests
             NonDomainNonSelfHarborAssemblies
                 .Concat(new[]
                 {
-                    "Harbor.Tui.Abstractions",
+                    "Harbor.Terminal.Abstractions",
                     "Harbor.Providers.OpenAiCompatible",
                     "Harbor.Providers.Anthropic",
                     "Harbor.Providers.OpenAI",
@@ -396,7 +396,7 @@ public class LayerDependencyTests
 
     /// <summary>
     ///     Every concrete Harbor.Tui.* renderer (Presentation) may reference
-    ///     Harbor.Abstractions + Harbor.Tui.Abstractions only — NOT Harbor.Core,
+    ///     Harbor.Abstractions + Harbor.Terminal.Abstractions only — NOT Harbor.Core,
     ///     NOT Harbor.Application / Harbor.Registries, NOT Infrastructure.
     /// </summary>
     [Test]
@@ -457,8 +457,10 @@ public class LayerDependencyTests
         // tests skip rather than fail).
         string[] expected =
         [
+            "Harbor.Domain",
+            "Harbor.Extensions",
             "Harbor.Abstractions",
-            "Harbor.Tui.Abstractions",
+            "Harbor.Terminal.Abstractions",
             "Harbor.Application",
             "Harbor.Registries",
             "Harbor.Core",

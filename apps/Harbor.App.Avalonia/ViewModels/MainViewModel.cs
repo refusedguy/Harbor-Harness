@@ -3,7 +3,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -26,7 +26,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly ToastService _toasts;
     private bool _disposed;
 
-    private readonly EventHandler<Harbor.Tui.Abstractions.State.UiState> _onStoreChanged;
+    private readonly EventHandler<Harbor.Ui.Framework.State.UiState> _onStoreChanged;
 
     /// <summary>Construct the shell view-model.</summary>
     public MainViewModel(

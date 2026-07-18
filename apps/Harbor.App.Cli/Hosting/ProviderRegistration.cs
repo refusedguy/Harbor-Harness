@@ -2,8 +2,10 @@ using System.Reflection;
 using System.Text.Json;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
+#if !HARBOR_MINIMAL
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
+#endif
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Hosting;
 /// <summary>
@@ -12,6 +14,7 @@ namespace Harbor.Cli.Hosting;
 /// </summary>
 internal static class ProviderRegistration
 {
+#if !HARBOR_MINIMAL
     public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
         IHttpClientFactory httpClientFactory,
@@ -90,6 +93,7 @@ internal static class ProviderRegistration
             Console.Error.WriteLine($"Failed to register provider: {ex.Message}");
         }
     }
+#endif
 
     private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders()
     {

@@ -9,7 +9,7 @@ namespace Harbor.Abstractions.Agents;
 /// <remarks>
 ///     <para>
 ///         <b>Why this exists (§ARCH-002):</b> before this interface was extracted,
-///         <c>Harbor.Tui.Abstractions</c> depended on the full <see cref="IAgent" />
+///         <c>Harbor.Terminal.Abstractions</c> depended on the full <see cref="IAgent" />
 ///         contract (which includes <see cref="IAgent.Subscribe" />,
 ///         <see cref="IAgent.Steer" />, <see cref="IAgent.FollowUp" />,
 ///         <see cref="IAgent.Initialize" /> — none of which a TUI effect host calls).
@@ -23,7 +23,7 @@ namespace Harbor.Abstractions.Agents;
 ///     </para>
 ///     <para>
 ///         <b>Layering:</b> declared in <c>Harbor.Abstractions</c> (Domain) so that
-///         <c>Harbor.Tui.Abstractions</c> (also Domain) can reference it without going
+///         <c>Harbor.Terminal.Abstractions</c> (also Domain) can reference it without going
 ///         through <c>Harbor.Core</c> (Application).
 ///     </para>
 /// </remarks>

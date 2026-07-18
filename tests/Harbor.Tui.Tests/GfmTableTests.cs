@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Tasks;
-using Harbor.Tui.Abstractions.Rendering;
+using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Tui.SpectreTui.View;
 namespace Harbor.Tui.Tests;
 public class GfmTableParserTests

@@ -3,7 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -228,16 +228,16 @@ public sealed class SessionManager
     }
 
     /// <summary>Convert an <see cref="AgentMessage"/> into a chat-line role + text for the UI store.</summary>
-    private static (Harbor.Tui.Abstractions.State.ChatRole role, string text) MessageToChatLine(AgentMessage msg)
+    private static (Harbor.Ui.Framework.State.ChatRole role, string text) MessageToChatLine(AgentMessage msg)
     {
         return msg switch
         {
-            Harbor.Abstractions.Models.UserMessage u => (Harbor.Tui.Abstractions.State.ChatRole.User, u.Content),
-            Harbor.Abstractions.Models.AssistantMessage a => (Harbor.Tui.Abstractions.State.ChatRole.Assistant,
+            Harbor.Abstractions.Models.UserMessage u => (Harbor.Ui.Framework.State.ChatRole.User, u.Content),
+            Harbor.Abstractions.Models.AssistantMessage a => (Harbor.Ui.Framework.State.ChatRole.Assistant,
                 string.Join(string.Empty, a.Parts.OfType<Harbor.Abstractions.Models.TextPart>().Select(p => p.Text))),
-            Harbor.Abstractions.Models.ToolResultMessage t => (Harbor.Tui.Abstractions.State.ChatRole.ToolResult,
+            Harbor.Abstractions.Models.ToolResultMessage t => (Harbor.Ui.Framework.State.ChatRole.ToolResult,
                 string.Join("\n", t.Results.Select(r => $"[{r.ToolName}] {r.Output}"))),
-            _ => (Harbor.Tui.Abstractions.State.ChatRole.System, msg.Role)
+            _ => (Harbor.Ui.Framework.State.ChatRole.System, msg.Role)
         };
     }
 }

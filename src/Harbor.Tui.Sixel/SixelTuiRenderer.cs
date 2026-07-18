@@ -1,7 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tui.Ansi;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -10,14 +10,14 @@ namespace Harbor.App.Avalonia.Services;
 public sealed class AvaloniaDispatcherAdapter
 {
     /// <summary>Raised on the UI thread whenever the UiStore transitions.</summary>
-    public event EventHandler<Harbor.Tui.Abstractions.State.UiState>? OnUiThread;
+    public event EventHandler<Harbor.Ui.Framework.State.UiState>? OnUiThread;
 
     /// <summary>
-    ///     Subscribe to <see cref="Harbor.Tui.Abstractions.State.UiStore.Changed"/> and forward
+    ///     Subscribe to <see cref="Harbor.Ui.Framework.State.UiStore.Changed"/> and forward
     ///     every transition to <see cref="OnUiThread"/> via <see cref="Dispatcher.UIThread.Post"/>.
     /// </summary>
     /// <param name="store">The UiStore to subscribe to.</param>
-    public void Bind(Harbor.Tui.Abstractions.State.UiStore store)
+    public void Bind(Harbor.Ui.Framework.State.UiStore store)
     {
         store.Changed += (_, e) =>
         {

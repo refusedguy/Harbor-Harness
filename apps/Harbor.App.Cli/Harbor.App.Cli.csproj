@@ -10,7 +10,25 @@
 
     The .NET namespace stays `Harbor.Cli.*` for backward compat with
     existing user code and docs.
+
+    ── Conditional build ───────────────────────────────────────────────────
+    Pass `-p:HARBOR_MINIMAL=true` (or set the env var HARBOR_MINIMAL=true)
+    to produce a much smaller CLI publish that excludes:
+
+      * every TUI renderer except Harbor.Tui.Plain
+      * the entire scripting stack (Harbor.Scripting.*)
+      * the plugin runtime (Harbor.Plugins.*)
+      * every LLM provider except Harbor.Providers.Ollama
+      * the SQLite session store (keeps Jsonl + Memory)
+
+    The corresponding `#if HARBOR_MINIMAL` directives in Hosting/HostBuilder.cs
+    skip service registration for the excluded assemblies, so the binary
+    boots without trying to resolve types that aren't there.
+
+    See docs/BUILD_SYSTEM.md §Conditional CLI variants for the size matrix
+    and the NUKE targets PublishCliMinimal / PublishCliFull / PublishSingleFile.
   -->
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -24,9 +42,39 @@
     <!-- The .NET namespace stays Harbor.Cli for backward compat. -->
     <RootNamespace>Harbor.Cli</RootNamespace>
     <AssemblyName>Harbor.App.Cli</AssemblyName>
+
+    <!--
+      HARBOR_MINIMAL=true → define the HARBOR_MINIMAL C# symbol so #if
+      directives in HostBuilder.cs can prune service wiring at compile time.
+      Property comes either from `-p:HARBOR_MINIMAL=true` on the command line
+      or from the HARBOR_MINIMAL env var (both recognized by MSBuild).
+    -->
+    <HARBOR_MINIMAL Condition="'$(HARBOR_MINIMAL)' == ''">$(env:HARBOR_MINIMAL)</HARBOR_MINIMAL>
+    <DefineConstants Condition="'$(HARBOR_MINIMAL)' == 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    Expose internals to the DI test project so it can call the internal
+    HostBuilder.Build(params string[] args) entry point directly and assert
+    every [Exposes(typeof(T))] service is resolvable from the built IServiceProvider.
+  -->
   <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Cli.Tests"/>
+  </ItemGroup>
+
+  <!-- ── Always-referenced core ───────────────────────────────────────────── -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+  </ItemGroup>
+
+  <!-- ── Full build only: scripting, plugins, all TUIs, all providers ─────── -->
+  <ItemGroup Condition="'$(HARBOR_MINIMAL)' != 'true'">
     <!-- Harbor.Plugins.* — full pipeline (facade + each layer directly). -->
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
@@ -42,19 +90,14 @@
     <ProjectReference Include="..\..\src\Harbor.Scripting.Engines\Harbor.Scripting.Engines.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Scripting.Bridge\Harbor.Scripting.Bridge.csproj"/>
 
-    <!-- Other infrastructure. -->
-    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <!-- Additional storage + providers (minimal keeps only Jsonl/Memory + Ollama). -->
     <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+
+    <!-- Alternative TUI renderers (minimal ships Plain only). -->
     <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>

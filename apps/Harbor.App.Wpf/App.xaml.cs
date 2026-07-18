@@ -13,6 +13,7 @@ using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Storage.Memory;
+using Excubo.Analyzers.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -90,6 +91,49 @@ public partial class App : Application
     }
 
     private static IHost BuildHost()
+    {
+        return BuildHostInternal();
+    }
+
+    /// <summary>
+    ///     Builds the Harbor DI host. Internal so the DI test project
+    ///     (Harbor.App.Wpf.Tests) can call it directly without going through
+    ///     the WPF startup lifetime. The public surface stays unchanged.
+    /// </summary>
+    /// <returns>A built <see cref="IHost"/>. Caller is responsible for disposal.</returns>
+    // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
+    // (EDI01–EDI04) and exercised at runtime by Harbor.App.Wpf.Tests/AppDiTests.cs.
+    [Exposes(typeof(IProviderRegistry))]
+    [Exposes(typeof(IAgentRegistry))]
+    [Exposes(typeof(IToolRegistry))]
+    [Exposes(typeof(IEventBus))]
+    [Exposes(typeof(IPermissionService))]
+    [Exposes(typeof(MessageConverter))]
+    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(ISessionStore))]
+    [Exposes(typeof(ISystemPromptBuilder))]
+    [Exposes(typeof(ICompactionService))]
+    [Exposes(typeof(IAgentLoop))]
+    [Exposes(typeof(IAgent))]
+    [Exposes(typeof(ThemeService))]
+    [Exposes(typeof(WpfFilePicker))]
+    [Exposes(typeof(DialogService))]
+    [Exposes(typeof(WpfDispatcherAdapter))]
+    [Exposes(typeof(MainViewModel))]
+    [Exposes(typeof(ChatViewModel))]
+    [Exposes(typeof(SessionListViewModel))]
+    [Exposes(typeof(ProviderBrowserViewModel))]
+    [Exposes(typeof(SettingsViewModel))]
+    [Exposes(typeof(CodeEditorViewModel))]
+    [Exposes(typeof(DiffViewModel))]
+    [Exposes(typeof(TokenUsageViewModel))]
+    [Exposes(typeof(CommandPaletteViewModel))]
+    [Exposes(typeof(ToastNotificationViewModel))]
+    [Exposes(typeof(MainWindow))]
+    [Exposes(typeof(ProviderBrowserView))]
+    [Exposes(typeof(SettingsView))]
+    [Exposes(typeof(CommandPaletteView))]
+    internal static IHost BuildHostInternal()
     {
         var builder = Host.CreateApplicationBuilder();
 

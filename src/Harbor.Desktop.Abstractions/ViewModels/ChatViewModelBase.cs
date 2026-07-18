@@ -1,5 +1,5 @@
 using Harbor.Desktop.Abstractions.DesignSystem;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 

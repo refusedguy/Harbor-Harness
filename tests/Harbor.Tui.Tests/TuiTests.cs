@@ -1,9 +1,9 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.ViewModels;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.Terminal.Abstractions.Views;
 namespace Harbor.Tui.Tests;
 public class StatusBarViewModelTests
 {

@@ -26,7 +26,7 @@ using Harbor.Scripting.Bridge;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Tui.RazorConsole;
@@ -98,7 +98,7 @@ public sealed class NetArchLayerRules
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Scripting",
-        "Harbor.Tui.Abstractions",
+        "Harbor.Terminal.Abstractions",
         "Harbor.Cli",
         // Sibling Infrastructure assemblies (no cross-Infrastructure edges):
         "Harbor.Providers.OpenAiCompatible",
@@ -129,7 +129,7 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Storage.Memory")
             .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
             .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .And().NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Cli")
@@ -138,7 +138,7 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Tui.Abstractions (Domain) may reference Harbor.Abstractions
+    ///     Harbor.Terminal.Abstractions (Domain) may reference Harbor.Abstractions
     ///     but no other Harbor assembly.
     /// </summary>
     [Test]
@@ -189,7 +189,7 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Application must NOT depend on Harbor.Tui.Abstractions (UI
+    ///     Harbor.Application must NOT depend on Harbor.Terminal.Abstractions (UI
     ///     vocabulary stays out of the agent-harness Application layer), on
     ///     Harbor.Registries (use cases depend on abstractions only), on
     ///     Harbor.Core (would re-create the god-project), or on sibling
@@ -201,7 +201,7 @@ public sealed class NetArchLayerRules
         var types = Types.InAssembly(typeof(AgentLoop).Assembly);
         var result = types
             .Should()
-            .NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Registries")
             // NOTE: 'Harbor.Core' check omitted — NetArchTest 1.3.2's NotHaveDependencyOn
             // matches by namespace prefix too, which would false-positive on every type in
@@ -232,7 +232,7 @@ public sealed class NetArchLayerRules
             // Harbor.Registries because those types live in the legacy Harbor.Core.* / 
             // Harbor.Abstractions.* namespaces (kept for backward compat after the S1 split).
             // Harbor.Core is now an empty facade with no types, so no IL can reference it.
-            .And().NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
@@ -265,7 +265,7 @@ public sealed class NetArchLayerRules
         var types = Types.InAssembly(asm);
         var result = types
             .Should()
-            .NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Scripting")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
@@ -282,7 +282,7 @@ public sealed class NetArchLayerRules
 
     /// <summary>
     ///     Harbor.Core (now a thin backward-compat facade) must NOT depend on
-    ///     Harbor.Tui.Abstractions (UI vocabulary stays out of the agent harness).
+    ///     Harbor.Terminal.Abstractions (UI vocabulary stays out of the agent harness).
     /// </summary>
     [Test]
     public async Task NetArch_Core_Facade_DoesNotDependOn_TuiAbstractions()
@@ -295,7 +295,7 @@ public sealed class NetArchLayerRules
         var types = Types.InAssembly(asm);
         var result = types
             .Should()
-            .NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
@@ -341,7 +341,7 @@ public sealed class NetArchLayerRules
 
     /// <summary>
     ///     Harbor.Scripting (Application) must NOT depend on Harbor.Core,
-    ///     Harbor.Application, Harbor.Registries, Harbor.Tui.Abstractions, or
+    ///     Harbor.Application, Harbor.Registries, Harbor.Terminal.Abstractions, or
     ///     Infrastructure.
     /// </summary>
     [Test]
@@ -353,7 +353,7 @@ public sealed class NetArchLayerRules
             .NotHaveDependencyOn("Harbor.Core")
             .And().NotHaveDependencyOn("Harbor.Application")
             .And().NotHaveDependencyOn("Harbor.Registries")
-            .And().NotHaveDependencyOn("Harbor.Tui.Abstractions")
+            .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
             .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")

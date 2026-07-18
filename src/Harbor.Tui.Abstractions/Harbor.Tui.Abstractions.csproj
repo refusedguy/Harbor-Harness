@@ -1,36 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Harbor.Tui.Abstractions — THIN BACKWARD-COMPAT FACADE.
+
+    This project is kept ONLY so existing `ProjectReference` entries pointing at
+    `Harbor.Tui.Abstractions.csproj` continue to build during the R6 rename
+    transition. The actual code lives in two new split projects:
+
+      - Harbor.Ui.Framework            (TEA state machine + dockable panel system
+                                        — used by terminal TUIs AND desktop GUIs)
+      - Harbor.Terminal.Abstractions   (terminal-specific renderer / view /
+                                        view-model / plugin contracts + GFM
+                                        table rendering)
+
+    Dependency direction (transitive):
+      Harbor.Tui.Abstractions  →  Harbor.Ui.Framework  →  Harbor.Abstractions
+                              →  Harbor.Terminal.Abstractions  →  Harbor.Ui.Framework
+                                                            →  Harbor.Abstractions
+
+    BREAKING CHANGE: all `using` directives that previously wrote
+    `Harbor.Tui.Abstractions.State` now write `Harbor.Ui.Framework.State`;
+    `Harbor.Tui.Abstractions.Panels` now writes `Harbor.Ui.Framework.Panels`;
+    `Harbor.Tui.Abstractions` (terminal types at the root) and the
+    `Renderers` / `Views` / `ViewModels` / `Plugins` / `Rendering` sub-namespaces
+    now write `Harbor.Terminal.Abstractions[.<sub>]`. C# does not support
+    namespace aliases via `GlobalUsings`, so consumers MUST update their
+    `using` directives — the facade only keeps ProjectReferences working.
+
+    New code should depend on the split projects directly. This facade will be
+    removed in v0.6. See Task A2 (R6) in /home/z/my-project/worklog.md and
+    docs/ARCHITECTURE_LAYERS.md §2.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Tui.Abstractions</PackageId>
-    <Description>Harbor TUI abstractions — MVVM-style views, view models, renderers, commands.</Description>
-    <PackageTags>harbor;tui;abstractions;mvvm</PackageTags>
+    <Description>Harbor TUI abstractions — backward-compat facade over Harbor.Ui.Framework + Harbor.Terminal.Abstractions. Will be removed in v0.6.</Description>
+    <PackageTags>harbor;tui;abstractions;facade;deprecated</PackageTags>
   </PropertyGroup>
 
-  <!--
-    Expose the internal UiStore.Transition helper to Presentation-layer apps that need
-    to fold non-agent state transitions (e.g. inserting a user-input line into the
-    transcript before the agent emits a UserMessage event). Harbor.Cli uses the agent
-    loop's events to drive state, so it does not need this; the desktop GUIs do.
-  -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.App.Avalonia"/>
-    <InternalsVisibleTo Include="Harbor.Tui.Avalonia"/>
-    <InternalsVisibleTo Include="Harbor.Tui.Wpf"/>
-    <InternalsVisibleTo Include="Harbor.Tui.Maui"/>
-    <InternalsVisibleTo Include="Harbor.Tui.Blazor"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm"/>
-    <PackageReference Include="CommunityToolkit.HighPerformance"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
   </ItemGroup>
 
 </Project>

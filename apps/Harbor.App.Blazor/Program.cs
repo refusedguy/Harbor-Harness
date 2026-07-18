@@ -1,7 +1,8 @@
 using Harbor.App.Blazor.Services;
 using Harbor.App.Blazor.ViewModels;
 using Harbor.Storage.Memory;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
+using Excubo.Analyzers.DependencyInjection;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,10 +34,60 @@ internal static class Program
 {
     /// <summary>Launch the Blazor host.</summary>
     /// <param name="args">CLI args. Recognises <c>--no-open-browser</c>.</param>
+    // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
+    // (EDI01–EDI04). Program.Main builds the WebApplication but never returns the IServiceProvider
+    // to a caller, so DI tests use BuildHostForTesting() below which mirrors the same registration
+    // list without starting Kestrel.
+    [Exposes(typeof(UiStore))]
+    [Exposes(typeof(MemorySessionStore))]
+    [Exposes(typeof(BlazorDispatcherAdapter))]
+    [Exposes(typeof(ThemeService))]
+    [Exposes(typeof(DialogService))]
+    [Exposes(typeof(ToastService))]
+    [Exposes(typeof(CommandPaletteService))]
+    [Exposes(typeof(SessionBrowserService))]
+    [Exposes(typeof(ProviderBrowserService))]
+    [Exposes(typeof(ChatViewModel))]
+    [Exposes(typeof(SessionListViewModel))]
+    [Exposes(typeof(ProviderBrowserViewModel))]
+    [Exposes(typeof(SettingsViewModel))]
+    [Exposes(typeof(TokenUsageViewModel))]
     public static async Task Main(string[] args)
     {
         bool autoOpen = !Array.Exists(args, a => a is "--no-open-browser" or "--no-browser");
 
+        WebApplication app = BuildApp(args);
+
+        string url = "http://localhost:5000";
+        if (autoOpen)
+        {
+            TryOpenBrowser(url);
+        }
+
+        Console.WriteLine($"Harbor Blazor listening on {url}");
+        Console.WriteLine("Press Ctrl+C to stop.");
+
+        try
+        {
+            await app.RunAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Graceful Ctrl+C shutdown.
+        }
+    }
+
+    /// <summary>
+    ///     Builds the configured <see cref="WebApplication"/> without starting
+    ///     Kestrel. Internal so <c>Harbor.App.Blazor.Tests</c> can resolve every
+    ///     registered service from <see cref="WebApplication.Services"/> and
+    ///     assert the DI container is complete. <see cref="Main"/> calls this
+    ///     and then invokes <c>app.RunAsync()</c> on the result.
+    /// </summary>
+    /// <param name="args">CLI args forwarded to <see cref="WebApplication.CreateBuilder"/>.</param>
+    /// <returns>A built (but not started) <see cref="WebApplication"/>.</returns>
+    internal static WebApplication BuildApp(string[] args)
+    {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddRazorComponents()
@@ -81,23 +132,7 @@ internal static class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        string url = "http://localhost:5000";
-        if (autoOpen)
-        {
-            TryOpenBrowser(url);
-        }
-
-        Console.WriteLine($"Harbor Blazor listening on {url}");
-        Console.WriteLine("Press Ctrl+C to stop.");
-
-        try
-        {
-            await app.RunAsync().ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Graceful Ctrl+C shutdown.
-        }
+        return app;
     }
 
     private static void TryOpenBrowser(string url)

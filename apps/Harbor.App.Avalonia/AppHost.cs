@@ -17,10 +17,11 @@ using Harbor.Providers.Ollama;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Tools.Builtin;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Excubo.Analyzers.DependencyInjection;
 
 namespace Harbor.App.Avalonia;
 
@@ -36,6 +37,28 @@ internal static class AppHost
     /// </summary>
     /// <param name="args">Command-line args (forwarded to <see cref="Host.CreateApplicationBuilder"/>).</param>
     /// <returns>A started <see cref="IHost"/>. Dispose on shutdown.</returns>
+    // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
+    // (EDI01–EDI04) and exercised at runtime by Harbor.App.Avalonia.Tests/AppHostDiTests.cs.
+    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(IEventBus))]
+    [Exposes(typeof(ISystemPromptBuilder))]
+    [Exposes(typeof(MessageConverter))]
+    [Exposes(typeof(IAgentLoop))]
+    [Exposes(typeof(IAgent))]
+    [Exposes(typeof(ISessionStore))]
+    [Exposes(typeof(ICompactionService))]
+    [Exposes(typeof(IPermissionService))]
+    [Exposes(typeof(IToolRegistry))]
+    [Exposes(typeof(IProviderRegistry))]
+    [Exposes(typeof(IAgentRegistry))]
+    [Exposes(typeof(IMcpRegistry))]
+    [Exposes(typeof(UiStore))]
+    [Exposes(typeof(TuiEffectHost))]
+    [Exposes(typeof(ThemeService))]
+    [Exposes(typeof(DialogService))]
+    [Exposes(typeof(AvaloniaFilePicker))]
+    [Exposes(typeof(SessionManager))]
+    [Exposes(typeof(ToastService))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

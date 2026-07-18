@@ -1,3 +1,4 @@
+#if !HARBOR_MINIMAL
 using Harbor.Plugins.Abstractions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -6,8 +7,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Runtime;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Terminal.Abstractions.Plugins;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -122,3 +123,8 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     /// <inheritdoc />
     public Result RegisterPanelProvider(IPanelProvider panel) => _panels.Register(panel);
 }
+#endif
+// HARBOR_MINIMAL: PluginLoadHost is omitted — the entire Harbor.Plugins.*
+// stack is excluded from the project reference graph in minimal builds, so
+// there's no IPluginLoadHost to implement. HostBuilder.cs gates the
+// construction of this type behind `#if !HARBOR_MINIMAL` accordingly.

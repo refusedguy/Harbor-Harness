@@ -1,118 +1,138 @@
 # Harbor.Abstractions
 
-The **Domain layer** of Harbor — zero-side-effect contracts: interfaces, immutable records, enums, and value objects. Every other Harbor layer depends on `Harbor.Abstractions`; `Harbor.Abstractions` depends on nothing Harbor-internal.
+The **thin facade** layer of Harbor — interface contracts only. After the round-6 architecture split, this project no longer contains domain models or extension helpers; it forwards to `Harbor.Domain` (pure domain models) and `Harbor.Extensions` (infrastructure helpers) transitively.
 
-> Design principle: **the Domain layer knows nothing about how it is used.** No I/O, no DI registration, no HTTP, no JSON parsing. Just pure contracts.
+> Design principle: **the facade knows nothing about how it is implemented.** Interfaces, plugin contexts, agent definitions, and the slash-command router contract live here; the implementations live in higher layers (`Harbor.Application`, `Harbor.Registries`, `Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tui.*`).
 
 ## Layer
 
-Domain — the innermost layer of the [Clean Architecture](../../docs/ARCHITECTURE_LAYERS.md) onion. Every other layer points inward to this one.
+**Domain (facade).** The innermost layer of the [Clean Architecture](../../docs/ARCHITECTURE_LAYERS.md) onion. Every other layer points inward to this one. This project, in turn, points only at `Harbor.Domain` (models the interfaces reference) and `Harbor.Extensions` (pooling helpers re-exported transitively for downstream consumers).
 
-## What's in it
+## What's in it (post-split)
 
-| Subfolder       | Contents                                                              |
-|-----------------|-----------------------------------------------------------------------|
-| `Agents/`       | `AgentDefinition`, `IAgent`, `AgentId`, `AgentType` (code/plan/explore) |
-| `Events/`       | `AgentEvent` (discriminated union), `StreamDeltaEvent`, `ToolCallEvent`, `CompactionEvent`, `ErrorEvent` |
-| `Extensions/`   | `ResultExtensions`, `AsyncEnumerableExtensions`                       |
-| `Models/`       | `Message`, `MessageRole`, `ToolCall`, `ToolResult`, `TokenUsage`, `SessionMetadata` |
-| `Permissions/`  | `Permission`, `PermissionRule`, `IPermissionService`, `PermissionDecision` (Allow/Ask/Deny) |
-| `Plugins/`      | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin`, `PluginManifest` |
-| `Providers/`    | `ILlmClient`, `LlmRequest`, `LlmResponse`, `ProviderDefinition`, `ProviderCapabilities` |
-| `Sessions/`     | `ISessionStore`, `SessionId`, `SessionState`, `CompactionSummary`     |
-| `Tools/`        | `ITool`, `ToolDefinition`, `ToolParameter`, `ToolInvocation`, `BuiltinTools` |
-| `Tui/`          | `IUiSink` (cross-cutting; full TUI contracts live in `Harbor.Tui.Abstractions`) |
+| Subfolder | Contents |
+| --- | --- |
+| `Agents/` | `IAgentRunner`, `IAgent`, `AgentState`, `IAgentLoop` (interfaces + the per-run state record), `AgentDefinition` (the static blueprint record), `IAgentRegistry`, `IAgentRegistryBuilder` |
+| `Events/` | `IEventBus`, `IEventSubscriber` (the event-bus interface — the `AgentEvent` discriminated union itself lives in `Harbor.Domain/Events/`) |
+| `Models/` | _(empty post-split)_ — `Session`, `Messages`, `MemoryPackFormatters`, `Identifiers/*` moved to `Harbor.Domain/Models/` |
+| `Permissions/` | _(empty post-split)_ — `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `PermissionRequest`, `PermissionResponse`, `IPermissionService` moved to `Harbor.Domain/Permissions/` |
+| `Plugins/` | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext`, `IPluginHost` |
+| `Providers/` | `ILlmClient`, `IProviderRegistry`, `IProviderRegistryBuilder`, plus the LLM-message contract types (`LlmRequest`, `LlmMessage` hierarchy, `LlmContentBlock` hierarchy, `ToolDefinition`) |
+| `Sessions/` | `ISessionStore`, `ISessionContext`, `ISystemPromptBuilder`, `SystemPromptContext`, `ContextFile`, `SkillDescriptor`, `ICompactionService`, `CompactionResult`, `ITokenEstimator`, `HeuristicTokenEstimator` |
+| `Tools/` | `ITool`, `ToolContext`, `ToolProgressUpdate`, `ToolDescriptor`, `ExecutionMode`, `IToolRegistry`, `IToolRegistryBuilder`, `IMcpRegistry` |
+| `Tui/` | `IInputHandler`, `KeyPress`, `KeyPressEventArgs`, `ISlashCommand`, `ICommandContext`, `ISlashCommandRouter` (the full TUI contracts may move again to `Harbor.Ui.Framework` per Task A2 — left here for now) |
+| `Extensions/` | _(empty post-split)_ — `ArrayPoolExtensions`, `CollectionExtensions`, `MemoryPackExtensions` moved to `Harbor.Extensions/` |
+| `ZLinqDropInAssemblyAttribute.cs` | Assembly-level source-generator config (kept here because the interfaces' LINQ call sites resolve via ZLinq drop-in) |
 
-## What's NOT in it
+## What's NOT in it (post-split)
 
-- **No HTTP, no HttpClient, no JSON serialization.** Provider implementations live in `Harbor.Providers.*` (Infrastructure).
+- **No domain models.** `Session`, `AgentMessage`, `ModelInfo`, `Usage`, `Pricing`, `ToolResult`, `ToolResultEntry`, `FileAttachment`, `AgentEvent` and all 13 derived event types, `LlmEvent` and all 12 derived streaming-event types, `PermissionRuleset` / `PermissionRule` / `PermissionAction`, `SessionId` / `MessageId` / `ToolCallId` / `ProviderId` / `ModelRef` / `ToolName` / `AgentName` — all moved to `Harbor.Domain`.
+- **No infrastructure helpers.** `ArrayPoolExtensions.RentScoped<T>`, `StringBuilderPool`, `RentedArray<T>`, `CollectionExtensions.ToFrozenSet<T>` / `ToFrozenDictionary<...>`, `MemoryPackExtensions.ToMemoryPackBytes<T>` / `FromMemoryPackBytes<T>` — all moved to `Harbor.Extensions`.
+- **No HTTP, no HttpClient, no JSON serialization beyond `JsonElement`/`JsonDocument`.** Provider implementations live in `Harbor.Providers.*` (Infrastructure).
 - **No DI registration.** `IServiceCollection` extensions live in `Harbor.Core` or composition roots.
 - **No Roslyn, no reflection-based activation.** Plugin instantiation lives in `Harbor.Plugins.Instantiation`.
 - **No file I/O.** Session storage lives in `Harbor.Storage.*`.
 - **No UI code.** TUI renderers live in `Harbor.Tui.*`.
-- **No business logic.** The agent loop lives in `Harbor.Core`.
+- **No business logic.** The agent loop lives in `Harbor.Application` (split out of `Harbor.Core` in round 5).
 
-If you find yourself adding any of the above to `Harbor.Abstractions`, **stop** — it belongs in a higher layer.
+If you find yourself adding any of the above to `Harbor.Abstractions`, **stop** — domain models belong in `Harbor.Domain`, helpers belong in `Harbor.Extensions`, business logic belongs in `Harbor.Application` / `Harbor.Registries`.
 
 ## Dependencies
 
-Zero Harbor-internal dependencies. External packages only:
+### Project references (the facade wiring)
+
+| Project | Why |
+| --- | --- |
+| `Harbor.Domain` | Interfaces reference domain types: `ITool.ExecuteAsync` returns `Task<ToolResult>` (Domain), `ISessionStore.AppendMessageAsync` takes `AgentMessage` (Domain), `IEventBus.PublishAsync` takes `AgentEvent` (Domain), `IAgentRegistry.GetAgent` returns `AgentDefinition` (Domain). |
+| `Harbor.Extensions` | The facade re-exports `ArrayPoolExtensions`, `StringBuilderPool`, `CollectionExtensions`, `MemoryPackExtensions` transitively so downstream consumers (e.g. `Harbor.Application`, `Harbor.Tools.*`) that already reference `Harbor.Abstractions` don't need to add a new `<ProjectReference Include="Harbor.Extensions">`. |
+
+### Package references (the interface-only contracts)
 
 - `CSharpFunctionalExtensions` — `Result<T>`, `ValueObject` (Railway Oriented Programming)
 - `CommunityToolkit.HighPerformance` — `Span<T>` helpers, `HashData`
-- `MemoryPack` — high-performance binary serialization for events
+- `MemoryPack` — `[MemoryPackable]` types referenced by interface signatures (`ToolResult`, `AgentMessage`)
 - `ZLinq` + `ZLinq.DropInGenerator` — zero-allocation LINQ (replaces `System.Linq` via `<Using Remove="System.Linq"/>`)
-- `Microsoft.Extensions.DependencyInjection.Abstractions` — `IServiceCollection` (interfaces only, no impl)
-- `Microsoft.Extensions.Logging.Abstractions` — `ILogger` (interfaces only)
-- `Microsoft.Extensions.Configuration.Abstractions` — `IConfiguration` (interfaces only)
+- `Microsoft.Extensions.DependencyInjection.Abstractions` — `IServiceCollection` (`PluginContext.Services`)
+- `Microsoft.Extensions.Logging.Abstractions` — `ILogger` (`PluginContext.CreateLogger<T>`)
+- `Microsoft.Extensions.Configuration.Abstractions` — `IConfiguration` (`PluginContext.Configuration`)
 
-> `AllowUnsafeBlocks` is `false`. The Domain layer is 100% safe code.
+> `AllowUnsafeBlocks` is `false`. The facade is 100% safe code.
 
-## Public API (highlights)
+## Why split? (rationale)
 
-### Result<T> — Railway Oriented Programming
+Before the round-6 split, `Harbor.Abstractions` was a god-project: domain models + interfaces + extension helpers + permissions + events all in one assembly. This had three problems:
+
+1. **Cross-cutting rebuilds.** Touching `Models/Session.cs` rebuilt every interface and every consumer of every interface, even though the interface signatures didn't change. With the split, only `Harbor.Domain` rebuilds; `Harbor.Abstractions` (and its 30+ consumers) stay cached.
+2. **Layering ambiguity.** A new contributor couldn't tell from the namespace whether a type was a pure model or an interface. The split enforces the boundary at the assembly level — architecture tests in `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs` fail the build if anyone re-adds a model to `Harbor.Abstractions` or an interface to `Harbor.Domain`.
+3. **Forced transitive deps.** Consumers that only needed pure models (e.g. `Harbor.Providers.Anthropic` only needs `ModelInfo`, `LlmRequest`, `LlmEvent`) were forced to pull in the full `Microsoft.Extensions.DependencyInjection.Abstractions` / `Logging.Abstractions` / `Configuration.Abstractions` stack that the interfaces pull in. After the split, these consumers can reference `Harbor.Domain` directly (a future optimization; the facade still works for now).
+
+The split is **namespace-preserving**: every file moved to `Harbor.Domain` or `Harbor.Extensions` keeps its original `namespace Harbor.Abstractions.{Models,Events,Permissions,Models.Identifiers,Extensions};` declaration. Consumer code requires zero `using` changes.
+
+## Public API (highlights — interface contracts)
+
+### IEventBus — Observer pattern
 
 ```csharp
-public Result<ToolResult> Invoke(ToolInvocation inv, CancellationToken ct)
+public interface IEventBus
 {
-    if (string.IsNullOrWhiteSpace(inv.Parameters.Path))
-        return Result.Failure<ToolResult>("Path is required.");
-    return Result.Success(new ToolResult(inv.Id, content, isError: false));
+    Task PublishAsync(AgentEvent @event, CancellationToken ct = default);
+    IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler);
+    IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, ValueTask> handler) where TEvent : AgentEvent;
+    IReadOnlyList<AgentEvent> GetScrollback(int maxEvents);
 }
 ```
 
-All fallible operations return `Result<T>` — no exceptions for expected failures. Exceptions are reserved for truly unexpected bugs (NullReference, OutOfMemory, etc.).
+`AgentEvent` lives in `Harbor.Domain`; the bus interface lives here.
 
-### AgentEvent — discriminated union
+### ITool — Strategy pattern
 
 ```csharp
-public abstract record AgentEvent
+public interface ITool
 {
-    public sealed record StreamDelta(string Text) : AgentEvent;
-    public sealed record ToolCallStarted(ToolInvocation Invocation) : AgentEvent;
-    public sealed record ToolCallCompleted(ToolInvocation Invocation, ToolResult Result) : AgentEvent;
-    public sealed record CompactionStarted(int OriginalMessageCount) : AgentEvent;
-    public sealed record CompactionCompleted(CompactionSummary Summary) : AgentEvent;
-    public sealed record Error(string Message, Exception? Inner) : AgentEvent;
-    public sealed record Completed(TokenUsage Usage) : AgentEvent;
+    ToolName Name { get; }                              // ToolName lives in Harbor.Domain
+    string DisplayName { get; }
+    JsonDocument ParameterSchema { get; }
+    ExecutionMode ExecutionMode { get; }
+    Task<ToolResult> ExecuteAsync(                     // ToolResult lives in Harbor.Domain
+        JsonElement args,
+        ToolContext context,
+        CancellationToken cancellationToken = default);
+    Result ValidateArguments(JsonElement args) => Result.Success();
 }
 ```
 
-Subscribe via `IEventBus` (defined in `Harbor.Core` — the Domain defines the event shapes, the Application layer defines the bus).
-
-### IPlugin — extension point
+### IPlugin — Plugin pattern
 
 ```csharp
 public interface IPlugin
 {
     string Name { get; }
-    string Version { get; }
-    void Initialize(IPluginLoadHost host);
-    Task ShutdownAsync(CancellationToken ct);
+    Version Version { get; }
+    void Initialize(PluginContext context);
+    Task ShutdownAsync(CancellationToken cancellationToken = default);
 }
 
 public interface IToolPlugin : IPlugin
 {
-    IEnumerable<ToolDefinition> Tools { get; }
-    Result<ToolResult> Invoke(ToolInvocation inv, CancellationToken ct);
+    void RegisterTools(IToolRegistryBuilder builder);
 }
 ```
 
 ## Usage
 
-`Harbor.Abstractions` is referenced by **every** other Harbor project. You don't typically consume it directly — you consume the types it defines via higher-layer packages.
+`Harbor.Abstractions` is referenced by **every** other Harbor project. You don't typically consume it directly — you consume the interface contracts it defines via higher-layer packages.
 
-If you're writing a Harbor plugin, you'll reference `Harbor.Abstractions` (and possibly `Harbor.Plugins.Abstractions`) and implement `IPlugin` / `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPlugin`.
+If you're writing a Harbor plugin, you'll reference `Harbor.Abstractions` (and possibly `Harbor.Plugins.Abstractions`) and implement `IPlugin` / `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin`. The domain types your plugin touches (`ToolResult`, `AgentMessage`, `Session`) come transitively via `Harbor.Abstractions → Harbor.Domain`. The pool helpers your plugin uses (`StringBuilderPool`, `RentScoped`) come transitively via `Harbor.Abstractions → Harbor.Extensions`.
 
-## Design principles
+## Design principles (preserved from the pre-split era)
 
 1. **Purity** — no side effects, no I/O, no global state.
-2. **Immutability** — every type is `sealed` or a `record`. Mutable state lives in `Harbor.Core` (the Application layer).
+2. **Immutability** — every type is `sealed` or a `record`. Mutable state lives in `Harbor.Application` / `Harbor.Registries`.
 3. **Railway Oriented Programming** — `Result<T>` everywhere; exceptions reserved for bugs.
 4. **Zero unsafe code** — `AllowUnsafeBlocks=false`.
-5. **Performance** — `ZLinq` drop-in generator replaces `System.Linq` for zero-allocation pipelines. `FrozenDictionary` for registries (in `Harbor.Core`).
+5. **Performance** — `ZLinq` drop-in generator replaces `System.Linq` for zero-allocation pipelines.
 6. **Full XML docs** — every public API ships with `<summary>`/`<param>`/`<returns>`/`<remarks>`.
-7. **No business logic** — Domain describes *what*; higher layers describe *how*.
+7. **No business logic** — the facade describes *what*; higher layers describe *how*.
 
 ## See also
 
@@ -121,3 +141,6 @@ If you're writing a Harbor plugin, you'll reference `Harbor.Abstractions` (and p
 - [../../docs/ANTIPATTERNS.md](../../docs/ANTIPATTERNS.md) — what NOT to do in the Domain layer
 - [../../docs/PLUGIN_SYSTEM.md](../../docs/PLUGIN_SYSTEM.md) — `IPlugin` extension model
 - [../../docs/CODE_PRINCIPLES_AUDIT.md](../../docs/CODE_PRINCIPLES_AUDIT.md)
+- [../Harbor.Domain/README.md](../Harbor.Domain/README.md) — the pure domain layer (post-split)
+- [../Harbor.Extensions/README.md](../Harbor.Extensions/README.md) — the infrastructure-helper layer (post-split)
+- [../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs](../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs) — enforces the split invariants

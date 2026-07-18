@@ -2,11 +2,11 @@ using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.State;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Ui.Framework.State;
+using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.SpectreTui.Panels;
 using Harbor.Tui.SpectreTui.Panels.Builtin;
 using Harbor.Tui.SpectreTui.View;
@@ -135,7 +135,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         var settings = new ApplicationSettings
         {
-            Terminal = Terminal.Create(new FullscreenMode())
+            Terminal = Spectre.Tui.Terminal.Create(new FullscreenMode())
         };
 
         await Application.Create(settings).RunAsync(_screen).ConfigureAwait(false);

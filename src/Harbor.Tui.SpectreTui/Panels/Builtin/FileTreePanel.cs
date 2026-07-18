@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Harbor.Tui.SpectreTui.View;
 using Spectre.Console;
 using Spectre.Tui;

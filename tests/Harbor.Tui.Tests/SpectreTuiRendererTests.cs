@@ -2,7 +2,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions.State;
+using Harbor.Ui.Framework.State;
 using Harbor.Tui.SpectreTui;
 using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging.Abstractions;
