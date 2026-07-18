@@ -28,6 +28,25 @@ public partial class MainWindow : Window
         // file is written).
         ApplyConfiguredGeometry();
 
+        // Defensive: ensure Chat is the active view and NO modal is open when the
+        // shell first appears. Without this, a stale state from a previous launch
+        // (or a binding-evaluation race on startup) could leave the Code editor or
+        // one of the modal overlays (Diff / TokenUsage) visible on top of the chat.
+        // This fires after every binding has been applied, so it's the LAST word
+        // on the initial UI state.
+        Loaded += (_, _) =>
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.ActiveView = "chat";
+                vm.IsDiffOpen = false;
+                vm.IsTokenUsageOpen = false;
+                vm.IsCommandPaletteOpen = false;
+                vm.IsSettingsOpen = false;
+                vm.IsProviderBrowserOpen = false;
+            }
+        };
+
         // Dispose the MainViewModel when the window closes — this unsubscribes
         // the UiStore → dispatcher bridge and prevents background toast
         // continuations from racing the window teardown. Coupled with

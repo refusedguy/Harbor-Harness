@@ -209,6 +209,9 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
                 // and leave any others blank (the user can add them later in
                 // Settings). For the common single-provider onboarding flow
                 // this is sufficient.
+                // NOTE: kept as a foreach (rather than a second .Where clause)
+                // because the loop body has an `if` that selects the entry to
+                // add — collapsing it into LINQ would obscure the conditional.
                 if (p == SelectedProvider && !string.IsNullOrWhiteSpace(ApiKey))
                 {
                     keysBuilder.Add(p.Id, ApiKey.Trim());

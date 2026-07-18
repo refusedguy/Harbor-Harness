@@ -74,6 +74,26 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!-- ════════════ Empty-state placeholder ════════════
+             Shown when there are no chat lines and no tool calls and the
+             agent isn't streaming/thinking. The placeholder makes it
+             OBVIOUS that the chat is the active view (rather than a blank
+             canvas that could be mistaken for a hidden view). -->
+        <Border Grid.Row="0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Padding="40"
+                IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}">
+            <StackPanel Spacing="12" HorizontalAlignment="Center">
+                <TextBlock Text="💬" FontSize="48" HorizontalAlignment="Center" Opacity="0.5"/>
+                <TextBlock Text="Start a conversation" FontSize="20" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                <TextBlock Text="Type a message below to begin chatting with the AI agent"
+                           FontSize="14" Opacity="0.6" HorizontalAlignment="Center"
+                           Foreground="{StaticResource TextMutedBrush}"/>
+            </StackPanel>
+        </Border>
+
         <!-- ════════════ Streaming / thinking indicators ════════════ -->
         <!-- Streaming buffer with typewriter cursor (killer feature #1). -->
         <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"

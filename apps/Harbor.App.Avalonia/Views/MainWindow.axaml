@@ -171,18 +171,29 @@
 
             <!-- ─── Center: chat / code editor ─── -->
             <Grid Grid.Column="1" RowDefinitions="Auto,*">
-                <!-- Tab strip -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{StaticResource MochaMantle}" Spacing="2" Margin="6,4">
-                    <Button Classes="Subtle" Content="💬 Chat"
-                            Command="{Binding SwitchViewCommand}" CommandParameter="chat"/>
-                    <Button Classes="Subtle" Content="📝 Code"
-                            Command="{Binding SwitchViewCommand}" CommandParameter="code"/>
+                <!-- Tab strip — RadioButtons with EqualityConverter so the
+                     active tab is visually highlighted (Button.Subtle had no
+                     notion of "selected" state, so the user couldn't tell
+                     which view was active). The EqualityConverter's ConvertBack
+                     pushes the ConverterParameter back to ActiveView when a
+                     radio button is checked. -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{StaticResource MochaMantle}" Spacing="2" Margin="6,4" x:Name="TabStrip">
+                    <RadioButton Classes="TabButton" Content="💬 Chat" GroupName="MainView"
+                                 IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}"/>
+                    <RadioButton Classes="TabButton" Content="📝 Code" GroupName="MainView"
+                                 IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}"/>
                 </StackPanel>
 
                 <Grid Grid.Row="1">
-                    <views:ChatView IsVisible="{Binding ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat}"
+                    <!-- NOTE: IsVisible binds to $parent[Window].DataContext.ActiveView (the
+                         MainViewModel) rather than the local DataContext (ChatViewModel /
+                         CodeEditorViewModel). Without this, the IsVisible binding would
+                         re-evaluate against the local DataContext once it's assigned and
+                         fail to find ActiveView, falling back to FallbackValue and never
+                         reflecting the actual ActiveView value. -->
+                    <views:ChatView IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat, FallbackValue=True}"
                                     DataContext="{Binding Chat}"/>
-                    <views:CodeEditorView IsVisible="{Binding ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code}"
+                    <views:CodeEditorView IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code, FallbackValue=False}"
                                           DataContext="{Binding CodeEditor}"/>
                 </Grid>
             </Grid>
@@ -264,20 +275,28 @@
             </Grid>
         </Border>
 
-        <!-- ════════════ Modal overlays ════════════ -->
-        <views:CommandPaletteView IsVisible="{Binding IsCommandPaletteOpen}"
+        <!-- ════════════ Modal overlays ════════════
+             IsVisible binds to $parent[Window].DataContext.IsXxxOpen (the
+             MainViewModel) rather than the local DataContext (the per-overlay
+             ViewModel). Without this, the IsVisible binding would re-evaluate
+             against the local DataContext once it's assigned and fail to find
+             IsXxxOpen, falling back to FallbackValue=False and never reflecting
+             the actual MainViewModel state. FallbackValue=False keeps the
+             overlay hidden until the binding resolves (e.g. during the very
+             first frame before the Window's DataContext is set). -->
+        <views:CommandPaletteView IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
                                   DataContext="{Binding CommandPalette}"
                                   ZIndex="100"/>
-        <views:SettingsView IsVisible="{Binding IsSettingsOpen}"
+        <views:SettingsView IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
                             DataContext="{Binding Settings}"
                             ZIndex="200"/>
-        <views:ProviderBrowserView IsVisible="{Binding IsProviderBrowserOpen}"
+        <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
                                    DataContext="{Binding ProviderBrowser}"
                                    ZIndex="200"/>
-        <views:DiffView IsVisible="{Binding IsDiffOpen}"
+        <views:DiffView IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
                         DataContext="{Binding Diff}"
                         ZIndex="200"/>
-        <views:TokenUsageView IsVisible="{Binding IsTokenUsageOpen}"
+        <views:TokenUsageView IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
                               DataContext="{Binding TokenUsage}"
                               ZIndex="200"/>
 

@@ -173,6 +173,46 @@
         <Setter Property="Foreground" Value="{StaticResource TextSubtleBrush}"/>
     </Style>
 
+    <!-- ════════════ TabButton (main-view tabs: Chat / Code) ════════════
+         RadioButton styled as a flat tab so the user can SEE which view is
+         active (the previous Button.Subtle tabs had no notion of "selected"
+         state, so the chat tab vs. code tab were visually identical and the
+         user couldn't tell which view they were looking at). -->
+    <Style Selector="RadioButton.TabButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12"/>
+                <BrushTransition Property="Foreground" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Hover (unchecked) → subtle surface tint. -->
+    <Style Selector="RadioButton.TabButton:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{StaticResource TextBrush}"/>
+    </Style>
+
+    <!-- Checked (active tab) → accent-tinted background + accent foreground. -->
+    <Style Selector="RadioButton.TabButton:checked /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SelectedBackgroundBrush}"/>
+        <Setter Property="TextElement.Foreground" Value="{StaticResource MochaBlue}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+
+    <!-- Checked+hover → brighter accent. -->
+    <Style Selector="RadioButton.TabButton:checked:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource HoverStrongBackgroundBrush}"/>
+    </Style>
+
     <!-- ════════════ Custom Windows caption buttons (Task U1) ════════════
          Drawn in the client area because ExtendClientAreaChromeHints=PreferNone
          hides the native Windows caption buttons. Matches the VS Code /
