@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Controls.MarkdownRenderer">
+
+    <!--
+        MarkdownRenderer — ORCA feature steal #1.
+
+        Renders a markdown string into a vertical stack of native Avalonia
+        controls (headings, paragraphs with inline bold/italic/code runs,
+        bullet & numbered lists, blockquotes, fenced code blocks via the
+        <CodeBlock> control, hyperlinks). Parsed by Markdig (already a
+        package reference in the project) and projected to controls in
+        code-behind (see MarkdownRenderer.axaml.cs).
+
+        Bind via the `Markdown` styled property. Re-renders on every
+        change — designed for streaming: the buffer updates token-by-token
+        and the renderer rebuilds incrementally.
+    -->
+
+    <StackPanel x:Name="RootPanel" Orientation="Vertical" Spacing="6"/>
+</UserControl>

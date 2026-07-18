@@ -91,6 +91,25 @@ public sealed partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     private bool _isThinking;
 
+    /// <summary>
+    ///     True while the agent loop is running (waiting for first token OR
+    ///     streaming). Mirrors <see cref="UiState.IsAgentRunning"/>. Bound to
+    ///     the chat area's "Agent is running…" indicator + the Stop button's
+    ///     IsVisible. Distinct from <see cref="IsStreaming"/> (only true while
+    ///     tokens are actively arriving) and <see cref="IsThinking"/> (true
+    ///     while running but not yet streaming).
+    /// </summary>
+    [ObservableProperty]
+    private bool _isAgentRunning;
+
+    /// <summary>
+    ///     Human-readable status message shown in the chat area while the
+    ///     agent is running (e.g. <c>"Agent is running…"</c>). Cleared on
+    ///     completion. Bound to the streaming-indicator border's TextBlock.
+    /// </summary>
+    [ObservableProperty]
+    private string _statusMessage = string.Empty;
+
     /// <summary>The role-color lookup for the view.</summary>
     public static string RoleBrushKey(ChatRole role) => role switch
     {
@@ -127,6 +146,10 @@ public sealed partial class ChatViewModel : ObservableObject
 
             IsStreaming = state.IsStreaming;
             IsThinking = state.IsAgentRunning && !state.IsStreaming;
+            IsAgentRunning = state.IsAgentRunning;
+            StatusMessage = state.IsAgentRunning
+                ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
+                : string.Empty;
             StreamingBuffer = state.Active.TextBuffer;
         });
     }

@@ -52,7 +52,10 @@
                                                FontSize="11" FontWeight="SemiBold"
                                                Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
                                 </Border>
-                                <!-- Message body (Inter, comfortable line-height) -->
+                                <!-- Message body — plain TextBlock. (The MarkdownRenderer
+                                     control was stubbed out in another subagent's WIP but
+                                     doesn't compile under .NET 10 + Markdig 0.38 — restore
+                                     it once the markdig API migration is done.) -->
                                 <Border Grid.Column="1"
                                         Background="{StaticResource MochaMantle}"
                                         CornerRadius="8"
@@ -95,6 +98,24 @@
         </Border>
 
         <!-- ════════════ Streaming / thinking indicators ════════════ -->
+        <!-- Agent-running banner — visible whenever the agent loop is active,
+             with a status message ("Agent is running…" or "Streaming response…"). -->
+        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                Padding="14,10" Margin="12,4,12,4"
+                BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
+                IsVisible="{Binding IsAgentRunning}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding StatusMessage}"
+                           Foreground="{StaticResource MochaBlue}" FontWeight="SemiBold"
+                           FontFamily="{StaticResource CodeFont}" FontSize="12"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="●●●" Foreground="{StaticResource MochaBlue}" FontSize="10"
+                           VerticalAlignment="Center" Opacity="0.7"
+                           Classes="BlinkingCursor"/>
+            </StackPanel>
+        </Border>
+
         <!-- Streaming buffer with typewriter cursor (killer feature #1). -->
         <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
                 Padding="14,8" Margin="12,4,12,4"

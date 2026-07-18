@@ -4,27 +4,51 @@
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView">
 
-    <ItemsControl ItemsSource="{Binding Toasts}">
+    <!--
+        Toast container — floating, bottom-right, ABOVE the status bar.
+
+        Parent (MainWindow.axaml) places this UserControl with:
+            ZIndex="500"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Margin="0,0,16,40"   (40 = status bar height)
+
+        So this UserControl just needs to stack the toasts vertically. We
+        also clamp the width so very long messages don't stretch across the
+        chat area, and align the stack to the right edge.
+    -->
+
+    <ItemsControl ItemsSource="{Binding Toasts}"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Bottom">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
-                <StackPanel Orientation="Vertical" Spacing="6"/>
+                <StackPanel Orientation="Vertical" Spacing="8"/>
             </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
             <DataTemplate DataType="srv:ToastNotification">
                 <Border Classes="ToastCard"
                         Background="{StaticResource MochaSurface0}"
-                        CornerRadius="6"
-                        Padding="12,8"
-                        BorderBrush="{StaticResource MochaSurface2}"
-                        BorderThickness="1,0,0,0"
-                        BoxShadow="0 4 12 0 #60000000"
-                        MinWidth="260" MaxWidth="380">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding Kind, Converter={x:Static views:ToastIconConverter.Instance}}"
-                                   FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center"
-                                   Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                        CornerRadius="8"
+                        Padding="14,10"
+                        BorderBrush="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"
+                        BorderThickness="3,0,0,0"
+                        BoxShadow="0 6 16 0 #80000000"
+                        MinWidth="280" MaxWidth="380">
+                    <StackPanel Orientation="Vertical" Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Kind, Converter={x:Static views:ToastIconConverter.Instance}}"
+                                       FontSize="14" VerticalAlignment="Center"
+                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                            <TextBlock Text="{Binding Kind, StringFormat='{}{0}'}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextBrush}"
+                                   FontSize="13" LineHeight="18"/>
                     </StackPanel>
                 </Border>
             </DataTemplate>

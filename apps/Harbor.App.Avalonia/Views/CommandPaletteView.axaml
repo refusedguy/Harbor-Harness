@@ -6,24 +6,35 @@
 
     <Border Background="{StaticResource MochaCrust}"
             CornerRadius="8"
-            Width="600" MaxHeight="440"
+            Width="640" MaxHeight="480"
             VerticalAlignment="Top"
             Margin="0,80,0,0"
             Padding="0"
             BoxShadow="0 8 24 0 #80000000">
-        <Grid RowDefinitions="Auto,*">
+        <Grid RowDefinitions="Auto,Auto,*">
 
-            <TextBox Grid.Row="0"
+            <!-- Header -->
+            <Border Grid.Row="0" Background="{StaticResource MochaSurface0}" Padding="16,10">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="⌘" FontSize="16" Foreground="{StaticResource MochaBlue}"
+                               VerticalAlignment="Center" FontWeight="Bold"/>
+                    <TextBlock Text="Command palette" FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource MochaBlue}" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <TextBox Grid.Row="1"
                      x:Name="QueryBox"
                      Text="{Binding Query, Mode=TwoWay}"
                      PlaceholderText="Type a command, /slash, or search…"
                      Padding="16,12"
-                     BorderThickness="0"
+                     BorderThickness="0,0,0,1"
+                     BorderBrush="{StaticResource BorderBrush}"
                      Background="Transparent"
                      FontSize="14"
                      KeyDown="QueryBox_KeyDown"/>
 
-            <ListBox Grid.Row="1"
+            <ListBox Grid.Row="2"
                      ItemsSource="{Binding Results}"
                      SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                      Background="Transparent"
