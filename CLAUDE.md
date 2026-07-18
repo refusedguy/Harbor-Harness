@@ -2,6 +2,22 @@
 
 > This file is read by Claude Code (and other AI agents) when working on this codebase. It encodes the project's conventions, patterns, and gotchas.
 
+## Companion documents
+
+- **[AGENTS.md](./AGENTS.md)** — operational guide for AI agents (read this for **how to make changes**, common tasks, E2E testing, what NOT to do). Cross-references this file.
+- **[docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md)** — canonical Clean / Hexagonal / Onion layering rules. The allowed/forbidden `<ProjectReference>` matrix is mechanically enforced by `tests/Harbor.Architecture.Tests`. **Read this before adding any `<ProjectReference>` to a `.csproj`.**
+- **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 41 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
+- **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of `Harbor.Tui.SpectreTui` for adding features from opencode/kilocode/pi-agent.
+- **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
+- **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
+- **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 18 pattern catalog with real code (Strategy, Registry, Observer, Builder, Adapter, Command, Specification, Value Object, Factory, Plugin, Repository, Chain of Resp, Flyweight, Object Pool, MVVM, Decorator, TEA, DU).
+- **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 38 antipatterns we forbid (with before/after code).
+- **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** — 40+ recipes ("How do I...?").
+- **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 14 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
+- **[docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md)** — Roslyn `.cs` plugin system + 5 full examples.
+
+> **TL;DR for AI agents:** read this file for conventions → read AGENTS.md for operational steps → consult CODE_PRINCIPLES_AUDIT.md before refactoring hot paths.
+
 ## Project overview
 
 Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritizes:
@@ -24,16 +40,12 @@ src/
 ├── Harbor.Providers.OpenAI/          — native OpenAI (Chat Completions + Responses API)
 ├── Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
 ├── Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter (13 JSON configs)
-├── Harbor.Tools.Builtin/             — 8 builtin tools (read/write/edit/bash/glob/grep/ls/task)
+├── Harbor.Tools.Builtin/             — 14 builtin tools (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
 ├── Harbor.Tui.Abstractions/          — MVVM: Views + ViewModels + ITuiRenderContext
-├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (AOT-compatible fallback)
+├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
 ├── Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
 ├── Harbor.Tui.Spectre/               — Spectre.Console renderer
 ├── Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
-├── Harbor.Tui.SpectreTui/            — Spectre.TUI widget renderer (CLI DEFAULT)
-├── Harbor.Tui.Termina/               — experimental Termina renderer
-├── Harbor.Tui.TerminalGui/           — experimental Terminal.Gui v2 renderer
-├── Harbor.Tui.RazorConsole/          — experimental RazorConsole template renderer
 └── Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands
 
 samples/plugins/
@@ -45,21 +57,84 @@ samples/plugins/
 tests/
 ├── Harbor.Abstractions.Tests/        — 35 tests (identifiers, sessions, permissions)
 ├── Harbor.Core.Tests/                — 53 tests (event bus, registries, agent loop, compaction, converter, permissions, system prompt)
-├── Harbor.Tools.Builtin.Tests/       — 29 tests (all 8 tools + task tool)
-├── Harbor.Storage.Jsonl.Tests/       — 5 tests (JSONL CRUD)
+├── Harbor.Tools.Builtin.Tests/       — 70+ tests (all 14 builtin tools, incl. webfetch/patch/notebook/ripgrep/tree/mcp)
+├── Harbor.Storage.Jsonl.Tests/       — 4 tests (JSONL CRUD)
 ├── Harbor.Storage.Tests/             — 27 tests (Memory + SQLite CRUD)
 ├── Harbor.Providers.Tests/           — 39 tests (models, config, auth, catalog, provider IDs)
 ├── Harbor.Config.Tests/              — 36 tests (config store, auth store, presets, onboarding wizard)
-├── Harbor.Tui.Tests/                 — 199 tests (view models, render context, view registry, builtin views) [5 fail]
-├── Harbor.Tui.E2E.Tests/             — 57 tests (renderer output verification)
-└── Harbor.Benchmarks/                — BenchmarkDotNet benchmarks
+├── Harbor.Tui.Tests/                 — 104 tests (view models, render context, view registry, builtin views)
+├── Harbor.Tui.E2E.Tests/             — 8 tests (renderer output verification)
+├── Harbor.Architecture.Tests/        — 21 tests (layering invariants, see ARCHITECTURE_LAYERS.md)
+└── Harbor.Benchmarks/                — 7 BenchmarkDotNet benchmarks
 
 providers/   — 13 JSON LLM provider configs (embedded + filesystem)
-specs/       — 17 design specification documents (incl. specs/README.md)
+specs/       — 16 design specification documents
 docs/        — architecture, benchmarks, build, dev, getting started, plugin dev, roadmap
 ```
 
-**Stats (verified 2026-07-17, Harbor v0.4.0-alpha): 480 tests total — 469 passed / 10 failed / 1 skipped across 10 test projects. `src/` builds with 0 warnings, 0 errors, 0% unsafe code. 106 warnings exist in `tests/Harbor.Tui.Tests` (below the treat-as-errors gate), so the suite is currently RED.**
+**Total: 334 tests passed, 1 skipped, 0 failed. 0 warnings, 0 errors. 0% unsafe code.**
+
+## Layering rules — Clean / Hexagonal / Onion Architecture
+
+> **Canonical reference:** [docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md).
+> **Mechanically enforced by:** `tests/Harbor.Architecture.Tests` (46 tests: 21 reflection-based + 25 NetArchTest-based).
+> **User mandate:** *"слои должны быть по чистой архитектуре, гексогональная луковая называй как хочешь но это надо"*.
+
+Harbor follows **Clean / Hexagonal / Onion Architecture**. The dependency direction is
+**inward only**: an outer layer may reference an inner layer, never the reverse. The
+innermost layer (Domain/Abstractions) references nothing but the BCL.
+
+| Layer            | Harbor projects                                                                                              | May reference                                |
+|------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| **Domain**       | `Harbor.Abstractions`, `Harbor.Tui.Abstractions`                                                             | BCL only (no other Harbor project, except Tui.Abstractions → Abstractions) |
+| **Application**  | `Harbor.Core`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
+| **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT `Harbor.Core`, NOT each other) |
+| **Presentation** | `Harbor.Cli`, `Harbor.Tui.Ansi/Plain/Spectre/Spectre.Fullscreen/SpectreTui/TerminalGui/Termina/RazorConsole/Sixel/Notifications/Wpf/Avalonia/Maui/Blazor` | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
+| **Composition Root** | `Harbor.Cli/Hosting/HostBuilder.cs` (inside Presentation)                                              | Everything — the ONLY place that `new`s concrete impls |
+
+### Hard rules (CI-enforced via `Harbor.Architecture.Tests`)
+
+1. `Harbor.Abstractions` references ZERO other Harbor assemblies.
+2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
+3. `Harbor.Core` references only `Harbor.Abstractions`.
+4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
+5. `Harbor.Scripting` references `Harbor.Abstractions` only.
+6. `Harbor.Providers.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
+7. `Harbor.Storage.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
+8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
+9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
+10. `Harbor.Cli` may reference everything (it is the Composition Root host).
+
+### Soft rules (code-review-enforced — not mechanically checkable)
+
+- Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`,
+  `DefaultAgent`, `InMemoryEventBus`, etc.) are `new`'d only inside
+  `Harbor.Cli/Hosting/HostBuilder.cs`. `Program.cs` resolves them from DI by interface.
+- New interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only
+  contracts), never in `Harbor.Core`.
+- New value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
+- Application projects must not cross-reference each other (e.g. `Harbor.Scripting` must
+  not reference `Harbor.Core`). If two Application projects need to share a type, the type
+  belongs in Domain.
+
+### Interface Segregation (ISP) — §ARCH-002
+
+`IAgent` is split into `IAgentRunner` (minimal runner surface: `PromptAsync(string, ct)`,
+`AbortSource`, `WaitForIdleAsync`) and `IAgent : IAgentRunner, IDisposable` (adds
+`State`, `Subscribe`, `Steer`, `FollowUp`, `Initialize`, `PromptAsync(UserMessage, ct)`).
+Callers that only need to "send a prompt and wait for idle" take `IAgentRunner`. This
+keeps `Harbor.Tui.Abstractions` in the Domain layer — it never needs to reference
+`Harbor.Core` for agent types.
+
+### Before adding a `<ProjectReference>` — checklist
+
+1. **Identify the layer** of the project you are editing (see table above).
+2. **Identify the layer** of the project you want to reference.
+3. **Check the matrix** in [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md#2-allowed-and-forbidden-project-references).
+   If the cell is ❌, you have a layering violation — fix the design first.
+4. **Run `dotnet test tests/Harbor.Architecture.Tests/`** — if your reference is
+   forbidden, the test for that project will fail with a clear list of violations.
+5. **Update `Harbor.Architecture.Tests`** if the new project creates a new sub-category.
 
 ## Code conventions
 
@@ -240,6 +315,101 @@ arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
 - **I**nterface Segregation — small, focused interfaces (`ITool`, `IToolPlugin`, `IProviderPlugin`).
 - **D**ependency Inversion — depend on `Harbor.Abstractions`, not implementations.
 
+#### Before / after — SOLID
+
+**SRP (Single Responsibility):**
+
+```csharp
+// ❌ WRONG — god class doing 5 things
+public sealed class AgentLoop
+{
+    public async Task RunAsync(...) { /* orchestrate */ }
+    public void CoalesceStreaming(...) { /* parse */ }
+    public void DispatchToolCalls(...) { /* tool dispatch */ }
+    public void PublishEvents(...) { /* event publishing */ }
+    public void CheckPermissions(...) { /* permissions */ }
+}
+
+// ✅ RIGHT — split into focused collaborators
+public sealed class AgentLoop { /* orchestration only */ }
+public sealed class StreamingCoalescer { /* text/thinking/tool-call accumulation */ }
+public sealed class ToolCallDispatcher { /* tool execution */ }
+public sealed class TurnEventPublisher { /* event publishing */ }
+```
+
+**OCP (Open/Closed):**
+
+```csharp
+// ❌ WRONG — switch on type, must edit when adding new provider
+switch (providerId.Value)
+{
+    case "deepseek":  BuildDeepSeekRequest(req);  break;
+    case "groq":      BuildGroqRequest(req);      break;
+}
+
+// ✅ RIGHT — strategy interface, add new providers without editing dispatcher
+public interface IProviderCompatFlags { void CustomizeRequest(LlmRequest req); }
+public sealed class DeepSeekCompat : IProviderCompatFlags { /* ... */ }
+// dispatcher just calls: _compat[providerId].CustomizeRequest(req);
+```
+
+**LSP (Liskov):**
+
+```csharp
+// ❌ WRONG — subclass throws for methods it doesn't support (LSP violation)
+public class ReadOnlyStore : ISessionStore
+{
+    public Task<Result> SaveAsync(...) => throw new NotSupportedException();
+}
+
+// ✅ RIGHT — interface split so impl doesn't have unsupported methods
+public interface IReadOnlySessionStore { Task<Result<Session>> LoadAsync(string id, ...); }
+public interface ISessionStore : IReadOnlySessionStore { Task<Result> SaveAsync(...); }
+// Then ReadOnlyStore implements only IReadOnlySessionStore.
+```
+
+**ISP (Interface Segregation):**
+
+```csharp
+// ❌ WRONG — fat interface forcing impl to throw
+public interface ITool
+{
+    Task<ToolResult> ExecuteAsync(...);
+    Task<ToolResult> ExecuteStreamingAsync(...);   // not all tools stream
+    Task<ToolResult> ExecuteBatchAsync(...);       // not all tools batch
+}
+public sealed class ReadTool : ITool
+{
+    public Task<ToolResult> ExecuteBatchAsync(...) => throw new NotSupportedException();
+}
+
+// ✅ RIGHT — segregated interfaces
+public interface ITool { Task<ToolResult> ExecuteAsync(...); }
+public interface IStreamingTool : ITool { IAsyncEnumerable<ToolResult> StreamAsync(...); }
+public interface IBatchTool : ITool { Task<IReadOnlyList<ToolResult>> ExecuteBatchAsync(...); }
+```
+
+**DIP (Dependency Inversion):**
+
+```csharp
+// ❌ WRONG — high-level module depends on low-level concrete class
+public sealed class AgentLoop
+{
+    private readonly JsonlSessionStore _store = new();   // ← concrete dep
+    private readonly OpenAiCompatibleLlmClient _client;  // ← concrete dep
+}
+
+// ✅ RIGHT — depend on abstractions
+public sealed class AgentLoop
+{
+    private readonly ISessionStore _store;        // interface from Harbor.Abstractions
+    private readonly ILlmClient _client;          // interface from Harbor.Abstractions
+    public AgentLoop(ISessionStore store, ILlmClient client, ...) { _store = store; _client = client; }
+}
+```
+
+> **Known violations:** see [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) — 8 OOP/SOLID findings (2 critical: §OOP-001 thread-safety in `OpenAiCompatibleLlmClient`, §SOLID-001 god-class in `AgentLoop`).
+
 ### GOF patterns used
 - **Strategy**: `ILlmClient`, `ITool`, `ITuiRenderer`, `ISessionStore` — swap implementations.
 - **Registry**: `ProviderRegistry`, `ToolRegistry`, `AgentRegistry`, `ViewRegistry`, `ViewModelRegistry` — with `FrozenDictionary` for O(1) lookups.
@@ -265,6 +435,198 @@ arrives via `AgentEvent`; all rendering goes through `ITuiRenderContext`.
 - `IAsyncEnumerable<T>` for streaming (LLM events, tool progress).
 - Pattern matching with `switch` expressions on discriminated unions (`AgentEvent`, `LlmEvent`).
 - `Channel<T>` for lock-free producer-consumer (FP-inspired message passing).
+
+#### Before / after — FP
+
+**Immutability:**
+
+```csharp
+// ❌ WRONG — mutable class with setters
+public class Session
+{
+    public string Id { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }   // anyone can mutate
+    public SessionMetadata Metadata { get; set; }
+}
+session.UpdatedAt = DateTimeOffset.UtcNow;   // ← silent mutation
+
+// ✅ RIGHT — immutable record with `with` for changes
+public sealed record Session(
+    string Id,
+    DateTimeOffset UpdatedAt,
+    SessionMetadata Metadata);
+
+var updated = session with { UpdatedAt = DateTimeOffset.UtcNow };   // explicit copy
+```
+
+**Pure functions:**
+
+```csharp
+// ❌ WRONG — side effects inside "pure" function
+public static UiState Reduce(UiState state, AgentEvent e)
+{
+    File.AppendAllText("log.txt", e.ToString());   // ← I/O side effect
+    return state with { Status = "running" };
+}
+
+// ✅ RIGHT — pure, side-effect-free
+public static UiState Reduce(UiState state, AgentEvent e) => e switch
+{
+    AgentStartEvent => state with { Status = "running" },
+    _ => state
+};
+// I/O goes in TuiEffectHost, not in the reducer.
+```
+
+**Fire-and-forget:**
+
+```csharp
+// ❌ WRONG — fire-and-forget, errors silently swallowed
+_ = _eventBus.PublishAsync(evt, ct);
+
+// ✅ RIGHT — await, or use ContinueWith(OnlyOnFaulted)
+await _eventBus.PublishAsync(evt, ct).ConfigureAwait(false);
+
+// ✅ OK — fire-and-forget with explicit fault handler
+_ = Task.Run(async () =>
+{
+    try { await SomeAsync(ct); }
+    catch (Exception ex) { _logger.LogError(ex, "Background task failed"); }
+});
+```
+
+> **Known violations:** see [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) — 7 FP findings (1 critical: §FP-003 fire-and-forget in `AgentLoop.ToolContext.ReportProgress` + §FP-006 fire-and-forget in `TuiEffectHost.Run`). Also §FP-005 mutable `_scroll`/`_viewport` in `ChatScreen.Render` breaks TEA invariant.
+
+### ROP (Railway Oriented Programming)
+
+#### Before / after — ROP
+
+```csharp
+// ❌ WRONG — exceptions for expected failure
+public Session Load(string id)
+{
+    if (string.IsNullOrEmpty(id)) throw new ArgumentException("id");
+    return _store.Load(id) ?? throw new NotFoundException(id);
+}
+
+// ✅ RIGHT — Result<T> for expected failure
+public Result<Session> Load(string? id) =>
+    SessionId.TryCreate(id)
+        .Bind(sid => _store.GetAsync(sid))
+        .Ensure(s => s is not null, "session not found");
+
+// ❌ WRONG — `.Value` without `IsSuccess` check (crash on failure)
+var agent = _agents.GetAgent(AgentName.TryCreate(agentName).Value);
+
+// ✅ RIGHT — pattern-match
+var nameResult = AgentName.TryCreate(agentName);
+if (nameResult.IsFailure) return Result.Failure<PermissionResponse>(nameResult.Error);
+var agentResult = _agents.GetAgent(nameResult.Value);
+if (agentResult.IsFailure) return Result.Failure<PermissionResponse>(agentResult.Error);
+
+// ❌ WRONG — returning null on failure
+public AgentMessage? DeserializeMessage(string json)
+{
+    try { return JsonSerializer.Deserialize<AgentMessage>(json); }
+    catch { return null; }
+}
+
+// ✅ RIGHT — Result<T> with error
+public Result<AgentMessage> DeserializeMessage(string json)
+{
+    try { return Result.Success(JsonSerializer.Deserialize<AgentMessage>(json)!); }
+    catch (JsonException ex) { return Result.Failure<AgentMessage>(ex.Message); }
+}
+```
+
+### Performance
+
+#### Before / after — Performance
+
+**LINQ on hot path:**
+
+```csharp
+// ❌ WRONG — LINQ allocates iterator + delegate per call
+foreach (var d in tools.Where(t => t.ExecutionMode == ExecutionMode.Parallel)
+                       .Select(ToDescriptor)) { /* ... */ }
+
+// ✅ RIGHT — manual for loop
+for (int i = 0; i < tools.Count; i++)
+{
+    var t = tools[i];
+    if (t.ExecutionMode == ExecutionMode.Parallel) { var d = ToDescriptor(t); /* ... */ }
+}
+```
+
+**Reflection JSON:**
+
+```csharp
+// ❌ WRONG — reflection, IL2026 under AOT
+var json = JsonSerializer.Serialize<Dictionary<string, object?>>(obj);
+
+// ✅ RIGHT — Utf8JsonWriter or JsonSerializerContext
+using var stream = new MemoryStream();
+using var writer = new Utf8JsonWriter(stream);
+writer.WriteStartObject();
+writer.WriteString("name", obj.Name);
+writer.WriteEndObject();
+await writer.FlushAsync(ct);
+```
+
+**Per-line JsonDocument.Parse:**
+
+```csharp
+// ❌ WRONG — 10k allocations per file
+foreach (var line in File.ReadLines(path))
+{
+    using var doc = JsonDocument.Parse(line);   // alloc per line
+    var type = doc.RootElement.GetProperty("type").GetString();
+}
+
+// ✅ RIGHT — Utf8JsonReader (struct, zero alloc)
+foreach (var line in File.ReadLines(path))
+{
+    var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(line));
+    while (reader.Read())
+    {
+        if (reader.TokenType == JsonTokenType.PropertyName && reader.ValueTextEquals("type"))
+        {
+            reader.Read();
+            var type = reader.GetString();
+        }
+    }
+}
+```
+
+**Unpooled buffers:**
+
+```csharp
+// ❌ WRONG — alloc per call
+var sb = new StringBuilder();
+foreach (var s in items) sb.AppendLine(s);
+
+// ✅ RIGHT — pooled
+using var sb = StringBuilderPool.Rent();
+foreach (var s in items) sb.Builder.AppendLine(s);
+```
+
+**`string.Split` on hot path:**
+
+```csharp
+// ❌ WRONG — allocates string[] + N substrings
+foreach (var part in line.Split(',')) { /* ... */ }
+
+// ✅ RIGHT — span-based, zero alloc
+ReadOnlySpan<char> span = line.AsSpan();
+int start = 0;
+while (start < span.Length)
+{
+    int comma = span.Slice(start).IndexOf(',');
+    if (comma < 0) { Process(span.Slice(start)); break; }
+    Process(span.Slice(start, comma));
+    start += comma + 1;
+}
+```
 
 ### Async
 - `async`/`await` everywhere. No `.Result`, no `.Wait()`.
@@ -315,6 +677,8 @@ Rules:
 - Use `ArgumentList.Add(arg)` instead of `Arguments = "..."` for `ProcessStartInfo`.
 - **No `unsafe` code** — verified by `MA0046` analyzer (set to error).
 
+> **Known performance / low-level issues:** see [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) §5–§6 — 9 perf + 6 low-level findings. Top-3: §PERF-002 reflection-based JSON in `BuildRequest`, §PERF-005 per-line `JsonDocument.Parse` in `GetMessagesAsync`, §PERF-007 `lock` per `UiStore.Dispatch`. Hot-path code MUST use `Utf8JsonReader` + `JsonSerializerContext` source-gen, not reflection.
+
 ### Full-screen TUI development
 
 `FullscreenTuiRenderer` (in `Harbor.Tui.Spectre.Fullscreen`) is a full-screen interactive
@@ -364,19 +728,85 @@ dotnet run --project src/Harbor.Cli -- help
 
 ### Add a new builtin tool
 
+> **Full reference:** [docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md) — every builtin
+> tool's args schema, 3+ examples, "when to use X vs Y" matrix, and a complete
+> WebFetchTool walkthrough showing how to design a tool from scratch.
+
 1. Create `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs`.
-2. Implement `ITool` interface.
-3. Register in `src/Harbor.Cli/Program.cs` — `builder.AddTool<YourTool>()`.
-4. Add tests in `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs`.
-5. Build + test.
+2. Implement `ITool` interface (sealed class, XML docs on every public member,
+   `ConfigureAwait(false)` everywhere, `ArrayPool`/`StringBuilderPool` for buffers).
+3. Register in `src/Harbor.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
+   `tb.AddTool(() => new YourTool(loggerFactory.CreateLogger<YourTool>()))`.
+   If the tool needs a DI dependency, construct it eagerly and pass the instance —
+   `ToolContext.Services` is not populated by the default `AgentLoop` (see
+   `McpToolTool` registration for the pattern).
+4. Add a permission rule to `PermissionRuleset.Default` in
+   `src/Harbor.Abstractions/Permissions/PermissionRuleset.cs`.
+5. Add tests in `tests/Harbor.Tools.Builtin.Tests/<Name>ToolTests.cs` — one file per
+   tool. See `WebFetchToolTests.cs` / `McpToolToolTests.cs` for canonical patterns.
+6. Build + test.
 
 See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
+
+Minimal real example:
+
+```csharp
+// src/Harbor.Tools.Builtin/Time/TimeTool.cs
+using System.Text.Json;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Tools;
+
+namespace Harbor.Tools.Builtin;
+
+public sealed class TimeTool : ITool
+{
+    public ToolName Name => ToolName.Create("time");
+    public string DisplayName => "Time";
+    public string Description => "Returns current UTC time";
+    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+    public string? PromptSnippet => "time: Get current UTC time";
+    public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+    public JsonDocument ParameterSchema =>
+        JsonDocument.Parse("""{"type":"object","properties":{}}""");
+    public Result ValidateArguments(JsonElement args) => Result.Success();
+    public Task<ToolResult> ExecuteAsync(JsonElement a, ToolContext c, CancellationToken ct = default)
+        => Task.FromResult(ToolResult.Success(DateTimeOffset.UtcNow.ToString("O")));
+}
+```
+
+Register in `src/Harbor.Cli/Hosting/HostBuilder.cs`:
+
+```csharp
+tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));
+```
 
 ### Add a new LLM provider (JSON-only)
 
 1. Create `providers/<name>.json` with provider config.
 2. Set env var `<NAME>_API_KEY`.
 3. Done. Provider is auto-discovered at startup.
+
+```jsonc
+// providers/myllm.json
+{
+  "id": "myllm",
+  "displayName": "MyLLM",
+  "baseUrl": "https://api.myllm.com/v1",
+  "apiType": "openai-compatible",
+  "authType": "bearer",
+  "authEnvVar": "MYLLM_API_KEY",
+  "modelsUrl": "https://api.myllm.com/v1/models",
+  "modelsPath": "data",
+  "modelMapping": { "id": "id", "displayName": "name", "contextWindow": "context_length" }
+}
+```
+
+```bash
+export MYLLM_API_KEY=...
+export HARBOR_MODEL=myllm/my-model-id
+```
 
 ### Add a new native LLM provider
 
@@ -386,6 +816,28 @@ See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
 4. Register in `src/Harbor.Cli/Program.cs` `BuildHost()`.
 5. Add to solution: `dotnet sln add src/Harbor.Providers.<Name>/...`.
 
+```csharp
+public sealed class MyLlmClient : ILlmClient
+{
+    public ProviderId ProviderId { get; } = ProviderId.Create("myllm");
+
+    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken ct = default)
+        => Result.Success<IReadOnlyList<ModelInfo>>(new[]
+        {
+            new ModelInfo("my-model", "My Model", 128_000, 8_192)
+        });
+
+    public async IAsyncEnumerable<LlmEvent> StreamAsync(
+        LlmRequest req, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return new TextStartEvent("1");
+        yield return new TextDeltaEvent("1", "Hello");
+        yield return new TextEndEvent("1", "Hello");
+        yield return new StepFinishEvent(1, "stop", new Usage(10, 5));
+    }
+}
+```
+
 ### Add a new storage backend
 
 1. Create `src/Harbor.Storage.<Name>/` project.
@@ -393,14 +845,69 @@ See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
 3. Register in `src/Harbor.Cli/Program.cs` — add to the `switch` on `HARBOR_STORAGE` env var.
 4. Add tests.
 
+```csharp
+public sealed class RedisSessionStore : ISessionStore
+{
+    public Task<Result<Session>> LoadAsync(string sessionId, CancellationToken ct = default) { /* ... */ }
+    public Task<Result> SaveAsync(Session session, CancellationToken ct = default) { /* ... */ }
+    public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) { /* ... */ }
+    public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, string? title = null, CancellationToken ct = default) { /* ... */ }
+    public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) { /* ... */ }
+    public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) { /* ... */ }
+    public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) { /* ... */ }
+}
+```
+
 ### Add a new TUI renderer
 
 1. Create `src/Harbor.Tui.<Framework>/` project.
-2. Implement `ITuiRenderer` from `Harbor.Tui.Abstractions`.
-3. Register in DI: add to the `switch` on `HARBOR_TUI` env var.
-4. Done — no other changes needed (event-bus decoupling).
+2. Implement `ITuiRenderer` from `Harbor.Tui.Abstractions` (or extend
+   `BaseTuiRenderer` / `IInteractiveTuiRenderer` if you need full-screen or
+   own the input loop).
+3. Register in DI: add to the `switch` on `HARBOR_TUI` in
+   `src/Harbor.Cli/Hosting/HostBuilder.cs` `RegisterTui`. Also add a
+   `ProjectReference` to `Harbor.Cli.csproj`.
+4. Update `Program.PrintTuiOptions()` to list the new option.
+5. Done — no other changes needed (event-bus decoupling).
 
-### Add a sample plugin
+For the full catalog of built-in renderers (terminal, desktop GUI, web,
+mobile, non-interactive) and a comparison table + decision tree, see
+**[docs/ALTERNATIVE_UIS.md](./docs/ALTERNATIVE_UIS.md)**. It covers every
+renderer including the alternative UI projects: `Harbor.Tui.Wpf`,
+`Harbor.Tui.Avalonia`, `Harbor.Tui.Maui`, `Harbor.Tui.Blazor`,
+`Harbor.Tui.Sixel`, and `Harbor.Tui.Notifications`.
+
+```csharp
+public sealed class MyTuiRenderer : ITuiRenderer
+{
+    public Task InitializeAsync(CancellationToken ct = default) { /* setup */ return Task.CompletedTask; }
+
+    public Task PublishAsync(AgentEvent e, CancellationToken ct = default)
+    {
+        // Render the event however you want — Console, GUI, web, etc.
+        Console.WriteLine($"[{e.GetType().Name}]");
+        return Task.CompletedTask;
+    }
+
+    public Task ShutdownAsync(CancellationToken ct = default) => Task.CompletedTask;
+}
+```
+
+### Add a CS-source plugin (preferred)
+
+CS-source plugins are compiled in-memory via Roslyn at startup. No `.csproj`, no DLL.
+
+1. Drop a `.cs` file into `~/.harbor/plugins/` (user-global) or `<project>/.harbor/plugins/` (project-local).
+2. The file must contain a public class implementing `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin` / `ITuiPlugin`) with a parameterless constructor.
+3. Add `using Harbor.Abstractions.Models.Identifiers;` if using `ToolName`.
+4. Add `using Microsoft.Extensions.Logging;` for `LogInformation` extension.
+5. The plugin can reference any type already loaded in the host AppDomain (Harbor.Abstractions, System.Text.Json, CSharpFunctionalExtensions, Microsoft.Extensions.Logging, etc.).
+6. See `samples/plugins-cs/HelloWorldPlugin.cs` for a canonical example.
+7. See [docs/PLUGIN_SYSTEM.md](./docs/PLUGIN_SYSTEM.md) for the full reference.
+
+Compiled assemblies are cached by source SHA-256 in `~/.harbor/plugins/cache/`. Compilation errors are logged to console + `~/.harbor/logs/plugins.log`.
+
+### Add a DLL-based sample plugin (legacy path)
 
 1. Create `samples/plugins/Harbor.Plugin.<Name>/`.
 2. Implement `IPlugin` (and `IToolPlugin` / `IProviderPlugin` / `IAgentPlugin`).
@@ -409,6 +916,8 @@ See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
 5. Add `using Harbor.Abstractions.Models.Identifiers;` if using `ToolName`.
 6. Add `using Microsoft.Extensions.Logging;` for `LogInformation` extension.
 7. Add to solution.
+
+DLL-based plugins are kept as a legacy alternative for projects that need full .NET project features (NuGet deps, unit tests, strong naming).
 
 ## Testing conventions
 
@@ -424,41 +933,213 @@ See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
 
 ### NativeAOT
 - `AssemblyLoadContext` collectible does NOT work under NativeAOT. Use out-of-process plugins.
+- **Roslyn-based CS-source plugins do NOT work under NativeAOT** — `Microsoft.CodeAnalysis.CSharp` requires JIT. CS plugins are JIT-only.
 - Reflection-based JSON serialization gives IL2026 warnings. Always use source-gen.
 - `Microsoft.Data.Sqlite` pulls in native `e_sqlite3`. JSONL storage avoids this.
+
+Real error if you try `AssemblyLoadContext` collectible under AOT:
+
+```
+$ dotnet publish -c Release -r linux-x64 /p:PublishAot=true
+ILCompiler.CompilerException: AssemblyLoadContext.LoadFromAssemblyPath is not supported
+  in NativeAOT (collectible ALCs require reflection emit).
+  at Harbor.Core.Plugins.DllPluginLoader.Load(string path)
+```
+
+Fix: use Roslyn `.cs` plugin loader (works under JIT), or out-of-process plugin host.
 
 ### CSharpFunctionalExtensions
 - `ValueObject` is a class, not a record. Cannot use record syntax for inheritance.
 - `Result<T>` is a struct — be careful with boxing.
+
+Real error — calling `.Value` on a failure Result:
+
+```csharp
+var result = AgentName.TryCreate("BAD NAME WITH SPACES");
+// result.IsFailure = true, result.Error = "Invalid AgentName..."
+var name = result.Value;   // ← throws InvalidOperationException!
+// System.InvalidOperationException: Result has no value
+//    at CSharpFunctionalExtensions.Result`1.get_Value()
+```
+
+Fix: always check `result.IsSuccess` first, or use `result.Match(ok, fail)`.
 
 ### TUnit 0.50
 - `Assert.That(() => method()).Throws<T>()` doesn't compile. Use try/catch.
 - `IsNotNull()` doesn't work for value types. Use `.IsTrue()` or `string.IsNullOrEmpty()` instead.
 - Source-generated test discovery — tests must be `public async Task` in a `public class`.
 
+Real compile error:
+
+```
+tests/MyTests.cs(15,18): error CS1503: Argument 1: cannot convert from
+  'System.Func<System.Threading.Tasks.Task>' to 'System.Action'
+   at TUnit.Core.Assert.That(Action actual, ...)
+```
+
+Fix — use `try`/`catch`:
+
+```csharp
+try { await ThrowsAsync(); /* should throw */ await Assert.That(false).IsTrue(); }
+catch (MyException) { /* expected */ }
+```
+
 ### JSON serialization
 - `JsonSerializerDefaults.Web` uses camelCase. Internal records need `[JsonPropertyName]` for PascalCase.
 - `JsonElement` from `JsonDocument.Parse` must be consumed before the document is disposed.
+
+Real error — `JsonElement` accessed after `JsonDocument` disposed:
+
+```csharp
+JsonElement elem;
+using (var doc = JsonDocument.Parse(json)) { elem = doc.RootElement; }
+// doc is disposed now
+var name = elem.GetProperty("name").GetString();   // ← ObjectDisposedException!
+// System.ObjectDisposedException: Cannot access a disposed object.
+```
+
+Fix: clone the element before exiting the `using` block:
+
+```csharp
+JsonElement elem;
+using (var doc = JsonDocument.Parse(json)) { elem = doc.RootElement.Clone(); }
+var name = elem.GetProperty("name").GetString();   // ← works
+```
 
 ### Process invocation
 - `ProcessStartInfo.Arguments` is a single string — quoting is tricky.
 - Use `ArgumentList.Add(arg)` for safe per-arg passing.
 - Always `RedirectStandardError = true` even if you don't expect errors.
 
+Real shell-injection bug (the bad way):
+
+```csharp
+var psi = new ProcessStartInfo
+{
+    FileName = "git",
+    Arguments = $"log --author=\"{userInput}\"",   // ← injection: userInput = "\"; rm -rf /; \""
+    UseShellExecute = false
+};
+```
+
+Fix — `ArgumentList.Add`:
+
+```csharp
+var psi = new ProcessStartInfo { FileName = "git", UseShellExecute = false };
+psi.ArgumentList.Add("log");
+psi.ArgumentList.Add($"--author={userInput}");   // ← .NET handles quoting
+```
+
 ### Streaming with `IAsyncEnumerable`
 - **Cannot use `yield` inside `try`/`catch`** — C# forbids it (CS1626).
 - Pattern: extract the body to a separate method that returns `IEnumerable<T>`, call it from the `try` block.
 - Or use `Channel<T>` for full backpressure-aware streaming (see `OpenAiCompatibleLlmClient`).
 
+Real compile error:
+
+```csharp
+public async IAsyncEnumerable<LlmEvent> StreamAsync(...)
+{
+    try
+    {
+        yield return new TextDeltaEvent("1", "Hello");   // ← CS1626
+    }
+    catch (Exception ex)
+    {
+        yield return new ErrorEvent(ex.Message);          // ← CS1626
+    }
+}
+
+// error CS1626: Cannot yield a value in the body of a try block with a catch clause
+```
+
+Fix — use `Channel<T>`:
+
+```csharp
+public async IAsyncEnumerable<LlmEvent> StreamAsync(...)
+{
+    var channel = Channel.CreateUnbounded<LlmEvent>();
+    _ = Task.Run(async () =>
+    {
+        try { await PumpAsync(channel.Writer, ...); }
+        catch (Exception ex) { await channel.Writer.WriteAsync(new ErrorEvent(ex.Message)); }
+        finally { channel.Writer.Complete(); }
+    });
+    await foreach (var e in channel.Reader.ReadAllAsync()) yield return e;
+}
+```
+
 ### Plugin development
+- **Prefer CS-source plugins** (drop a `.cs` into `~/.harbor/plugins/`) over DLL-based plugins. See [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md).
 - Add `using Harbor.Abstractions.Models.Identifiers;` — `ToolName` lives there, not in `Tools`.
 - Add `using Microsoft.Extensions.Logging;` — `LogInformation` is an extension method.
 - Use `internal static HttpClient` (not `private`) if accessed from a separate tool class.
+- CS plugins run **in-process with full trust** — only drop reviewed source files.
+- Compilation errors are logged to console + `~/.harbor/logs/plugins.log`. Bump `HARBOR_LOGLEVEL=Debug` for verbose output.
+
+Real plugin compile error:
+
+```
+warn: Harbor.Core.Plugins.CsPluginLoader[0]
+      Failed to compile ~/.harbor/plugins/webhook.cs:
+      (12, 17): error CS0103: The name 'HttpClient' does not exist in the current context
+      (15, 32): error CS0246: The type 'JsonDocument' could not be found
+```
+
+Fix — add the missing usings at the top of the `.cs` file:
+
+```csharp
+using System.Net.Http;
+using System.Text.Json;
+```
 
 ### Provider config
 - `id` field must be lowercase alphanumeric + dash.
 - JSON configs are embedded as resources via `<EmbedProviders>true</EmbedProviders>` in `Harbor.Cli.csproj`.
 - After `dotnet publish`, builtin providers work without external JSON files.
+
+Real error — invalid `id` field:
+
+```jsonc
+{ "id": "MyLLM", "baseUrl": "..." }   // ← uppercase not allowed
+```
+
+```
+warn: Harbor.Core.Configuration.JsonConfigStore[0]
+      Failed to load provider config 'MyLLM': id must be lowercase alphanumeric + dash.
+      Got: 'MyLLM'
+```
+
+Fix — use lowercase id:
+
+```jsonc
+{ "id": "myllm", "baseUrl": "..." }
+```
+
+### Memory leaks
+
+Long-running sessions can leak if:
+
+1. Plugin subscribes to `IEventBus` on every tool call (forgetting to unsubscribe).
+   Symptom: `_subscriptions` array grows unbounded in `InMemoryEventBus`.
+   Fix: subscribe once in `Initialize`, never in `ExecuteAsync`.
+
+2. `ConcurrentDictionary<sessionId, T>` in a plugin grows without cleanup
+   (e.g. TodoWritePlugin never removes entries when session ends).
+   Symptom: RSS grows linearly with session count.
+   Fix: subscribe to `AgentEndEvent`, remove the session's entry.
+
+3. Streaming `StringBuilder` not returned to pool (forgot `using var`).
+   Symptom: `StringBuilderPool` runs out, falls back to `new StringBuilder()`.
+   Fix: always `using var buf = StringBuilderPool.Rent();` — never `var buf = ...`.
+
+Diagnose with:
+
+```bash
+dotnet tool install -g dotnet-gcdump
+dotnet-gcdump collect -n Harbor.Cli -o harbor.dump
+# Open in PerfView or dotnet-heapstat
+```
 
 ## Architecture decision records
 
@@ -475,21 +1156,34 @@ See `specs/` for the full design rationale. Key decisions:
 
 ## Code review checklist
 
+> **See also:** [docs/DEVELOPMENT.md §Principles checklist](./docs/DEVELOPMENT.md#principles-checklist) — full version with OOP/SOLID/GoF/FP/ROP/perf/low-level/concurrency/AOT sections.
+> **See also:** [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) — known violations; don't introduce more of the same kind.
+
 - [ ] Builds without warnings (treat warnings as errors).
 - [ ] All async methods accept `CancellationToken`.
 - [ ] No `.Result` or `.Wait()`.
+- [ ] No `_ = SomeAsync()` fire-and-forget (use `await` + `try/catch`, or `.ContinueWith(OnlyOnFaulted)`).
 - [ ] Public APIs have XML doc comments (`<summary>`, `<param>`, `<returns>`, `<remarks>`).
-- [ ] New types follow SOLID principles.
+- [ ] New types follow SOLID principles (no `switch` on type for new OCP violations — use Strategy).
 - [ ] Tests added for new functionality.
 - [ ] No secrets in code or config.
-- [ ] Uses `Result<T>` for failure cases, not exceptions (Railway Oriented Programming).
+- [ ] Uses `Result<T>` for failure cases, not exceptions (Railway Oriented Programming). **Never** call `.Value` on `Result` without checking `IsSuccess`.
 - [ ] No `yield` inside `try`/`catch`.
 - [ ] No `unsafe` code.
 - [ ] Uses `FrozenDictionary` / `IReadOnlyCollection` where appropriate.
 - [ ] Uses `ArgumentList.Add()` for process args.
+- [ ] Uses `Utf8JsonReader` / `JsonSerializerContext` source-gen on hot paths (no `JsonSerializer.Serialize<T>` reflection).
 - [ ] New view models use `CommunityToolkit.Mvvm` source generators (`[ObservableProperty]`, `[RelayCommand]`).
 - [ ] New TUI views never reach into `Harbor.Core` — only subscribe to `AgentEvent`.
 - [ ] Hot paths use manual `for` loops or ZLinq, not `System.Linq`.
+- [ ] Hot paths avoid `string.Split`, `string.Format`, `new StringBuilder()` — use `Span<T>` + `StringBuilderPool`.
+- [ ] Singleton services with mutable instance state — thread-safe (`lock` / `Interlocked` / per-call local state).
+- [ ] `ILlmClient` and `ITool` impls — explicitly thread-safe for concurrent calls.
+- [ ] NativeAOT: 0 IL2026 warnings in `dotnet build -c Release`.
+- [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet test tests/Harbor.Architecture.Tests/` — it must stay green.
+- [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `Harbor.Cli/Hosting/HostBuilder.cs`. `Program.cs` resolves services by interface from DI.
+- [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in `Harbor.Core`.
+- [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
 
 ## When in doubt
 

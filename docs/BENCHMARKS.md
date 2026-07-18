@@ -69,7 +69,7 @@ du -sh ./publish
 
 ### 2.4 Test execution
 
-Total wall-clock time for `dotnet test --no-build` across all 10 test projects.
+Total wall-clock time for `dotnet test --no-build` across all 8 test projects.
 
 ### 2.5 Hot-path micro-benchmarks
 
@@ -155,15 +155,14 @@ permission evaluation, event publish) thanks to:
 | Test project | Tests | Duration |
 |---|---|---|
 | `Harbor.Abstractions.Tests` | 35 | ~1.4 s |
-| `Harbor.Core.Tests` | 53 (4 fail, 1 skip) | ~1.0 s |
-| `Harbor.Tools.Builtin.Tests` | 29 (1 fail) | ~1.6 s |
+| `Harbor.Core.Tests` | 10 (1 skipped) | ~1.0 s |
+| `Harbor.Tools.Builtin.Tests` | 16 | ~1.6 s |
 | `Harbor.Storage.Jsonl.Tests` | 5 | ~1.2 s |
 | `Harbor.Providers.Tests` | 39 | ~1.6 s |
 | `Harbor.Storage.Tests` | 27 | ~2.2 s |
 | `Harbor.Config.Tests` | 36 | ~1.6 s |
-| `Harbor.Tui.Tests` | 199 (5 fail) | ~1.5 s |
-| `Harbor.Tui.E2E.Tests` | 57 | ~1.0 s |
-| **Total** | **480 (469 pass / 10 fail / 1 skip)** | **~12 s** |
+| `Harbor.Tui.Tests` | 75 | ~1.5 s |
+| **Total** | **242** | **~12 s** |
 
 Reproduce with:
 

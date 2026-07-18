@@ -1,6 +1,13 @@
 # Architecture
 
 > High-level design of Harbor. For full details, see [specs/](../specs/).
+>
+> **Связанные документы:**
+> - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — canonical Clean / Hexagonal / Onion layering rules + the allowed/forbidden ProjectReference matrix, enforced by `Harbor.Architecture.Tests`.
+> - [PATTERNS.md](./PATTERNS.md) — каталог из 18 паттернов с примерами кода.
+> - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 "не делайте так" с примерами.
+> - [EXAMPLES.md](./EXAMPLES.md) — 40+ рецептов.
+> - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 41 known violation + §ARCH-001..§ARCH-NNN layering audit.
 
 ## Design goals
 
@@ -8,96 +15,113 @@
 2. **NativeAOT-ready** — Core can be AOT-compiled; TUI runs JIT.
 3. **Low memory** — <30MB RSS idle target (vs 1GB+ for Node.js equivalents).
 4. **Plugin-extensible** — tools, providers, agents, UI all extensible.
-5. **Testable** — 480 tests across 10 projects, interfaces make mocking easy.
+5. **Testable** — 65+ unit tests, interfaces make mocking easy.
 
 ## Solution structure
 
 ```
-Harbor.slnx
-├── src/  (20 projects)
+Harbor.sln
+├── src/
 │   ├── Harbor.Abstractions/         (zero deps, only CSharpFunctionalExtensions)
-│   ├── Harbor.Core/                 (DI, EventBus, AgentLoop, registries, config)
+│   ├── Harbor.Core/                 (DI, EventBus, AgentLoop, registries)
 │   ├── Harbor.Storage.Jsonl/        (JSONL session store)
-│   ├── Harbor.Storage.Memory/       (in-memory store)
-│   ├── Harbor.Storage.Sqlite/       (SQLite store)
-│   ├── Harbor.Providers.Anthropic/  (native Anthropic)
-│   ├── Harbor.Providers.OpenAI/     (native OpenAI)
-│   ├── Harbor.Providers.Ollama/     (native Ollama)
 │   ├── Harbor.Providers.OpenAiCompatible/ (generic LLM client)
-│   ├── Harbor.Tools.Builtin/        (8 builtin tools)
+│   ├── Harbor.Tools.Builtin/        (7 builtin tools)
 │   ├── Harbor.Tui.Abstractions/     (TUI interfaces)
 │   ├── Harbor.Tui.Ansi/             (ANSI streaming renderer)
-│   ├── Harbor.Tui.Plain/            (plain text renderer)
-│   ├── Harbor.Tui.Spectre/          (Spectre.Console renderer)
-│   ├── Harbor.Tui.Spectre.Fullscreen/ (full-screen Spectre renderer)
-│   ├── Harbor.Tui.SpectreTui/       (Spectre.TUI widget renderer, CLI default)
-│   ├── Harbor.Tui.Termina/          (experimental Termina renderer)
-│   ├── Harbor.Tui.TerminalGui/      (experimental Terminal.Gui v2 renderer)
-│   ├── Harbor.Tui.RazorConsole/     (experimental RazorConsole renderer)
 │   └── Harbor.Cli/                  (entry point, wiring)
-├── tests/  (10 test projects + 1 benchmark project)
+├── tests/
 │   ├── Harbor.Abstractions.Tests/   (35 tests)
-│   ├── Harbor.Core.Tests/           (53 tests, 4 fail / 1 skip)
-│   ├── Harbor.Tools.Builtin.Tests/  (29 tests, 1 fail)
-│   ├── Harbor.Storage.Jsonl.Tests/  (5 tests)
-│   ├── Harbor.Providers.Tests/      (39 tests)
-│   ├── Harbor.Storage.Tests/        (27 tests)
-│   ├── Harbor.Config.Tests/         (36 tests)
-│   ├── Harbor.Tui.Tests/            (199 tests, 5 fail)
-│   ├── Harbor.Tui.E2E.Tests/        (57 tests)
-│   └── Harbor.Benchmarks/           (BenchmarkDotNet, no tests)
+│   ├── Harbor.Core.Tests/           (10 tests)
+│   ├── Harbor.Tools.Builtin.Tests/  (16 tests)
+│   └── Harbor.Storage.Jsonl.Tests/  (5 tests)
 ├── providers/                       (13 JSON LLM provider configs)
-├── specs/                           (17 design documents, incl. specs/README.md)
-└── docs/                            (architecture, development, build, plugin dev, benchmarks, roadmap, getting started)
+├── specs/                           (16 design documents)
+└── docs/                            (architecture, development guides)
 ```
 
 ## Layered architecture
 
+> **Canonical reference:** [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — the
+> authoritative matrix of allowed and forbidden `<ProjectReference>` edges, mechanically
+> enforced by `tests/Harbor.Architecture.Tests` (46 tests: 21 reflection-based +
+> 25 NetArchTest-based). The diagram below is the TL;DR; the full rules, Mermaid
+> diagram, and audit history live in that document.
+
+Harbor follows **Clean / Hexagonal / Onion Architecture** — dependency direction is
+inward only. The innermost layer (Domain) references nothing but the BCL.
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│                   Harbor.Cli (entry point)                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────┴──────────────────────────────────┐
-│                      Core Layer                              │
-│  ┌──────────────┐  ┌─────────────┐  ┌──────────────────┐   │
-│  │  AgentLoop   │  │  EventBus   │  │  SystemPrompt    │   │
-│  │  DefaultAgent│  │  InMemory   │  │  Builder         │   │
-│  └──────────────┘  └─────────────┘  └──────────────────┘   │
-│  ┌──────────────┐  ┌─────────────┐  ┌──────────────────┐   │
-│  │  Registries  │  │ Permission  │  │  Compaction      │   │
-│  │  (Prov/Tool/ │  │ Service     │  │  Service         │   │
-│  │   Agent)     │  │             │  │                  │   │
-│  └──────────────┘  └─────────────┘  └──────────────────┘   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────┴──────────────────────────────────┐
-│                  Abstractions Layer                          │
-│  Harbor.Abstractions                                         │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐    │
-│  │ ITool  │ │ILlmCli │ │ISessSt │ │IAgent  │ │IEventBu│    │
-│  │        │ │  ent   │ │  ore   │ │        │ │  s     │    │
-│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘    │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐    │
-│  │ISlashC │ │ITuiRen │ │IPlugin │ │IPermSn │ │IAgentR │    │
-│  │  md    │ │ derer  │ │        │ │  vc    │ │  eg    │    │
-│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘    │
-└─────────────────────────────────────────────────────────────┘
-                           │
-┌──────────────────────────┴──────────────────────────────────┐
-│                  Implementations Layer                       │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │ Harbor.Tools.    │  │ Harbor.Providers.│                 │
-│  │ Builtin          │  │ OpenAiCompatible │                 │
-│  │ (read/write/...) │  │ (generic client) │                 │
-│  └──────────────────┘  └──────────────────┘                 │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │ Harbor.Storage.  │  │ Harbor.Tui.Ansi  │                 │
-│  │ Jsonl            │  │ (ANSI renderer)  │                 │
-│  └──────────────────┘  └──────────────────┘                 │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  PRESENTATION (UI / CLI)                                        │
+│  - Harbor.Cli                                                   │
+│  - Harbor.Tui.Ansi / Plain / Spectre / Spectre.Fullscreen /     │
+│    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel /  │
+│    Notifications / Wpf / Avalonia / Maui / Blazor               │
+│  Depends on: Application + Abstractions                         │
+└─────────────────────────────────────────────────────────────────┘
+                                  ▲
+                                  │ uses
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  APPLICATION (use cases, orchestration)                         │
+│  - Harbor.Core (AgentLoop, CompactionService, PermissionService,│
+│                 AgentRegistry, ToolRegistry, ProviderRegistry,  │
+│                 InMemoryEventBus, SystemPromptBuilder, …)       │
+│  - Harbor.Plugins.Runtime (PluginHost, PluginHostBuilder)       │
+│  - Harbor.Scripting (ScriptHost, Bridge/ScriptGlobals)          │
+│  Depends on: Abstractions ONLY                                  │
+└─────────────────────────────────────────────────────────────────┘
+                                  ▲
+                                  │ implements
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  INFRASTRUCTURE (adapters, I/O, external services)              │
+│  - Harbor.Storage.Jsonl / Memory / Sqlite                       │
+│  - Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI /     │
+│    Ollama                                                       │
+│  - Harbor.Tools.Builtin                                         │
+│  - (Plugins.Runtime/Compilation + Scripting/Engines are         │
+│     Infrastructure-flavored subfolders inside Application       │
+│     projects — see ARCHITECTURE_LAYERS.md §3 for the rationale) │
+│  Depends on: Abstractions ONLY (NOT Harbor.Core)                │
+└─────────────────────────────────────────────────────────────────┘
+                                  ▲
+                                  │ declares
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  DOMAIN / ABSTRACTIONS (the hexagon core)                       │
+│  - Harbor.Abstractions (interfaces, models, events, value objs, │
+│    IAgent, IAgentRunner, IAgentLoop, ITool, IToolRegistry,      │
+│    ILlmClient, ISessionStore, IProviderRegistry, IAgentRegistry,│
+│    IEventBus, IPermissionService, ICompactionService,           │
+│    PermissionRuleset, Session, Messages, Identifiers, …)        │
+│  - Harbor.Tui.Abstractions (TUI interfaces, UiState, UiReducer, │
+│    ViewRegistry, IPanels, ITuiViewModel, ITuiView, ITuiPlugin)  │
+│  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
+│              Microsoft.Extensions.Logging.Abstractions etc.)    │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+**Key layering invariants** (enforced by `Harbor.Architecture.Tests`):
+
+1. `Harbor.Abstractions` references no other Harbor assembly.
+2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
+3. `Harbor.Core` references only `Harbor.Abstractions` (NOT `Harbor.Tui.Abstractions`,
+   NOT Infrastructure).
+4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` +
+   `Harbor.Tui.Abstractions` only (NOT `Harbor.Core`).
+5. `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+6. `Harbor.Providers.*` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+7. `Harbor.Storage.*` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` +
+   `Harbor.Tui.Abstractions` only (NOT `Harbor.Core`, NOT Infrastructure).
+10. `Harbor.Cli` references everything — it is the Composition Root.
+
+See [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) for the full allowed/forbidden
+matrix and [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) §ARCH-001+ for the
+audit trail of violations found and fixed.
 
 ## Key architectural decisions
 
@@ -216,7 +240,39 @@ Provider config is JSON:
 }
 ```
 
+## Code principles
+
+Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/perf. Полный аудит с примерами нарушений и рекомендациями — [docs/CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md).
+
+### Краткая сводка
+
+| Принцип | Где применять | Эталонные реализации |
+|---|---|---|
+| **S**RP | Все классы | `UiReducer`, `MessageConverter`, `PermissionRuleset` |
+| **O**CP | Все switch-dispatch | Strategy-паттерн (`ITool`, `ILlmClient`) |
+| **L**SP | Все interface-impls | `JsonlSessionStore`, `MemorySessionStore`, `SqliteSessionStore` — взаимозаменяемы |
+| **I**SP | Все интерфейсы | `ITool` (8 методов, все нужны) |
+| **D**IP | Все ссылки на модули | Только `Harbor.Abstractions` в зависимостях |
+| **FP** — immutability | Доменные модели | `record Session`, `record AgentMessage`, `record UiState` |
+| **FP** — pure functions | Reducers | `UiReducer.Reduce`, `Pricing.CalculateCost` |
+| **ROP** | Все public APIs что могут ошибиться | `Result<Session>`, `Result<ITool>`, `Result<ProviderId>` |
+| **Perf** — pools | Hot paths | `ArrayPool<byte>`, `StringBuilderPool`, `StringPool.Shared` |
+| **Perf** — frozen | Read-only collections | `FrozenDictionary` после `Freeze()` |
+| **Perf** — span | Парсинг | `IdentifierValidation` (manual char-check) |
+| **AOT** | Core/Storage/Providers | `MemoryPack` source-gen, planned `JsonSerializerContext` |
+
+### Чек-лист для PR
+
+См. [docs/DEVELOPMENT.md §Principles checklist](./DEVELOPMENT.md#principles-checklist).
+
+### Известные нарушения (tech debt)
+
+41 нарушение, 11 критических, разбито по 4 спринта. Полный список — [docs/CODE_PRINCIPLES_AUDIT.md §Prioritized plan](./CODE_PRINCIPLES_AUDIT.md).
+
 ## NativeAOT strategy
+## NativeAOT strategy
+
+> Note: duplicate heading kept for historical reasons — fix in v0.4 doc cleanup.
 
 **Core** (`Harbor.Abstractions`, `Harbor.Core`, `Harbor.Storage.Jsonl`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`) — designed to be AOT-compatible:
 - No reflection emit.
@@ -236,7 +292,458 @@ Provider config is JSON:
 | RSS idle | <30MB | Core only |
 | Binary size | ~5-7MB | NativeAOT, stripped |
 | Token-to-screen latency | <35ms | LLM network dominates |
-| Test execution | <15s | 480 tests (469 pass / 10 fail / 1 skip) in ~12s |
+| Test execution | <2s | 65 tests in ~300ms |
+
+## Concrete code flow: one user prompt
+
+Что происходит когда пользователь пишет `harbor ask "Print hello world"`? Пройдём
+по каждому слою с реальным кодом.
+
+### Step 1: `Program.cs` → `RunAskAsync`
+
+`src/Harbor.Cli/Program.cs:85`:
+
+```csharp
+private static async Task<int> RunAskAsync(string[] args)
+{
+    if (args.Length == 0) { Console.Error.WriteLine("Usage: harbor ask <prompt>"); return 1; }
+    string prompt = string.Join(' ', StripLogArgs(args));
+    using var host = HostBuilder.Build(args);
+    var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
+    return await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+}
+```
+
+### Step 2: `HostBuilder.Build` wires DI
+
+`src/Harbor.Cli/Hosting/HostBuilder.cs:40`:
+
+```csharp
+public static IHost Build(params string[] args)
+{
+    // ... create ~/.harbor/{sessions,cache}
+    var builder = Host.CreateApplicationBuilder();
+    ConfigureLogging(builder, args);
+    RegisterCore(builder);                              // AgentLoop, EventBus, registries
+    RegisterRegistries(builder, harborDir);             // Tools, Providers, Agents
+    RegisterStorage(builder, sessionsDir, sqlitePath);  // Jsonl | Memory | Sqlite
+    RegisterTui(builder);                               // Ansi | Plain | Spectre | Fullscreen | ...
+    RegisterHttpClients(builder);
+    return builder.Build();
+}
+```
+
+`CreateToolRegistry`:
+
+```csharp
+var registry = new ToolRegistry();
+var tb = new ToolRegistryBuilder(registry);
+var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+tb.AddTool(() => new ReadTool(loggerFactory.CreateLogger<ReadTool>()));
+tb.AddTool(() => new WriteTool(loggerFactory.CreateLogger<WriteTool>()));
+// ... 6 more
+registry.Freeze();   // snapshot to FrozenDictionary for O(1) lookups
+```
+
+### Step 3: `ReplRunner.RunAskAsync` → `DefaultAgent.PromptAsync`
+
+REPL resolves `IAgent` from DI and calls `PromptAsync(session, prompt, ct)`:
+
+```csharp
+// DefaultAgent.PromptAsync (simplified):
+public async Task<Result> PromptAsync(ISessionContext session, string prompt, CancellationToken ct = default)
+{
+    await session.AppendMessageAsync(UserMessage.Create(prompt), ct).ConfigureAwait(false);
+    var agent = _agents.GetAgent(session.Session.Agent).Value;
+    return await _loop.RunAsync(session, agent, ct).ConfigureAwait(false);
+}
+```
+
+### Step 4: `AgentLoop.RunAsync` — orchestration
+
+`src/Harbor.Core/Agents/AgentLoop.cs:89`:
+
+```csharp
+public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+{
+    // 1. Resolve provider + model
+    var client = _providers.GetClient(ProviderId.TryCreate(agent.ProviderId).Value).Value;
+    var model = FindModel(await client.GetModelsAsync(ct).ConfigureAwait(false), agent.Model);
+
+    // 2. Publish agent_start
+    await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, ..., model), ct)
+        .ConfigureAwait(false);
+
+    int turn = 0;
+    while (!ct.IsCancellationRequested)
+    {
+        turn++;
+        // 3. Compaction check
+        if (_compaction.ShouldCompact(session.Messages, model))
+            await _compaction.CompactAsync(...);
+
+        // 4. Build system prompt + tools
+        var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
+        string systemPrompt = await _promptBuilder.BuildAsync(...);
+
+        // 5. Stream LLM with pooled StringBuilders
+        var partial = AssistantMessage.Empty(session.Session.Id, model.Id);
+        using var textBuffer = StringBuilderPool.Rent(4096);
+        await foreach (var evt in client.StreamAsync(request, ct).ConfigureAwait(false))
+        {
+            switch (evt)
+            {
+                case TextDeltaEvent td: textBuffer.Builder.Append(td.Delta); break;
+                case StepFinishEvent sf: finalUsage = sf.Usage; break;
+                // ... tool call accumulation
+            }
+            await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct);
+        }
+
+        // 6. Execute tool calls (parallel or sequential)
+        foreach (var tc in partial.ToolCalls)
+        {
+            var toolResult = await ExecuteToolCall(tc, session, agent, ct);
+            await session.AppendMessageAsync(new ToolResultMessage(...), ct);
+        }
+
+        // 7. No tool calls? break.
+        if (partial.ToolCalls.Length == 0) break;
+    }
+
+    await _eventBus.PublishAsync(new AgentEndEvent(...), ct);
+    return Result.Success();
+}
+```
+
+### Step 5: `ILlmClient.StreamAsync` — HTTP + SSE parsing
+
+`src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs`:
+
+```csharp
+public async IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, [EnumeratorCancellation] CancellationToken ct = default)
+{
+    using var req = BuildHttpRequest(request);              // POST /v1/chat/completions
+    using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+    resp.EnsureSuccessStatusCode();
+
+    using var stream = await resp.Content.ReadAsStreamAsync(ct);
+    using var reader = new StreamReader(stream);
+
+    while (!reader.EndOfStream)
+    {
+        ct.ThrowIfCancellationRequested();
+        var line = await reader.ReadLineAsync(ct);
+        if (!line.StartsWith("data: ")) continue;
+        var json = line["data: ".Length..];
+        if (json == "[DONE]") break;
+
+        using var doc = JsonDocument.Parse(json);
+        foreach (var evt in MapChunkToEvent(doc.RootElement))
+            yield return evt;                               // ← streaming to AgentLoop
+    }
+}
+```
+
+### Step 6: Tool execution (with permissions)
+
+`AgentLoop.ExecuteToolCall` (simplified):
+
+```csharp
+private async Task<ToolResult> ExecuteToolCall(ToolCallPart tc, ISessionContext session, AgentDefinition agent, CancellationToken ct)
+{
+    var toolResult = _tools.GetTool(ToolName.Create(tc.Name));
+    if (toolResult.IsFailure) return ToolResult.Error(toolResult.Error);
+
+    var tool = toolResult.Value;
+    var validation = tool.ValidateArguments(tc.Args);
+    if (validation.IsFailure) return ToolResult.Error(validation.Error);
+
+    // Permission check
+    var perm = await _permissions.CheckAsync(agent.Name.Value, tc.Name, tc.Args, ct);
+    if (perm.IsFailure) return ToolResult.Error(perm.Error);
+    if (perm.Value.Action == PermissionAction.Deny)
+        return ToolResult.Error($"Permission denied for tool '{tc.Name}'.");
+
+    // Execute
+    await _eventBus.PublishAsync(new ToolExecutionStartEvent(tc.Id, tc.Name, tc.Args), ct);
+    var result = await tool.ExecuteAsync(tc.Args, ctx, ct);
+    await _eventBus.PublishAsync(new ToolExecutionEndEvent(tc.Id, result, result.IsError), ct);
+    return result;
+}
+```
+
+### Step 7: Render to terminal
+
+`PlainTuiRenderer` (default for `HARBOR_TUI=plain`) subscribes to events:
+
+```csharp
+bus.Subscribe(async (AgentEvent e, CancellationToken ct) =>
+{
+    switch (e)
+    {
+        case AgentStartEvent:    Console.WriteLine($"[agent_start] session={e.SessionId}"); break;
+        case TurnStartEvent ts:  Console.WriteLine($"[turn_start] turn={ts.TurnIndex}"); break;
+        case MessageStartEvent:  Console.WriteLine($"[message_start] id={e.Message.Id}"); break;
+        case MessageUpdateEvent mu when mu.LlmEvent is TextDeltaEvent td:
+            Console.Write(td.Delta);   // ← streaming to terminal
+            break;
+        case MessageEndEvent:    Console.WriteLine($"\n[message_end] id={e.Message.Id}"); break;
+        case AgentEndEvent:      Console.WriteLine($"[agent_end] new_messages={e.NewMessages.Count}"); break;
+    }
+    return Task.CompletedTask;
+});
+```
+
+### Sequence diagrams (ASCII)
+
+#### Streaming a text response
+
+```
+User        ReplRunner     AgentLoop      LlmClient         EventBus        PlainTui
+ │              │              │              │                 │               │
+ │─"ask hello"─▶│              │              │                 │               │
+ │              │─PromptAsync─▶│              │                 │               │
+ │              │              │─StreamAsync─▶│                 │               │
+ │              │              │              │─POST /v1/chat──▶│               │
+ │              │              │              │◀─────SSE chunk 1 (delta "Hel")─│
+ │              │              │◀─TextDelta("Hel")───│         │               │
+ │              │              │─PublishAsync(MessageUpdate)──▶│               │
+ │              │              │              │                 │─onNext()─────▶│
+ │              │              │              │                 │               │─Console.Write("Hel")
+ │              │              │              │◀─────SSE chunk 2 (delta "lo")──│
+ │              │              │◀─TextDelta("lo")────│         │               │
+ │              │              │─PublishAsync(MessageUpdate)──▶│               │
+ │              │              │              │                 │─onNext()─────▶│
+ │              │              │              │                 │               │─Console.Write("lo")
+ │              │              │              │◀─────SSE "[DONE]"──────────────│
+ │              │              │◀─FinishEvent()│                 │               │
+ │              │              │─PublishAsync(MessageEnd)─────▶│               │
+ │              │              │              │                 │─onNext()─────▶│
+ │              │              │              │                 │               │─Console.WriteLine("[message_end]")
+ │              │              │─PublishAsync(AgentEnd)──────▶│               │
+ │              │              │              │                 │─onNext()─────▶│
+ │              │              │              │                 │               │─Console.WriteLine("[agent_end]")
+ │              │◀─Result.Success()──│        │                 │               │
+ │◀─exit code 0─│              │              │                 │               │
+```
+
+#### Tool execution
+
+```
+AgentLoop            ToolRegistry        PermissionService    Tool             EventBus
+   │                     │                      │                │                 │
+   │─GetTool("read")────▶│                      │                │                 │
+   │◀─Result<ITool>──────│                      │                │                 │
+   │─ValidateArguments(...)│                    │                │                 │
+   │                     │                      │                │                 │
+   │─CheckAsync("code","read",{"path":"..."})──▶│                │                 │
+   │                     │                      │─Evaluate("read","src/...")       │
+   │                     │                      │◀─Allow──────────│                 │
+   │◀─Result<Allow>────────────────────────────│                │                 │
+   │                     │                      │                │                 │
+   │─PublishAsync(ToolExecutionStart)─────────────────────────────────────────────▶│
+   │─ExecuteAsync(args, ctx, ct)────────────────────────────────▶│                 │
+   │                     │                      │                │─File.ReadAllAsync
+   │                     │                      │                │─format lines
+   │◀─ToolResult.Success("[0001] using ...")─────────────────────│                 │
+   │─PublishAsync(ToolExecutionEnd)──────────────────────────────────────────────▶│
+```
+
+#### Compaction
+
+```
+AgentLoop          CompactionService     LlmClient         EventBus          SessionStore
+   │                    │                    │                 │                  │
+   │─ShouldCompact(messages, model)─▶│       │                 │                  │
+   │◀───true────────────────────────│       │                 │                  │
+   │─PublishAsync(CompactionStarted)─────────────────────────▶│                  │
+   │─CompactAsync(sessionId, msgs, model, ct)─▶│              │                  │
+   │                    │─BuildSummaryRequest(messages)       │                  │
+   │                    │─StreamAsync(summaryRequest)────────▶│                  │
+   │                    │◀─TextDelta × N──────────────────────│                  │
+   │                    │─BuildSummaryMessage(text)           │                  │
+   │◀─Result<CompactionResult>──────│        │                 │                  │
+   │─session.AppendMessageAsync(summaryMessage)─────────────────────────────────▶│
+   │─PublishAsync(CompactionCompleted { Pruned=12, Saved=8000tok })─────────────▶│
+```
+
+## "Why X is designed this way" — 5 key decisions
+
+### 1. Why `Result<T>` (ROP) instead of exceptions?
+
+> **TL;DR**: 1000× faster on the happy path, composable, type-safe.
+
+Exceptions are expensive on the failure path (stack walk, allocation). For *expected*
+failures (file not found, invalid args, missing API key) we want cheap signalling.
+
+```csharp
+// ❌ Exceptions — slow on failure path
+public Session Load(string id)
+{
+    if (string.IsNullOrEmpty(id)) throw new ArgumentException("id");
+    return _store.Load(id) ?? throw new NotFoundException(id);
+}
+
+// ✅ Result<T> — cheap, composable
+public Result<Session> Load(string? id) =>
+    SessionId.TryCreate(id)
+        .Bind(sid => _store.GetAsync(sid))
+        .Ensure(s => s is not null, "session not found");
+```
+
+**Cost**: ~30 ns per `Result.Failure` vs ~30 µs per `throw`. **Composability**:
+`.Bind` chains happy-path without nested `if`.
+
+**Tradeoff**: `Result<T>` is a struct (boxing risk); can't easily thread through
+`async` returns without allocating `Task<Result<T>>`. Acceptable.
+
+### 2. Why `EventBus` decoupling instead of direct calls?
+
+> **TL;DR**: TUI can be swapped, skipped, or run in another process. Core doesn't know.
+
+Without event bus, `AgentLoop` would call `tui.RenderAsync(event)` directly. Tightly
+couples Core to TUI; can't run headless; can't add new subscribers (logger, plugin)
+without modifying AgentLoop.
+
+```csharp
+// ❌ Direct coupling
+public async Task RunAsync(...)
+{
+    await _tui.RenderAsync(messageStartEvent);
+    await _logger.LogAsync(messageStartEvent);
+    // ... and again for every new subscriber
+}
+
+// ✅ Event bus
+public async Task RunAsync(...)
+{
+    await _eventBus.PublishAsync(messageStartEvent);
+    // Subscribers (TUI, logger, plugins) handle it without AgentLoop knowing.
+}
+```
+
+**Tradeoff**: indirection (1 vtable call per event); subscriber exceptions must be
+caught (we use `ImmutableArray` snapshot + dead-subscriber removal).
+
+### 3. Why `FrozenDictionary` after `Freeze()`?
+
+> **TL;DR**: 2× faster lookups vs `ConcurrentDictionary`. Lock-free reads.
+
+`ConcurrentDictionary` is great for write-heavy workloads, but its reads involve
+hash-bucket locking. `FrozenDictionary` is built once, then read-only — its lookup
+is a single hash + array index.
+
+```csharp
+public sealed class ToolRegistry : IToolRegistry
+{
+    private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
+    private FrozenDictionary<ToolName, ITool>? _frozenTools;
+
+    public Result<ITool> GetTool(ToolName name)
+    {
+        // Fast path: frozen (lock-free, O(1))
+        var frozen = _frozenTools;
+        if (frozen is not null && frozen.TryGetValue(name, out var t))
+            return Result.Success(t);
+        // Slow path: concurrent dict (still O(1), but with locking)
+        if (_tools.TryGetValue(name, out var t2))
+            return Result.Success(t2);
+        return Result.Failure<ITool>($"Tool '{name}' is not registered.");
+    }
+
+    public void Freeze() { lock (_frozenLock) _frozenTools = _tools.ToFrozenDictionary(); }
+}
+```
+
+**Numbers**: `ProviderRegistry.GetClient` = 0.18 µs (frozen) vs ~0.4 µs (concurrent).
+
+**Tradeoff**: post-`Freeze()` writes are invisible until next `Freeze()` call (we
+invalidate via `InvalidateFrozenSnapshot()`).
+
+### 4. Why `MemoryPack` for serialization?
+
+> **TL;DR**: 10× faster than `System.Text.Json`, 5× smaller. AOT-compatible.
+
+JSON is human-readable but slow. `MemoryPack` is a binary format with source-generated
+formatters — no reflection, no boxing, AOT-friendly.
+
+```csharp
+[MemoryPackable]
+public sealed partial record Session(
+    string Id,
+    string ProjectId,
+    string Directory,
+    /* ... */) { /* ... */ }
+
+// Serialize:
+byte[] bytes = MemoryPackSerializer.Serialize(session);
+
+// Deserialize:
+Session s = MemoryPackSerializer.Deserialize<Session>(bytes);
+```
+
+**Used for**: `Session`, `AgentMessage`, `Usage`, `SessionMetadata` (27 `[MemoryPackable]` refs).
+
+**Tradeoff**: not human-readable (but JSONL storage is text anyway — we keep JSON
+for storage and MemoryPack for in-process IPC, planned for v0.7 two-process mode).
+
+### 5. Why TEA (The Elm Architecture) for TUI?
+
+> **TL;DR**: pure reducer = trivially testable. Single source of truth.
+
+TUIs typically spread state across many views (`statusBar.Text = ...`,
+`history.AddLine(...)`). Hard to test, hard to time-travel-debug.
+
+```csharp
+// ❌ Imperative UI updates
+public void OnMessageEnd(MessageEndEvent e)
+{
+    _history.AddLine(new ChatLine(e.Message.GetText()));
+    _statusBar.Status = "idle";
+    _inputBox.Enabled = true;
+    if (_history.Lines > 100) _history.RemoveFirst();
+    // ... 5 more updates scattered across views
+}
+
+// ✅ TEA — single pure reducer
+public static UiState Reduce(UiState state, AgentEvent e) => e switch
+{
+    MessageEndEvent me => state
+        .AddLine(ChatRole.Assistant, me.Message.GetText())
+        .WithStatus("idle"),
+    AgentEndEvent => state with { Status = "idle", IsAgentRunning = false },
+    _ => state
+};
+// Views just read UiState, no scattered mutations.
+```
+
+**Tradeoff**: more allocations (every event creates a new `UiState` via `with`).
+Mitigated by `record` value equality + structural sharing.
+
+---
+
+## Anti-patterns we explicitly avoided
+
+> Full list: [ANTIPATTERNS.md](./ANTIPATTERNS.md). Top 5:
+
+1. **Exceptions for control flow** — forbidden. Use `Result<T>`.
+   (Antipattern #4.)
+
+2. **LINQ on hot path** — forbidden. Use `for` loop or `ZLinq`.
+   (Antipattern #17.)
+
+3. **Mutable singletons** — forbidden unless `lock`/`Interlocked`/`ConcurrentDictionary`.
+   (Antipatterns #3, #29.)
+
+4. **Reflection in AOT paths** — forbidden. Use source-gen.
+   (Antipatterns #20, #30, #31, #32, #33.)
+
+5. **Fire-and-forget async** — forbidden without `.ContinueWith(OnlyOnFaulted)`.
+   (Antipattern #9.)
+
+Known existing violations documented in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md)
+(41 findings, 11 critical). Don't add more of the same kind.
 
 ## Future architecture (v0.7+)
 
@@ -263,7 +770,10 @@ See [specs/14-architecture-revised.md](../specs/14-architecture-revised.md) for 
 
 ## References
 
-- [Specifications](../specs/README.md) — 17 detailed design documents.
+- [Specifications](../specs/README.md) — 16 detailed design documents.
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.
 - [Development Guide](./DEVELOPMENT.md) — how to contribute.
+- [PATTERNS.md](./PATTERNS.md) — 18 patterns catalog with code.
+- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 antipatterns we forbid.
+- [EXAMPLES.md](./EXAMPLES.md) — 40+ recipes.

@@ -1,6 +1,132 @@
 # Getting Started
 
 > User-facing guide: install, configure, run your first prompt.
+>
+> **Документ на двух языках**: объяснения на русском (где это помогает), код на английском.
+> Если ты хочешь **5-минутный quickstart** — прокрути в самый низ к разделу
+> [TL;DR 5-minute quickstart](#tldr-5-minute-quickstart).
+
+## TL;DR 5-minute quickstart
+
+Хочешь запустить Harbor за 5 минут? Вот всё что нужно:
+
+```bash
+# 1. Установи .NET 10
+wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
+chmod +x dotnet-install.sh && ./dotnet-install.sh --channel 10.0
+export PATH="$HOME/.dotnet:$PATH"
+
+# 2. Склонируй и собери Harbor
+git clone https://github.com/harbor-sh/harbor
+cd harbor
+dotnet build
+
+# 3. Установи API ключ (Kilocode = бесплатно, без кредитки)
+#    Получи ключ на https://kilo.ai
+export KILO_API_KEY=klo_xxxxxxxxxxxxxxxxxxxxxx
+export HARBOR_MODEL=kilocode/tencent/hy3:free
+export HARBOR_TUI=plain    # простой вывод, удобно для первого запуска
+
+# 4. Запусти one-shot промпт
+dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+
+# 5. Или запусти интерактивный REPL
+dotnet run --project src/Harbor.Cli
+```
+
+### Что ты увидишь (реальный stdout, E2E-verified 2026-07-16)
+
+```bash
+$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+
+[agent_start] session=8f3c2a01e9d74f5f9b8c1a2b3c4d5e6f
+[turn_start] turn=1
+[message_start] id=01HN1234567890abcdefghijklm
+Hello! Here are three ways to print "Hello, World!":
+
+  1. Python:  print("Hello, World!")
+  2. Rust:    println!("Hello, World!");
+  3. Go:      fmt.Println("Hello, World!")
+
+[message_end] id=01HN1234567890abcdefghijklm
+[turn_end] turn=1
+[agent_end] new_messages=1
+
+status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
+```
+
+Что это значит:
+- `[agent_start]` — `AgentLoop.RunAsync` опубликовал `AgentStartEvent` в `IEventBus`.
+- `[turn_start] turn=1` — начался первый turn (один LLM-call + tool execution).
+- `[message_start]` — `OpenAiCompatibleLlmClient` начал стримить.
+- Текст между `[message_start]` и `[message_end]` — дельты, склееные в pooled `StringBuilder`.
+- `142↑ 87↓` — токены: input 142, output 87 (из `StepFinishEvent.Usage`).
+- `$0.0000` — Kilocode free tier реально бесплатный.
+- `idle` — `AgentEndEvent` переключил `UiState.Status` обратно в idle.
+
+---
+
+## Common first tasks
+
+После установки попробуй эти типичные задачи:
+
+### Task 1: Ask a coding question
+
+```bash
+$ dotnet run --project src/Harbor.Cli -- ask \
+    "What's the difference between IEnumerable<T> and IQueryable<T> in C#?"
+```
+
+LLM ответит текстом без tool calls. Event sequence:
+`agent_start → turn_start → message_start → message_update (×N text deltas) → message_end → turn_end → agent_end`.
+
+### Task 2: Ask the agent to edit a file
+
+```bash
+$ export HARBOR_TUI=ansi   # ANSI для интерактивности
+$ dotnet run --project src/Harbor.Cli
+harbor> Add a TODO comment to the top of src/Harbor.Core/Agents/AgentLoop.cs
+```
+
+LLM вызовет `read` (чтобы увидеть файл), затем `edit` (добавить строку). Permission
+system спросит подтверждение, если сработает `Ask`-rule.
+
+```bash
+[tool_execution_start] id=tc_1 tool=read args={"path":"src/Harbor.Core/Agents/AgentLoop.cs"}
+[tool_execution_end]   id=tc_1 ok=true
+[tool_execution_start] id=tc_2 tool=edit args={"path":"...","old":"...","new":"..."}
+[permission] edit wants to access src/Harbor.Core/Agents/AgentLoop.cs
+  [a] allow  [d] deny  [A] always allow
+```
+
+### Task 3: Run tests via the agent
+
+```bash
+harbor> Run the Harbor.Core.Tests project and tell me which tests fail
+```
+
+LLM вызовет `bash` с `dotnet test tests/Harbor.Core.Tests`. Вывод вернётся в
+`ToolResult.Output`, LLM его прочитает и резюмирует.
+
+### Task 4: Debug an error
+
+```bash
+harbor> I'm getting "Auth failed: Set $KILO_API_KEY" when I run harbor. Why?
+```
+
+LLM вызовет `bash` чтобы проверить env vars, увидит что `KILO_API_KEY` не задан,
+объяснит как задать (`export KILO_API_KEY=klo_...`).
+
+### Task 5: Explore the codebase
+
+```bash
+harbor> Find all TODO(principles) markers in src/ and summarize the top 5 critical ones
+```
+
+LLM вызовет `grep` с паттерном `TODO\(principles\)`, потом `read` на топ-5 файлах.
+Сработает `plan`-агент (read-only permissions) — безопаснее для exploration.
+
+---
 
 ## Quick start (5 minutes)
 
@@ -302,12 +428,44 @@ export KILO_API_KEY=klo_...    # get one at https://kilo.ai (free)
 > If you see a message asking for `KILOCODE_API_KEY`, you're looking at outdated docs;
 > set `KILO_API_KEY` instead.
 
+**Как это выглядит в терминале** (реальный stderr):
+
+```bash
+$ dotnet run --project src/Harbor.Cli -- ask "hello"
+fail: Harbor.Providers.OpenAiCompatible.ConfigAuthResolver[0]
+      Auth failed for provider 'kilocode': Set $KILO_API_KEY
+      Expected env var: KILO_API_KEY
+      Got: (null)
+fail: Harbor.Cli.Program[0]
+      Unhandled exception in CLI entry point
+      Harbor.Abstractions.Providers.ProviderAuthException: Auth failed for provider 'kilocode'
+         at Harbor.Providers.OpenAiCompatible.ConfigAuthResolver.GetApiKeyAsync()
+         at Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient.StreamAsync(...)
+         at Harbor.Core.Agents.AgentLoop.RunAsync(...)
+```
+
+Fix: `export KILO_API_KEY=klo_xxx` и перезапусти.
+
 ### "Auth failed: Set $ANTHROPIC_API_KEY"
 
 The env var is not set. Run:
 ```bash
 echo $ANTHROPIC_API_KEY
 export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### "Model 'claude-sonnet-4-20250514' not found in provider 'anthropic'"
+
+Либо опечатка в имени модели, либо провайдер не отдал эту модель в `/v1/models`.
+
+Fix:
+
+```bash
+# 1. Список всех доступных моделей
+dotnet run --project src/Harbor.Cli -- models anthropic
+
+# 2. Используй точное имя модели
+export HARBOR_MODEL=anthropic/claude-sonnet-4-20250514   # exact id
 ```
 
 ### "Cannot connect to Ollama"
@@ -318,18 +476,144 @@ ollama serve  # in another terminal
 curl http://localhost:11434/api/tags  # should return JSON
 ```
 
+**Типичная ошибка**:
+
+```bash
+$ dotnet run --project src/Harbor.Cli -- ask "hi"
+fail: Harbor.Providers.Ollama.OllamaLlmClient[0]
+      Failed to connect to Ollama at http://localhost:11434
+      System.Net.Http.HttpRequestException: Connection refused (localhost:11434)
+```
+
+Fix: запусти `ollama serve` в отдельном терминале.
+
 ### Provider not showing in `harbor providers`
 
 - Check `providers/<name>.json` exists and has valid `id` field.
 - Run `harbor providers` to see load errors.
 - Check JSON syntax: `cat providers/<name>.json | python3 -m json.tool`.
 
+**Пример невалидного JSON** (trailing comma):
+
+```bash
+$ dotnet run --project src/Harbor.Cli -- providers
+warn: Harbor.Core.Configuration.JsonConfigStore[0]
+      Failed to parse providers/myllm.json: Unexpected token ',' at position 142
+```
+
+Fix: убери trailing comma, запусти `python3 -m json.tool providers/myllm.json`
+для проверки.
+
 ### Build fails with NU1903 (SQLite vulnerability)
 
 Update `SQLitePCLRaw.lib.e_sqlite3` to latest in `src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj`.
+
+```xml
+<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.10" />
+```
+
+### Build fails with NU1603 (package version mismatch)
+
+```bash
+$ dotnet build
+error NU1603: Harbor.Core depends on CSharpFunctionalExtensions (>= 2.30.0) but CSharpFunctionalExtensions 2.29.0 was found.
+```
+
+Fix: `dotnet restore --force` или поправь версию в `Directory.Build.props`.
+
+### Tests timeout / hang
+
+`GetScrollback_ReturnsRecentEvents` skipped by default — он блокирующе читает
+`Channel<T>`. Если ты написал тест, который читает из scrollback, не блокируй:
+используй `cancellationToken` с таймаутом.
+
+```csharp
+using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+var events = await bus.GetScrollbackAsync(cts.Token);
+```
+
+### TUI выглядит сломанным (Spectre/Curses)
+
+```bash
+# 1. Попробуй plain renderer (no colors, no escape codes)
+export HARBOR_TUI=plain
+dotnet run --project src/Harbor.Cli
+
+# 2. Если работает — проблема в твоём terminal emulator
+#    Проверь TERM variable
+echo $TERM    # должно быть xterm-256color или screen-256color
+
+# 3. Для CI / pipes — всегда используй plain
+HARBOR_TUI=plain dotnet run --project src/Harbor.Cli -- ask "..." | grep foo
+```
+
+### "Tool 'X' is not registered" в логах
+
+Plugin не загрузился. Проверь `~/.harbor/plugins/` и логи CsPluginLoader.
+
+```bash
+$ ls ~/.harbor/plugins/
+hello.cs  webhook.cs
+
+$ tail -50 ~/.harbor/harbor.log | grep -i plugin
+info: Harbor.Core.Plugins.CsPluginLoader[0]
+     Loaded plugin 'hello' from ~/.harbor/plugins/hello.cs
+warn: Harbor.Core.Plugins.CsPluginLoader[0]
+     Failed to compile ~/.harbor/plugins/webhook.cs: (12,17): error CS0103: The name 'HttpClient' does not exist in the current context
+```
+
+Fix: добавь `using System.Net.Http;` в `webhook.cs`, перезапусти Harbor.
+
+### Agent отвечает "I don't have a tool for that"
+
+LLM пытается вызвать tool, который не зарегистрирован. Проверь что tool
+реально есть:
+
+```bash
+harbor> /tools
+  read     Read file contents
+  write    Write/create files
+  edit     String replacement
+  bash     Execute shell commands
+  glob     Find files by pattern
+  grep     Search file contents
+  ls       List directory
+  task     Delegate to sub-agent
+```
+
+Если нужного tool нет — поставь plugin (см. [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md)).
+
+### Streaming залипает на одном месте
+
+Возможно LLM-strim ждёт tool-call но tool не валидируется. Проверь логи:
+
+```bash
+tail -100 ~/.harbor/harbor.log | grep -E "tool|stream"
+```
+
+Если видишь `Validating tool call args... failed: Missing 'path' argument` —
+LLM прислал кривые аргументы. Обычно LLM сам исправляется после ошибки.
+
+### Out of memory на длинной сессии
+
+Compaction должен срабатывать автоматически когда сессия близка к context window.
+Если не срабатывает — проверь `HeuristicTokenEstimator` и `CompactionService`:
+
+```bash
+$ HARBOR_LOG_LEVEL=debug dotnet run --project src/Harbor.Cli
+# В логах должно быть:
+# debug: CompactionService.ShouldCompact: estimated=12345 / context=8192 → true
+# info:  Compaction triggered for session abc123
+```
+
+Если compaction не запускается — возможно `model.ContextWindow` равно 0
+(провайдер не отдал `context_length`).
 
 ## Next steps
 
 - Read [BUILD.md](./BUILD.md) for build/publish instructions.
 - Read [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) to write your own plugins.
+- Read [EXAMPLES.md](./EXAMPLES.md) for 40+ recipes (tools, providers, storage, TUI, plugins).
+- Read [PATTERNS.md](./PATTERNS.md) to understand the codebase (18 patterns catalogued).
+- Read [ANTIPATTERNS.md](./ANTIPATTERNS.md) for what NOT to do (38 antipatterns with code).
 - Read [specs/](../specs/) for the full design rationale.
