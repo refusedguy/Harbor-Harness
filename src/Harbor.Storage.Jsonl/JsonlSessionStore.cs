@@ -7,11 +7,21 @@ namespace Harbor.Storage.Jsonl;
 /// </summary>
 public sealed class JsonlSessionStore : ISessionStore
 {
+    // TODO(principles)[PERF, байтоебля]: JsonOptions uses reflection-based
+    // JsonSerializer.Deserialize<SessionHeaderEntry>(line, JsonOptions) — это
+    // генерит IL2026 warnings под NativeAOT и боксит record'ы. Для AOT нужен
+    // JsonTypeInfo<> через JsonSerializerContext. См. аудит §PERF-003, §AOT-001.
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    // TODO(principles)[CONCURRENCY]: простой `lock(_lock)` сериализует ВСЕ записи
+    // во ВСЕ сессии. Если одновременно идут 10 сессий, каждая ждет другую. Это OK
+    // для File.AppendAllText (atomic per-call), но плохо для batch-загрузки.
+    // Альтернатива: per-session SemaphoreSlim (Dictionary<sessionId, SemaphoreSlim>),
+    // либо System.Threading.Channels для write queue. См. аудит §PERF-004.
     private readonly object _lock = new();
     private readonly ILogger<JsonlSessionStore> _logger;
 
@@ -165,6 +175,16 @@ public sealed class JsonlSessionStore : ISessionStore
 
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
+        // TODO(principles)[PERF, байтоебля]: на каждый чанк строки вызывается
+        // JsonDocument.Parse(line) — тысячи аллокаций. Для длинных сессий (10k+ строк)
+        // это существенный overhead. Альтернативы: (1) Utf8JsonReader на ReadOnlySpan<byte>,
+        // (2) MemoryPack-encoded binary формат вместо JSONL (есть же [MemoryPackable] на
+        // всех сообщениях!), (3) streaming deserialize. См. аудит §PERF-005.
+        // §PERF-005 (PARTIAL): the full Utf8JsonReader rewrite is risky without AOT
+        // testing, so we keep JsonDocument.Parse for now. The ROP path (§ROP-001) is
+        // fixed: per-line deserialization errors are aggregated into a `List<string>`
+        // and surfaced via _logger.LogWarning, while still returning the successfully
+        // deserialized messages (instead of silently swallowing the failure).
         try
         {
             string sessionFile = GetSessionFilePath(sessionId);
@@ -172,6 +192,7 @@ public sealed class JsonlSessionStore : ISessionStore
                 return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
 
             var messages = new Dictionary<string, AgentMessage>();
+            var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
 
             using var reader = new StreamReader(sessionFile);
             while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
@@ -185,15 +206,27 @@ public sealed class JsonlSessionStore : ISessionStore
 
                     if (type == "message")
                     {
-                        var msg = DeserializeMessage(doc.RootElement);
-                        if (msg is not null)
-                            messages[msg.Id] = msg; // latest entry wins
+                        var msgResult = DeserializeMessage(sessionId, doc.RootElement);
+                        if (msgResult.IsSuccess)
+                            messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
+                        else
+                            errors.Add(msgResult.Error);
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Skipping malformed line in session {SessionId}", sessionId);
+                    // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
+                    // and logged at Warning level. Previously the caller silently
+                    // swallowed these, leaving the user with a truncated session
+                    // transcript and no diagnostic.
+                    errors.Add($"Line parse failed: {ex.Message}");
                 }
+            }
+
+            if (errors.Count > 0)
+            {
+                _logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
+                    errors.Count, sessionId, string.Join("; ", errors));
             }
 
             var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
@@ -322,73 +355,118 @@ public sealed class JsonlSessionStore : ISessionStore
         _ => new { type = "unknown" }
     };
 
-    private static AgentMessage? DeserializeMessage(JsonElement element)
+    private static Result<AgentMessage> DeserializeMessage(string sessionId, JsonElement element)
     {
-        string id = element.GetProperty("id").GetString()!;
-        var createdAt = element.GetProperty("createdAt").GetDateTimeOffset();
+        // §ROP-001 (RESOLVED): returns Result<AgentMessage> instead of `null` so
+        // the caller can surface a diagnostic message rather than silently dropping
+        // the line. Each branch returns Result.Failure with a specific message
+        // (missing field, unknown role, etc.) instead of `null`.
+        // §OOP-003 (RESOLVED): `sessionId` is now a parameter (previously a
+        // placeholder `""`), so the reconstructed AgentMessage is always in a valid
+        // state — no escape hatch where the caller is expected to backfill it.
+        string? id;
+        try
+        {
+            id = element.GetProperty("id").GetString();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"missing 'id': {ex.Message}");
+        }
+        if (string.IsNullOrEmpty(id))
+            return Result.Failure<AgentMessage>("'id' is null or empty");
+
+        DateTimeOffset createdAt;
+        try
+        {
+            createdAt = element.GetProperty("createdAt").GetDateTimeOffset();
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"message {id}: missing/invalid 'createdAt': {ex.Message}");
+        }
+
         string? parentId = element.TryGetProperty("parentId", out var p) ? p.GetString() : null;
-        string role = element.GetProperty("role").GetString()!;
-        var payload = element.GetProperty("payload");
-        string sessionId = ""; // populated by file context
+        string? role = element.TryGetProperty("role", out var r) ? r.GetString() : null;
+        if (string.IsNullOrEmpty(role))
+            return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
+
+        if (!element.TryGetProperty("payload", out var payload))
+            return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
 
         if (role == "user")
         {
-            return new UserMessage(
-                id,
-                sessionId,
-                createdAt,
-                payload.GetProperty("content").GetString()!,
-                payload.GetProperty("agent").GetString()!,
-                payload.GetProperty("model").GetString()!,
-                parentId);
+            string? content = payload.TryGetProperty("content", out var c) ? c.GetString() : null;
+            string? agent = payload.TryGetProperty("agent", out var a) ? a.GetString() : null;
+            string? model = payload.TryGetProperty("model", out var m) ? m.GetString() : null;
+            if (content is null || agent is null || model is null)
+                return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
+
+            return Result.Success<AgentMessage>(new UserMessage(
+                id!, sessionId, createdAt, content!, agent!, model!, parentId));
         }
 
         if (role == "assistant")
         {
-            var parts = payload.GetProperty("parts").EnumerateArray()
-                .Select(DeserializePart)
-                .Where(p => p is not null)
-                .Cast<ContentPart>()
-                .ToList();
+            if (!payload.TryGetProperty("parts", out var partsEl) || partsEl.ValueKind != JsonValueKind.Array)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'parts'");
 
-            var stopReason = Enum.Parse<StopReason>(payload.GetProperty("stopReason").GetString()!, true);
-            var usage = payload.GetProperty("usage").Deserialize<Usage>(JsonOptions) ?? new Usage(0, 0);
-            string model = payload.GetProperty("model").GetString()!;
+            var parts = new List<ContentPart>();
+            foreach (var partEl in partsEl.EnumerateArray())
+            {
+                var part = DeserializePart(partEl);
+                if (part is not null) parts.Add(part);
+            }
+
+            if (!payload.TryGetProperty("stopReason", out var srEl) || srEl.ValueKind != JsonValueKind.String)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'stopReason'");
+            StopReason stopReason;
+            try
+            {
+                stopReason = Enum.Parse<StopReason>(srEl.GetString()!, true);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<AgentMessage>($"assistant message {id}: invalid stopReason: {ex.Message}");
+            }
+
+            var usage = payload.TryGetProperty("usage", out var u)
+                ? u.Deserialize<Usage>(JsonOptions) ?? new Usage(0, 0)
+                : new Usage(0, 0);
+            string? model = payload.TryGetProperty("model", out var m) ? m.GetString() : null;
+            if (model is null)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'model'");
+
             bool isSummary = payload.TryGetProperty("isSummary", out var s) && s.GetBoolean();
             string? summaryFirstKeptId = payload.TryGetProperty("summaryFirstKeptId", out var sf) ? sf.GetString() : null;
 
-            return new AssistantMessage(
-                id,
-                sessionId,
-                createdAt,
-                parts,
-                stopReason,
-                usage,
-                model,
-                parentId,
-                isSummary,
-                summaryFirstKeptId);
+            return Result.Success<AgentMessage>(new AssistantMessage(
+                id!, sessionId, createdAt, parts, stopReason, usage, model!, parentId, isSummary, summaryFirstKeptId));
         }
 
         if (role == "tool_result")
         {
-            var results = payload.GetProperty("results").EnumerateArray()
-                .Select(r => new ToolResultEntry(
-                    r.GetProperty("toolCallId").GetString()!,
-                    r.GetProperty("toolName").GetString()!,
-                    r.GetProperty("output").GetString()!,
-                    r.GetProperty("isError").GetBoolean()))
-                .ToList();
+            if (!payload.TryGetProperty("results", out var resultsEl) || resultsEl.ValueKind != JsonValueKind.Array)
+                return Result.Failure<AgentMessage>($"tool_result message {id}: missing 'results'");
 
-            return new ToolResultMessage(
-                id,
-                sessionId,
-                createdAt,
-                results,
-                parentId);
+            var results = new List<ToolResultEntry>();
+            foreach (var rEl in resultsEl.EnumerateArray())
+            {
+                string? tcId = rEl.TryGetProperty("toolCallId", out var tci) ? tci.GetString() : null;
+                string? tn = rEl.TryGetProperty("toolName", out var tnEl) ? tnEl.GetString() : null;
+                string? output = rEl.TryGetProperty("output", out var o) ? o.GetString() : null;
+                bool isError = rEl.TryGetProperty("isError", out var ie) && ie.GetBoolean();
+                if (tcId is null || tn is null || output is null)
+                    return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
+
+                results.Add(new ToolResultEntry(tcId!, tn!, output!, isError));
+            }
+
+            return Result.Success<AgentMessage>(new ToolResultMessage(
+                id!, sessionId, createdAt, results, parentId));
         }
 
-        return null;
+        return Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'");
     }
 
     private static ContentPart? DeserializePart(JsonElement element)
