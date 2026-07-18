@@ -109,6 +109,4 @@ api/
 *.binlog
 .avalonia-build-tasks/
 *.wpftmp.csproj
-apps/*/Configuration/
-src/Harbor.Desktop.Abstractions/Configuration/
 build/_build/Configuration/
