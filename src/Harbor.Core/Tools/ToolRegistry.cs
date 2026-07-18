@@ -10,6 +10,14 @@ namespace Harbor.Abstractions.Tools;
 /// </summary>
 public sealed class ToolRegistry : IToolRegistry
 {
+    // TODO(principles)[OCP, ROP]: двойной путь — frozen vs concurrent — дублирует
+    // логику в GetAllTools / ResolveTools / GetTool. Если добавить третий источник
+    // (например, lazy-loaded tools из плагинов), придётся ещё раз дублировать.
+    // Лучше — CompositeToolRegistry, делегирующий в один из IToolSource. См. §OOP-005.
+    // TODO(principles)[CONCURRENCY]: InvalidateFrozenSnapshot() берёт lock, что бы
+    // вернуть _frozenTools = null. Если Register вызывают под нагрузкой, frozen
+    // инвалидация постоянно дёргает lock и приводит к "thundering herd" — следующий
+    // GetTool берёт slow path. Fix: Interlocked.Exchange(ref _frozenTools, null).
     private readonly object _frozenLock = new();
     private readonly ConcurrentDictionary<ToolName, ITool> _tools = new();
     private FrozenDictionary<ToolName, ITool>? _frozenTools;

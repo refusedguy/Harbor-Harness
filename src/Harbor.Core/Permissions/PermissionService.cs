@@ -32,7 +32,16 @@ public sealed class PermissionService : IPermissionService
         JsonElement args,
         CancellationToken ct = default)
     {
-        var agentResult = _agents.GetAgent(AgentName.TryCreate(agentName).Value);
+        // §ROP-002 (RESOLVED): pattern-match the Result<AgentName> instead of
+        // calling .Value (which throws InvalidOperationException on invalid input).
+        // An invalid agent name is an expected failure (e.g. provider routed a
+        // request with a malformed header), so it must surface as
+        // Result.Failure rather than throwing through the call stack.
+        var agentNameResult = AgentName.TryCreate(agentName);
+        if (agentNameResult.IsFailure)
+            return Task.FromResult(Result.Failure<PermissionResponse>(agentNameResult.Error));
+
+        var agentResult = _agents.GetAgent(agentNameResult.Value);
         if (agentResult.IsFailure)
             return Task.FromResult(Result.Failure<PermissionResponse>(agentResult.Error));
 
@@ -86,7 +95,16 @@ public sealed class PermissionService : IPermissionService
     /// <inheritdoc />
     public PermissionRuleset GetRuleset(string agentName)
     {
-        var agentResult = _agents.GetAgent(AgentName.TryCreate(agentName).Value);
+        // §ROP-002 (RESOLVED): pattern-match Result<AgentName> instead of
+        // calling .Value (which throws on invalid input). On failure we return
+        // the empty ruleset — GetRuleset's contract is "best-effort lookup",
+        // so callers (e.g. /permissions command) get a safe default rather than
+        // an exception bubbling up to the UI.
+        var agentNameResult = AgentName.TryCreate(agentName);
+        if (agentNameResult.IsFailure)
+            return PermissionRuleset.Empty;
+
+        var agentResult = _agents.GetAgent(agentNameResult.Value);
         return agentResult.IsSuccess ? agentResult.Value.Permission : PermissionRuleset.Empty;
     }
 

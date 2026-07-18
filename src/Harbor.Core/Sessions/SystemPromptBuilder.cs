@@ -75,16 +75,21 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine();
         }
 
-        // 5. Tools (descriptors already permission-filtered; schema lives in the API tool defs)
+        // 5. Available Tools (descriptors already permission-filtered; schema lives in the API tool defs).
+        //    Header is "## Available Tools" per specs/04-tools.md §3 and the
+        //    ISystemPromptBuilder contract ("a Markdown document with sections for
+        //    environment, agent instructions, available tools, ..."). The header is
+        //    rendered even when the tool list is empty so consumers can rely on the
+        //    anchor for parsing/scroll-target purposes.
         if (context.Tools.Count == 0)
         {
-            builder.AppendLine("## Tools");
+            builder.AppendLine("## Available Tools");
             builder.AppendLine("No tools available this turn. Answer from knowledge only.");
             builder.AppendLine();
         }
         else
         {
-            builder.AppendLine("## Tools");
+            builder.AppendLine("## Available Tools");
             foreach (var tool in context.Tools.OrderBy(t => t.Name.Value, StringComparer.Ordinal))
             {
                 builder.Append("- `").Append(tool.Name.Value).Append("`: ")
@@ -113,17 +118,28 @@ public sealed class SystemPromptBuilder : ISystemPromptBuilder
             builder.AppendLine();
         }
 
-        // 7. Skills (flat — cheaper than nested XML)
+        // 7. Available Skills. Per specs/04-tools.md §5 and specs/13-questions-and-answers
+        //    the skills block is wrapped in <available_skills> XML so the model can
+        //    reliably extract skill metadata (name/description/path) without parsing
+        //    prose, and the UI can render a stable tree. The wrapper is a few extra
+        //    bytes per prompt — negligible vs. the per-skill description text.
         if (context.Skills.Count > 0)
         {
-            builder.AppendLine("## Skills");
-            builder.AppendLine("Specialized instruction packs. Use `read` on the skill path when the task matches.");
+            builder.AppendLine("## Available Skills");
+            builder.AppendLine("The following skills provide specialized instructions:");
+            builder.AppendLine();
+            builder.AppendLine("<available_skills>");
             foreach (var skill in context.Skills.OrderBy(s => s.Name, StringComparer.Ordinal))
             {
-                builder.Append("- **").Append(skill.Name).Append("** — ")
-                    .Append(skill.Description)
-                    .Append(" (`").Append(skill.FilePath).AppendLine("`)");
+                builder.Append("  <skill>").AppendLine();
+                builder.Append("    <name>").Append(skill.Name).AppendLine("</name>");
+                builder.Append("    <description>").Append(skill.Description).AppendLine("</description>");
+                builder.Append("    <location>").Append(skill.FilePath).AppendLine("</location>");
+                builder.AppendLine("  </skill>");
             }
+            builder.AppendLine("</available_skills>");
+            builder.AppendLine();
+            builder.AppendLine("Use the `read` tool to read a skill file when the task matches its description.");
             builder.AppendLine();
         }
 

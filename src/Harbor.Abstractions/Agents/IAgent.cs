@@ -3,6 +3,56 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 namespace Harbor.Abstractions.Agents;
 /// <summary>
+///     Minimal runner surface for an agent — the subset of <see cref="IAgent" /> that
+///     presentation and orchestration layers need to drive a conversation.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>Why this exists (§ARCH-002):</b> before this interface was extracted,
+///         <c>Harbor.Tui.Abstractions</c> depended on the full <see cref="IAgent" />
+///         contract (which includes <see cref="IAgent.Subscribe" />,
+///         <see cref="IAgent.Steer" />, <see cref="IAgent.FollowUp" />,
+///         <see cref="IAgent.Initialize" /> — none of which a TUI effect host calls).
+///         That violated the Interface Segregation Principle and made the TUI layer
+///         rebuild whenever any IAgent member changed.
+///     </para>
+///     <para>
+///         <see cref="IAgent" /> extends this interface, so any code that already takes
+///         <c>IAgent</c> keeps working. New code that only needs to "send a prompt and
+///         wait for idle" should take <see cref="IAgentRunner" />.
+///     </para>
+///     <para>
+///         <b>Layering:</b> declared in <c>Harbor.Abstractions</c> (Domain) so that
+///         <c>Harbor.Tui.Abstractions</c> (also Domain) can reference it without going
+///         through <c>Harbor.Core</c> (Application).
+///     </para>
+/// </remarks>
+public interface IAgentRunner
+{
+    /// <summary>
+    ///     Cancellation token source used to abort the current run. Call
+    ///     <see cref="CancellationTokenSource.Cancel" /> to interrupt the agent at the
+    ///     next safe boundary (between turns or during a streaming await).
+    /// </summary>
+    CancellationTokenSource AbortSource { get; }
+
+    /// <summary>
+    ///     Submit a user prompt as plain text and run the agent loop to completion.
+    /// </summary>
+    /// <param name="text">The user's prompt text.</param>
+    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
+    /// <returns>Success on completion, or failure with an error message.</returns>
+    Task<Result> PromptAsync(string text, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> call in flight).
+    /// </summary>
+    /// <param name="ct">Optional cancellation token.</param>
+    /// <returns>A task that completes when the agent is idle.</returns>
+    Task WaitForIdleAsync(CancellationToken ct = default);
+}
+
+/// <summary>
 ///     Stateful agent wrapper around the agent loop pipeline.
 /// </summary>
 /// <remarks>
@@ -21,8 +71,15 @@ namespace Harbor.Abstractions.Agents;
 ///     <para>
 ///         The default implementation is <c>DefaultAgent</c> in <c>Harbor.Core</c>.
 ///     </para>
+///     <para>
+///         <b>ISP note (§ARCH-002):</b> the runner surface (<see cref="AbortSource" />,
+///         <see cref="PromptAsync(string, CancellationToken)" />,
+///         <see cref="WaitForIdleAsync" />) is also exposed on
+///         <see cref="IAgentRunner" />. Callers that do not need steering / follow-up /
+///         subscription should take <see cref="IAgentRunner" /> instead.
+///     </para>
 /// </remarks>
-public interface IAgent : IDisposable
+public interface IAgent : IAgentRunner, IDisposable
 {
     /// <summary>
     ///     Current agent state snapshot. <see cref="AgentState.IsRunning" /> reflects whether
@@ -31,26 +88,12 @@ public interface IAgent : IDisposable
     public AgentState State { get; }
 
     /// <summary>
-    ///     Cancellation token source used to abort the current run. Call <see cref="CancellationTokenSource.Cancel" />
-    ///     to interrupt the agent at the next safe boundary (between turns or during a streaming await).
-    /// </summary>
-    public CancellationTokenSource AbortSource { get; }
-
-    /// <summary>
     ///     Subscribe to all <see cref="AgentEvent" />s emitted by this agent. The returned
     ///     <see cref="IDisposable" /> unsubscribes the listener when disposed.
     /// </summary>
     /// <param name="listener">Async callback invoked for every event.</param>
     /// <returns>An <see cref="IDisposable" /> that removes the listener on dispose.</returns>
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener);
-
-    /// <summary>
-    ///     Submit a user prompt as plain text and run the agent loop to completion.
-    /// </summary>
-    /// <param name="text">The user's prompt text.</param>
-    /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
-    /// <returns>Success on completion, or failure with an error message.</returns>
-    public Task<Result> PromptAsync(string text, CancellationToken ct = default);
 
     /// <summary>
     ///     Submit a pre-built <see cref="UserMessage" /> and run the agent loop to completion.
@@ -78,13 +121,6 @@ public interface IAgent : IDisposable
     /// </summary>
     /// <param name="message">A message to append after the current run finishes.</param>
     public void FollowUp(AgentMessage message);
-
-    /// <summary>
-    ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> in flight).
-    /// </summary>
-    /// <param name="ct">Optional cancellation token.</param>
-    /// <returns>A task that completes when the agent is idle.</returns>
-    public Task WaitForIdleAsync(CancellationToken ct = default);
 }
 
 /// <summary>

@@ -15,6 +15,20 @@ namespace Harbor.Core.Agents;
 /// </summary>
 public sealed class AgentLoop : IAgentLoop
 {
+    // TODO(principles)[SRP]: класс ~650 строк делает слишком много: (1) оркестрация
+    // turn-loop, (2) streaming coalescing, (3) tool-call accumulation, (4) tool
+    // execution dispatch, (5) error handling, (6) event publishing, (7) permission
+    // gating, (8) steering queue draining. Лучше разнести:
+    //   - AgentLoop — оркестрация (10-20 строк)
+    //   - StreamingCoalescer — аккумулирование дельт в StringBuilder'ах
+    //   - ToolCallDispatcher — выполнение тулзов и сбор результатов
+    //   - TurnEventPublisher — publish events
+    // См. аудит §SOLID-001.
+
+    // TODO(principles)[OCP]: switch по типам LlmEvent (TextDeltaEvent, ThinkingDeltaEvent,
+    // ToolCallStartEvent, ToolCallDeltaEvent, StepFinishEvent, ErrorEvent) — каждый новый
+    // event type требует правки RunAsync. Лучше — visitor pattern или discriminated union
+    // через MemoryPack (уже есть в Messages.cs — тот же подход для LlmEvent). См. §OOP-004.
     private readonly IAgentRegistry _agents;
     private readonly ICompactionService _compaction;
     private readonly IEventBus _eventBus;
@@ -615,10 +629,23 @@ public sealed class AgentLoop : IAgentLoop
                 agent.Name.Value,
                 ct,
                 session.Messages,
-                (update, c) =>
+                async (update, c) =>
                 {
-                    _ = _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c);
-                    return Task.CompletedTask;
+                    // §FP-003 (RESOLVED): previously `_ = _eventBus.PublishAsync(...)`
+                    // was fire-and-forget — exceptions died as unobserved task exceptions
+                    // and tool progress updates were silently dropped on bus back-pressure.
+                    // The lambda is now async and awaits the publish with a try/catch so
+                    // failures are logged without breaking tool execution. Return type is
+                    // still `Task` per the ToolContext.ReportProgress contract.
+                    try
+                    {
+                        await _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
+                    }
                 },
                 // async/await instead of ContinueWith + .Result: the latter allocates a
                 // continuation Task and accesses .Result which (though safe here because

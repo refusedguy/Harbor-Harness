@@ -139,6 +139,11 @@ public sealed class InMemoryEventBus : IEventBus
     /// <inheritdoc />
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
     {
+        // TODO(principles)[PERF, байтоебля]: ReadAllAsync().ToBlockingEnumerable()
+        // DRAINS channel полностью — после вызова scrollback пуст, и следующий
+        // late-subscriber не получит историю. Это утечка состояния. Также ToBlockingEnumerable
+        // синхронно блокирует поток — в TUI это фриз. Fix: IImmutableList<AgentEvent> как
+        // ring buffer, обновляемый через ImmutableInterlocked.Update. См. §PERF-008.
         var all = _scrollback.Reader.ReadAllAsync(CancellationToken.None)
             .ToBlockingEnumerable();
         var result = new List<AgentEvent>(maxEvents);
@@ -149,6 +154,7 @@ public sealed class InMemoryEventBus : IEventBus
             result.RemoveRange(0, result.Count - maxEvents);
         return result;
     }
+
 
     private void RemoveDeadSubscriptions(Subscription[] dead, int deadCount)
     {

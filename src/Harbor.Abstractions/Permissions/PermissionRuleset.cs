@@ -113,6 +113,12 @@ public sealed record PermissionRuleset
         new("bash", "sudo *", PermissionAction.Deny),
         new("bash", "*", PermissionAction.Ask),
         new("webfetch", "*", PermissionAction.Ask),
+        new("tree", "*", PermissionAction.Allow),
+        new("ripgrep", "*", PermissionAction.Allow),
+        new("notebook", "*", PermissionAction.Allow),
+        new("mcp", "*", PermissionAction.Ask),
+        new("patch", "src/*", PermissionAction.Allow),
+        new("patch", "*", PermissionAction.Ask),
         new("task", "*", PermissionAction.Allow)
     });
 
