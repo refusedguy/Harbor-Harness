@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
@@ -9,11 +10,19 @@ namespace Harbor.Tui.SpectreTui.View;
 internal static class ChatMarkdown
 {
 
+    // §FP-004 / §PERF-009 (RESOLVED): Cache is now a ConcurrentDictionary, so the
+    // per-render `lock(Cache)` is gone. ConcurrentDictionary's GetOrAdd handles
+    // the read+populate race atomically without blocking parallel renderers.
+    // The `Cache.Count > 2048 → Clear()` thundering-herd eviction is removed:
+    // the cache is already bounded upstream by ChatTranscriptCache._rows (only
+    // lines currently in the transcript are reachable from ToSpans, so the cache
+    // can hold at most that many entries; an explicit cap here would only kick
+    // in for pathological cycling of the same N>2048 distinct strings).
     private static readonly Regex HeadingRegex = new(
         @"^\s{0,3}(#{1,3})\s+(.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Dictionary<string, List<TextSpan>> Cache = new(512);
+    private static readonly ConcurrentDictionary<string, List<TextSpan>> Cache = new(concurrencyLevel: Environment.ProcessorCount, capacity: 512);
     /// <summary>Default ON so agent #/**/` output is readable.</summary>
     public static bool Enabled { get; set; } = true;
 
@@ -36,30 +45,13 @@ internal static class ChatMarkdown
     {
         // Color is not part of key: styles re-base on role color for plain runs
         // via Render; headings/code use fixed colors. Good enough for chat.
-        lock (Cache)
-        {
-            if (Cache.TryGetValue(text, out var hit))
-                return hit;
-        }
-
-        var spans = Render(text, baseColor).ToList();
-        lock (Cache)
-        {
-            if (Cache.Count > 2048)
-                Cache.Clear();
-            Cache[text] = spans;
-        }
-
-        return spans;
+        // ConcurrentDictionary.GetOrAdd may run the factory multiple times in
+        // parallel (only one writer wins) — that's fine, Render is pure and the
+        // lost throwaway is just GC'd.
+        return Cache.GetOrAdd(text, static (t, color) => Render(t, color).ToList(), baseColor);
     }
 
-    public static void ClearCache()
-    {
-        lock (Cache)
-        {
-            Cache.Clear();
-        }
-    }
+    public static void ClearCache() => Cache.Clear();
 
     private const int MaxInlineLength = 4096;
 

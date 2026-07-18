@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Tui.Abstractions.Panels;
 namespace Harbor.Tui.Abstractions.State;
 /// <summary>
 ///     The single message type for the interactive UI (TEA/MVU "Msg"). Every input
@@ -24,4 +26,67 @@ public abstract record UiMsg
     /// <summary>The renderer reports the wrapped transcript height (for scroll %).</summary>
     /// <param name="TotalLines">Total wrapped history rows.</param>
     public sealed record HistoryMeasured(int TotalLines) : UiMsg;
+
+    /// <summary>
+    ///     Toggle a panel between <see cref="TuiPanelState.Hidden" /> and
+    ///     <see cref="TuiPanelState.Visible" />. If the panel is currently focused,
+    ///     toggling hides it and returns focus to chat.
+    /// </summary>
+    /// <param name="Id">The panel id (must already be registered).</param>
+    public sealed record TogglePanel(string Id) : UiMsg;
+
+    /// <summary>
+    ///     Set focus to a specific panel, or return focus to chat when
+    ///     <paramref name="Id" /> is <see langword="null" />. The previously focused
+    ///     panel (if any) drops back to <see cref="TuiPanelState.Visible" />.
+    /// </summary>
+    /// <param name="Id">Panel id, or <see langword="null" /> to focus chat.</param>
+    public sealed record FocusPanel(string? Id) : UiMsg;
+
+    /// <summary>
+    ///     Cycle keyboard focus to the next visible panel; if the last panel is
+    ///     currently focused, return focus to chat.
+    /// </summary>
+    public sealed record CyclePanelFocus : UiMsg;
+
+    /// <summary>
+    ///     Grow or shrink the panel by <paramref name="Delta" /> rows (Top/Bottom) or
+    ///     columns (Left/Right). Clamped to [<c>PanelRegistry.MinSize</c> ..
+    ///     <c>PanelRegistry.MaxSize</c>] by the reducer.
+    /// </summary>
+    /// <param name="Id">The panel id.</param>
+    /// <param name="Delta">Signed delta (positive = grow, negative = shrink).</param>
+    public sealed record ResizePanel(string Id, int Delta) : UiMsg;
+
+    /// <summary>
+    ///     Reset <see cref="UiState.ScrollOffset" /> to 0 (pin to live tail). Emitted by
+    ///     a renderer when it detects the agent just started a new run
+    ///     (<c>state.IsAgentRunning &amp;&amp; !state.WasRunning</c>) so streaming output
+    ///     is always visible. The reducer also does this on <c>AgentStartEvent</c> as a
+    ///     belt-and-braces guarantee.
+    /// </summary>
+    public sealed record ScrollResetToTail : UiMsg;
+
+    /// <summary>
+    ///     Clamp <see cref="UiState.ScrollOffset" /> to <c>[0 .. <paramref name="MaxScroll" />]</c>
+    ///     after the renderer measured the current maximum (which depends on the wrapped
+    ///     transcript height + pinned stream rows — both only known after layout).
+    /// </summary>
+    /// <param name="MaxScroll">Maximum legal scroll offset this frame.</param>
+    public sealed record ScrollClamp(int MaxScroll) : UiMsg;
+
+    /// <summary>
+    ///     Host-side seeding of the registered panel ids + default states + default
+    ///     sizes into <see cref="UiState" />. Dispatched once at startup by
+    ///     <c>SpectreTuiRenderer.SeedPanelRegistryIntoState</c> (and on plugin reload).
+    ///     Not for renderer-time use — this is a host initialization message, the TEA
+    ///     equivalent of <see cref="UiStore.BindSession" />.
+    /// </summary>
+    /// <param name="Ids">Registered panel ids in registration order.</param>
+    /// <param name="States">Per-panel default state (Hidden unless re-registering).</param>
+    /// <param name="Sizes">Per-panel default size (provider's DefaultSize unless re-registering).</param>
+    public sealed record SeedPanels(
+        ImmutableArray<string> Ids,
+        ImmutableDictionary<string, TuiPanelState> States,
+        ImmutableDictionary<string, int> Sizes) : UiMsg;
 }

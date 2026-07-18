@@ -1,9 +1,10 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Abstractions.State;
 /// <summary>
 ///     Default <see cref="ITuiEffectRunner" />. The ONLY place that touches
-///     <see cref="IAgent" /> / the slash handler. Renderers stay free of
+///     <see cref="IAgentRunner" /> / the slash handler. Renderers stay free of
 ///     <c>Harbor.Core</c> references and instead emit <see cref="TuiEffect" />.
 /// </summary>
 /// <remarks>
@@ -12,20 +13,36 @@ namespace Harbor.Tui.Abstractions.State;
 ///         the supplied <see cref="UiStore" /> so the UI state stays in sync without
 ///         the renderer polling <c>IAgent.State</c>.
 ///     </para>
+///     <para>
+///         <b>Layering (§ARCH-002):</b> depends on <see cref="IAgentRunner" /> (the
+///         minimal runner surface in <c>Harbor.Abstractions</c>), not the full
+///         <see cref="IAgent" />. This keeps <c>Harbor.Tui.Abstractions</c> in the
+///         Domain layer — it never needs to reference <c>Harbor.Core</c> for agent
+///         types. <see cref="IAgent" /> extends <see cref="IAgentRunner" />, so the
+///         Composition Root (<c>HostBuilder</c>) can pass a concrete <c>DefaultAgent</c>
+///         wherever an <c>IAgentRunner</c> is required.
+///     </para>
 /// </remarks>
 public sealed class TuiEffectHost : ITuiEffectRunner
 {
-    private readonly IAgent _agent;
+    private readonly IAgentRunner _agent;
     private readonly CancellationToken _appCt;
     private readonly Func<string, Task>? _slash;
+    private readonly ILogger<TuiEffectHost>? _logger;
     private readonly UiStore _store;
 
-    public TuiEffectHost(IAgent agent, UiStore store, Func<string, Task>? slash = null, CancellationToken appCt = default)
+    public TuiEffectHost(
+        IAgentRunner agent,
+        UiStore store,
+        Func<string, Task>? slash = null,
+        CancellationToken appCt = default,
+        ILogger<TuiEffectHost>? logger = null)
     {
         _agent = agent;
         _store = store;
         _slash = slash;
         _appCt = appCt;
+        _logger = logger;
     }
 
     /// <summary>Slash command list for input autocomplete.</summary>
@@ -33,24 +50,37 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     public void Run(TuiEffect effect)
     {
+        // §FP-006 (RESOLVED): each fire-and-forget async branch now attaches a
+        // ContinueWith(OnlyOnFaulted) continuation that logs the exception. The
+        // Run contract stays synchronous (per ITuiEffectRunner.Run), so we still
+        // do NOT await — but unobserved-task exceptions are now surfaced via
+        // _logger instead of dying in TaskScheduler.UnobservedTaskException.
+        // Run synchronously is fine because the continuation just logs.
         switch (effect)
         {
             case TuiEffect.None:
                 break;
             case TuiEffect.PromptAgent p:
-                _ = PromptAsync(p.Text);
+                PromptAsync(p.Text).ContinueWith(
+                    t => _logger?.LogError(t.Exception, "PromptAsync failed"),
+                    TaskContinuationOptions.OnlyOnFaulted);
                 break;
             case TuiEffect.RunSlash s:
-                _ = RunSlashAsync(s.Command);
+                RunSlashAsync(s.Command).ContinueWith(
+                    t => _logger?.LogError(t.Exception, "RunSlashAsync failed for {Command}", s.Command),
+                    TaskContinuationOptions.OnlyOnFaulted);
                 break;
             case TuiEffect.AbortAgent:
-                _ = AbortAsync();
+                AbortAsync().ContinueWith(
+                    t => _logger?.LogError(t.Exception, "AbortAsync failed"),
+                    TaskContinuationOptions.OnlyOnFaulted);
                 break;
             case TuiEffect.QuitApp:
                 _store.Transition(s => s with { ShouldQuit = true });
                 break;
         }
     }
+
 
     private async Task PromptAsync(string text)
     {

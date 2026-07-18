@@ -1,10 +1,14 @@
+using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Abstractions;
+using Harbor.Tui.Abstractions.Panels;
 using Harbor.Tui.Abstractions.Renderers;
 using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.Abstractions.Views;
+using Harbor.Tui.SpectreTui.Panels;
+using Harbor.Tui.SpectreTui.Panels.Builtin;
 using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
@@ -15,6 +19,17 @@ namespace Harbor.Tui.SpectreTui;
 ///     <see cref="ChatScreen" /> projects shared <see cref="UiState" /> into widgets.
 ///     Agent I/O goes through <see cref="TuiEffectHost" /> only.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>TEA compliance (§FP-005):</b> all interactive state lives in
+///         <see cref="UiState" /> and is mutated only by <see cref="UiReducer" /> via
+///         <see cref="UiStore.Dispatch(UiMsg)" />. The renderer's <see cref="ChatScreen" />
+///         is a pure view: it reads state, measures geometry, and dispatches
+///         measurement messages (<see cref="UiMsg.Viewport" />,
+///         <see cref="UiMsg.HistoryMeasured" />, <see cref="UiMsg.ScrollClamp" />,
+///         <see cref="UiMsg.ScrollResetToTail" />). It never mutates state directly.
+///     </para>
+/// </remarks>
 public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
 {
     private readonly ILogger<SpectreTuiRenderer> _logger;
@@ -23,9 +38,27 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     private Func<string, Task>? _slashHandler;
     private UiStore? _store;
 
-    public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger) : base(logger)
+    /// <summary>
+    ///     Panel registry shared with the screen and any loaded panel plugins.
+    ///     Populated during host startup (builtins registered in
+    ///     <see cref="RunInteractiveAsync" />, plugins via <c>ITuiPanelPlugin.RegisterPanels</c>).
+    /// </summary>
+    /// <remarks>
+    ///     <b>Registration-only:</b> the registry holds <see cref="IPanelProvider" />
+    ///     instances and nothing else. Panel <i>state</i> (visibility / focus / size)
+    ///     lives in <see cref="UiState.PanelStates" /> / <see cref="UiState.FocusedPanelId" />
+    ///     / <see cref="UiState.PanelSizes" /> and is mutated only by
+    ///     <see cref="UiReducer" />. See <see cref="PanelRegistryView" /> for the
+    ///     read-only snapshot used during render.
+    /// </remarks>
+    public PanelRegistry Panels { get; }
+
+    public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger, PanelRegistry? panels = null) : base(logger)
     {
         _logger = logger;
+        // Use the host-supplied registry (so plugin-contributed panels land here) or
+        // construct a fresh one for tests / non-DI callers.
+        Panels = panels ?? new PanelRegistry();
         Context = new SpectreTuiRenderContext();
     }
 
@@ -80,7 +113,25 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             agent.State.Agent.Model,
             agent.State.Agent.ProviderId,
             agent.State.Agent.Name.Value);
-        _screen = new ChatScreen(_store, _effects, _logger);
+
+        // Register builtin panels if the user hasn't suppressed them
+        // (env var HARBOR_TUI_NO_BUILTIN_PANELS=1 → opt-out for tests).
+        if (!"1".Equals(Environment.GetEnvironmentVariable("HARBOR_TUI_NO_BUILTIN_PANELS"), StringComparison.OrdinalIgnoreCase))
+        {
+            Panels.Register(new Panels.Builtin.HelpPanel());
+            Panels.Register(new Panels.Builtin.TodoListPanel());
+            Panels.Register(new Panels.Builtin.DiffPreviewPanel());
+            Panels.Register(new Panels.Builtin.FileTreePanel());
+            Panels.Register(new Panels.Builtin.TokenBreakdownPanel());
+            Panels.Register(new Panels.Builtin.DiagnosticsPanel());
+        }
+
+        // Seed registered panel ids + default Hidden states + default sizes into
+        // UiState. After this the reducer is the single source of truth for all
+        // panel state; the registry only holds the provider list.
+        SeedPanelRegistryIntoState();
+
+        _screen = new ChatScreen(_store, _effects, _logger, Panels, host);
 
         var settings = new ApplicationSettings
         {
@@ -89,6 +140,38 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         await Application.Create(settings).RunAsync(_screen).ConfigureAwait(false);
         return 0;
+    }
+
+    /// <summary>
+    ///     Seed the registered panel ids + default Hidden states + default sizes into
+    ///     <see cref="UiState" />. Call this whenever panels are registered or
+    ///     unregistered at runtime. After seeding, the reducer is the single source of
+    ///     truth — there is no runtime state mirror in <see cref="PanelRegistry" />
+    ///     (TEA compliance, §FP-005 / §FP-007).
+    /// </summary>
+    public void SeedPanelRegistryIntoState()
+    {
+        if (_store is null) return;
+        var idsBuilder = ImmutableArray.CreateBuilder<string>(Panels.All.Count);
+        var statesBuilder = ImmutableDictionary.CreateBuilder<string, TuiPanelState>(StringComparer.Ordinal);
+        var sizesBuilder = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
+        var current = _store.State;
+        foreach (var p in Panels.All)
+        {
+            idsBuilder.Add(p.Id);
+            // Preserve any already-known state (in case panels were re-registered at runtime).
+            statesBuilder.Add(p.Id, current.PanelStates.TryGetValue(p.Id, out var s)
+                ? s
+                : TuiPanelState.Hidden);
+            sizesBuilder.Add(p.Id, current.PanelSizes.TryGetValue(p.Id, out var sz)
+                ? sz
+                : p.DefaultSize);
+        }
+        // Dispatch via UiMsg (TEA: no Transition escape hatch from renderers).
+        _store.Dispatch(new UiMsg.SeedPanels(
+            idsBuilder.MoveToImmutable(),
+            statesBuilder.ToImmutable(),
+            sizesBuilder.ToImmutable()));
     }
 
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
@@ -120,31 +203,45 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         => false;
 
     /// <summary>
-    ///     Thin TEA view: keys → <see cref="UiMsg" />, effects → host,
-    ///     <see cref="UiState" /> → <see cref="LayoutBuilder" />.
-    ///     Local scroll is display-rows-from-bottom (0 = live tail).
+    ///     Pure TEA view: keys → <see cref="UiMsg" />, effects → host,
+    ///     <see cref="UiState" /> → <see cref="LayoutBuilder" />. State lives ONLY in
+    ///     <see cref="UiStore" /> — there are no local mutable scroll / viewport /
+    ///     was-running fields. Scroll is rows-from-bottom (0 = live tail).
     /// </summary>
     private sealed class ChatScreen : Screen
     {
+
         private readonly TuiEffectHost _effects;
         private readonly ChatKeyMap _keyMap = new();
         private readonly ChatViewProjector _layout;
+        private readonly PanelViewProjector _panels;
+        private readonly PanelLayoutShell _panelShell;
+        private readonly PanelRegistry _registry;
+        private readonly IServiceProvider _services;
         private readonly ILogger _logger;
         private readonly UiStore _store;
+        private readonly SpectreTuiRenderer _parent;
         private ApplicationContext? _app;
 
-        // Display-rows lifted from the bottom. 0 = pinned to newest (live).
-        // Kept local so we never Dispatch geometry every frame.
-        private int _scroll;
-        private int _viewport;
-        private bool _wasRunning;
-
-        public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger)
+        public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
+            PanelRegistry registry, IServiceProvider services, SpectreTuiRenderer? parent = null)
         {
             _store = store;
             _effects = effects;
             _logger = logger;
+            _registry = registry;
+            _services = services;
             _layout = new ChatViewProjector();
+            _panels = new PanelViewProjector(_layout, registry);
+            _panelShell = new PanelLayoutShell(registry);
+            _parent = parent!;
+        }
+
+        public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
+            PanelRegistry registry, IServiceProvider services)
+            : this(store, effects, logger, registry, services, parent: null)
+        {
+            // Backwards-compatible ctor for tests that don't pass a parent.
         }
 
         public override void OnEnter(ApplicationContext context)
@@ -184,14 +281,46 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 action = ChatAction.Clear;
             else if (key.Character == 'c' && key.Modifiers.HasFlag(KeyModifier.Ctrl))
                 action = ChatAction.Abort;
+            // '?' → toggle help panel.
+            else if (key.Character == '?' && !key.Modifiers.HasFlag(KeyModifier.Ctrl))
+                action = ChatAction.HelpPanel;
+
+            // Handle panel-specific actions before falling through to the reducer.
+            if (HandlePanelAction(action, uiKey))
+                return;
+
+            // If a panel currently owns focus, route the key to it first.
+            // The panel may consume (return true) or fall through to the host.
+            var s = _store.State;
+            if (s.FocusedPanelId is { } focusedId && _registry.Get(focusedId) is { } focusedPanel)
+            {
+                // Esc / 'q' while a panel is focused → close panel (return to chat).
+                if (action is ChatAction.ClosePanel
+                    || (uiKey.Code == UiKeyCode.Escape)
+                    || (uiKey.Code == UiKeyCode.Char && uiKey.Character == 'q'
+                        && !uiKey.Mods.HasFlag(KeyModifierSet.Ctrl)))
+                {
+                    _store.Dispatch(new UiMsg.FocusPanel(null));
+                    return;
+                }
+
+                var ctx = new PanelContext(s, Width: 80, Height: 24, Services: _services);
+                try
+                {
+                    if (focusedPanel.OnKey(uiKey, ctx))
+                        return; // consumed
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Panel {Id} OnKey threw", focusedId);
+                }
+            }
 
             if (action == ChatAction.None)
                 return;
 
-            // Scroll stays local (always allowed, including while streaming).
-            if (HandleLocalScroll(action))
-                return;
-
+            // TEA: every action — scroll, focus, edit, submit, abort — flows through
+            // the single UiReducer.Update. No local scroll handling (§FP-005 fix).
             var effect = _store.Dispatch(new UiMsg.KeyInput(action, uiKey));
             if (effect is not TuiEffect.None)
                 _effects.Run(effect);
@@ -201,38 +330,55 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         }
 
         /// <summary>
-        ///     <c>_scroll</c> = display-rows up from bottom; 0 = live tail.
-        ///     Clamp happens in <see cref="LayoutBuilder.BuildWidgets" /> /
-        ///     <see cref="LayoutBuilder.EffectiveScroll" />.
+        ///     Handle panel-specific actions: <see cref="ChatAction.TogglePanelSlot" />,
+        ///     <see cref="ChatAction.CyclePanelFocus" />,
+        ///     <see cref="ChatAction.ResizePanelGrow" /> /
+        ///     <see cref="ChatAction.ResizePanelShrink" />,
+        ///     <see cref="ChatAction.HelpPanel" />. Returns <see langword="true" /> if
+        ///     the action was consumed (host should NOT fall through to the reducer).
         /// </summary>
-        private bool HandleLocalScroll(ChatAction action)
+        private bool HandlePanelAction(ChatAction action, UiKey key)
         {
-            int page = Math.Max(1, _viewport - 2);
             switch (action)
             {
-                case ChatAction.ScrollUpLine:
-                    _scroll++;
-                    break;
-                case ChatAction.ScrollDownLine:
-                    _scroll = Math.Max(0, _scroll - 1);
-                    break;
-                case ChatAction.ScrollUpPage:
-                    _scroll += page;
-                    break;
-                case ChatAction.ScrollDownPage:
-                    _scroll = Math.Max(0, _scroll - page);
-                    break;
-                case ChatAction.ScrollTop:
-                    _scroll = int.MaxValue; // LayoutBuilder clamps to MaxScroll
-                    break;
-                case ChatAction.ScrollBottom:
-                    _scroll = 0;
-                    break;
-                default:
-                    return false;
-            }
+                case ChatAction.TogglePanelSlot:
+                {
+                    // Alt+1..Alt+9 — toggle the Nth registered panel.
+                    if (key.Code != UiKeyCode.Char || key.Character is not ({ } c and >= '1' and <= '9'))
+                        return false;
+                    int slot = c - '1';
+                    var providers = _registry.All;
+                    if (slot >= providers.Count)
+                        return true; // consume even if out of range
+                    string id = providers[slot].Id;
+                    _store.Dispatch(new UiMsg.TogglePanel(id));
+                    return true;
+                }
 
-            return true;
+                case ChatAction.CyclePanelFocus:
+                    _store.Dispatch(new UiMsg.CyclePanelFocus());
+                    return true;
+
+                case ChatAction.ResizePanelGrow:
+                case ChatAction.ResizePanelShrink:
+                {
+                    var s = _store.State;
+                    if (s.FocusedPanelId is not { } id)
+                        return false;
+                    int delta = action == ChatAction.ResizePanelGrow ? 1 : -1;
+                    _store.Dispatch(new UiMsg.ResizePanel(id, delta));
+                    return true;
+                }
+
+                case ChatAction.HelpPanel:
+                {
+                    var help = _registry.Get("help");
+                    if (help is null) return false;
+                    _store.Dispatch(new UiMsg.TogglePanel("help"));
+                    return true;
+                }
+            }
+            return false;
         }
 
         public override void Update(FrameInfo frame, IRenderBounds bounds)
@@ -251,55 +397,78 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 _logger.LogError(
                     ex,
                     "Render failed; scroll={Scroll} viewport={Viewport} lines={Lines}",
-                    _scroll, _viewport, _store.State.Lines.Length);
+                    _store.State.ScrollOffset, _store.State.ViewportLines, _store.State.Lines.Length);
             }
         }
 
+        /// <summary>
+        ///     Pure TEA render: read state, measure geometry, dispatch measurement msgs
+        ///     (<see cref="UiMsg.Viewport" />, <see cref="UiMsg.HistoryMeasured" />,
+        ///     <see cref="UiMsg.ScrollResetToTail" />, <see cref="UiMsg.ScrollClamp" />),
+        ///     build widgets, render. Never mutates state directly.
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///         Dispatching messages from render is an acceptable TEA pattern (called
+        ///         "subscription" in Elm) — what's forbidden is mutating state directly.
+        ///         All state changes go through the reducer.
+        ///     </para>
+        /// </remarks>
         private void RenderCore(RenderContext context)
         {
-            var historyArea = _layout.Layout.GetArea(context, "History");
-            _viewport = historyArea.Height > 0 ? historyArea.Height : 0;
-
+            // Rebuild the layout tree if the visible-set / size / streaming flag changed.
             var state = _store.State;
+            _panelShell.Ensure(state, state.IsStreaming);
 
-            // New agent run → pin to live tail so streaming is visible.
-            if (state.IsAgentRunning && !_wasRunning)
-                _scroll = 0;
-            _wasRunning = state.IsAgentRunning;
-
-            // Soft pre-clamp using last frame's TotalLines (may be 0 on first frame).
-            // Final clamp is LayoutBuilder.EffectiveScroll after expand+stream.
-            if (_layout.TotalLines > 0)
+            // ── 1. Measure viewport (history area height) and report it to the reducer.
+            var historyArea = _panelShell.Layout.GetArea(context, "History");
+            int viewport = historyArea.Height > 0 ? historyArea.Height : 0;
+            if (state.ViewportLines != viewport)
             {
-                int maxPrev = Math.Max(0, _layout.TotalLines - _viewport);
-                if (_scroll != int.MaxValue)
-                    _scroll = Math.Clamp(_scroll, 0, maxPrev);
+                _store.Dispatch(new UiMsg.Viewport(viewport));
+                state = _store.State;
             }
 
+            // ── 2. Rising-edge: agent just started a new run → pin scroll to live tail.
+            //    The reducer already did this on AgentStartEvent; this is a belt-and-
+            //    braces dispatch for cases where IsAgentRunning was flipped via the
+            //    effect host's Transition (e.g. PromptAgent effect) instead of an
+            //    AgentStartEvent.
+            if (state.IsAgentRunning && !state.WasRunning)
+            {
+                _store.Dispatch(new UiMsg.ScrollResetToTail());
+                state = _store.State;
+            }
+
+            // ── 3. Sync UiState into the chat projector (read-only copy for this frame).
             SyncLayout(state, historyArea.Width);
-            _layout.ScrollOffset = _scroll;
+            _layout.ScrollOffset = state.ScrollOffset;
 
-            var widgets = _layout.BuildWidgets(_viewport);
+            // ── 4. Build widgets (this measures TotalLines / MaxScroll / EffectiveScroll).
+            var widgets = _panels.BuildWidgets(viewport, state);
 
-            // Authoritative clamp in display-row units (includes pinned stream height).
-            _scroll = _layout.EffectiveScroll;
-            _viewport = _layout.ViewportLines;
+            // ── 5. Report measured TotalLines to the reducer.
+            if (_layout.TotalLines != state.TotalLines)
+            {
+                _store.Dispatch(new UiMsg.HistoryMeasured(_layout.TotalLines));
+                state = _store.State;
+            }
+
+            // ── 6. Clamp scroll to MaxScroll (the renderer is the only one that knows
+            //    the post-layout MaxScroll, which depends on wrapped rows + pinned stream).
+            if (state.ScrollOffset > _layout.MaxScroll)
+            {
+                _store.Dispatch(new UiMsg.ScrollClamp(_layout.MaxScroll));
+                state = _store.State;
+                _layout.ScrollOffset = state.ScrollOffset;
+            }
 
             // Footer after measure so scroll % matches this frame.
-            _layout.FooterText = BuildFooter();
+            _layout.FooterText = BuildFooter(state);
 
             _logger.LogTrace(
                 "Render: scroll={Scroll}/{Max} total={Total} viewport={Viewport} lines={Lines}",
-                _scroll, _layout.MaxScroll, _layout.TotalLines, _viewport, state.Lines.Length);
-
-            foreach ((string name, var widget) in widgets)
-            {
-                // Rebuild footer widget if we updated FooterText after BuildWidgets.
-                // Cheapest approach: if footer text changed post-build, only the Footer
-                // entry is stale — re-render path below uses the dict from build.
-                // So rebuild footer entry only:
-                _ = name;
-            }
+                state.ScrollOffset, _layout.MaxScroll, _layout.TotalLines, viewport, state.Lines.Length);
 
             // Footer text was updated after BuildWidgets → rebuild footer widget only.
             // (Avoid rebuilding the whole tree just for the % label.)
@@ -307,7 +476,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
             foreach ((string name, var widget) in widgets)
             {
-                var area = _layout.Layout.GetArea(context, name);
+                var area = _panelShell.Layout.GetArea(context, name);
                 if (area.Width <= 0 || area.Height <= 0)
                     continue;
 
@@ -340,15 +509,20 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             // ScrollOffset is set in RenderCore right before BuildWidgets.
         }
 
-        private string BuildFooter()
+        /// <summary>
+        ///     Build the footer markup from the current <see cref="UiState" />. Reads
+        ///     <c>state.ScrollOffset</c> / <c>_layout.MaxScroll</c> for the scroll
+        ///     percentage. Pure (no state mutation).
+        /// </summary>
+        private string BuildFooter(UiState s)
         {
             string Label(ChatAction a) => _keyMap.Get(a).Label;
-            var s = _store.State;
             string mode = s.Focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
 
             int max = _layout.MaxScroll;
-            string scroll = max > 0
-                ? $"scroll {_scroll * 100 / max}%"
+            int scroll = s.ScrollOffset;
+            string scrollPct = max > 0
+                ? $"scroll {scroll * 100 / max}%"
                 : "scroll 0%";
 
             // Esc is quit (see keymap); show it honestly.
@@ -357,7 +531,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                    $"[grey]↑/↓[/] {Label(ChatAction.ScrollUpLine)}  " +
                    $"[grey]PgUp/PgDn[/] {Label(ChatAction.ScrollUpPage)}  " +
                    $"[grey]Home/End[/] {Label(ChatAction.ScrollTop)}  " +
-                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  {scroll}";
+                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  {scrollPct}";
         }
 
         private static IWidget ParagraphFromFooter(string markup)

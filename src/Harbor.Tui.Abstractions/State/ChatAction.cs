@@ -23,7 +23,26 @@ public enum ChatAction
     Autocomplete,
     Backspace,
     Clear,
-    Char
+    Char,
+
+    // ── panel actions ───────────────────────────────────────────────────
+    /// <summary>Alt+1..Alt+9 — toggle the Nth registered panel. Slot index comes from the key's Character.</summary>
+    TogglePanelSlot,
+
+    /// <summary>Ctrl+Tab — cycle focus between visible panels and chat.</summary>
+    CyclePanelFocus,
+
+    /// <summary>Esc or 'q' while a panel is focused — return focus to chat.</summary>
+    ClosePanel,
+
+    /// <summary>Ctrl+Up / Ctrl+Right — grow the focused panel.</summary>
+    ResizePanelGrow,
+
+    /// <summary>Ctrl+Down / Ctrl+Left — shrink the focused panel.</summary>
+    ResizePanelShrink,
+
+    /// <summary>'?' — toggle the help / keymap panel.</summary>
+    HelpPanel
 }
 
 /// <summary>
@@ -34,7 +53,9 @@ public enum ChatAction
 public enum FocusMode
 {
     Input,
-    Chat
+    Chat,
+    /// <summary>A panel owns focus; the specific panel id is in <c>UiState.FocusedPanelId</c>.</summary>
+    Panel
 }
 
 /// <summary>

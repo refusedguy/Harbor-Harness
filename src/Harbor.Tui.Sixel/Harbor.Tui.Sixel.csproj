@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.Sixel</PackageId>
+    <Description>Harbor TUI renderer — extends AnsiTuiRenderer with Sixel image support for image-capable terminals (xterm + vt_sixel, wezterm, foot, mlterm).</Description>
+    <PackageTags>harbor;tui;sixel;terminal;images</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,107 @@
+@page "/"
+@using Harbor.Tui.Abstractions.State
+@using Microsoft.AspNetCore.Components.Web
+@inject UiStore Store
+@inject TuiEffectHost Effects
+@implements IDisposable
+
+<div class="header">
+    <span class="agent">🤖 <strong>@Store.State.AgentName</strong></span>
+    <span class="dim"> · </span>
+    <span class="model">@Store.State.Model</span>
+    <span class="dim"> · </span>
+    <span class="provider">@Store.State.Provider</span>
+</div>
+
+<div class="history" @ref="_historyRef">
+    @foreach (var line in Store.State.Lines)
+    {
+        <div class="line">
+            <span class="role">@line.Role.ToString().ToLowerInvariant()</span>
+            <span class="text @line.Role.ToString().ToLowerInvariant()">@line.Text</span>
+        </div>
+    }
+
+    @if (Store.State.IsStreaming && !string.IsNullOrEmpty(Store.State.Active.TextBuffer))
+    {
+        <div class="streaming">
+            <span class="@(Store.State.IsAgentRunning ? "pulse" : "think")">
+                @(Store.State.IsAgentRunning ? "● streaming" : "● thinking")
+            </span>
+            <span class="dim">@Store.State.Active.TextBuffer</span>
+        </div>
+    }
+</div>
+
+<div class="input-row">
+    <textarea @bind="_input"
+              @bind:event="oninput"
+              @onkeydown="OnKeyDown"
+              placeholder="Type a message…  (Enter = send, Shift+Enter = newline)"
+              rows="2"></textarea>
+    <button @onclick="Submit">Send</button>
+</div>
+
+<div class="status">
+    <span>@Store.State.Status</span>
+    <span class="dim">
+        @(Store.State.Cost.TokensIn.ToString("N0")) in /
+        @(Store.State.Cost.TokensOut.ToString("N0")) out /
+        $@(Store.State.Cost.CostUsd.ToString("F4"))
+    </span>
+</div>
+
+@code {
+    private string _input = string.Empty;
+    private ElementReference _historyRef;
+
+    protected override void OnInitialized()
+    {
+        Store.Changed += OnStoreChanged;
+    }
+
+    private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
+    {
+        // Trigger a re-render on the Blazor circuit.
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await Submit();
+        }
+    }
+
+    private Task Submit()
+    {
+        var text = _input.TrimEnd('\r', '\n');
+        if (string.IsNullOrWhiteSpace(text)) return Task.CompletedTask;
+
+        _input = string.Empty;
+        string trimmed = text.Trim();
+        TuiEffect effect;
+        if (ChatCommands.ExitWords.Contains(trimmed))
+        {
+            effect = new TuiEffect.QuitApp();
+        }
+        else if (trimmed.StartsWith('/'))
+        {
+            effect = new TuiEffect.RunSlash(trimmed);
+        }
+        else
+        {
+            Store.Transition(s => s.AddLine(ChatRole.User, text));
+            effect = new TuiEffect.PromptAgent(trimmed);
+        }
+
+        Effects.Run(effect);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        Store.Changed -= OnStoreChanged;
+    }
+}

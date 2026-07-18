@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Harbor.Tui.Maui.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <Color x:Key="PageBg">#1E1E2E</Color>
+            <Color x:Key="PanelBg">#181825</Color>
+            <Color x:Key="TextPrimary">#CDD6F4</Color>
+            <Color x:Key="TextDim">#6C7086</Color>
+            <Color x:Key="AccentBlue">#89B4FA</Color>
+            <Color x:Key="AccentGreen">#A6E3A1</Color>
+            <Color x:Key="AccentYellow">#F9E2AF</Color>
+            <Color x:Key="AccentRed">#F38BA8</Color>
+            <Color x:Key="AccentOrange">#FAB387</Color>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

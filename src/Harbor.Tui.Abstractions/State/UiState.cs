@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Tui.Abstractions.Panels;
 namespace Harbor.Tui.Abstractions.State;
 /// <summary>
 ///     Semantic role of a rendered transcript line. Shared by every renderer so
@@ -88,6 +89,14 @@ public sealed record UiState
     /// <summary>Whether the agent is currently running a prompt.</summary>
     public bool IsAgentRunning { get; init; }
 
+    /// <summary>
+    ///     Snapshot of <see cref="IsAgentRunning" /> from the previous agent event
+    ///     (AgentStart/AgentEnd). Lets renderers detect the rising edge
+    ///     (<c>IsAgentRunning &amp;&amp; !WasRunning</c>) without keeping local mutable
+    ///     state — TEA compliance (§FP-005).
+    /// </summary>
+    public bool WasRunning { get; init; }
+
     /// <summary>Whether the user has requested to quit the interactive loop.</summary>
     public bool ShouldQuit { get; init; }
 
@@ -120,6 +129,36 @@ public sealed record UiState
             return (int)Math.Round(100.0 * ScrollOffset / max);
         }
     }
+
+    /// <summary>
+    ///     Per-panel runtime state. Mirrors the <c>PanelRegistry</c>; updated by
+    ///     <c>UiReducer</c> on <c>TogglePanel</c> / <c>FocusPanel</c> /
+    ///     <c>ResizePanel</c>. Renderers read this to decide which panels to render.
+    /// </summary>
+    public ImmutableDictionary<string, TuiPanelState> PanelStates { get; init; }
+        = ImmutableDictionary<string, TuiPanelState>.Empty;
+
+    /// <summary>
+    ///     Per-panel size override (rows or cols, depending on the panel's placement).
+    ///     <c>0</c> = use the provider's <c>DefaultSize</c>.
+    /// </summary>
+    public ImmutableDictionary<string, int> PanelSizes { get; init; }
+        = ImmutableDictionary<string, int>.Empty;
+
+    /// <summary>
+    ///     Id of the panel currently owning keyboard focus, or <see langword="null" />
+    ///     when the chat / input box owns focus. Driven by <c>FocusPanel</c> /
+    ///     <c>CyclePanelFocus</c> messages.
+    /// </summary>
+    public string? FocusedPanelId { get; init; }
+
+    /// <summary>
+    ///     Registered panel ids in registration order. Maintained by the host
+    ///     (<c>PanelRegistry</c>) via <c>UiStore.Transition</c>. Read by the reducer
+    ///     for <c>CyclePanelFocus</c> so it stays pure (no IRegistry dependency).
+    /// </summary>
+    public ImmutableArray<string> RegisteredPanelIds { get; init; }
+        = ImmutableArray<string>.Empty;
 
     /// <summary>
     ///     Append a line to the transcript, returning a new immutable snapshot.

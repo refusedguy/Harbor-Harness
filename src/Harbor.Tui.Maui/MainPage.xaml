@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:Harbor.Tui.Maui"
+             x:Class="Harbor.Tui.Maui.MainPage"
+             BackgroundColor="{StaticResource PageBg}"
+             Title="Harbor">
+
+    <Grid Padding="8" RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="6">
+
+        <!-- Header: agent / model / provider -->
+        <Border Grid.Row="0" BackgroundColor="{StaticResource PanelBg}" Padding="10,6" StrokeShape="RoundRectangle 6">
+            <HorizontalStackLayout Spacing="8">
+                <Label Text="🤖" FontSize="16" VerticalOptions="Center"/>
+                <Label x:Name="AgentLabel" Text="agent" TextColor="{StaticResource AccentBlue}" FontAttributes="Bold" VerticalOptions="Center"/>
+                <Label Text=" · " TextColor="{StaticResource TextDim}" VerticalOptions="Center"/>
+                <Label x:Name="ModelLabel" Text="model" TextColor="{StaticResource AccentGreen}" VerticalOptions="Center"/>
+                <Label Text=" · " TextColor="{StaticResource TextDim}" VerticalOptions="Center"/>
+                <Label x:Name="ProviderLabel" Text="provider" TextColor="{StaticResource AccentYellow}" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Chat history (CollectionView is virtualized — good for long transcripts on mobile) -->
+        <CollectionView Grid.Row="1"
+                        x:Name="HistoryList"
+                        BackgroundColor="Transparent">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="local:ChatLineViewModel">
+                    <Grid Padding="0,2" ColumnDefinitions="90,*">
+                        <Label Grid.Column="0"
+                               Text="{Binding Role}"
+                               TextColor="{StaticResource TextDim}"
+                               FontAttributes="Bold"
+                               VerticalOptions="Start"/>
+                        <Label Grid.Column="1"
+                               Text="{Binding Text}"
+                               TextColor="{Binding ForegroundHex}"
+                               LineBreakMode="WordWrap"
+                               VerticalOptions="Start"/>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Streaming indicator -->
+        <Border Grid.Row="2" BackgroundColor="{StaticResource PanelBg}" Padding="8,3" StrokeShape="RoundRectangle 4" x:Name="StreamingBar" IsVisible="False">
+            <HorizontalStackLayout Spacing="10">
+                <Label x:Name="StreamingLabel" Text="● streaming" TextColor="{StaticResource AccentOrange}"/>
+                <Label x:Name="StreamingBuffer" Text="" TextColor="{StaticResource TextDim}" LineBreakMode="TailTruncation" MaximumWidthRequest="900"/>
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Input -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <Editor Grid.Column="0"
+                    x:Name="InputBox"
+                    BackgroundColor="{StaticResource PanelBg}"
+                    TextColor="{StaticResource TextPrimary}"
+                    AutoSize="TextChanges"
+                    Placeholder="Type a message…"
+                    PlaceholderColor="{StaticResource TextDim}"
+                    HeightRequest="40"
+                    Completed="InputBox_Completed"/>
+            <Button Grid.Column="1"
+                    Text="Send"
+                    BackgroundColor="{StaticResource AccentBlue}"
+                    TextColor="Black"
+                    Clicked="SendButton_Click"/>
+        </Grid>
+
+        <!-- Status bar -->
+        <Border Grid.Row="4" BackgroundColor="{StaticResource PanelBg}" Padding="8,4" StrokeShape="RoundRectangle 4">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Grid.Column="0" x:Name="StatusLabel" Text="idle" TextColor="{StaticResource TextPrimary}"/>
+                <Label Grid.Column="1" x:Name="CostLabel" Text="0 in / 0 out / $0.0000" TextColor="{StaticResource TextDim}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</ContentPage>

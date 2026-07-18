@@ -27,7 +27,19 @@ public sealed class ChatKeyMap
         new(ChatAction.Autocomplete, "complete", new Binding(UiKeyCode.Tab)),
         new(ChatAction.Backspace, "backspace", new Binding(UiKeyCode.Backspace)),
         // Clear is bound to Ctrl+L, reported by most frameworks as a character — handled separately.
-        new(ChatAction.Clear, "clear")
+        new(ChatAction.Clear, "clear"),
+
+        // ── panel hotkeys ────────────────────────────────────────────────
+        // Alt+1..Alt+9 — toggle the Nth registered panel. Slot comes from the key's Character.
+        new(ChatAction.TogglePanelSlot, "panel 1", new Binding(UiKeyCode.Char, KeyModifierSet.Alt)),
+        // Ctrl+Tab — cycle focus between visible panels and chat.
+        new(ChatAction.CyclePanelFocus, "cycle panel", new Binding(UiKeyCode.Tab, KeyModifierSet.Ctrl)),
+        // Ctrl+Up / Ctrl+Right — grow focused panel.
+        new(ChatAction.ResizePanelGrow, "grow panel", new Binding(UiKeyCode.Up, KeyModifierSet.Ctrl)),
+        // Ctrl+Down / Ctrl+Left — shrink focused panel.
+        new(ChatAction.ResizePanelShrink, "shrink panel", new Binding(UiKeyCode.Down, KeyModifierSet.Ctrl)),
+        // '?' — toggle help panel.
+        new(ChatAction.HelpPanel, "help")
     ];
 
     public ChatKeyMap()

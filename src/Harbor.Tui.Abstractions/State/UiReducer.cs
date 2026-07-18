@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Tui.Abstractions.Panels;
 namespace Harbor.Tui.Abstractions.State;
 /// <summary>
 ///     Pure reducer: <c>(UiState, AgentEvent) → UiState</c>. This is the single
@@ -28,6 +29,16 @@ public static class UiReducer
     /// <summary>
     ///     Apply an agent event to the UI state, returning the next immutable snapshot.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="AgentStartEvent" /> and <see cref="AgentEndEvent" /> both
+    ///         snapshot <see cref="UiState.IsAgentRunning" /> into
+    ///         <see cref="UiState.WasRunning" /> before flipping it, so renderers can
+    ///         detect the rising edge (<c>IsAgentRunning &amp;&amp; !WasRunning</c>)
+    ///         without keeping local mutable state. A new run also pins scroll to the
+    ///         live tail so streaming output is always visible (§FP-005 TEA fix).
+    ///     </para>
+    /// </remarks>
     public static UiState Reduce(UiState state, AgentEvent @event) => @event switch
     {
         AgentStartEvent ase => OnAgentStart(state, ase),
@@ -41,7 +52,14 @@ public static class UiReducer
         AgentErrorEvent err => state
             .AddLine(ChatRole.Error, err.Message)
             .WithStatus("error"),
-        AgentEndEvent => state with { Status = "idle", IsAgentRunning = false, IsStreaming = false, Active = ActiveMessage.Empty },
+        AgentEndEvent => state with
+        {
+            Status = "idle",
+            IsAgentRunning = false,
+            WasRunning = state.IsAgentRunning,
+            IsStreaming = false,
+            Active = ActiveMessage.Empty
+        },
         _ => state
     };
 
@@ -49,7 +67,16 @@ public static class UiReducer
 
     private static UiState OnAgentStart(UiState state, AgentStartEvent ase)
     {
-        var next = state with { Status = "running", IsAgentRunning = true };
+        // Rising-edge trigger: snapshot the prior IsAgentRunning and pin scroll to
+        // live tail so the user immediately sees streaming output. This used to be a
+        // local `_wasRunning` / `_scroll = 0` mutation in ChatScreen (§FP-005).
+        var next = state with
+        {
+            Status = "running",
+            IsAgentRunning = true,
+            WasRunning = state.IsAgentRunning,
+            ScrollOffset = 0
+        };
         if (next.Lines.Length != 0)
             return next;
 
@@ -147,8 +174,98 @@ public static class UiReducer
         UiMsg.KeyInput k => UpdateKey(state, k),
         UiMsg.Viewport v => (state with { ViewportLines = v.HistoryHeight }, new TuiEffect.None()),
         UiMsg.HistoryMeasured t => (state with { TotalLines = t.TotalLines }, new TuiEffect.None()),
+        UiMsg.TogglePanel tp => (TogglePanel(state, tp.Id), new TuiEffect.None()),
+        UiMsg.FocusPanel fp => (FocusPanel(state, fp.Id), new TuiEffect.None()),
+        UiMsg.CyclePanelFocus => (CycleFocus(state), new TuiEffect.None()),
+        UiMsg.ResizePanel rp => (ResizePanel(state, rp.Id, rp.Delta), new TuiEffect.None()),
+        UiMsg.ScrollResetToTail => (state with { ScrollOffset = 0, WasRunning = true }, new TuiEffect.None()),
+        UiMsg.ScrollClamp sc => (state with
+        {
+            ScrollOffset = Math.Clamp(state.ScrollOffset, 0, Math.Max(0, sc.MaxScroll))
+        }, new TuiEffect.None()),
+        UiMsg.SeedPanels sp => (state with
+        {
+            RegisteredPanelIds = sp.Ids,
+            PanelStates = sp.States,
+            PanelSizes = sp.Sizes
+        }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
+
+    // ── panel transitions (pure; no IPanelRegistry dependency) ────────────
+
+    /// <summary>Toggle a panel between Hidden ↔ Visible (Focused → Hidden also clears focus).</summary>
+    public static UiState TogglePanel(UiState state, string id)
+    {
+        if (string.IsNullOrEmpty(id) || !state.PanelStates.ContainsKey(id))
+            return state;
+
+        var current = state.PanelStates[id];
+        var next = current == TuiPanelState.Hidden ? TuiPanelState.Visible : TuiPanelState.Hidden;
+        var states = state.PanelStates.SetItem(id, next);
+
+        string? focused = state.FocusedPanelId;
+        if (next == TuiPanelState.Hidden && focused == id)
+            focused = null;
+
+        return state with { PanelStates = states, FocusedPanelId = focused };
+    }
+
+    /// <summary>Focus a specific panel (or chat when <paramref name="id" /> is null).</summary>
+    public static UiState FocusPanel(UiState state, string? id)
+    {
+        if (id is null)
+        {
+            // Demote any Focused panel back to Visible.
+            var states = state.PanelStates;
+            if (state.FocusedPanelId is { } prev && states.ContainsKey(prev))
+                states = states.SetItem(prev, TuiPanelState.Visible);
+            return state with { PanelStates = states, FocusedPanelId = null };
+        }
+
+        if (!state.PanelStates.ContainsKey(id))
+            return state;
+
+        var next = state.PanelStates;
+        if (state.FocusedPanelId is { } prevFocused && next.ContainsKey(prevFocused) && prevFocused != id)
+            next = next.SetItem(prevFocused, TuiPanelState.Visible);
+        // Make sure the target is at least Visible before focusing.
+        if (next[id] == TuiPanelState.Hidden)
+            next = next.SetItem(id, TuiPanelState.Visible);
+        next = next.SetItem(id, TuiPanelState.Focused);
+
+        return state with { PanelStates = next, FocusedPanelId = id };
+    }
+
+    /// <summary>
+    ///     Cycle focus to the next visible panel in registration order. If the last
+    ///     visible panel is already focused, returns focus to chat (null).
+    /// </summary>
+    public static UiState CycleFocus(UiState state)
+    {
+        var visible = state.RegisteredPanelIds
+            .Where(id => state.PanelStates.TryGetValue(id, out var s) && s != TuiPanelState.Hidden)
+            .ToList();
+        if (visible.Count == 0)
+            return state.FocusedPanelId is null ? state : FocusPanel(state, null);
+
+        int idx = visible.IndexOf(state.FocusedPanelId ?? string.Empty);
+        int nextIdx = idx < 0 ? 0 : (idx + 1) % visible.Count;
+        if (idx >= 0 && nextIdx == 0)
+            return FocusPanel(state, null);
+
+        return FocusPanel(state, visible[nextIdx]);
+    }
+
+    /// <summary>Grow or shrink a panel by <paramref name="delta" />, clamped to [2..200].</summary>
+    public static UiState ResizePanel(UiState state, string id, int delta)
+    {
+        if (string.IsNullOrEmpty(id) || !state.PanelStates.ContainsKey(id) || delta == 0)
+            return state;
+        int current = state.PanelSizes.TryGetValue(id, out var s) ? s : 0;
+        int next = Math.Clamp(current + delta, PanelRegistry.MinSize, PanelRegistry.MaxSize);
+        return state with { PanelSizes = state.PanelSizes.SetItem(id, next) };
+    }
 
     private static (UiState State, TuiEffect Effect) UpdateKey(UiState state, UiMsg.KeyInput k)
     {

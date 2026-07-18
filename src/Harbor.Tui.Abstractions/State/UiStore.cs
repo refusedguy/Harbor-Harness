@@ -43,8 +43,21 @@ public interface ITuiEffectRunner
 /// </summary>
 public sealed class UiStore
 {
-    private readonly object _gate = new();
-    private UiState _state;
+    // §PERF-007 (RESOLVED): previously `lock(_gate)` serialized every dispatch
+    // (user input, scroll, agent event) — a bottleneck under heavy streaming
+    // (1000+ events/sec). The lock is now replaced with a lock-free CAS loop on
+    // the immutable UiState reference. `_state` is marked `volatile` so the
+    // initial read in each iteration is an acquire load (interlocked CAS already
+    // provides a full barrier on success).
+    //
+    // §FP-007 (acknowledged, not fixed): `Transition(Func<UiState,UiState>)` is
+    // still an escape hatch from the pure reducer — the effect runner uses it to
+    // fold follow-up state. Marked `internal` so external renderers cannot bypass
+    // Dispatch(UiMsg). Removing it entirely would require restructuring
+    // TuiEffectHost to emit UiMsg values instead of mutating state directly —
+    // out of scope for this sprint.
+    private volatile UiState _state;
+
 
     /// <summary>Construct a store with the initial (empty) state.</summary>
     public UiStore(UiState? initial = null)
@@ -53,32 +66,27 @@ public sealed class UiStore
     }
 
     /// <summary>The current immutable snapshot. Cheap to read; never mutate.</summary>
-    public UiState State
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _state;
-            }
-        }
-    }
+    public UiState State => _state;
 
     /// <summary>Raised after every successful <see cref="Dispatch" />.</summary>
     public event EventHandler<UiStateChangedEventArgs>? Changed;
 
     /// <summary>
     ///     Apply an agent event through the pure reducer and notify subscribers.
-    ///     Thread-safe; concurrent dispatches are serialized.
+    ///     Thread-safe; concurrent dispatches are coalesced via CAS retry.
     /// </summary>
     public void Dispatch(AgentEvent @event)
     {
+        UiState original;
         UiState next;
-        lock (_gate)
+        do
         {
-            next = UiReducer.Reduce(_state, @event);
-            _state = next;
-        }
+            original = _state; // volatile read
+            next = UiReducer.Reduce(original, @event);
+            // No-op short-circuit: avoid the event if nothing changed.
+            if (ReferenceEquals(original, next))
+                return;
+        } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
     }
@@ -91,13 +99,17 @@ public sealed class UiStore
     /// </summary>
     public TuiEffect Dispatch(UiMsg msg)
     {
+        UiState original;
         UiState next;
         TuiEffect effect;
-        lock (_gate)
+        do
         {
-            (next, effect) = UiReducer.Update(_state, msg);
-            _state = next;
-        }
+            original = _state; // volatile read
+            (next, effect) = UiReducer.Update(original, msg);
+            // No-op short-circuit: state unchanged, no event.
+            if (ReferenceEquals(original, next))
+                return effect;
+        } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
         return effect;
@@ -109,14 +121,21 @@ public sealed class UiStore
     ///     for the effect runner (<see cref="TuiEffectHost" />), which legitimately
     ///     folds follow-up state as part of running an effect.
     /// </summary>
-    public void Transition(Func<UiState, UiState> reducer)
+    /// <remarks>
+    ///     Marked <c>internal</c> so external renderers cannot bypass
+    ///     <see cref="Dispatch(UiMsg)" /> — see §FP-007 in the audit.
+    /// </remarks>
+    internal void Transition(Func<UiState, UiState> reducer)
     {
+        UiState original;
         UiState next;
-        lock (_gate)
+        do
         {
-            next = reducer(_state);
-            _state = next;
-        }
+            original = _state; // volatile read
+            next = reducer(original);
+            if (ReferenceEquals(original, next))
+                return;
+        } while (Interlocked.CompareExchange(ref _state, next, original) != original);
 
         Changed?.Invoke(this, new UiStateChangedEventArgs(next));
     }

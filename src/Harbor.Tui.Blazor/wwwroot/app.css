@@ -1,0 +1,122 @@
+/* Harbor.Tui.Blazor — Catppuccin Mocha dark theme for the chat page. */
+
+:root {
+    --bg: #1E1E2E;
+    --panel: #181825;
+    --text: #CDD6F4;
+    --dim: #6C7086;
+    --blue: #89B4FA;
+    --green: #A6E3A1;
+    --yellow: #F9E2AF;
+    --red: #F38BA8;
+    --orange: #FAB387;
+    --cyan: #89DCEB;
+    --border: #313244;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", "Menlo", "Consolas", monospace;
+    font-size: 14px;
+    padding: 12px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.header {
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+.header .agent strong { color: var(--blue); }
+.header .model { color: var(--green); }
+.header .provider { color: var(--yellow); }
+.header .dim { color: var(--dim); }
+
+.history {
+    background: transparent;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.line {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    padding: 2px 0;
+    gap: 8px;
+}
+.line .role { color: var(--dim); font-weight: bold; }
+.line .user { color: var(--cyan); }
+.line .assistant { color: var(--text); }
+.line .thinking { color: var(--dim); font-style: italic; }
+.line .tool { color: var(--blue); }
+.line .toolresult { color: var(--green); }
+.line .error { color: var(--red); }
+.line .system { color: var(--orange); }
+
+.streaming {
+    background: var(--panel);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 6px 0;
+}
+.streaming .pulse { color: var(--orange); animation: pulse 1.4s ease-in-out infinite; }
+.streaming .think { color: var(--dim); font-style: italic; }
+.streaming .dim { color: var(--dim); margin-left: 10px; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1.0; }
+    50% { opacity: 0.4; }
+}
+
+.input-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+textarea {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    min-height: 32px;
+    max-height: 120px;
+    resize: vertical;
+    outline: none;
+}
+textarea:focus { border-color: var(--blue); }
+
+button {
+    background: var(--blue);
+    color: black;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+}
+button:hover { background: #B4BEFE; }
+
+.status {
+    background: var(--panel);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+}
+.status .dim { color: var(--dim); }
