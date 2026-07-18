@@ -13,7 +13,7 @@
                 <StackPanel Grid.Row="1" Spacing="14">
                     <StackPanel Spacing="4">
                         <TextBlock Text="Model (provider/model)" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <TextBox Text="{Binding Model, Mode=TwoWay}" Watermark="ollama/qwen2.5-coder:7b"/>
+                        <TextBox Text="{Binding Model, Mode=TwoWay}" PlaceholderText="ollama/qwen2.5-coder:7b"/>
                     </StackPanel>
 
                     <StackPanel Spacing="4">
@@ -37,7 +37,7 @@
 
                     <StackPanel Spacing="4">
                         <TextBlock Text="Ollama host" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
-                        <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" Watermark="http://localhost:11434"/>
+                        <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434"/>
                     </StackPanel>
 
                     <StackPanel Spacing="4">
