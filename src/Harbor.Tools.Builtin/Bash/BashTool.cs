@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tools.Builtin;
 /// <summary>
@@ -87,9 +88,20 @@ public sealed class BashTool : ITool
                 psi.Environment[k] = v;
         }
 
+        // §PERF-006 (RESOLVED): stdout/stderr are accumulated in two StringBuilders
+        // rented from StringBuilderPool (no per-call allocation), and each is capped
+        // at MaxOutputChars so a runaway `find /` or `cat huge.log` can't OOM the
+        // process. Once the cap is hit, further lines are silently dropped (the
+        // dropped-bytes counter is kept for diagnostic logging) — partial output is
+        // strictly better than crashing the agent. Append('\n') is used instead of
+        // AppendLine() to keep the separator platform-independent (the rendered
+        // transcript already normalises line endings).
         using var process = new Process { StartInfo = psi };
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
+        const int MaxOutputChars = 100_000;
+        using var stdout = StringBuilderPool.Rent(4096);
+        using var stderr = StringBuilderPool.Rent(1024);
+        long stdoutDropped = 0;
+        long stderrDropped = 0;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeout));
 
@@ -97,11 +109,15 @@ public sealed class BashTool : ITool
 
         process.OutputDataReceived += (_, e) =>
         {
-            if (e.Data is not null) stdout.AppendLine(e.Data);
+            if (e.Data is null) return;
+            if (stdout.Builder.Length >= MaxOutputChars) { stdoutDropped += e.Data.Length + 1; return; }
+            stdout.Builder.Append(e.Data).Append('\n');
         };
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data is not null) stderr.AppendLine(e.Data);
+            if (e.Data is null) return;
+            if (stderr.Builder.Length >= MaxOutputChars) { stderrDropped += e.Data.Length + 1; return; }
+            stderr.Builder.Append(e.Data).Append('\n');
         };
 
         if (!process.Start())
@@ -129,9 +145,15 @@ public sealed class BashTool : ITool
         }
 
         var output = new StringBuilder();
-        if (stdout.Length > 0) output.AppendLine(stdout.ToString());
-        if (stderr.Length > 0) output.AppendLine($"[stderr]\n{stderr}");
-        output.AppendLine($"[exit code: {process.ExitCode}]");
+        if (stdout.Builder.Length > 0) output.Append(stdout.Builder).Append('\n');
+        if (stderr.Builder.Length > 0) output.Append("[stderr]\n").Append(stderr.Builder).Append('\n');
+        output.Append("[exit code: ").Append(process.ExitCode).Append(']').Append('\n');
+
+        if (stdoutDropped > 0 || stderrDropped > 0)
+        {
+            _logger.LogWarning("Bash output truncated: stdout dropped {StdoutDropped} chars, stderr dropped {StderrDropped} chars (cap={Cap})",
+                stdoutDropped, stderrDropped, MaxOutputChars);
+        }
 
         _logger.LogInformation("Command completed: exit={ExitCode}", process.ExitCode);
 

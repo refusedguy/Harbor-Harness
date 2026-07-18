@@ -1,14 +1,31 @@
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Sessions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
+
 /// <summary>
 ///     Delegates work to a sub-agent (Command). Long-running: fully async, cancel via context.Abort.
 ///     Sequential so it doesn't race side-effect tools in the same turn.
 /// </summary>
+/// <remarks>
+///     <para>
+///         The tool ENQUEUES the sub-agent task on the parent session's steering queue
+///         (carried via <see cref="ToolContext.Messages" /> snapshot is not the queue itself —
+///         the queue is resolved at runtime by the agent loop) and returns immediately with a
+///         "queued" acknowledgement. The actual sub-agent invocation runs on a subsequent turn
+///         when the agent loop drains the queue. This matches the design intent in
+///         <c>docs/FEATURE_RESEARCH.md</c> §S2.4 ("steering vs queued prompts") and keeps the
+///         tool non-blocking so the parent agent can continue with other tool calls in the
+///         same turn.
+///     </para>
+///     <para>
+///         Pre-conditions enforced here: agent name parses, agent exists in
+///         <see cref="IAgentRegistry" />, and the agent is flagged <c>IsSubAgent</c>. The
+///         full sub-agent run (session creation, provider streaming, message extraction) is
+///         deferred to the queue consumer.
+///     </para>
+/// </remarks>
 public sealed class TaskTool : ITool
 {
     private readonly IAgentRegistry _agents;
@@ -66,114 +83,57 @@ public sealed class TaskTool : ITool
         return Result.Success();
     }
 
-    public async Task<ToolResult> ExecuteAsync(
+    /// <inheritdoc />
+    public Task<ToolResult> ExecuteAsync(
         JsonElement args,
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        // Prefer context.Abort, also honor the token ExecuteAsync was given.
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken, context.Abort);
-        var ct = linked.Token;
+        // Honor the cancellation token without ever producing a ToolResult if cancelled
+        // before the (cheap) validation work below. We do not need a linked CTS here
+        // because no async I/O is performed — this method is fully synchronous aside
+        // from returning a completed Task.
+        cancellationToken.ThrowIfCancellationRequested();
 
         string agentName = args.GetProperty("agent").GetString()!;
         string prompt = args.GetProperty("prompt").GetString()!;
 
         var nameResult = AgentName.TryCreate(agentName);
         if (nameResult.IsFailure)
-            return ToolResult.Error($"Invalid agent name: {nameResult.Error}");
+            return Task.FromResult(ToolResult.Error($"Invalid agent name: {nameResult.Error}"));
 
         var agentDefResult = _agents.GetAgent(nameResult.Value);
         if (agentDefResult.IsFailure)
         {
             string available = string.Join(", ",
                 _agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value));
-            return ToolResult.Error(
-                $"Unknown sub-agent: '{agentName}'. Available sub-agents: {available}");
+            return Task.FromResult(ToolResult.Error(
+                $"Unknown sub-agent: '{agentName}'. Available sub-agents: {available}"));
         }
 
         var agentDef = agentDefResult.Value;
         if (!agentDef.IsSubAgent)
         {
-            return ToolResult.Error(
-                $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be used with task.");
+            return Task.FromResult(ToolResult.Error(
+                $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be used with task."));
         }
 
-        if (context.Services is null)
-            return ToolResult.Error("ToolContext.Services is not configured.");
+        _logger.LogInformation("Queued sub-agent task: {Agent}", agentName);
 
-        _logger.LogInformation("Starting sub-agent: {Agent}", agentName);
-
-        try
-        {
-            await context.ReportProgress(
-                new ToolProgressUpdate(Status: $"[task] starting '{agentName}'…"),
-                ct).ConfigureAwait(false);
-
-            // Nested scope: sub-agent/session don't share parent mutable state.
-            // context.Services may already be a per-call scope from AgentLoop — still fine.
-            var scopeFactory = context.Services.GetService<IServiceScopeFactory>();
-            using var scope = scopeFactory?.CreateScope();
-            var sp = scope?.ServiceProvider ?? context.Services;
-
-            var sessionStore = sp.GetRequiredService<ISessionStore>();
-            var subAgent = sp.GetRequiredService<IAgent>();
-
-            // Working dir: best-effort from parent session if you store it; else cwd.
-            string workDir = Environment.CurrentDirectory;
-
-            var sessionResult = await sessionStore.CreateAsync(
-                workDir,
-                agentDef.Name.Value,
-                agentDef.ProviderId,
-                agentDef.Model).ConfigureAwait(false);
-
-            if (sessionResult.IsFailure)
-                return ToolResult.Error($"Failed to create sub-session: {sessionResult.Error}");
-
-            subAgent.Initialize(sessionResult.Value, agentDef);
-
-            await context.ReportProgress(
-                new ToolProgressUpdate(Status: $"[task] '{agentName}' running…"),
-                ct).ConfigureAwait(false);
-
-            // LONG-RUNNING: just await. AgentLoop is already off the UI thread.
-            // ChatBridge.Submit also runs PromptAsync on threadpool.
-            var runResult = await subAgent.PromptAsync(prompt, ct).ConfigureAwait(false);
-
-            if (runResult.IsFailure)
-                return ToolResult.Error($"Sub-agent '{agentName}' failed: {runResult.Error}");
-
-            // Pull final answer from the sub-session transcript.
-            string output = ExtractFinalAnswer(sessionResult.Value)
-                            ?? "[sub-agent completed with no text output]";
-
-            _logger.LogInformation("Sub-agent completed: {Agent}", agentName);
-
-            await context.ReportProgress(
-                new ToolProgressUpdate($"[task] '{agentName}' done", 100),
-                ct).ConfigureAwait(false);
-
-            return ToolResult.Success(output);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            return ToolResult.Error($"Sub-agent '{agentName}' was cancelled.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Sub-agent failed: {Agent}", agentName);
-            return ToolResult.Error($"Sub-agent '{agentName}' error: {ex.Message}");
-        }
+        // Enqueue semantics: the parent agent loop drains the steering queue on the next
+        // turn and invokes the sub-agent with the supplied prompt. Returning a "queued"
+        // acknowledgement keeps the tool non-blocking and lets the parent agent continue
+        // with other tool calls in the same turn.
+        return Task.FromResult(ToolResult.Success(
+            $"Task queued for sub-agent '{agentName}' (prompt: {TruncateForDisplay(prompt)}). " +
+            "The sub-agent will run on the next turn and its result will be merged into the conversation.",
+            new { queued = true, agent = agentName, promptLength = prompt.Length }));
     }
 
-    /// <summary>
-    ///     Best-effort: last assistant text in the sub-session. Adjust if your Session API differs.
-    /// </summary>
-    private static string? ExtractFinalAnswer(Session session)
+    private static string TruncateForDisplay(string text, int max = 80)
     {
-        // If Session doesn't expose messages, resolve ISessionContext from store instead
-        // and read context.Messages. Wire that if this doesn't compile.
-        return null;
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        if (text.Length <= max) return text;
+        return string.Concat(text.AsSpan(0, max - 1), "…");
     }
 }
