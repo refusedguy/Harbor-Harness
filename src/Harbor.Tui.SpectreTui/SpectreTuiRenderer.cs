@@ -124,6 +124,13 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             Panels.Register(new Panels.Builtin.FileTreePanel());
             Panels.Register(new Panels.Builtin.TokenBreakdownPanel());
             Panels.Register(new Panels.Builtin.DiagnosticsPanel());
+            // LogsPanel: surfaces live ILogger output inside the TUI. Only
+            // useful when the host attached DiagnosticsPanelLoggerProvider
+            // (which happens when an interactive TUI is active — see
+            // HostBuilder.ConfigureLogging). Registering it unconditionally
+            // is harmless: when no IDiagnosticsPanel is in DI, the panel
+            // shows a "not registered" placeholder.
+            Panels.Register(new Panels.Builtin.LogsPanel());
         }
 
         // Seed registered panel ids + default Hidden states + default sizes into
@@ -377,6 +384,18 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                     _store.Dispatch(new UiMsg.TogglePanel("help"));
                     return true;
                 }
+
+                case ChatAction.ToggleLogsPanel:
+                {
+                    // F12 — toggle the live ILogger output panel. Falls through
+                    // (return false) when no "logs" panel is registered (e.g.
+                    // tests with HARBOR_TUI_NO_BUILTIN_PANELS=1) so the keystroke
+                    // doesn't get swallowed.
+                    if (_registry.Get("logs") is null)
+                        return false;
+                    _store.Dispatch(new UiMsg.TogglePanel("logs"));
+                    return true;
+                }
             }
             return false;
         }
@@ -531,7 +550,8 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                    $"[grey]↑/↓[/] {Label(ChatAction.ScrollUpLine)}  " +
                    $"[grey]PgUp/PgDn[/] {Label(ChatAction.ScrollUpPage)}  " +
                    $"[grey]Home/End[/] {Label(ChatAction.ScrollTop)}  " +
-                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  {scrollPct}";
+                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  " +
+                   $"[grey]F12[/] logs  {scrollPct}";
         }
 
         private static IWidget ParagraphFromFooter(string markup)
@@ -569,6 +589,14 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 Key.F2 => UiKeyCode.F2,
                 Key.F3 => UiKeyCode.F3,
                 Key.F4 => UiKeyCode.F4,
+                Key.F5 => UiKeyCode.F5,
+                Key.F6 => UiKeyCode.F6,
+                Key.F7 => UiKeyCode.F7,
+                Key.F8 => UiKeyCode.F8,
+                Key.F9 => UiKeyCode.F9,
+                Key.F10 => UiKeyCode.F10,
+                Key.F11 => UiKeyCode.F11,
+                Key.F12 => UiKeyCode.F12,
                 _ => UiKeyCode.None
             };
             return new UiKey(code, mods);

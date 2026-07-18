@@ -27,12 +27,16 @@ internal static class ProviderRegistration
             cacheDir,
             loggerFactory.CreateLogger<DynamicModelCatalog>());
 
-        // Filesystem providers
-        string? providersDir = FindProvidersDirectory();
-        if (providersDir is not null && Directory.Exists(providersDir))
+        // Discover providers from EVERY candidate directory (user config first,
+        // then bundled). User config (~/.harbor/providers/) wins on id collisions
+        // so E2E tests can override a bundled provider with a mock pointing at
+        // an in-process server. Tracked-registered ids guard against duplicates.
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string dir in FindProvidersDirectories())
         {
-            foreach (string file in Directory.EnumerateFiles(providersDir, "*.json"))
-                RegisterOne(file, builder, httpClientFactory, authStore, modelCatalog, loggerFactory);
+            if (!Directory.Exists(dir)) continue;
+            foreach (string file in Directory.EnumerateFiles(dir, "*.json"))
+                RegisterOne(file, builder, httpClientFactory, authStore, modelCatalog, loggerFactory, seenIds);
         }
 
         // Embedded providers
@@ -43,6 +47,7 @@ internal static class ProviderRegistration
                 var config = JsonSerializer.Deserialize<ProviderConfig>(content);
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;
                 if (config.Id is "anthropic" or "openai" or "ollama") continue;
+                if (!seenIds.Add(config.Id)) continue;
 
                 var http = httpClientFactory.CreateClient($"provider:{config.Id}");
                 http.Timeout = TimeSpan.FromSeconds(config.Timeout);
@@ -67,13 +72,15 @@ internal static class ProviderRegistration
     private static void RegisterOne(
         string file, IProviderRegistryBuilder builder,
         IHttpClientFactory httpClientFactory, AuthStore authStore,
-        DynamicModelCatalog modelCatalog, ILoggerFactory loggerFactory)
+        DynamicModelCatalog modelCatalog, ILoggerFactory loggerFactory,
+        HashSet<string> seenIds)
     {
         try
         {
             var config = ProviderConfig.LoadFromFile(file);
             if (config.IsFailure) return;
             if (config.Value.Id is "anthropic" or "openai" or "ollama") return;
+            if (!seenIds.Add(config.Value.Id)) return;
 
             var http = httpClientFactory.CreateClient($"provider:{config.Value.Id}");
             http.Timeout = TimeSpan.FromSeconds(config.Value.Timeout);
@@ -110,22 +117,36 @@ internal static class ProviderRegistration
         }
     }
 
-    public static string? FindProvidersDirectory()
+    public static string? FindProvidersDirectory() =>
+        FindProvidersDirectories().FirstOrDefault(Directory.Exists);
+
+    /// <summary>
+    ///     Enumerate every candidate providers directory in precedence order:
+    ///     user config (<c>~/.harbor/providers/</c>) first, then bundled
+    ///     (<c>&lt;exeDir&gt;/providers/</c> and any ancestor). User config wins
+    ///     on id collisions so E2E tests (and power users) can override a
+    ///     bundled provider with their own JSON.
+    /// </summary>
+    public static IEnumerable<string> FindProvidersDirectories()
     {
+        // 1. User config — always checked first so user overrides win.
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userProviders = Path.Combine(home, ".harbor", "providers");
+        yield return userProviders;
+
+        // 2. providers/ next to the running executable (single-file publish, etc.).
         string exeDir = AppContext.BaseDirectory;
         string providersInExe = Path.Combine(exeDir, "providers");
-        if (Directory.Exists(providersInExe)) return providersInExe;
+        yield return providersInExe;
 
+        // 3. Walk up from exeDir looking for a sibling providers/ directory
+        //    (the typical dev-clone layout: repo root has providers/ next to apps/).
         string? current = exeDir;
         for (int i = 0; i < 8 && current is not null; i++)
         {
             string candidate = Path.Combine(current, "providers");
-            if (Directory.Exists(candidate)) return candidate;
+            yield return candidate;
             current = Path.GetDirectoryName(current);
         }
-
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string userProviders = Path.Combine(home, ".harbor", "providers");
-        return Directory.Exists(userProviders) ? userProviders : null;
     }
 }

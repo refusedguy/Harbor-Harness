@@ -42,6 +42,7 @@ public sealed class HelpPanel : IPanelProvider
         p.Lines.Add(TextLine.FromMarkup("  [grey]q / Esc[/]    return focus to chat"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]?[/]          toggle this help panel"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]F2[/]         toggle input/chat focus"));
+        p.Lines.Add(TextLine.FromMarkup("  [grey]F12[/]        toggle logs panel (live ILogger output)"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+L[/]     clear transcript"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+C[/]     abort running agent"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Esc[/]        quit"));

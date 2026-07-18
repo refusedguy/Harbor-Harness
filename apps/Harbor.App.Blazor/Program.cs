@@ -73,13 +73,29 @@ internal static class Program
         bool autoOpen = autoOpenArg && blazorConfig.AutoOpenBrowser;
         int port = blazorConfig.ListenPort <= 0 ? 5000 : blazorConfig.ListenPort;
         string url = $"http://localhost:{port}";
+
+        // Wire the resolved URL into Kestrel's URL list so the printed banner
+        // reflects the actual bound port. Without this, Kestrel falls back to
+        // its default http://localhost:5000 and the banner lies — which broke
+        // E2E tests that wait for "listening on" then hit the configured port.
+        app.Urls.Clear();
+        app.Urls.Add(url);
+
+        // Print the listening banner ONLY after Kestrel has actually bound to
+        // the port (IHostApplicationLifetime.ApplicationStarted fires after the
+        // server is accepting connections). Printing earlier would race E2E
+        // tests that see the banner then immediately HTTP-GET the port.
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        lifetime.ApplicationStarted.Register(() =>
+        {
+            Console.WriteLine($"Harbor Blazor listening on {url}");
+            Console.WriteLine("Press Ctrl+C to stop.");
+        });
+
         if (autoOpen)
         {
-            TryOpenBrowser(url);
+            lifetime.ApplicationStarted.Register(() => TryOpenBrowser(url));
         }
-
-        Console.WriteLine($"Harbor Blazor listening on {url}");
-        Console.WriteLine("Press Ctrl+C to stop.");
 
         try
         {

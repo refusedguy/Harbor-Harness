@@ -135,6 +135,13 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
                     this.ViewModel.RequestShutdown();
                     return;
                 }
+                // F12 — dump last 10 log entries from the shared IDiagnosticsPanel
+                // into the chat stream. No-op when no panel is registered.
+                if (key.KeyInfo.Key == ConsoleKey.F12)
+                {
+                    _bridge.DumpDiagnostics();
+                    return;
+                }
 
                 _input.HandleInput(key.KeyInfo);
             })

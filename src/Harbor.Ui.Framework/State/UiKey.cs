@@ -22,7 +22,23 @@ public enum UiKeyCode : byte
     F1,
     F2,
     F3,
-    F4
+    F4,
+    /// <summary>F5 — reserved for future use (reload config / replay).</summary>
+    F5,
+    /// <summary>F6 — reserved for future use.</summary>
+    F6,
+    /// <summary>F7 — reserved for future use.</summary>
+    F7,
+    /// <summary>F8 — reserved for future use.</summary>
+    F8,
+    /// <summary>F9 — reserved for future use.</summary>
+    F9,
+    /// <summary>F10 — reserved for future use.</summary>
+    F10,
+    /// <summary>F11 — reserved for future use.</summary>
+    F11,
+    /// <summary>F12 — toggles the in-TUI diagnostics / logs panel.</summary>
+    F12
 }
 
 /// <summary>Modifier set for a <see cref="UiKey" /> (bitwise-combinable).</summary>

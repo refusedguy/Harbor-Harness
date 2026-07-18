@@ -56,6 +56,12 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // do NOT await — but unobserved-task exceptions are now surfaced via
         // _logger instead of dying in TaskScheduler.UnobservedTaskException.
         // Run synchronously is fine because the continuation just logs.
+        //
+        // Architecture audit v2 §3.4 (CT-002 RESOLVED): the inner async methods
+        // (PromptAsync, RunSlashAsync, AbortAsync) catch OperationCanceledException
+        // FIRST and route it to a clean "idle" transition instead of letting the
+        // generic Exception catch set the status to "error". An Esc-abort is no
+        // longer misreported as a failure.
         switch (effect)
         {
             case TuiEffect.None:
@@ -89,8 +95,19 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         {
             await _agent.PromptAsync(text, _appCt).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
+            // Architecture audit v2 §3.4 (CT-002 RESOLVED): an Esc-abort
+            // cancels _appCt, which surfaces as OperationCanceledException
+            // from _agent.PromptAsync. The previous generic Exception
+            // catch treated this as an error and set the status bar to
+            // "error". The user just wanted to abort — route to a clean
+            // "idle" transition instead.
+            _store.Transition(s => s with { Status = "idle" });
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "PromptAsync failed");
             _store.Transition(s => s with { Status = "error" });
         }
     }
@@ -107,6 +124,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         {
             await _slash(command).ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
+        {
+            // §3.4: same rationale as PromptAsync — abort ≠ error.
+            _store.Transition(s => s with { Status = "idle" });
+        }
         catch (Exception ex)
         {
             _store.Transition(s => s.AddLine(ChatRole.Error, ex.Message));
@@ -120,9 +142,10 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         {
             await _agent.WaitForIdleAsync(_appCt).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
             // Expected when the abort token fires; the agent is idle now.
+            // §3.4: do not propagate as an error.
         }
         catch (Exception ex)
         {

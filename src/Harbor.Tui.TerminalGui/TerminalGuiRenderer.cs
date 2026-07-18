@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Terminal.Gui.App;
 using Terminal.Gui.Configuration;
@@ -27,6 +28,7 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     private IApplication? _app;
     private TerminalGuiScreen? _screen;
     private Func<string, Task>? _slashHandler;
+    private IDiagnosticsPanel? _diagnostics;
 
     public TerminalGuiRenderer(ILogger<TerminalGuiRenderer> logger) : base(logger)
     {
@@ -59,8 +61,11 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     public Task<int> RunInteractiveAsync(IAgent agent, IServiceProvider host, CancellationToken ct = default)
     {
         _logger.LogInformation("Starting Terminal.Gui app");
+        // Resolve the shared IDiagnosticsPanel (registered by HostBuilder when an
+        // interactive TUI is active). Null in tests / non-interactive modes.
+        _diagnostics = host?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
         _app = Application.Create().Init();
-        _screen = new TerminalGuiScreen(agent, _slashHandler, _app, _logger);
+        _screen = new TerminalGuiScreen(agent, _slashHandler, _app, _logger, _diagnostics);
 
         // Жестко задаем дарк-мод тему, чтобы убить дефолтный синий цвет Terminal.Gui
         var darkScheme = new Scheme
@@ -114,6 +119,23 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
         };
 
+        // ── 3a. Diagnostics overlay (F12) ───────────────────────────────────
+        // Floating overlay covering the chat output region when visible. Hidden
+        // by default. Renders the last 10 log entries from the shared
+        // IDiagnosticsPanel on every dirty frame.
+        var diagnostics = new TextView
+        {
+            X = 0,
+            Y = 1, // below the header
+            Width = Dim.Fill(),
+            Height = Dim.Fill(2), // leave status bar + input visible
+            ReadOnly = true,
+            WordWrap = true,
+            Title = "📋 Logs (F12 to close)",
+            Visible = false
+        };
+        diagnostics.Border.LineStyle = LineStyle.Rounded;
+
         // 4. Multi-line Input
         var input = new TextView
         {
@@ -128,6 +150,14 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
         input.KeyDown += (sender, key) =>
         {
+            // F12 toggles the diagnostics overlay from anywhere.
+            if (key.KeyCode == (KeyCode)ConsoleKey.F12)
+            {
+                _screen!.ToggleDiagnostics(diagnostics);
+                key.Handled = true;
+                return;
+            }
+
             if (key.KeyCode == KeyCode.Enter)
             {
                 if ((key.KeyCode & KeyCode.ShiftMask) != 0)
@@ -146,8 +176,9 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         };
 
         _screen.Attach(output, statusBar);
+        _screen.AttachDiagnostics(diagnostics);
 
-        window.Add(header, output, statusBar, input);
+        window.Add(header, output, statusBar, diagnostics, input);
         input.SetFocus();
 
         _screen.Start();
@@ -203,8 +234,11 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     private sealed class TerminalGuiScreen
     {
         private static readonly TimeSpan ThrottleInterval = TimeSpan.FromMilliseconds(50); // 20 FPS
+        private const int DiagnosticsRows = 10;
+
         private readonly IAgent _agent;
         private readonly IApplication _app;
+        private readonly IDiagnosticsPanel? _diagnostics;
 
         private readonly List<(string Role, string Text)> _chat = new();
         private readonly StringBuilder _finalizedText = new();
@@ -222,6 +256,8 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         private volatile bool _isDirty;
 
         private TextView? _output;
+        private TextView? _diagnosticsView;
+        private bool _diagnosticsVisible;
         private int _spinnerIdx;
         private string _status = "idle";
         private Label? _statusBar;
@@ -230,12 +266,14 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 
         private bool _wasAtBottom = true;
 
-        public TerminalGuiScreen(IAgent agent, Func<string, Task>? slash, IApplication app, ILogger logger)
+        public TerminalGuiScreen(IAgent agent, Func<string, Task>? slash, IApplication app, ILogger logger,
+            IDiagnosticsPanel? diagnostics)
         {
             _agent = agent;
             _slash = slash;
             _app = app;
             _logger = logger;
+            _diagnostics = diagnostics;
 
             _renderTimer = new Timer(_ => InvokeOnMainThread(RenderIfDirty), null, Timeout.Infinite, Timeout.Infinite);
         }
@@ -244,6 +282,28 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         public void Stop() => _renderTimer.Change(Timeout.Infinite, Timeout.Infinite);
 
         public void Attach(TextView output, Label statusBar) => (_output, _statusBar) = (output, statusBar);
+
+        public void AttachDiagnostics(TextView diagnosticsView) => _diagnosticsView = diagnosticsView;
+
+        /// <summary>
+        ///     Toggle the visibility of the F12 diagnostics overlay. No-op when
+        ///     no <see cref="IDiagnosticsPanel" /> was registered (one-shot tests,
+        ///     non-interactive mode). The overlay is a floating TextView that
+        ///     covers the chat output region when visible.
+        /// </summary>
+        public void ToggleDiagnostics(TextView diagnosticsView)
+        {
+            if (_diagnostics is null)
+            {
+                _logger.LogWarning("F12 pressed but no IDiagnosticsPanel is registered — ignoring");
+                return;
+            }
+            _diagnosticsVisible = !_diagnosticsVisible;
+            diagnosticsView.Visible = _diagnosticsVisible;
+            if (_diagnosticsVisible)
+                diagnosticsView.SetFocus();
+            MarkDirty();
+        }
 
         public void ApplyEvent(AgentEvent @event)
         {
@@ -420,7 +480,15 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
                     ? _spinnerFrames[_spinnerIdx++ % _spinnerFrames.Length]
                     : "⏳";
 
-                _statusBar.Text = $" {spinner} {_status} | agent: {_agent.State.Agent.Name.Value} | model: {_agent.State.Agent.Model} | ${_cost:F4} | {_tokensIn}↑ {_tokensOut}↓";
+                _statusBar.Text = $" {spinner} {_status} | agent: {_agent.State.Agent.Name.Value} | model: {_agent.State.Agent.Model} | ${_cost:F4} | {_tokensIn}↑ {_tokensOut}↓ | F12 logs";
+            }
+
+            // Refresh the diagnostics overlay if it is visible.
+            if (_diagnosticsVisible && _diagnosticsView is not null && _diagnostics is not null)
+            {
+                var view = new Harbor.Tui.TerminalGui.Views.DiagnosticsView();
+                _diagnosticsView.Text = view.Render(_diagnostics, DiagnosticsRows);
+                _diagnosticsView.MoveEnd();
             }
         }
 

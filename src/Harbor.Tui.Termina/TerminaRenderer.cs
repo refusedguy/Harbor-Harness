@@ -4,6 +4,8 @@ using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Tui.Termina.Views;
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -67,6 +69,10 @@ public sealed class TerminaRenderer : BaseTuiRenderer, IInteractiveTuiRenderer
         _bridge = new ChatBridge(_logger);
         _bridge.Agent = agent;
         _bridge.SlashHandler = _slashHandler;
+        // Resolve the shared IDiagnosticsPanel (registered by HostBuilder when
+        // an interactive TUI is active). Null in tests / non-interactive modes.
+        // When non-null, F12 dumps the last 10 log entries to the chat stream.
+        _bridge.DiagnosticsPanel = host?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
 
         _logger.LogInformation("Starting Termina host with route /chat");
 
@@ -148,9 +154,36 @@ public sealed class ChatBridge : IDisposable
 
     public Func<string, Task>? SlashHandler { get; set; }
 
+    /// <summary>
+    ///     Shared diagnostics panel (resolved from DI). When non-null, F12 dumps
+    ///     the last 10 log entries to the chat stream so the user can inspect
+    ///     runtime logging without leaving the TUI.
+    /// </summary>
+    public IDiagnosticsPanel? DiagnosticsPanel { get; set; }
+
     public Observable<ChatLine> OutputStream => _outputStream;
 
     public void Dispose() => _outputStream.Dispose();
+
+    /// <summary>
+    ///     Dump the last 10 log entries to the chat output stream. Called by
+    ///     the page when the user presses F12 and <see cref="DiagnosticsPanel" />
+    ///     is non-null. Each entry is color-coded by log level. No-op when no
+    ///     panel is registered. Formatting is delegated to
+    ///     <see cref="DiagnosticsView" /> so the rendering logic stays
+    ///     unit-testable in isolation.
+    /// </summary>
+    public void DumpDiagnostics()
+    {
+        if (DiagnosticsPanel is null)
+        {
+            PushLine("F12: no diagnostics panel registered (non-interactive build).", Color.DarkGray);
+            return;
+        }
+        var view = new DiagnosticsView();
+        foreach (var line in view.Render(DiagnosticsPanel, max: 10))
+            _outputStream.OnNext(line);
+    }
 
     public void Push(AgentEvent @event)
     {

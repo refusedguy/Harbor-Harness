@@ -42,7 +42,10 @@ public enum ChatAction
     ResizePanelShrink,
 
     /// <summary>'?' — toggle the help / keymap panel.</summary>
-    HelpPanel
+    HelpPanel,
+
+    /// <summary>F12 — toggle the in-TUI diagnostics / logs panel (shows live ILogger output).</summary>
+    ToggleLogsPanel
 }
 
 /// <summary>

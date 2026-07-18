@@ -39,7 +39,9 @@ public sealed class ChatKeyMap
         // Ctrl+Down / Ctrl+Left — shrink focused panel.
         new(ChatAction.ResizePanelShrink, "shrink panel", new Binding(UiKeyCode.Down, KeyModifierSet.Ctrl)),
         // '?' — toggle help panel.
-        new(ChatAction.HelpPanel, "help")
+        new(ChatAction.HelpPanel, "help"),
+        // F12 — toggle the in-TUI diagnostics / logs panel.
+        new(ChatAction.ToggleLogsPanel, "logs", new Binding(UiKeyCode.F12))
     ];
 
     public ChatKeyMap()

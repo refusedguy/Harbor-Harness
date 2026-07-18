@@ -73,6 +73,15 @@ public sealed class KeyHandler
             ConsoleKey.F2 => UiKeyCode.F2,
             ConsoleKey.F3 => UiKeyCode.F3,
             ConsoleKey.F4 => UiKeyCode.F4,
+            ConsoleKey.F5 => UiKeyCode.F5,
+            ConsoleKey.F6 => UiKeyCode.F6,
+            ConsoleKey.F7 => UiKeyCode.F7,
+            ConsoleKey.F8 => UiKeyCode.F8,
+            ConsoleKey.F9 => UiKeyCode.F9,
+            ConsoleKey.F10 => UiKeyCode.F10,
+            ConsoleKey.F11 => UiKeyCode.F11,
+            // F12 toggles the in-TUI diagnostics / logs panel (ChatAction.ToggleLogsPanel).
+            ConsoleKey.F12 => UiKeyCode.F12,
             _ => UiKeyCode.None
         };
         return new UiKey(code, mods);

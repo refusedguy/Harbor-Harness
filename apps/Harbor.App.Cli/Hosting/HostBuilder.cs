@@ -41,6 +41,8 @@ using Harbor.Storage.Memory;
 using Harbor.Tools.Builtin;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Diagnostics;
+using Harbor.Cli.Logging;
 using Harbor.Tui.Plain;
 using Harbor.Ipc;
 using Harbor.Ipc.Client;
@@ -218,7 +220,35 @@ internal static class HostBuilder
         builder.Logging.ClearProviders();
         var logLevel = Program.ResolveLogLevel(args);
 
-        if (logLevel <= LogLevel.Information)
+        // Interactive TUI detection: same logic as Program.Main. When an
+        // interactive TUI is active (SpectreTUI / Termina / Terminal.Gui /
+        // RazorConsole / Fullscreen / Spectre), the alt-screen buffer is owned
+        // by the TUI and any Console.Write from the simple-console logger
+        // corrupts the rendered frame. We:
+        //   * skip AddSimpleConsole (no Console.Out writes from ILogger),
+        //   * attach the shared IDiagnosticsPanel via DiagnosticsPanelLoggerProvider
+        //     so log entries flow into the in-TUI F12 panel,
+        //   * register the IDiagnosticsPanel singleton in DI so renderers can
+        //     resolve it from PanelContext.Services / IServiceProvider.
+        // File logging stays on regardless (HarborLogManager.Current is added
+        // by Program.Main and we re-attach the same instance here).
+        bool interactiveTui = TuiMode.WillEnterInteractiveTui(args);
+
+        // Re-attach the shared file logger so host-build / runtime logging lands
+        // in the same per-run file as Program.Main's pre-host logging.
+        var fileProvider = HarborLogManager.Current;
+        if (fileProvider is not null)
+            builder.Logging.AddProvider(fileProvider);
+
+        if (interactiveTui)
+        {
+            var panel = DiagnosticsSink.Initialize();
+            builder.Logging.AddProvider(new DiagnosticsPanelLoggerProvider(panel));
+            // Register the same singleton in DI so renderers can resolve it
+            // (PanelContext.Services.GetService<IDiagnosticsPanel>()).
+            builder.Services.AddSingleton<IDiagnosticsPanel>(panel);
+        }
+        else if (logLevel <= LogLevel.Information)
         {
             builder.Logging.AddSimpleConsole(o =>
             {

@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -65,6 +66,14 @@ public sealed class RazorConsoleRenderer : BaseTuiRenderer, IInteractiveTuiRende
     {
         _logger.LogInformation("Starting RazorConsole host");
         _bridge = new ChatBridge(agent, _slashHandler, _logger);
+        // Resolve the shared IDiagnosticsPanel (registered by HostBuilder when
+        // an interactive TUI is active). Null in tests / non-interactive modes.
+        // When non-null, the `/logs` slash command (intercepted locally in
+        // ChatBridge.SendAsync) dumps the last 10 log entries to the chat.
+        // RazorConsole does not expose a global F12 key handler the way
+        // SpectreTUI / Terminal.Gui do, so `/logs` is the documented escape
+        // hatch instead. See docs/TUI_FEATURE_GAPS.md.
+        _bridge.DiagnosticsPanel = host?.GetService(typeof(IDiagnosticsPanel)) as IDiagnosticsPanel;
 
         _host = new HostBuilder()
             .UseRazorConsole<ChatTui>()
@@ -254,6 +263,13 @@ public sealed class ChatBridge
     /// <summary>The active agent name.</summary>
     public string AgentName { get; }
 
+    /// <summary>
+    ///     Shared diagnostics panel (resolved from DI). When non-null, the
+    ///     <c>/logs</c> slash command dumps the last 10 log entries to the chat
+    ///     so the user can inspect runtime logging without leaving the TUI.
+    /// </summary>
+    public IDiagnosticsPanel? DiagnosticsPanel { get; set; }
+
     /// <summary>Whether the user has requested to quit.</summary>
     public bool QuitRequested { get; private set; }
 
@@ -284,6 +300,16 @@ public sealed class ChatBridge
 
         if (trimmed.StartsWith('/') && Slash is not null)
         {
+            // Local intercept: /logs dumps the last 10 log entries from the
+            // shared IDiagnosticsPanel. We handle it here rather than going
+            // through the external Slash handler (which routes to general
+            // CLI slash commands and doesn't have access to the bridge).
+            if (string.Equals(trimmed, "/logs", StringComparison.OrdinalIgnoreCase))
+            {
+                DumpDiagnostics();
+                return;
+            }
+
             try
             {
                 await Slash(trimmed).ConfigureAwait(false);
@@ -343,6 +369,27 @@ public sealed class ChatBridge
     public void PushLine(string role, string text)
     {
         _messages.Add(new ChatLine(role, text));
+        RaiseChanged();
+    }
+
+    /// <summary>
+    ///     Dump the last 10 log entries from the shared
+    ///     <see cref="DiagnosticsPanel" /> to the chat transcript. Called when
+    ///     the user submits <c>/logs</c>. Each entry is added as a system line.
+    ///     No-op (with a notice) when no panel is registered. Formatting is
+    ///     delegated to <see cref="Views.DiagnosticsView" /> so the rendering
+    ///     logic stays unit-testable in isolation.
+    /// </summary>
+    public void DumpDiagnostics()
+    {
+        if (DiagnosticsPanel is null)
+        {
+            PushLine(ChatRoles.System, "/logs: no diagnostics panel registered (non-interactive build).");
+            return;
+        }
+        var view = new Views.DiagnosticsView();
+        foreach (var line in view.Render(DiagnosticsPanel, max: 10))
+            _messages.Add(line);
         RaiseChanged();
     }
 

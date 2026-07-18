@@ -23,6 +23,7 @@ using Harbor.Scripting.Hosting;
 using Harbor.Scripting.Storage;
 #endif
 using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli;
@@ -50,30 +51,65 @@ public static class Program
         // file (harbor-cli-{timestamp}.log), FileMode.Append — never overwrites
         // a previous run. Rolling cleanup keeps the last 50 files.
         var fileProvider = HarborLogManager.Initialize("cli", LogLevel.Debug);
+
+        // Interactive TUI detection: when the user is about to enter an
+        // interactive TUI session (SpectreTUI / Termina / Terminal.Gui /
+        // RazorConsole / Fullscreen / Spectre), the TUI owns the alt-screen
+        // buffer and any stray Console.Write from the logger would corrupt the
+        // rendered frame. In that mode we:
+        //   * skip the simple-console logger (no Console.Out writes),
+        //   * initialize the shared IDiagnosticsPanel singleton and route
+        //     ILogger entries into it via DiagnosticsPanelLoggerProvider,
+        //   * the in-TUI panel (F12) shows the live log stream.
+        // One-shot commands (`harbor ask`, `harbor providers`, …) and
+        // non-interactive TUIs (plain, ansi) keep the console logger so the
+        // user sees output inline.
+        bool interactiveTui = Hosting.TuiMode.WillEnterInteractiveTui(args);
+        var diagnosticsPanel = interactiveTui ? Hosting.DiagnosticsSink.Initialize() : null;
+
         var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddProvider(fileProvider);
-
-            builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
-                (category, level) =>
+            if (diagnosticsPanel is not null)
+            {
+                // Interactive TUI mode: route logs to the in-TUI panel instead
+                // of the console. File logging stays on (fileProvider above).
+                builder.AddProvider(new DiagnosticsPanelLoggerProvider(diagnosticsPanel));
+            }
+            else
+            {
+                // Non-interactive: keep the console logger so the user sees
+                // output inline (one-shot commands, plain/ansi TUI).
+                builder.AddSimpleConsole(o =>
                 {
-                    if (category is not null && consoleLevel > LogLevel.Debug &&
-                        (category.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||
-                         category.StartsWith("Microsoft.Extensions.Hosting", StringComparison.Ordinal) ||
-                         category.StartsWith("Microsoft.Hosting", StringComparison.Ordinal)))
-                    {
-                        return level >= LogLevel.Warning;
-                    }
-                    return level >= consoleLevel;
+                    o.SingleLine = true;
+                    o.TimestampFormat = "HH:mm:ss.fff ";
+                    o.IncludeScopes = false;
                 });
+                builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
+                    (category, level) =>
+                    {
+                        if (category is not null && consoleLevel > LogLevel.Debug &&
+                            (category.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||
+                             category.StartsWith("Microsoft.Extensions.Hosting", StringComparison.Ordinal) ||
+                             category.StartsWith("Microsoft.Hosting", StringComparison.Ordinal)))
+                        {
+                            return level >= LogLevel.Warning;
+                        }
+                        return level >= consoleLevel;
+                    });
+            }
             // File provider filters itself by its own _fileLevel; set the
             // pipeline floor to Debug so the file actually receives Debug events.
+            // The diagnostics panel does its own ring-buffer eviction so we
+            // don't need a filter for it.
             builder.SetMinimumLevel(LogLevel.Debug);
         });
         _logger = loggerFactory.CreateLogger(typeof(Program).FullName ?? "Program");
 
         _logger.LogInformation("Starting Harbor CLI with {ArgCount} args: {Args}", args.Length, string.Join(' ', args));
-        _logger.LogInformation("Console log level: {ConsoleLevel}; file log: {FilePath}", consoleLevel, fileProvider.FilePath);
+        _logger.LogInformation("Console log level: {ConsoleLevel}; file log: {FilePath}; interactive-tui: {InteractiveTui}",
+            consoleLevel, fileProvider.FilePath, interactiveTui);
         try
         {
             if (args.Length == 0)
