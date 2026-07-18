@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.E2E.App.Blazor - end-to-end tests for the Harbor Blazor Server app.
+    Spins up Kestrel on a random port (via CliDriver), then issues real HTTP
+    requests with HttpClient. No browser automation — pure HTTP.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CA1707;S3267;S2365;S2445;S6618;TUnit0055</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <ProjectReference Include="..\..\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>

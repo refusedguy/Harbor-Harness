@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.E2E.Tui.RazorConsole - end-to-end tests for the RazorConsole-based
+    TUI renderer (Razor components projected onto the terminal).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CA1707;S3267;S2365;S2445;S6618;TUnit0055</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <ProjectReference Include="..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>
