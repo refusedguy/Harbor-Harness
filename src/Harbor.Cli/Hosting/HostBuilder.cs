@@ -9,6 +9,13 @@ using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
+using Harbor.Core.Tools;
+using Harbor.Plugins.Runtime;
+using Harbor.Plugins.Runtime.Compilation;
+using Harbor.Plugins.Runtime.Hosting;
+using Harbor.Plugins.Runtime.Instantiation;
+using Harbor.Plugins.Runtime.Registration;
+using Harbor.Plugins.Runtime.Storage;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
@@ -17,6 +24,7 @@ using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.Abstractions;
+using Harbor.Tui.Abstractions.Panels;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Tui.RazorConsole;
@@ -57,10 +65,10 @@ internal static class HostBuilder
 
         _logger.LogInformation("Building host");
         RegisterCore(builder);
+        RegisterHttpClients(builder);
         RegisterRegistries(builder, harborDir);
         RegisterStorage(builder, sessionsDir, sqlitePath);
         RegisterTui(builder);
-        RegisterHttpClients(builder);
         return builder.Build();
     }
 
@@ -98,16 +106,106 @@ internal static class HostBuilder
     private static void RegisterRegistries(HostApplicationBuilder builder, string harborDir)
     {
         _logger.LogInformation("Loading config");
-        var configStore = new JsonConfigStore(logger: builder.Services.BuildServiceProvider().GetRequiredService<ILogger<JsonConfigStore>>());
+        var tempSp = builder.Services.BuildServiceProvider();
+        var loggerFactory = tempSp.GetRequiredService<ILoggerFactory>();
+        var configStore = new JsonConfigStore(logger: loggerFactory.CreateLogger<JsonConfigStore>());
 #pragma warning disable RS0030 // Do not use APIs banned for analyzers — DI setup is synchronous, no SynchronizationContext present
         var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
 #pragma warning restore RS0030
         ApplyEnvOverrides(config);
 
         _logger.LogInformation("Registering agents, tools, providers, compaction, and permissions");
-        builder.Services.AddSingleton<IAgentRegistry>(sp => CreateAgentRegistry(config));
-        builder.Services.AddSingleton<IToolRegistry>(sp => CreateToolRegistry(sp));
-        builder.Services.AddSingleton<IProviderRegistry>(sp => CreateProviderRegistry(sp, harborDir, config));
+
+        // Construct registries eagerly so CS plugins can extend them BEFORE builder.Build().
+        // The instances are then registered as singletons so the final ServiceProvider uses
+        // the same registry objects the plugin loader wrote into.
+        var agentRegistry = CreateAgentRegistry(config);
+        builder.Services.AddSingleton<IAgentRegistry>(agentRegistry);
+        // MCP registry is constructed eagerly so the builtin `mcp` tool can be wired with
+        // a concrete registry reference at tool-registration time (ToolContext.Services is
+        // not populated by the default AgentLoop, so we can't rely on late resolution).
+        var mcpRegistry = new InMemoryMcpRegistry(
+            loggerFactory.CreateLogger<InMemoryMcpRegistry>());
+        builder.Services.AddSingleton<IMcpRegistry>(mcpRegistry);
+        // Rebuild the temporary ServiceProvider so eager registry construction below
+        // (e.g. TaskTool resolving IAgentRegistry) can resolve already-registered services.
+        tempSp = builder.Services.BuildServiceProvider();
+        var toolRegistry = CreateToolRegistry(tempSp, mcpRegistry);
+        var providerRegistry = CreateProviderRegistry(tempSp, harborDir, config);
+        var eventBus = tempSp.GetRequiredService<IEventBus>();
+        // The host-owned PanelRegistry. Plugin-contributed IPanelProviders land here
+        // via IPluginLoadHost.RegisterPanelProvider; the SpectreTUI renderer resolves
+        // the same singleton from DI when its interactive loop starts.
+        var panelRegistry = new PanelRegistry(
+            loggerFactory.CreateLogger<PanelRegistry>());
+
+        // Run the CS-source plugin loader. Adds tools / providers / agents / TUI plugins
+        // contributed via Roslyn-compiled .cs files in ~/.harbor/plugins/ or
+        // <cwd>/.harbor/plugins/.
+        //
+        // Composed from the four layers: storage (FileSystemPluginSource) →
+        // compilation (CachingCompiler over RoslynPluginCompiler) → instantiation
+        // (ReflectionPluginInstantiator) → registration (SafePluginRegistrar over
+        // PluginRegistrar). Each layer is independently swappable.
+        var pluginHost = new PluginLoadHost(
+            services: builder.Services,
+            configuration: builder.Configuration,
+            loggerFactory: loggerFactory,
+            eventBus: eventBus,
+            tools: toolRegistry,
+            providers: providerRegistry,
+            agents: agentRegistry,
+            panels: panelRegistry);
+
+        string globalPluginsDir = Path.Combine(harborDir, "plugins");
+        string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
+        string pluginsCacheDir = Path.Combine(globalPluginsDir, "cache");
+        var pluginReferences = new PluginAssemblyReferences(
+            loggerFactory.CreateLogger<PluginAssemblyReferences>());
+
+        var pluginRuntime = new PluginHostBuilder()
+            .WithSource(new FileSystemPluginSource(
+                new[] { globalPluginsDir, projectPluginsDir },
+                loggerFactory.CreateLogger<FileSystemPluginSource>()))
+            .WithCompiler(new CachingCompiler(
+                new RoslynPluginCompiler(pluginReferences),
+                pluginsCacheDir,
+                loggerFactory.CreateLogger<CachingCompiler>()))
+            .WithInstantiator(new ReflectionPluginInstantiator())
+            .WithRegistrar(new SafePluginRegistrar(
+                new PluginRegistrar(globalPluginsDir, loggerFactory.CreateLogger<PluginRegistrar>()),
+                loggerFactory.CreateLogger<SafePluginRegistrar>()))
+            .WithOptions(o => o.PluginRoot = globalPluginsDir)
+            .Build(loggerFactory.CreateLogger<PluginHost>());
+#pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load above.
+        var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
+#pragma warning restore RS0030
+        if (pluginResult.IsSuccess)
+        {
+            _logger.LogInformation("Loaded {Count} CS plugin(s)", pluginResult.Value.Count);
+            foreach (var p in pluginResult.Value)
+            {
+                _logger.LogInformation("  - {DisplayName} (from cache: {FromCache})", p.DisplayName, p.LoadedFromCache);
+            }
+        }
+        else
+        {
+            _logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
+        }
+
+        // Re-freeze the registries so post-Build() lookups hit the frozen O(1) snapshot.
+        // Plugins added entries via Register which invalidated the previous snapshot.
+        toolRegistry.Freeze();
+        providerRegistry.Freeze();
+
+        // Register the already-constructed instances as singletons. The previous factory
+        // descriptors remain in the ServiceCollection but the instance descriptors win.
+
+        builder.Services.AddSingleton<IToolRegistry>(toolRegistry);
+        builder.Services.AddSingleton<IProviderRegistry>(providerRegistry);
+        builder.Services.AddSingleton<IEventBus>(eventBus);
+        builder.Services.AddSingleton(panelRegistry);
+        builder.Services.AddSingleton<IPanelRegistry>(panelRegistry);
         builder.Services.AddSingleton<ICompactionService>(sp => new CompactionService(
             sp.GetRequiredService<ITokenEstimator>(),
             sp.GetRequiredService<IProviderRegistry>(),
@@ -141,7 +239,7 @@ internal static class HostBuilder
         return registry;
     }
 
-    private static ToolRegistry CreateToolRegistry(IServiceProvider sp)
+    private static ToolRegistry CreateToolRegistry(IServiceProvider sp, IMcpRegistry mcpRegistry)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry);
@@ -154,8 +252,25 @@ internal static class HostBuilder
         tb.AddTool(() => new GrepTool(loggerFactory.CreateLogger<GrepTool>()));
         tb.AddTool(() => new LsTool(loggerFactory.CreateLogger<LsTool>()));
         tb.AddTool(new TaskTool(sp.GetRequiredService<IAgentRegistry>(), loggerFactory.CreateLogger<TaskTool>()));
+
+        // ── Extended builtin tools (see docs/TOOLS_CATALOG.md) ──
+        // WebFetch: parallel HTTP fetch + HTML→markdown conversion (no deps).
+        tb.AddTool(() => new WebFetchTool(loggerFactory.CreateLogger<WebFetchTool>()));
+        // Patch: unified-diff applier, atomic write, context-validated.
+        tb.AddTool(() => new PatchTool(loggerFactory.CreateLogger<PatchTool>()));
+        // Notebook: per-session persistent markdown notes (JSON file under ~/.harbor/notes).
+        tb.AddTool(() => new NotebookTool(loggerFactory.CreateLogger<NotebookTool>()));
+        // RipGrep: thin wrapper over the `rg` binary; falls back to an error if rg missing.
+        tb.AddTool(() => new RipGrepTool(loggerFactory.CreateLogger<RipGrepTool>()));
+        // Tree: ASCII directory tree, respects .gitignore when git is available.
+        tb.AddTool(() => new TreeTool(loggerFactory.CreateLogger<TreeTool>()));
+        // Mcp: bridge to MCP servers via the registry; wired eagerly so it works even when
+        // ToolContext.Services is null (default AgentLoop does not populate it).
+        tb.AddTool(new McpToolTool(mcpRegistry, loggerFactory.CreateLogger<McpToolTool>()));
+
         registry.Freeze();
-        _logger.LogInformation("Registered {Count} tools", 8);
+        const int toolCount = 14;
+        _logger.LogInformation("Registered {Count} tools", toolCount);
         return registry;
     }
 
@@ -215,10 +330,25 @@ internal static class HostBuilder
             "plain" => new PlainTuiRenderer(),
             "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
             "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
-            "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(sp.GetRequiredService<ILogger<Tui.SpectreTui.SpectreTuiRenderer>>()),
+            "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(
+                sp.GetRequiredService<ILogger<Tui.SpectreTui.SpectreTuiRenderer>>(),
+                sp.GetService<PanelRegistry>()),
             "terminal-gui" => new TerminalGuiRenderer(sp.GetRequiredService<ILogger<TerminalGuiRenderer>>()),
             "termina" => new TerminaRenderer(sp.GetRequiredService<ILogger<TerminaRenderer>>()),
             "razor" => new RazorConsoleRenderer(sp.GetRequiredService<ILogger<RazorConsoleRenderer>>()),
+
+            // ── Alternative UI renderers (see docs/ALTERNATIVE_UIS.md) ──
+            // To enable, add the matching ProjectReference to Harbor.Cli.csproj and
+            // (for MAUI) install the workload: `dotnet workload install maui`.
+            // Then uncomment the case you need.
+            //
+            // "wpf"            => new Harbor.Tui.Wpf.WpfTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Wpf.WpfTuiRenderer>>()),
+            // "avalonia"       => new Harbor.Tui.Avalonia.AvaloniaTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Avalonia.AvaloniaTuiRenderer>>()),
+            // "maui"           => new Harbor.Tui.Maui.MauiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Maui.MauiTuiRenderer>>()),
+            // "blazor"         => new Harbor.Tui.Blazor.BlazorTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Blazor.BlazorTuiRenderer>>()),
+            // "sixel"          => new Harbor.Tui.Sixel.SixelTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Sixel.SixelTuiRenderer>>()),
+            // "notifications"  => new Harbor.Tui.Notifications.NotificationTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Notifications.NotificationTuiRenderer>>()),
+
             _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
         });
     }

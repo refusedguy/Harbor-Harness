@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
     <ProjectReference Include="..\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="..\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
@@ -31,6 +32,7 @@
     <ProjectReference Include="..\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+    <ProjectReference Include="..\Harbor.Scripting\Harbor.Scripting.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

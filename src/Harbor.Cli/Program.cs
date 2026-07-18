@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -8,6 +9,11 @@ using Harbor.Cli.Logging;
 using Harbor.Cli.Repl;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
+using Harbor.Scripting.Bridge;
+using Harbor.Scripting.Compilation;
+using Harbor.Scripting.Engines;
+using Harbor.Scripting.Hosting;
+using Harbor.Scripting.Storage;
 using Harbor.Tui.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -21,6 +27,12 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        // Extract --script <path> (or --script=<path>) from args before dispatch.
+        // The script is run after the host is built but before the REPL/ask loop
+        // starts — so script-registered tools are available to the agent.
+        string? scriptPath = ExtractScriptArg(args, out var remainingArgs);
+        args = remainingArgs;
+
         var logLevel = ResolveLogLevel(args);
         var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -43,14 +55,14 @@ public static class Program
             if (args.Length == 0)
             {
                 _logger.LogInformation("No args provided — entering interactive mode");
-                return await RunInteractiveAsync(args);
+                return await RunInteractiveAsync(args, scriptPath);
             }
 
             string command = args[0].ToLowerInvariant();
             _logger.LogInformation("Command: {Command}", command);
             return command switch
             {
-                "ask" => await RunAskAsync(args.Skip(1).ToArray()),
+                "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
                 "providers" => await RunListProvidersAsync(),
                 "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
                 "sessions" => await RunListSessionsAsync(),
@@ -61,7 +73,7 @@ public static class Program
                 "config" => await RunConfigAsync(args.Skip(1).ToArray()),
                 "help" or "--help" or "-h" => PrintHelp(),
                 "version" or "--version" or "-v" => PrintVersion(),
-                _ => await RunInteractiveAsync()
+                _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
             };
         }
         catch (Exception ex)
@@ -72,28 +84,133 @@ public static class Program
         }
     }
 
-    private static async Task<int> RunInteractiveAsync(params string[] args)
+    private static async Task<int> RunInteractiveAsync(string[] args, string? scriptPath = null)
     {
         _logger.LogInformation("Starting interactive mode");
         using var host = HostBuilder.Build(args);
+        var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
+        if (scriptResult.IsFailure)
+        {
+            _logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
+        }
         var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
         int exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
         return exitCode;
     }
 
-    private static async Task<int> RunAskAsync(string[] args)
+    private static async Task<int> RunAskAsync(string[] args, string? scriptPath = null)
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: harbor ask <prompt>");
+            Console.Error.WriteLine("Usage: harbor ask <prompt> [--script <path>]");
             return 1;
         }
         string prompt = string.Join(' ', StripLogArgs(args));
         _logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
         using var host = HostBuilder.Build(args);
+        var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
+        if (scriptResult.IsFailure)
+        {
+            _logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
+        }
         var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
         return await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Run a script file at startup via <see cref="ScriptHost" />. The script's
+    ///     <c>Harbor.registerTool</c> calls register tools in the live
+    ///     <see cref="IToolRegistry" />, making them available to the agent.
+    /// </summary>
+    /// <returns>Success, or failure with an error message. Never throws for expected script failures.</returns>
+    private static async Task<CSharpFunctionalExtensions.Result> RunStartupScriptAsync(IServiceProvider services, string? scriptPath)
+    {
+        if (string.IsNullOrEmpty(scriptPath))
+        {
+            return CSharpFunctionalExtensions.Result.Success();
+        }
+
+        var tools = services.GetRequiredService<IToolRegistry>();
+        var providers = services.GetRequiredService<IProviderRegistry>();
+        var agents = services.GetRequiredService<IAgentRegistry>();
+        var loggerFactory = services.GetRequiredService<ILoggerFactory>();
+
+        // Compose the script host: SharpTS engine (default) + tsc compiler
+        // fallback + in-memory store seeded with the one-shot script path.
+        // SharpTS handles TypeScript natively (no tsc needed); if `sharpts`
+        // is not on PATH, the host falls back to the Jint engine.
+        var sharpTsLogger = loggerFactory.CreateLogger<SharpTsScriptEngine>();
+        var jintLogger = loggerFactory.CreateLogger("Harbor.Scripting.Jint");
+        var tscLogger = loggerFactory.CreateLogger<TscCompiler>();
+        var hostLogger = loggerFactory.CreateLogger<ScriptHost>();
+
+        var sharpTs = new SharpTsScriptEngine(sharpTsLogger);
+        IScriptEngine engine = sharpTs.IsAvailable
+            ? sharpTs
+            : new JintScriptEngine(jintLogger);
+        IScriptCompiler compiler = engine is SharpTsScriptEngine
+            ? new PassThroughCompiler()
+            : new TscCompiler(tscLogger);
+
+        var globals = new ScriptGlobals
+        {
+            Tools = tools,
+            Providers = providers,
+            Agents = agents,
+            Logger = loggerFactory.CreateLogger("Harbor.Script")
+        };
+
+        var host = new ScriptHost(engine, new InMemoryScriptStore(), compiler, hostLogger);
+        string fullPath = Path.GetFullPath(scriptPath);
+        string source;
+        try
+        {
+            source = File.ReadAllText(fullPath);
+        }
+        catch (Exception ex)
+        {
+            return CSharpFunctionalExtensions.Result.Failure($"Failed to read script '{fullPath}': {ex.Message}");
+        }
+
+        var result = await host.EvaluateAsync(fullPath, source, globals).ConfigureAwait(false);
+        return result.IsSuccess
+            ? CSharpFunctionalExtensions.Result.Success()
+            : CSharpFunctionalExtensions.Result.Failure(result.Error ?? "Script evaluation failed.");
+    }
+
+    /// <summary>
+    ///     Extract <c>--script &lt;path&gt;</c> (or <c>--script=&lt;path&gt;</c>) from the
+    ///     argument list. Returns the script path (or <see langword="null" /> if not
+    ///     present) and the remaining args with the flag stripped.
+    /// </summary>
+    internal static string? ExtractScriptArg(string[] args, out string[] remaining)
+    {
+        var remainingList = new List<string>(args.Length);
+        string? scriptPath = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            string a = args[i];
+            if (a.Equals("--script", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 < args.Length)
+                {
+                    scriptPath = args[i + 1];
+#pragma warning disable S127 // Intentional: consume the value token alongside the flag.
+                    i++;
+#pragma warning restore S127
+                }
+                continue;
+            }
+            if (a.StartsWith("--script=", StringComparison.OrdinalIgnoreCase))
+            {
+                scriptPath = a["--script=".Length..];
+                continue;
+            }
+            remainingList.Add(a);
+        }
+        remaining = remainingList.ToArray();
+        return scriptPath;
     }
 
     private static async Task<int> RunSetupAsync()
@@ -224,7 +341,19 @@ public static class Program
 
     private static int PrintTuiOptions()
     {
-        Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen");
+        Console.WriteLine("""
+                          TUI renderers (set HARBOR_TUI):
+                            Terminal:  ansi (default), plain, spectre, fullscreen, spectre-tui,
+                                       terminal-gui, termina, razor, sixel
+                            Desktop:   wpf (Windows), avalonia (cross-platform), maui (WinUI/Android/iOS/Mac)
+                            Web:       blazor (Blazor Server, http://localhost:5000)
+                            Non-interactive: notifications (desktop OS notifications only)
+
+                          See docs/ALTERNATIVE_UIS.md for the full comparison.
+                          Note: wpf/avalonia/maui/blazor/sixel/notifications require adding the
+                          corresponding Harbor.Tui.* project reference to Harbor.Cli.csproj
+                          (and the matching workload — e.g. `dotnet workload install maui`).
+                          """);
         return 0;
     }
     private static int PrintStorageOptions()
@@ -237,7 +366,10 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|help|version]
+                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|help|version] [--script <path>]
+
+                          --script <path>   Run a .js or .ts script at startup (registers tools via Harbor.registerTool).
+                                            See docs/SCRIPTING.md for the full comparison of CS / Jint / SharpTS / MCP.
                           """);
         return 0;
     }

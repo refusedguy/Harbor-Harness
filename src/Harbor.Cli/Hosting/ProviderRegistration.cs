@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Hosting;
 /// <summary>
@@ -42,6 +43,11 @@ internal static class ProviderRegistration
 
                 var http = httpClientFactory.CreateClient($"provider:{config.Id}");
                 http.Timeout = TimeSpan.FromSeconds(config.Timeout);
+                // §OOP-002 (RESOLVED): attach provider-specific compat flags
+                // (Strategy pattern) so the client can apply them without hardcoding
+                // provider ids. ProviderCompatFlags.For returns null when there are
+                // no flags for this provider, which the client treats as no-op.
+                config.Quirks = ProviderCompatFlags.For(config.GetProviderId());
                 builder.AddProvider(config.Id, () => new OpenAiCompatibleLlmClient(
                     http, config,
                     new ConfigAuthResolver(authStore, config.Id),
@@ -68,6 +74,11 @@ internal static class ProviderRegistration
 
             var http = httpClientFactory.CreateClient($"provider:{config.Value.Id}");
             http.Timeout = TimeSpan.FromSeconds(config.Value.Timeout);
+            // §OOP-002 (RESOLVED): attach provider-specific compat flags
+            // (Strategy pattern) so the client can apply them without hardcoding
+            // provider ids. ProviderCompatFlags.For returns null when there are
+            // no flags for this provider, which the client treats as no-op.
+            config.Value.Quirks = ProviderCompatFlags.For(config.Value.GetProviderId());
             builder.AddProvider(config.Value.Id, () => new OpenAiCompatibleLlmClient(
                 http, config.Value,
                 new ConfigAuthResolver(authStore, config.Value.Id),
