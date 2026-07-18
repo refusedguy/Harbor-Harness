@@ -104,3 +104,5 @@ runtime/
 ## Docs build
 _site/
 api/
+
+.avalonia-build-tasks/
