@@ -4,20 +4,16 @@
     Harbor.App.Avalonia — standalone ORCA-level desktop GUI for Harbor.
     Composition root: depends on Harbor.Abstractions + Harbor.Terminal.Abstractions + Harbor.Core +
     Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama + Harbor.Providers.OpenAiCompatible.
-    Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 11.2
+    Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 12.1
     desktop lifetime with Catppuccin-Mocha dark theme, code editor (AvaloniaEdit), streaming chat,
-    session manager, command palette, diff view, token-usage chart, plugin panel host.
+    session manager, command palette, diff view, token-usage chart, plugin panel host,
+    and a custom-drawn Windows title bar (ExtendClientAreaToDecorationsHint).
   -->
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <UseAvalonia>true</UseAvalonia>
-    <!-- Avalonia 12 enables compiled bindings by default, which require an
-         explicit x:DataType on every binding. This repo's AXAML uses v11-style
-         reflection bindings without x:DataType, so disable compiled bindings
-         project-wide to keep them working unchanged. -->
-    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.App.Avalonia</PackageId>
     <Description>Harbor standalone Avalonia desktop app — ORCA-level coding agent GUI.</Description>
@@ -45,6 +41,16 @@
     <!-- Avalonia XAML codegen emits some pattern-matching warnings under .NET 10 analyzers. -->
     <NoWarn>$(NoWarn);AVLN1000;AVLN1001</NoWarn>
 
+    <!-- Avalonia 12 promotes AVLN2100 (missing x:DataType on compiled bindings)
+         from warning → error. Adding x:DataType to every view is a separate UI
+         task; for now we disable compiled bindings project-wide so the launch
+         build unblocks. Reflection-based bindings work identically at runtime —
+         the only cost is compile-time binding validation. Re-enable per-view
+         via x:DataType directives during the ORCA UI redesign (Task U2).
+         AvaloniaUseCompiledBindingsByDefault is the canonical Avalonia 12
+         property name (see AvaloniaBuildTasks.targets line 185). -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+
     <!-- Source-generator MVVM emits some unused-field warnings. -->
     <NoWarn>$(NoWarn);CS0169;CS0414;CA1823</NoWarn>
 
@@ -54,10 +60,12 @@
     <NoWarn>$(NoWarn);MA0046</NoWarn>
   </PropertyGroup>
 
-  <!-- Expose internals to the DI test project so it can call AppHost.BuildAsync
-       directly and assert every expected service is resolvable. -->
+  <!-- Expose internals to the DI test project + the E2E test project so they
+       can call AppHost.BuildAsync() directly. The E2E driver uses this to
+       spin up the real DI container inside an Avalonia.Headless app. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
+    <InternalsVisibleTo Include="Harbor.E2E.App.Avalonia"/>
   </ItemGroup>
 
   <ItemGroup>
@@ -87,14 +95,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Avalonia 12.1.0 stable (all packages kept at the same version via
-         Directory.Packages.props central package management to avoid the
-         PlatformNotSupportedException that results from a mixed 11.2/12.x
-         runtime + theme assembly mismatch). -->
+    <!-- Avalonia 12.1.x stable (Avalonia.Diagnostics pinned to 11.3.x because
+         the diagnostics inspector package has not been published for 12.x yet). -->
     <PackageReference Include="Avalonia"/>
     <PackageReference Include="Avalonia.Desktop"/>
     <PackageReference Include="Avalonia.Themes.Fluent"/>
     <PackageReference Include="Avalonia.Fonts.Inter"/>
+    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'"/>
     <!-- Avalonia.AvaloniaEdit 12.0.0 is the build matched to Avalonia 12.x -->
     <PackageReference Include="Avalonia.AvaloniaEdit"/>
     <!-- Markdown parsing (no rendering — we project to Avalonia controls in ChatMarkdown.cs) -->

@@ -97,11 +97,23 @@
     <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
     <PackageVersion Include="Termina" Version="0.15.0" />
     <PackageVersion Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409" />
+    <!-- Avalonia 12.1.x — latest stable line (released 2026-Q3). Brings the
+         new Win32 chrome renderer (ExtendClientAreaChromeHints), fixed
+         Dispatcher.MainLoop PlatformNotSupportedException on Windows without
+         a RID, and Skia 3.x. Avalonia.AvaloniaEdit 12.0.0 is the matched
+         code-editor build. Avalonia.Diagnostics stays on 11.3.x because the
+         diagnostics inspector was not published for the 12.x line yet. -->
     <PackageVersion Include="Avalonia" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.0" />
-    <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+    <!-- Avalonia.Headless — in-process off-screen renderer for E2E tests with screenshot capture. -->
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.0" />
+    <!-- Avalonia.Skia — software renderer used by Avalonia.Headless when
+         UseHeadlessDrawing=false. Required for CaptureRenderedFrame() to
+         produce a real Bitmap we can save as PNG. -->
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.18" />
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
     <PackageVersion Include="AvalonEdit" Version="6.3.0.90" />

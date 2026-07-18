@@ -27,11 +27,8 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 
 using var host = await AppHost.BuildAsync(args);
 
-
 AppBuilder.Configure<App>()
-    .UseWin32()
-    .UseSkia()
-    .UseHarfBuzz()
+    .UsePlatformDetect()
     .WithInterFont()
     .LogToTrace()
     .AfterSetup(_ =>
