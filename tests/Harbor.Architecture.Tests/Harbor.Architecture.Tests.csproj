@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      Architecture tests intentionally probe the layering invariants of every
+      Harbor assembly. TreatWarningsAsErrors is OFF here because we load assemblies
+      via reflection (which Sonar's S3011 / ReflectionAnalyzers sometimes flags)
+      and we want a clean test runner exit even if a single rule's diagnostic
+      triggers on a probe helper.
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;S3011;S2365;CA1851</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    NetArchTest.Rules — fluent DSL for asserting assembly-level dependency
+    invariants. Used by NetArchLayerRules.cs. The reflection-based
+    LayerDependencyTests.cs file remains as the zero-dependency fallback so
+    the layering rules still run even if NetArchTest ever fails to restore.
+  -->
+  <ItemGroup>
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2"/>
+    <PackageReference Include="TUnit.Assertions" Version="0.50.0"/>
+  </ItemGroup>
+
+  <!--
+    Reference every Harbor project so the test runner loads each assembly into
+    the default AppDomain. Architecture tests then call Assembly.GetReferencedAssemblies()
+    on each to assert that the layering invariants from docs/ARCHITECTURE_LAYERS.md hold.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting\Harbor.Scripting.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+</Project>

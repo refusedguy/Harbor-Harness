@@ -1,4 +1,4 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -278,7 +278,8 @@ public class SpectreTuiChatViewProjectorTests
 
         var widgets = layout.BuildWidgets(0);
 
-        await Assert.That(widgets.Count).IsEqualTo(6);
+        // 4 base widgets (Header/History/Input/Footer); StreamBar only added when streaming.
+        await Assert.That(widgets.Count).IsEqualTo(4);
         await Assert.That(widgets.ContainsKey("History")).IsTrue();
     }
 
@@ -291,7 +292,8 @@ public class SpectreTuiChatViewProjectorTests
 
         var widgets = layout.BuildWidgets(0);
 
-        await Assert.That(widgets.Count).IsEqualTo(6);
+        // 5 widgets when streaming (Header/History/StreamBar/Input/Footer).
+        await Assert.That(widgets.Count).IsEqualTo(5);
         await Assert.That(layout.IsStreaming).IsTrue();
     }
 
@@ -312,7 +314,9 @@ public class SpectreTuiChatViewProjectorTests
         var layout = new ChatViewProjector();
         layout.SetLines(lines, false, ActiveMessage.Empty);
 
-        // 3 messages → (1+1) + (10+1) + (1+1) = 15 display rows total.
+        // 3 messages → (header+1+gap) + (header+10+gap) + (header+1+gap) = 18 display
+        // rows total when ChatMarkdown.Enabled. ChatMessageFormatter.AppendRole emits
+        // a role header before each non-ToolResult message and a trailing gap row.
         const int viewport = 5;
         layout.BuildWidgets(viewport);
 
@@ -322,7 +326,7 @@ public class SpectreTuiChatViewProjectorTests
 
         // TotalLines is the FULL wrapped content, not the truncated visible window,
         // so scroll math has a correct denominator.
-        await Assert.That(layout.TotalLines).IsEqualTo(15);
+        await Assert.That(layout.TotalLines).IsEqualTo(18);
         await Assert.That(layout.ViewportLines).IsEqualTo(viewport);
     }
 
@@ -342,13 +346,14 @@ public class SpectreTuiChatViewProjectorTests
         layout.ScrollOffset = 0;
         layout.BuildWidgets(viewport);
         int pinnedTop = layout.HistoryTopRow;
-        await Assert.That(layout.TotalLines).IsEqualTo(23); // 20 + blank + 1 + blank
-        await Assert.That(pinnedTop).IsEqualTo(23 - viewport);
+        // 20-line assistant (header + 20 + gap = 22) + 1-line user (header + 1 + gap = 3) = 25.
+        await Assert.That(layout.TotalLines).IsEqualTo(25);
+        await Assert.That(pinnedTop).IsEqualTo(25 - viewport);
 
         // Offset lifts N display rows from the bottom; the slice shifts upward.
         layout.ScrollOffset = 10;
         layout.BuildWidgets(viewport);
-        await Assert.That(layout.HistoryTopRow).IsEqualTo(23 - viewport - 10);
+        await Assert.That(layout.HistoryTopRow).IsEqualTo(25 - viewport - 10);
         await Assert.That(layout.HistoryTopRow).IsNotEqualTo(pinnedTop);
     }
 
@@ -369,9 +374,9 @@ public class SpectreTuiChatViewProjectorTests
         layout.BuildWidgets(10);
         int scrolledTotal = layout.TotalLines;
 
-        // Source is 1 line (+blank) = 2 display rows; stream adds think+assistant+blanks.
+        // Source is 1 user line = header + 1 body + gap = 3 display rows.
         await Assert.That(pinnedTotal).IsGreaterThan(scrolledTotal);
-        await Assert.That(scrolledTotal).IsEqualTo(2);
+        await Assert.That(scrolledTotal).IsEqualTo(3);
     }
 }
 

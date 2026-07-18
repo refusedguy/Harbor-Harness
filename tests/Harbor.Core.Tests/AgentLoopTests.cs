@@ -96,7 +96,11 @@ public class AgentLoopTests
         await Assert.That(receivedEvents.Any(e => e is AgentStartEvent)).IsTrue();
         await Assert.That(receivedEvents.Any(e => e is TurnStartEvent)).IsTrue();
         await Assert.That(receivedEvents.Any(e => e is MessageStartEvent)).IsTrue();
-        await Assert.That(receivedEvents.Count(e => e is MessageUpdateEvent)).IsEqualTo(2);
+        // MessageUpdateEvent fires once per streamed TextDelta PLUS once on StepFinishEvent
+        // (the loop forwards StepFinish to the bus so status bars / views can tally token
+        // usage — see AgentLoop.StreamAsync switch → case StepFinishEvent). For the
+        // 2-delta script here, that is 2 (deltas) + 1 (step finish) = 3 updates.
+        await Assert.That(receivedEvents.Count(e => e is MessageUpdateEvent)).IsEqualTo(3);
         await Assert.That(receivedEvents.Any(e => e is MessageEndEvent)).IsTrue();
         await Assert.That(receivedEvents.Any(e => e is AgentEndEvent)).IsTrue();
     }
