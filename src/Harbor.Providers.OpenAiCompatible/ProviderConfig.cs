@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.OpenAiCompatible;
@@ -30,6 +32,14 @@ public sealed class ProviderConfig
     public Dictionary<string, string>? Capabilities { get; set; }
     public int Timeout { get; set; } = 60;
     public int Retries { get; set; } = 3;
+
+    /// <summary>
+    ///     §OOP-002 (RESOLVED): provider-specific request quirks (Strategy pattern).
+    ///     Populated by the registration code (see <see cref="ProviderCompatFlags.For" />);
+    ///     not deserialized from JSON. May be <see langword="null" /> when the provider
+    ///     has no quirks — the client treats null and empty identically.
+    /// </summary>
+    public IReadOnlyList<IProviderCompatFlag>? Quirks { get; set; }
 
     public ProviderId GetProviderId() => ProviderId.Create(Id);
 

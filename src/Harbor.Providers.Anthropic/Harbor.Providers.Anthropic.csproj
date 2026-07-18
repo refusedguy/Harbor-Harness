@@ -9,8 +9,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- §ARCH-003: Infrastructure references Domain (Harbor.Abstractions) ONLY. -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

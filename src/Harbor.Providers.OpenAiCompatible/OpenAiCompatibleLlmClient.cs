@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
+using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
 /// <summary>
@@ -21,12 +22,6 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     private readonly HttpClient _http;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
     private readonly IModelCatalog _modelCatalog;
-
-    // State carried across streaming chunks for a single StreamAsync call:
-    // OpenAI sends tool_call id/name only in the first delta of a given index,
-    // while arguments arrive as fragments across subsequent deltas. We map by
-    // the stable `index` so all fragments of one tool call share one id.
-    private readonly Dictionary<int, string> _toolCallIndexToId = new();
 
     public OpenAiCompatibleLlmClient(
         HttpClient http,
@@ -94,8 +89,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                     using var reader = new StreamReader(stream);
 
-                    // Reset per-stream tool-call accumulation state.
-                    _toolCallIndexToId.Clear();
+                    // §OOP-001 (RESOLVED): the tool-call index→id map is per-StreamAsync-call
+                    // state. It used to be a shared instance field on the client (a singleton),
+                    // which raced when two sessions shared one provider client. It now lives
+                    // as a local captured by the MapChunk closure, so concurrent StreamAsync
+                    // calls each get their own map without any synchronisation.
+                    var indexToId = new Dictionary<int, string>(capacity: 4);
 
                     string? line;
                     while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
@@ -111,7 +110,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                             return;
                         }
 
-                        foreach (var evt in MapChunk(data))
+                        foreach (var evt in MapChunk(data, indexToId))
                         {
                             await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
                         }
@@ -144,6 +143,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     private HttpRequestMessage BuildRequest(LlmRequest request, string apiKey)
     {
+        // TODO(principles)[PERF, байтоебля, FP]: BuildRequest конструирует
+        // Dictionary<string,object?> + анонимные типы + JsonSerializer.Serialize(payload, JsonOptions)
+        // на каждый вызов. Это: (1) reflection-based serialize (non-AOT-friendly), (2)
+        // боксинг value types в object, (3) closure над request. Для hot path правильнее
+        // использовать Utf8JsonWriter + ArrayPool<byte> и писать JSON напрямую в stream
+        // без intermediate Dictionary. См. аудит §PERF-002, §FP-001 (mutability).
         string url = $"{_config.BaseUrl.TrimEnd('/')}/chat/completions";
 
         var payload = new Dictionary<string, object?>
@@ -206,14 +211,20 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
     private void ApplyCompatFlags(Dictionary<string, object?> payload, LlmRequest request)
     {
-        if (ProviderId.Value == "deepseek" && request.Model.Contains("reasoner", StringComparison.OrdinalIgnoreCase))
-        {
-            payload.Remove("temperature");
-        }
+        // §OOP-002 (RESOLVED): provider-specific quirks are now pluggable via
+        // IProviderCompatFlag (Strategy pattern). The client no longer hardcodes
+        // `ProviderId.Value == "deepseek"` / `"groq"` switches — it just iterates
+        // the quirks attached to ProviderConfig.Quirks (populated by the
+        // registration code from ProviderCompatFlags.For(providerId)). New
+        // providers with quirks get their own IProviderCompatFlag implementation
+        // without this client being touched (Open/Closed).
+        var quirks = _config.Quirks;
+        if (quirks is null || quirks.Count == 0)
+            return;
 
-        if (ProviderId.Value == "groq" && !payload.ContainsKey("max_tokens") && !payload.ContainsKey("max_completion_tokens"))
+        for (int i = 0; i < quirks.Count; i++)
         {
-            payload["max_tokens"] = 4096;
+            quirks[i].Apply(payload, request);
         }
     }
 
@@ -260,22 +271,25 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         _ => new { role = "user", content = "" }
     };
 
-    private IEnumerable<LlmEvent> MapChunk(string data)
+    private IEnumerable<LlmEvent> MapChunk(string data, Dictionary<int, string> indexToId)
     {
         try
         {
             using var doc = JsonDocument.Parse(data);
             // Materialize immediately — JsonElement is invalid after JsonDocument is disposed
-            return MapChunkFromDocument(doc.RootElement).ToList();
+            return MapChunkFromDocument(doc.RootElement, indexToId).ToList();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse chunk: {Data}", data);
-            return Enumerable.Empty<LlmEvent>();
+            // §ROP-004 (RESOLVED): previously returned Enumerable.Empty<LlmEvent>(),
+            // silently dropping the chunk and the parse error. Now surfaces an
+            // ErrorEvent so the agent loop can fail loudly instead of stalling.
+            return new[] { new ErrorEvent($"Parse failed: {ex.Message}") };
         }
     }
 
-    private IEnumerable<LlmEvent> MapChunkFromDocument(JsonElement root)
+    private IEnumerable<LlmEvent> MapChunkFromDocument(JsonElement root, Dictionary<int, string> indexToId)
     {
         var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new List<JsonElement>();
         if (choices.Count == 0)
@@ -324,8 +338,8 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
                     string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
                         ? idEl.GetString()!
-                        : _toolCallIndexToId.GetValueOrDefault(index) ?? $"tc{index}";
-                    _toolCallIndexToId[index] = id;
+                        : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+                    indexToId[index] = id;
 
                     var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
