@@ -242,7 +242,7 @@ public sealed record PermissionRule(
                                   Regex.Escape(p)
                                       .Replace("\\*", ".*")
                                       .Replace("\\?", ".") + "$";
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(5));
         });
     }
 }
