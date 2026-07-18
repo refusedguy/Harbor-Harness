@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Ipc.Server — hosts the AgentLoop + registries and exposes them
+    via MessagePack RPC over Named Pipe (Windows) / Unix Domain Socket
+    (Linux/Mac). Used when HARBOR_MODE=ipc-server.
+
+    Layer: Application — same as Harbor.Application. Depends on:
+      * Harbor.Ipc.Abstractions — protocol contract.
+      * Harbor.Abstractions — application-layer service interfaces.
+      * Harbor.Application — for IAgent (DefaultAgent) construction; this is
+        the only edge from the IPC server into the application layer. The
+        server uses IServiceProvider to resolve services at request-dispatch
+        time, so it does not need a static dependency on Harbor.Registries
+        or any Infrastructure project.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Ipc.Server</PackageId>
+    <Description>Harbor IPC server — hosts AgentLoop + registries and exposes them via MessagePack RPC over Named Pipe / Unix Domain Socket. Used when HARBOR_MODE=ipc-server.</Description>
+    <PackageTags>harbor;ipc;server;messagepack;rpc;named-pipe;unix-socket</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+  </ItemGroup>
+
+</Project>

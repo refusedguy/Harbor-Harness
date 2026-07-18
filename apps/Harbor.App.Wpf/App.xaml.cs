@@ -123,6 +123,9 @@ public partial class App : Application
     [Exposes(typeof(WpfDispatcherAdapter))]
     [Exposes(typeof(IAppConfigStore<WpfConfig>))]
     [Exposes(typeof(WpfConfig))]
+    [Exposes(typeof(ICommonConfigStore))]
+    [Exposes(typeof(CommonConfig))]
+    [Exposes(typeof(CompositeConfig<WpfConfig>))]
     [Exposes(typeof(MainViewModel))]
     [Exposes(typeof(ChatViewModel))]
     [Exposes(typeof(SessionListViewModel))]
@@ -202,7 +205,8 @@ public partial class App : Application
         });
 
         // ── Per-app WPF configuration (~/.harbor/wpf.json) ──
-        // Non-overlapping with CLI/Avalonia/MAUI/Blazor config files.
+        // Non-overlapping with CLI/Avalonia/MAUI/Blazor config files AND
+        // with the shared ~/.harbor/config.json.
         services.AddSingleton<IAppConfigStore<WpfConfig>>(sp =>
             new JsonAppConfigStore<WpfConfig>(
                 new WpfConfig(),
@@ -215,6 +219,32 @@ public partial class App : Application
 #pragma warning restore RS0030
             return result.IsSuccess ? result.Value : new WpfConfig();
         });
+
+        // ── Shared common configuration (~/.harbor/config.json) ──
+        // CommonConfig holds API keys, default provider/model, storage backend,
+        // log level, permissions, plugins, network, compaction — every field
+        // that is shared across ALL Harbor apps. Loaded eagerly so the WPF
+        // composition root can read StorageBackend / LogLevel / etc.
+        // synchronously. Same atomic-write + thread-safe pattern as
+        // JsonAppConfigStore<T>.
+        services.AddSingleton<ICommonConfigStore>(sp =>
+            new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<ICommonConfigStore>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new CommonConfig();
+        });
+
+        // ── Composite: CommonConfig + WpfConfig ──
+        services.AddSingleton<CompositeConfig<WpfConfig>>(sp =>
+            new CompositeConfig<WpfConfig>(
+                sp.GetRequiredService<CommonConfig>(),
+                sp.GetRequiredService<WpfConfig>()));
     }
 
     private static void RegisterApp(IServiceCollection services)

@@ -58,6 +58,9 @@ public static class MauiProgram
     [Exposes(typeof(IAgent))]
     [Exposes(typeof(IAppConfigStore<MauiConfig>))]
     [Exposes(typeof(MauiConfig))]
+    [Exposes(typeof(ICommonConfigStore))]
+    [Exposes(typeof(CommonConfig))]
+    [Exposes(typeof(CompositeConfig<MauiConfig>))]
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
@@ -85,7 +88,8 @@ public static class MauiProgram
         builder.Services.AddLogging();
 
         // ── Per-app MAUI configuration (~/.harbor/maui.json) ──
-        // Non-overlapping with CLI/Avalonia/WPF/Blazor config files.
+        // Non-overlapping with CLI/Avalonia/WPF/Blazor config files AND with
+        // the shared ~/.harbor/config.json.
         builder.Services.AddSingleton<IAppConfigStore<MauiConfig>>(sp =>
             new JsonAppConfigStore<MauiConfig>(
                 new MauiConfig(),
@@ -98,6 +102,32 @@ public static class MauiProgram
 #pragma warning restore RS0030
             return result.IsSuccess ? result.Value : new MauiConfig();
         });
+
+        // ── Shared common configuration (~/.harbor/config.json) ──
+        // CommonConfig holds API keys, default provider/model, storage backend,
+        // log level, permissions, plugins, network, compaction — every field
+        // that is shared across ALL Harbor apps. Loaded eagerly so the MAUI
+        // composition root can read StorageBackend / LogLevel / etc.
+        // synchronously. Same atomic-write + thread-safe pattern as
+        // JsonAppConfigStore<T>.
+        builder.Services.AddSingleton<ICommonConfigStore>(sp =>
+            new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<ICommonConfigStore>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new CommonConfig();
+        });
+
+        // ── Composite: CommonConfig + MauiConfig ──
+        builder.Services.AddSingleton<CompositeConfig<MauiConfig>>(sp =>
+            new CompositeConfig<MauiConfig>(
+                sp.GetRequiredService<CommonConfig>(),
+                sp.GetRequiredService<MauiConfig>()));
 
 #if DEBUG
         builder.Logging.SetMinimumLevel(LogLevel.Debug);

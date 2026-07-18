@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
@@ -45,6 +46,8 @@ public class App : Application
             var mainViewModel = Services.GetRequiredService<MainViewModel>();
             var themeService = Services.GetRequiredService<ThemeService>();
             themeService.Application = this;
+
+
             var toastService = Services.GetRequiredService<ToastService>();
             toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 

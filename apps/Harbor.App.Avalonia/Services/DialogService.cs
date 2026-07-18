@@ -133,7 +133,12 @@ public sealed class DialogService
         panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = global::Avalonia.Media.Brushes.White });
         panel.Children.Add(buttons);
         dialog.Content = panel;
-        await dialog.ShowDialog(window).ConfigureAwait(false);
+        // ShowDialog must run on the UI thread (it pumps the Avalonia message loop
+        // and parents the dialog to the main window). The previous ConfigureAwait(false)
+        // was technically safe — the continuation only reads a local bool and calls
+        // the logger — but it is fragile: any future UI access added after the await
+        // would silently break under a non-UI continuation. Stay on the UI thread.
+        await dialog.ShowDialog(window);
         _logger.LogDebug("Confirm '{Title}' → {Result}", title, result);
         return result;
     }
@@ -166,7 +171,10 @@ public sealed class DialogService
         panel.Children.Add(box);
         panel.Children.Add(buttons);
         dialog.Content = panel;
-        var result = await dialog.ShowDialog<string?>(window).ConfigureAwait(false);
+        // ShowDialog must run on the UI thread (see ConfirmAsync comment). Stay on
+        // the UI thread — the continuation only reads the local result string and
+        // logs, but we keep the await UI-bound to stay safe under future edits.
+        var result = await dialog.ShowDialog<string?>(window);
         _logger.LogDebug("Prompt '{Title}' → '{Result}'", title, result);
         return result;
     }

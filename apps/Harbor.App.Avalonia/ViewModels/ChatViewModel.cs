@@ -40,7 +40,10 @@ public sealed partial class ChatViewModel : ObservableObject
         _toasts = toasts;
 
         _onStoreChanged = (_, state) => OnStoreChanged(state);
-        _dispatcher.Bind(_store);
+        // NOTE: _dispatcher.Bind(_store) is intentionally NOT called here — the
+        // composition root (AppHost.BuildAsync) binds the dispatcher to the UiStore
+        // exactly once, idempotently. Subscribing here would duplicate the binding
+        // (now prevented by the idempotent Bind, but we still centralise the call).
         _dispatcher.OnUiThread += _onStoreChanged;
     }
 

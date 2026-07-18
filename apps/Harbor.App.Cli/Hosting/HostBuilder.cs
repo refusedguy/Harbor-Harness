@@ -42,6 +42,10 @@ using Harbor.Tools.Builtin;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Tui.Plain;
+using Harbor.Ipc;
+using Harbor.Ipc.Client;
+using Harbor.Ipc.InProcess;
+using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -119,6 +123,9 @@ internal static class HostBuilder
     [Exposes(typeof(ITuiRenderer))]
     [Exposes(typeof(IAppConfigStore<CliConfig>))]
     [Exposes(typeof(CliConfig))]
+    [Exposes(typeof(ICommonConfigStore))]
+    [Exposes(typeof(CommonConfig))]
+    [Exposes(typeof(CompositeConfig<CliConfig>))]
 #endif
     public static IHost Build(params string[] args)
     {
@@ -156,7 +163,54 @@ internal static class HostBuilder
         RegisterRegistries(builder, harborDir);
         RegisterStorage(builder, sessionsDir, sqlitePath);
         RegisterTui(builder);
+        RegisterIpc(builder);
         return builder.Build();
+    }
+
+    /// <summary>
+    ///     Register the IPC layer (IHarborClient + optional IHarborServer)
+    ///     based on the HARBOR_MODE env var.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>HARBOR_MODE values:</b>
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item><c>inprocess</c> (default) — InProcessHarborClient calls IAgent/ISessionStore/etc. directly.</item>
+    ///         <item><c>ipc-server</c> — InProcessHarborClient + HarborIpcServer (accepts remote clients).</item>
+    ///         <item><c>ipc-client</c> — IpcHarborClient only (thin, talks to a running ipc-server).</item>
+    ///     </list>
+    ///     <para>
+    ///         For <c>ipc-client</c> mode, the application-layer services
+    ///         (IAgent, ISessionStore, IProviderRegistry, ...) are still
+    ///         registered by RegisterCore / RegisterRegistries — but the
+    ///         IpcHarborClient does not use them. A future optimization could
+    ///         skip their registration entirely in this mode.
+    ///     </para>
+    /// </remarks>
+    private static void RegisterIpc(HostApplicationBuilder builder)
+    {
+        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        _logger.LogInformation("HARBOR_MODE = {Mode}", mode);
+
+        string pipeName = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
+
+        switch (mode.ToLowerInvariant())
+        {
+            case "inprocess":
+                builder.Services.UseInProcessHarborClient();
+                break;
+            case "ipc-server":
+                builder.Services.UseInProcessHarborClient();
+                builder.Services.UseHarborIpcServer(pipeName);
+                break;
+            case "ipc-client":
+                builder.Services.UseIpcHarborClient(pipeName);
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unknown HARBOR_MODE: '{mode}'. Expected one of: inprocess, ipc-server, ipc-client.");
+        }
     }
 
     private static void ConfigureLogging(HostApplicationBuilder builder, string[] args)
@@ -211,6 +265,40 @@ internal static class HostBuilder
             }
             return result.Value;
         });
+
+        // ── Shared common configuration (~/.harbor/config.json) ──
+        // CommonConfig holds API keys, default provider/model, storage backend,
+        // log level, permissions, plugins, network, compaction — every field
+        // that is shared across ALL Harbor apps (CLI, Avalonia, WPF, MAUI,
+        // Blazor). Loaded eagerly so RegisterStorage / RegisterRegistries can
+        // resolve CommonConfig synchronously from the temp ServiceProvider.
+        // Same atomic-write + thread-safe pattern as JsonAppConfigStore<T>.
+        builder.Services.AddSingleton<ICommonConfigStore>(sp =>
+            new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<ICommonConfigStore>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            if (result.IsFailure)
+            {
+                _logger.LogWarning("Failed to load CommonConfig, using defaults: {Error}", result.Error);
+                return new CommonConfig();
+            }
+            return result.Value;
+        });
+
+        // ── Composite: CommonConfig + CliConfig ──
+        // Convenience pair so services that need fields from BOTH layers can
+        // take a single dependency instead of two. Resolved after both
+        // singletons above so the factory can build a snapshot.
+        builder.Services.AddSingleton<CompositeConfig<CliConfig>>(sp =>
+            new CompositeConfig<CliConfig>(
+                sp.GetRequiredService<CommonConfig>(),
+                sp.GetRequiredService<CliConfig>()));
     }
 
     private static void RegisterRegistries(HostApplicationBuilder builder, string harborDir)
@@ -431,13 +519,17 @@ internal static class HostBuilder
 
     private static void RegisterStorage(HostApplicationBuilder builder, string sessionsDir, string sqlitePath)
     {
-        // Resolve CliConfig from a temp ServiceProvider so we can read the
-        // per-app DefaultStorage preference. The HARBOR_STORAGE env var still
+        // Resolve CommonConfig from a temp ServiceProvider so we can read the
+        // shared StorageBackend preference. The HARBOR_STORAGE env var still
         // wins (matches the legacy HarborConfig behavior — env vars override
         // persisted config).
+        //
+        // NOTE: storage used to live on CliConfig.DefaultStorage (B2 layout).
+        // As of task C1 it lives on CommonConfig.StorageBackend so the user's
+        // choice is shared across every Harbor app.
         var tempSp = builder.Services.BuildServiceProvider();
-        var cliConfig = tempSp.GetRequiredService<CliConfig>();
-        string defaultStorage = string.IsNullOrEmpty(cliConfig.DefaultStorage) ? "jsonl" : cliConfig.DefaultStorage;
+        var commonConfig = tempSp.GetRequiredService<CommonConfig>();
+        string defaultStorage = string.IsNullOrEmpty(commonConfig.StorageBackend) ? "jsonl" : commonConfig.StorageBackend;
         string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? defaultStorage;
         _logger.LogInformation("Storage backend: {Storage}", storage);
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch

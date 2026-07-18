@@ -212,19 +212,24 @@ public sealed class SessionManager
         return true;
     }
 
-    /// <summary>Rename a session.</summary>
-    public async Task<bool> RenameSessionAsync(string sessionId, string newTitle)
+    /// <summary>
+    ///     Rename a session. <b>NOT YET SUPPORTED</b> — the underlying
+    ///     <see cref="ISessionStore"/> has no <c>UpdateSessionMetadataAsync</c>
+    ///     API (only <c>CreateAsync</c>/<c>UpdateStatsAsync</c>), so persisting
+    ///     a title change is not possible without a sidecar file. We log a
+    ///     warning and return <c>false</c> so the caller can surface an honest
+    ///     "coming in v0.8" toast. Tracked in the roadmap as session-metadata
+    ///     persistence.
+    /// </summary>
+    /// <param name="sessionId">The session id to rename.</param>
+    /// <param name="newTitle">The new title.</param>
+    /// <returns><c>false</c> — rename is not yet persisted.</returns>
+    public Task<bool> RenameSessionAsync(string sessionId, string newTitle)
     {
-        var sessionResult = await _sessionStore.GetAsync(sessionId).ConfigureAwait(false);
-        if (sessionResult.IsFailure) return false;
-        var updated = sessionResult.Value with { Title = newTitle, UpdatedAt = DateTimeOffset.UtcNow };
-        // The session store doesn't have an Update method — we use UpdateStatsAsync
-        // as a side-channel via re-creating the session record in metadata. For the
-        // standalone app we accept that rename is best-effort: the title is persisted
-        // through message appends.
-        Active = Active?.Id == sessionId ? updated : Active;
-        _logger.LogInformation("Renamed session {Id} → '{Title}'", sessionId, newTitle);
-        return true;
+        _logger.LogWarning(
+            "Rename session {Id} → '{Title}' ignored — ISessionStore has no metadata-update API. Coming in v0.8.",
+            sessionId, newTitle);
+        return Task.FromResult(false);
     }
 
     /// <summary>Convert an <see cref="AgentMessage"/> into a chat-line role + text for the UI store.</summary>

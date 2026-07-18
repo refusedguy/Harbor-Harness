@@ -1,8 +1,16 @@
 // AvaloniaConfig.cs — Avalonia app-specific configuration record.
 //
 // Stored at ~/.harbor/avalonia.json (NON-overlapping with CLI/WPF/MAUI/Blazor
-// config files). Common fields (Theme, LogLevel, LastUsed*, RecentSessions)
-// are inherited from AppConfigBase; Avalonia-specific fields are declared here.
+// config files AND with the shared ~/.harbor/config.json which holds
+// CommonConfig).
+//
+// As of task C1, common fields (Theme, LogLevel, LastUsed*, RecentSessions)
+// live in CommonConfig (~/.harbor/config.json). AvaloniaConfig owns ONLY
+// Avalonia-specific UX preferences (window size, fonts, panel visibility,
+// open tabs). The optional per-app Theme field here is an OVERRIDE: when set
+// to "system" (the default) the Avalonia app uses the shared
+// CommonConfig.PermissionMode / theme tokens; when set to "dark"/"light" the
+// app forces its own theme regardless of the shared preference.
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -11,7 +19,8 @@ namespace Harbor.App.Avalonia.Configuration;
 
 /// <summary>
 ///     Per-app configuration for the Harbor Avalonia desktop app. Stored at
-///     <c>~/.harbor/avalonia.json</c>. Non-overlapping with CLI/WPF/MAUI/Blazor.
+///     <c>~/.harbor/avalonia.json</c>. Non-overlapping with CLI/WPF/MAUI/Blazor
+///     and with the shared <c>~/.harbor/config.json</c>.
 /// </summary>
 public sealed record AvaloniaConfig : AppConfigBase
 {
@@ -20,6 +29,14 @@ public sealed record AvaloniaConfig : AppConfigBase
 
     /// <inheritdoc />
     public override string ConfigFileName => "avalonia.json";
+
+    /// <summary>
+    ///     App-specific theme override: <c>"system"</c> (default — use the
+    ///     shared theme tokens), <c>"dark"</c> (force dark), <c>"light"</c>
+    ///     (force light). Lets the user override the cross-app theme for the
+    ///     Avalonia app only.
+    /// </summary>
+    public string Theme { get; init; } = "system";
 
     /// <summary>
     ///     Initial window width in device-independent pixels. Defaults to

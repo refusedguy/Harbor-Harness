@@ -90,6 +90,29 @@ public class ProgramDiTests
         await Assert.That(config.ConfigFileName).IsEqualTo("blazor.json");
     }
 
+    // ── Shared common config (~/.harbor/config.json) ──────────────────────
+
+    [Test]
+    public async Task BuildApp_Registers_ICommonConfigStore()
+        => await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
+
+    [Test]
+    public async Task BuildApp_Registers_CommonConfig()
+    {
+        var config = Services.GetService<CommonConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+    }
+
+    [Test]
+    public async Task BuildApp_Registers_CompositeConfig_BlazorConfig()
+    {
+        var composite = Services.GetService<CompositeConfig<BlazorConfig>>();
+        await Assert.That(composite).IsNotNull();
+        await Assert.That(composite!.AppId).IsEqualTo("blazor");
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -136,6 +159,9 @@ public class ProgramDiTests
             typeof(ProviderBrowserService),
             typeof(IAppConfigStore<BlazorConfig>),
             typeof(BlazorConfig),
+            typeof(ICommonConfigStore),
+            typeof(CommonConfig),
+            typeof(CompositeConfig<BlazorConfig>),
             typeof(ChatViewModel),
             typeof(SessionListViewModel),
             typeof(ProviderBrowserViewModel),

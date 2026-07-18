@@ -15,6 +15,9 @@ using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Ipc;
+using Harbor.Ipc.Client;
+using Harbor.Ipc.InProcess;
 using Harbor.Providers.Ollama;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
@@ -61,8 +64,13 @@ internal static class AppHost
     [Exposes(typeof(AvaloniaFilePicker))]
     [Exposes(typeof(SessionManager))]
     [Exposes(typeof(ToastService))]
+    [Exposes(typeof(AvaloniaDispatcherAdapter))]
+    [Exposes(typeof(IHarborClient))]
     [Exposes(typeof(IAppConfigStore<AvaloniaConfig>))]
     [Exposes(typeof(AvaloniaConfig))]
+    [Exposes(typeof(ICommonConfigStore))]
+    [Exposes(typeof(CommonConfig))]
+    [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -86,28 +94,77 @@ internal static class AppHost
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
+        // Forward IAgentRunner → IAgent so DI resolution (and the Excubo
+        // DependencyInjectionValidation analyzer) is satisfied. IAgent extends
+        // IAgentRunner; this is the canonical "interface forwarded to a concrete
+        // service that implements it" pattern documented in the MS DI docs.
+        builder.Services.AddSingleton<IAgentRunner>(sp => sp.GetRequiredService<IAgent>());
 
         // ── Per-app Avalonia configuration (~/.harbor/avalonia.json) ──
-        // Non-overlapping with CLI/WPF/MAUI/Blazor config files. JsonAppConfigStore
-        // handles atomic write (temp + rename) + SemaphoreSlim thread safety.
+        // Non-overlapping with CLI/WPF/MAUI/Blazor config files AND with the
+        // shared ~/.harbor/config.json. JsonAppConfigStore handles atomic
+        // write (temp + rename) + SemaphoreSlim thread safety.
+        //
+        // We load the config eagerly using a *bootstrap* logger factory so we
+        // can register the loaded AvaloniaConfig as a singleton before the
+        // host is built. The previous pattern called BuildServiceProvider()
+        // twice just to get an ILogger — that creates a parallel DI container
+        // that disposes out from under us and is flagged by the .NET analyser
+        // as an anti-pattern.
+        // NB: no `using` here — the bootstrap logger factory must outlive this
+        // method because its loggers are passed to long-lived singletons
+        // (ToolRegistry, ProviderRegistry, InMemoryMcpRegistry) constructed
+        // eagerly below. Disposing the factory at end-of-method would silence
+        // those singletons. The factory is intentionally leaked to process
+        // lifetime (same effective lifetime as the previous tempSp pattern).
+        var bootstrapLoggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole());
+        var bootstrapConfigLogger = bootstrapLoggerFactory.CreateLogger<JsonAppConfigStore<AvaloniaConfig>>();
+        var configStore = new JsonAppConfigStore<AvaloniaConfig>(
+            new AvaloniaConfig(),
+            bootstrapConfigLogger);
         builder.Services.AddSingleton<IAppConfigStore<AvaloniaConfig>>(sp =>
             new JsonAppConfigStore<AvaloniaConfig>(
                 new AvaloniaConfig(),
                 sp.GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>()));
-        // Eagerly load AvaloniaConfig so the rest of the composition root
-        // (ThemeService, MainViewModel) can resolve it synchronously.
-        var configStore = new JsonAppConfigStore<AvaloniaConfig>(
-            new AvaloniaConfig(),
-            builder.Services.BuildServiceProvider()
-                .GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>());
         var avaloniaConfigResult = await configStore.LoadAsync().ConfigureAwait(false);
         var avaloniaConfig = avaloniaConfigResult.IsSuccess
             ? avaloniaConfigResult.Value
             : new AvaloniaConfig();
         builder.Services.AddSingleton(avaloniaConfig);
 
-        // Storage — opt-in via HARBOR_STORAGE env var. Defaults to in-memory (ephemeral).
-        string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "memory";
+        // ── Shared common configuration (~/.harbor/config.json) ──
+        // CommonConfig holds API keys, default provider/model, storage backend,
+        // log level, permissions, plugins, network, compaction — every field
+        // that is shared across ALL Harbor apps. Loaded eagerly so the
+        // Avalonia composition root can read StorageBackend / LogLevel / etc.
+        // synchronously. Same atomic-write + thread-safe pattern as
+        // JsonAppConfigStore<T>. Reuses the bootstrap logger factory to avoid
+        // the BuildServiceProvider() anti-pattern.
+        var bootstrapCommonLogger = bootstrapLoggerFactory.CreateLogger<JsonCommonConfigStore>();
+        var commonStore = new JsonCommonConfigStore(
+            new CommonConfig(),
+            bootstrapCommonLogger);
+        var commonConfigResult = await commonStore.LoadAsync().ConfigureAwait(false);
+        var commonConfig = commonConfigResult.IsSuccess
+            ? commonConfigResult.Value
+            : new CommonConfig();
+        builder.Services.AddSingleton<ICommonConfigStore>(sp =>
+            new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        builder.Services.AddSingleton(commonConfig);
+
+        // ── Composite: CommonConfig + AvaloniaConfig ──
+        builder.Services.AddSingleton<CompositeConfig<AvaloniaConfig>>(sp =>
+            new CompositeConfig<AvaloniaConfig>(
+                sp.GetRequiredService<CommonConfig>(),
+                sp.GetRequiredService<AvaloniaConfig>()));
+
+        // Storage — opt-in via HARBOR_STORAGE env var. The default comes from
+        // CommonConfig.StorageBackend (shared across every Harbor app) and
+        // falls back to "memory" (ephemeral) for the Avalonia desktop shell.
+        string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE")
+            ?? (string.IsNullOrEmpty(commonConfig.StorageBackend) ? "memory" : commonConfig.StorageBackend);
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
         {
             "jsonl" => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>()),
@@ -115,8 +172,10 @@ internal static class AppHost
         });
 
         // Build registries eagerly so the agent can be initialized with them.
-        var tempSp = builder.Services.BuildServiceProvider();
-        var loggerFactory = tempSp.GetRequiredService<ILoggerFactory>();
+        // Use the bootstrap logger factory (created above) instead of a throwaway
+        // BuildServiceProvider() call — the parallel container anti-pattern was
+        // flagged by DeepSeek review and is unsafe under disposables.
+        var loggerFactory = bootstrapLoggerFactory;
 
         // Tools — a subset of the builtin tools (no MCP, no WebFetch to avoid HTTP
         // policy decisions; the user can add them via Settings later).
@@ -187,19 +246,62 @@ internal static class AppHost
         builder.Services.AddSingleton<AvaloniaFilePicker>();
         builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<ToastService>();
+        // AvaloniaDispatcherAdapter is the UiStore→UI-thread bridge. Bound to
+        // the UiStore exactly once below (after host.Build()) so VMs that
+        // resolve the adapter can subscribe to OnUiThread without racing with
+        // a Bind call from another VM's constructor.
+        builder.Services.AddSingleton<AvaloniaDispatcherAdapter>();
 
-        // ViewModels — registered as transient because some hold session-scoped state.
-        builder.Services.AddTransient<MainViewModel>();
-        builder.Services.AddTransient<ChatViewModel>();
-        builder.Services.AddTransient<SessionListViewModel>();
+        // ── IHarborClient (proof of concept) ──────────────────────────────
+        // Register IHarborClient based on HARBOR_MODE env var:
+        //   inprocess (default) → InProcessHarborClient calls IAgent/etc directly.
+        //   ipc-client           → IpcHarborClient talks to a separately-running
+        //                         Harbor.App.Cli process with HARBOR_MODE=ipc-server.
+        // The Avalonia app does NOT support ipc-server mode itself — the desktop
+        // app shouldn't be a background server. Use the CLI for that.
+        string ipcMode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        string ipcPipe = Environment.GetEnvironmentVariable("HARBOR_IPC_PIPE") ?? "harbor-ipc";
+        switch (ipcMode.ToLowerInvariant())
+        {
+            case "ipc-client":
+                builder.Services.UseIpcHarborClient(ipcPipe);
+                break;
+            default:
+                builder.Services.UseInProcessHarborClient();
+                break;
+        }
+
+        // ViewModels — long-lived shell VMs are Singletons so that resolves are
+        // stable across the app lifetime. Transient resolution of MainViewModel
+        // was a DeepSeek-flagged bug: CommandPaletteViewModel resolves MainViewModel
+        // on every command invocation, and a transient MainViewModel meant each
+        // invocation got a fresh shell with no bound ChatViewModel/Sessions/etc.
+        //
+        // The shell VMs (Main/Chat/SessionList/CommandPalette) form a singleton
+        // cluster — they reference each other and share the UiStore subscription.
+        //
+        // Edit-style VMs (CodeEditor/Diff/TokenUsage) stay Transient because they
+        // hold per-document state that the user may want to discard on close.
+        builder.Services.AddSingleton<MainViewModel>();
+        builder.Services.AddSingleton<ChatViewModel>();
+        builder.Services.AddSingleton<SessionListViewModel>();
+        builder.Services.AddSingleton<CommandPaletteViewModel>();
         builder.Services.AddTransient<ProviderBrowserViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<CodeEditorViewModel>();
         builder.Services.AddTransient<DiffViewModel>();
         builder.Services.AddTransient<TokenUsageViewModel>();
-        builder.Services.AddTransient<CommandPaletteViewModel>();
 
         var host = builder.Build();
+
+        // Bind the UiStore → AvaloniaDispatcherAdapter exactly once, here in the
+        // composition root. ViewModels only subscribe to the dispatcher's
+        // OnUiThread event (the Bind call is no longer made from VM constructors,
+        // which previously caused duplicate subscriptions because MainViewModel and
+        // ChatViewModel both called Bind during their construction).
+        var uiStore = host.Services.GetRequiredService<UiStore>();
+        var dispatcherAdapter = host.Services.GetRequiredService<AvaloniaDispatcherAdapter>();
+        dispatcherAdapter.Bind(uiStore);
 
         // Initialize the agent with a fresh session so the user can start chatting
         // immediately. The SessionManager owns the active session and re-initializes

@@ -140,6 +140,29 @@ public class AppDiTests
         await Assert.That(config.ConfigFileName).IsEqualTo("wpf.json");
     }
 
+    // ── Shared common config (~/.harbor/config.json) ──────────────────────
+
+    [Test]
+    public async Task BuildHost_Registers_ICommonConfigStore()
+        => await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
+
+    [Test]
+    public async Task BuildHost_Registers_CommonConfig()
+    {
+        var config = Services.GetService<CommonConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+    }
+
+    [Test]
+    public async Task BuildHost_Registers_CompositeConfig_WpfConfig()
+    {
+        var composite = Services.GetService<CompositeConfig<WpfConfig>>();
+        await Assert.That(composite).IsNotNull();
+        await Assert.That(composite!.AppId).IsEqualTo("wpf");
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -231,6 +254,9 @@ public class AppDiTests
             typeof(WpfDispatcherAdapter),
             typeof(IAppConfigStore<WpfConfig>),
             typeof(WpfConfig),
+            typeof(ICommonConfigStore),
+            typeof(CommonConfig),
+            typeof(CompositeConfig<WpfConfig>),
             typeof(MainViewModel),
             typeof(ChatViewModel),
             typeof(SessionListViewModel),

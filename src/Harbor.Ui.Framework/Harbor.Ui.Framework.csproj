@@ -47,6 +47,9 @@
     <InternalsVisibleTo Include="Harbor.App.Maui"/>
     <InternalsVisibleTo Include="Harbor.App.Blazor"/>
     <InternalsVisibleTo Include="Harbor.App.Cli"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Termina"/>
+    <InternalsVisibleTo Include="Harbor.Tui.TerminalGui"/>
+    <InternalsVisibleTo Include="Harbor.Tui.RazorConsole"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -55,8 +55,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Settings = services.GetRequiredService<SettingsViewModel>();
         CommandPalette = services.GetRequiredService<CommandPaletteViewModel>();
 
-        // Subscribe to UiStore transitions on the UI thread.
-        _dispatcher.Bind(_store);
+        // Subscribe to UiStore transitions on the UI thread. NOTE: _dispatcher.Bind(store)
+        // is intentionally NOT called here — the composition root (AppHost.BuildAsync) binds
+        // the dispatcher to the UiStore exactly once, idempotently. Calling Bind from each
+        // ViewModel would create duplicate subscriptions (now prevented by the idempotent
+        // Bind, but we still centralise the call for clarity).
         _onStoreChanged = (_, state) => OnStoreChanged(state);
         _dispatcher.OnUiThread += _onStoreChanged;
 

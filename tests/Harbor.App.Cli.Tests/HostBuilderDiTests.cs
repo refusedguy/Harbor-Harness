@@ -222,6 +222,34 @@ public class HostBuilderDiTests
         await Assert.That(config.ConfigFileName).IsEqualTo("cli.json");
     }
 
+    // ── Shared common config (~/.harbor/config.json) ──────────────────────
+
+    [Test]
+    public async Task Build_Registers_ICommonConfigStore()
+    {
+        await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
+    }
+
+    [Test]
+    public async Task Build_Registers_CommonConfig()
+    {
+        var config = Services.GetService<CommonConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+        await Assert.That(config.StorageBackend).IsEqualTo("jsonl");
+    }
+
+    [Test]
+    public async Task Build_Registers_CompositeConfig_CliConfig()
+    {
+        var composite = Services.GetService<CompositeConfig<CliConfig>>();
+        await Assert.That(composite).IsNotNull();
+        await Assert.That(composite!.AppId).IsEqualTo("cli");
+        await Assert.That(composite.Common).IsNotNull();
+        await Assert.That(composite.App).IsNotNull();
+    }
+
     // ── Aggregate / cross-cutting ─────────────────────────────────────────
 
     /// <summary>
@@ -257,6 +285,9 @@ public class HostBuilderDiTests
             typeof(ITuiRenderer),
             typeof(IAppConfigStore<CliConfig>),
             typeof(CliConfig),
+            typeof(ICommonConfigStore),
+            typeof(CommonConfig),
+            typeof(CompositeConfig<CliConfig>),
         };
 
         var missing = new List<Type>();

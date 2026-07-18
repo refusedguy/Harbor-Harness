@@ -20,6 +20,8 @@ artifacts/
 *.userprefs
 *.swp
 *~
+*_wpftmp.csproj
+*_wpftmp.*
 
 ## Build results
 [Dd]ebug/
@@ -104,6 +106,7 @@ runtime/
 ## Docs build
 _site/
 api/
+
 
 ## Build artifacts
 *.binlog

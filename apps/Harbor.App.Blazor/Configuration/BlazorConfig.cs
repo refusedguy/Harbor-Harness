@@ -1,8 +1,16 @@
 // BlazorConfig.cs — Blazor Server app-specific configuration record.
 //
-// Stored at ~/.harbor/blazor.json (NON-overlapping with the other apps' configs).
+// Stored at ~/.harbor/blazor.json (NON-overlapping with the other apps'
+// configs AND with the shared ~/.harbor/config.json which holds
+// CommonConfig).
+//
 // The Blazor app hosts Kestrel on localhost and serves the chat UI over a
-// SignalR circuit; this config owns the listen port + browser-launch behavior.
+// SignalR circuit; this config owns the listen port + browser-launch
+// behavior + hot-reload toggle.
+//
+// As of task C1, common fields (Theme, LogLevel, LastUsed*, RecentSessions)
+// live in CommonConfig (~/.harbor/config.json). BlazorConfig owns ONLY
+// Blazor-specific runtime preferences.
 
 using Harbor.Desktop.Abstractions.Configuration;
 
@@ -11,7 +19,7 @@ namespace Harbor.App.Blazor.Configuration;
 /// <summary>
 ///     Per-app configuration for the Harbor Blazor Server desktop app. Stored
 ///     at <c>~/.harbor/blazor.json</c>. Non-overlapping with
-///     CLI/Avalonia/WPF/MAUI.
+///     CLI/Avalonia/WPF/MAUI and with the shared <c>~/.harbor/config.json</c>.
 /// </summary>
 public sealed record BlazorConfig : AppConfigBase
 {
@@ -29,9 +37,10 @@ public sealed record BlazorConfig : AppConfigBase
     public int ListenPort { get; init; } = 5000;
 
     /// <summary>
-    ///     Whether to auto-open the host browser to <c>http://localhost:&lt;ListenPort&gt;</c>
-    ///     on startup. The <c>--no-open-browser</c> CLI flag overrides this at
-    ///     runtime. Defaults to <c>true</c>.
+    ///     Whether to auto-open the host browser to
+    ///     <c>http://localhost:&lt;ListenPort&gt;</c> on startup. The
+    ///     <c>--no-open-browser</c> CLI flag overrides this at runtime.
+    ///     Defaults to <c>true</c>.
     /// </summary>
     public bool AutoOpenBrowser { get; init; } = true;
 

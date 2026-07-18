@@ -1,8 +1,13 @@
 // WpfConfig.cs — WPF app-specific configuration record.
 //
-// Stored at ~/.harbor/wpf.json (NON-overlapping with the other apps' configs).
+// Stored at ~/.harbor/wpf.json (NON-overlapping with the other apps' configs
+// AND with the shared ~/.harbor/config.json which holds CommonConfig).
 // Mirrors AvaloniaConfig's windowing fields but with WPF-specific defaults
 // (e.g. AvalonDock is the panel system instead of Avalonia's dock panel).
+//
+// As of task C1, common fields (Theme, LogLevel, LastUsed*, RecentSessions)
+// live in CommonConfig (~/.harbor/config.json). WpfConfig owns ONLY
+// WPF-specific UX preferences.
 
 using Harbor.Desktop.Abstractions.Configuration;
 
@@ -10,7 +15,8 @@ namespace Harbor.App.Wpf.Configuration;
 
 /// <summary>
 ///     Per-app configuration for the Harbor WPF desktop app. Stored at
-///     <c>~/.harbor/wpf.json</c>. Non-overlapping with CLI/Avalonia/MAUI/Blazor.
+///     <c>~/.harbor/wpf.json</c>. Non-overlapping with CLI/Avalonia/MAUI/Blazor
+///     and with the shared <c>~/.harbor/config.json</c>.
 /// </summary>
 public sealed record WpfConfig : AppConfigBase
 {
@@ -19,6 +25,13 @@ public sealed record WpfConfig : AppConfigBase
 
     /// <inheritdoc />
     public override string ConfigFileName => "wpf.json";
+
+    /// <summary>
+    ///     App-specific theme override: <c>"system"</c> (default — use the
+    ///     shared theme tokens), <c>"dark"</c> (force dark), <c>"light"</c>
+    ///     (force light).
+    /// </summary>
+    public string Theme { get; init; } = "system";
 
     /// <summary>
     ///     Initial window width in device-independent pixels. Defaults to

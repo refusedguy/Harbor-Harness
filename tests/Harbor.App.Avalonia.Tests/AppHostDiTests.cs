@@ -37,23 +37,13 @@ public class AppHostDiTests
         ? _hostLazy.Value.Result.Services
         : throw new InvalidOperationException("Host not yet built");
 
-    [After(HookType.Class)]
-    public static async ValueTask DisposeHostAsync()
-    {
-        if (_hostLazy.IsValueCreated && _hostLazy.Value.IsCompletedSuccessfully)
-        {
-            var host = _hostLazy.Value.Result;
-            try
-            {
-                await host.StopAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Best-effort.
-            }
-            host.Dispose();
-        }
-    }
+    // NOTE: the previous [After(HookType.Class)] hook disposed the shared host
+    // after EACH test (TUnit's HookType.Class runs per-test, not once-per-class
+    // like NUnit/xUnit OneTimeTearDown). That made only the first test pass and
+    // the other 27 fail with ObjectDisposedException on the shared IServiceProvider.
+    // The host is a process-lifetime static — we let it leak to test-process exit
+    // rather than risk disposing it under concurrent test execution. This is a
+    // pre-existing test-infrastructure issue documented as part of task A1.
 
     // ── Core services ─────────────────────────────────────────────────────
 
@@ -220,6 +210,36 @@ public class AppHostDiTests
         await Assert.That(config.ConfigFileName).IsEqualTo("avalonia.json");
     }
 
+    // ── Shared common config (~/.harbor/config.json) ──────────────────────
+
+    [Test]
+    public async Task BuildAsync_Registers_ICommonConfigStore()
+    {
+        await GetHostAsync();
+        await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
+    }
+
+    [Test]
+    public async Task BuildAsync_Registers_CommonConfig()
+    {
+        await GetHostAsync();
+        var config = Services.GetService<CommonConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+    }
+
+    [Test]
+    public async Task BuildAsync_Registers_CompositeConfig_AvaloniaConfig()
+    {
+        await GetHostAsync();
+        var composite = Services.GetService<CompositeConfig<AvaloniaConfig>>();
+        await Assert.That(composite).IsNotNull();
+        await Assert.That(composite!.AppId).IsEqualTo("avalonia");
+        await Assert.That(composite.Common).IsNotNull();
+        await Assert.That(composite.App).IsNotNull();
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -272,6 +292,9 @@ public class AppHostDiTests
             typeof(ToastService),
             typeof(IAppConfigStore<AvaloniaConfig>),
             typeof(AvaloniaConfig),
+            typeof(ICommonConfigStore),
+            typeof(CommonConfig),
+            typeof(CompositeConfig<AvaloniaConfig>),
         };
 
         var missing = new List<Type>();

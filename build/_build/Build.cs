@@ -5,7 +5,6 @@ using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build;
 
 /// <summary>
@@ -133,4 +132,21 @@ class Build : NukeBuild
                 Resolver, VariantBuilder, Archiver, Uploader,
                 AppName, variants, Flags, Settings, ReleaseTag, ReleaseRepo);
         });
+
+    /// <summary>
+    ///     Publish the <c>ipc-server</c> variant of the CLI. The resulting
+    ///     binary hosts the AgentLoop + registries and exposes them via
+    ///     MessagePack-over-pipe. Output: <c>artifacts/ipc-server/</c>.
+    /// </summary>
+    Target PublishIpcServer => _ => _.DependsOn(Compile)
+        .Executes(() => IpcPublishTarget.ExecuteIpcServer(Resolver, Settings, Flags));
+
+    /// <summary>
+    ///     Publish the <c>ipc-client</c> variant of the CLI. The resulting
+    ///     binary is a thin client that connects to a running
+    ///     <see cref="PublishIpcServer"/> via MessagePack-over-pipe.
+    ///     Output: <c>artifacts/ipc-client/</c>.
+    /// </summary>
+    Target PublishIpcClient => _ => _.DependsOn(Compile)
+        .Executes(() => IpcPublishTarget.ExecuteIpcClient(Resolver, Settings, Flags));
 }

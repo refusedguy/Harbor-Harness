@@ -1,0 +1,18 @@
+// Global usings for Harbor.Ipc.Client
+global using System;
+global using System.IO;
+global using System.IO.Pipes;
+global using System.Net;
+global using System.Net.Sockets;
+global using System.Threading;
+global using System.Threading.Channels;
+global using System.Threading.Tasks;
+global using CSharpFunctionalExtensions;
+global using Harbor.Abstractions.Models;
+global using Harbor.Abstractions.Models.Identifiers;
+global using Harbor.Abstractions.Tools;
+global using Harbor.Ipc;
+global using Harbor.Ipc.Protocol;
+global using Harbor.Ipc.Transport;
+global using MessagePack;
+global using Microsoft.Extensions.Logging;

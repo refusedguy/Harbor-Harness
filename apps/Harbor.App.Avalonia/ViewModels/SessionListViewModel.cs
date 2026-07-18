@@ -131,14 +131,22 @@ public sealed partial class SessionListViewModel : ObservableObject
         _toasts.Show($"Deleted: {item.Title}", ToastKind.Warning);
     }
 
-    /// <summary>Rename the selected session.</summary>
+    /// <summary>
+    ///     Rename the selected session. <b>Not yet supported</b> — surfaces an
+    ///     honest "coming in v0.8" toast to the user instead of silently
+    ///     mutating in-memory state (the previous behaviour gave the illusion
+    ///     of a rename that would be lost on next refresh).
+    /// </summary>
     [RelayCommand]
     private async Task RenameAsync(SessionItemViewModel? item)
     {
         if (item is null) return;
-        // The actual prompt is in the view (DialogService.PromptAsync). For the
-        // simple flow we accept a default suffix.
-        await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
+        var ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
+        if (!ok)
+        {
+            _toasts.Show("Rename not yet supported — coming in v0.8.", ToastKind.Warning);
+            return;
+        }
         await RefreshAsync().ConfigureAwait(false);
     }
 }

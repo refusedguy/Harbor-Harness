@@ -1,7 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views;
 
@@ -16,6 +18,32 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Apply persisted window geometry from AvaloniaConfig (~/.harbor/avalonia.json).
+        // The XAML defaults (Width=1280, Height=800) are the fallback when no config
+        // is available yet (design-time previewer, or first-run before the config
+        // file is written).
+        ApplyConfiguredGeometry();
+    }
+
+    /// <summary>
+    ///     Read <see cref="AvaloniaConfig.WindowWidth"/> / <see cref="AvaloniaConfig.WindowHeight"/>
+    ///     / <see cref="AvaloniaConfig.WindowMaximized"/> from DI and apply them to this
+    ///     window. No-op when <see cref="App.Services"/> is null (design-time).
+    /// </summary>
+    private void ApplyConfiguredGeometry()
+    {
+        var services = App.Services;
+        if (services is null) return;
+        var config = services.GetService<AvaloniaConfig>();
+        if (config is null) return;
+
+        if (config.WindowWidth > 0) Width = config.WindowWidth;
+        if (config.WindowHeight > 0) Height = config.WindowHeight;
+        if (config.WindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
     }
 
     private MainViewModel? Vm => DataContext as MainViewModel;

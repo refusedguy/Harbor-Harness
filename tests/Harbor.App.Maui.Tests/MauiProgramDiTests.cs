@@ -97,6 +97,29 @@ public class MauiProgramDiTests
         await Assert.That(config.ConfigFileName).IsEqualTo("maui.json");
     }
 
+    // ── Shared common config (~/.harbor/config.json) ──────────────────────
+
+    [Test]
+    public async Task CreateMauiApp_Registers_ICommonConfigStore()
+        => await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
+
+    [Test]
+    public async Task CreateMauiApp_Registers_CommonConfig()
+    {
+        var config = Services.GetService<CommonConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+    }
+
+    [Test]
+    public async Task CreateMauiApp_Registers_CompositeConfig_MauiConfig()
+    {
+        var composite = Services.GetService<CompositeConfig<MauiConfig>>();
+        await Assert.That(composite).IsNotNull();
+        await Assert.That(composite!.AppId).IsEqualTo("maui");
+    }
+
     /// <summary>
     ///     Aggregate: resolves every service declared with [Exposes(typeof(T))]
     ///     on MauiProgram.CreateMauiApp in one shot.
@@ -120,6 +143,9 @@ public class MauiProgramDiTests
             typeof(IAgent),
             typeof(IAppConfigStore<MauiConfig>),
             typeof(MauiConfig),
+            typeof(ICommonConfigStore),
+            typeof(CommonConfig),
+            typeof(CompositeConfig<MauiConfig>),
         };
 
         var missing = new List<Type>();

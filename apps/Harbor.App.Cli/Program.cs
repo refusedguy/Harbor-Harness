@@ -53,12 +53,7 @@ public static class Program
         var loggerFactory = LoggerFactory.Create(builder =>
         {
             builder.AddProvider(fileProvider);
-            builder.AddSimpleConsole(o =>
-            {
-                o.SingleLine = true;
-                o.TimestampFormat = "HH:mm:ss.fff ";
-                o.IncludeScopes = false;
-            });
+
             builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
                 (category, level) =>
                 {
@@ -118,6 +113,7 @@ public static class Program
     {
         _logger.LogInformation("Starting interactive mode");
         using var host = HostBuilder.Build(args);
+        await StartIpcAsync(host.Services).ConfigureAwait(false);
         var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
         if (scriptResult.IsFailure)
         {
@@ -126,6 +122,7 @@ public static class Program
         var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
         int exitCode = await runner.RunInteractiveAsync(host.Services).ConfigureAwait(false);
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
+        await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
     }
 
@@ -139,13 +136,75 @@ public static class Program
         string prompt = string.Join(' ', StripLogArgs(args));
         _logger.LogInformation("Starting ask command with prompt length {Length}", prompt.Length);
         using var host = HostBuilder.Build(args);
+        await StartIpcAsync(host.Services).ConfigureAwait(false);
         var scriptResult = await RunStartupScriptAsync(host.Services, scriptPath).ConfigureAwait(false);
         if (scriptResult.IsFailure)
         {
             _logger.LogWarning("Startup script failed: {Error}", scriptResult.Error);
         }
         var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
-        return await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+        int exitCode = await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+        await StopIpcAsync(host.Services).ConfigureAwait(false);
+        return exitCode;
+    }
+
+    /// <summary>
+    ///     Start the IPC layer based on the active HARBOR_MODE:
+    ///     <list type="bullet">
+    ///         <item><c>inprocess</c> — no-op (InProcessHarborClient has no transport).</item>
+    ///         <item><c>ipc-server</c> — bind <c>IHarborServer</c> and start accepting clients.</item>
+    ///         <item><c>ipc-client</c> — call <c>IHarborClient.ConnectAsync</c> to open the pipe/socket.</item>
+    ///     </list>
+    ///     Silently skips when the relevant service is not registered (e.g. tests
+    ///     that build a partial host).
+    /// </summary>
+    private static async Task StartIpcAsync(IServiceProvider services)
+    {
+        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
+        {
+            var server = services.GetService<Harbor.Ipc.IHarborServer>();
+            if (server is not null)
+            {
+                _logger.LogInformation("Starting IPC server at {Endpoint}", server.Endpoint);
+                await server.StartAsync().ConfigureAwait(false);
+            }
+        }
+        else if (string.Equals(mode, "ipc-client", StringComparison.OrdinalIgnoreCase))
+        {
+            var client = services.GetService<Harbor.Ipc.IHarborClient>();
+            if (client is not null)
+            {
+                _logger.LogInformation("Connecting IPC client");
+                await client.ConnectAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Stop the IPC layer (mirror of <see cref="StartIpcAsync" />).
+    /// </summary>
+    private static async Task StopIpcAsync(IServiceProvider services)
+    {
+        string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
+        if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
+        {
+            var server = services.GetService<Harbor.Ipc.IHarborServer>();
+            if (server is not null)
+            {
+                _logger.LogInformation("Stopping IPC server");
+                await server.StopAsync().ConfigureAwait(false);
+            }
+        }
+        else if (string.Equals(mode, "ipc-client", StringComparison.OrdinalIgnoreCase))
+        {
+            var client = services.GetService<Harbor.Ipc.IHarborClient>();
+            if (client is not null)
+            {
+                _logger.LogInformation("Disconnecting IPC client");
+                await client.DisconnectAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>

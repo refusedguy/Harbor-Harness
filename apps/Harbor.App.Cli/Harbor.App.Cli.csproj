@@ -126,7 +126,41 @@
     <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+
+    <!--
+      Harbor IPC layer. The shared contract (Harbor.Ipc.Abstractions) is
+      always referenced; the three implementations (InProcess / Server /
+      Client) are also referenced so the CLI can switch modes via the
+      HARBOR_MODE env var at runtime. Each implementation is small
+      (~10-30 KB) and shares the same IHarborClient interface, so shipping
+      all three in one binary has no real size cost.
+
+      HARBOR_MODE values:
+        inprocess   (default) — UI + agent loop in one process
+        ipc-server            — host the agent loop, accept IPC clients
+        ipc-client            — thin client, connect to a running ipc-server
+
+      See docs/IPC.md for the full architecture and usage guide.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
   </ItemGroup>
+
+  <!--
+    HarborMode MSBuild property — used by the NUKE PublishIpcServer /
+    PublishIpcClient targets to tag the published binary with the intended
+    mode. The CLI itself reads HARBOR_MODE at runtime, so this property is
+    informational only (it does NOT exclude any of the three IPC projects
+    above). Defaults to 'inprocess'.
+  -->
+  <PropertyGroup>
+    <HarborMode Condition="'$(HarborMode)' == ''">inprocess</HarborMode>
+    <DefineConstants Condition="'$(HarborMode)' == 'ipc-server'">$(DefineConstants);HARBOR_IPC_SERVER</DefineConstants>
+    <DefineConstants Condition="'$(HarborMode)' == 'ipc-client'">$(DefineConstants);HARBOR_IPC_CLIENT</DefineConstants>
+    <DefineConstants Condition="'$(HarborMode)' == 'inprocess'">$(DefineConstants);HARBOR_IPC_INPROCESS</DefineConstants>
+  </PropertyGroup>
 
   <!-- ── Plugins (conditional on HarborWithPlugins) ───────────────────────── -->
   <ItemGroup Condition="'$(HarborWithPlugins)' == 'true'">

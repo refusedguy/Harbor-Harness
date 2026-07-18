@@ -52,6 +52,9 @@ internal static class Program
     [Exposes(typeof(ProviderBrowserService))]
     [Exposes(typeof(IAppConfigStore<BlazorConfig>))]
     [Exposes(typeof(BlazorConfig))]
+    [Exposes(typeof(ICommonConfigStore))]
+    [Exposes(typeof(CommonConfig))]
+    [Exposes(typeof(CompositeConfig<BlazorConfig>))]
     [Exposes(typeof(ChatViewModel))]
     [Exposes(typeof(SessionListViewModel))]
     [Exposes(typeof(ProviderBrowserViewModel))]
@@ -119,7 +122,8 @@ internal static class Program
         builder.Services.AddSingleton<MemorySessionStore>();
 
         // ── Per-app Blazor configuration (~/.harbor/blazor.json) ──
-        // Non-overlapping with CLI/Avalonia/WPF/MAUI config files.
+        // Non-overlapping with CLI/Avalonia/WPF/MAUI config files AND with
+        // the shared ~/.harbor/config.json.
         builder.Services.AddSingleton<IAppConfigStore<BlazorConfig>>(sp =>
             new JsonAppConfigStore<BlazorConfig>(
                 new BlazorConfig(),
@@ -132,6 +136,32 @@ internal static class Program
 #pragma warning restore RS0030
             return result.IsSuccess ? result.Value : new BlazorConfig();
         });
+
+        // ── Shared common configuration (~/.harbor/config.json) ──
+        // CommonConfig holds API keys, default provider/model, storage backend,
+        // log level, permissions, plugins, network, compaction — every field
+        // that is shared across ALL Harbor apps. Loaded eagerly so the Blazor
+        // composition root can read StorageBackend / LogLevel / etc.
+        // synchronously. Same atomic-write + thread-safe pattern as
+        // JsonAppConfigStore<T>.
+        builder.Services.AddSingleton<ICommonConfigStore>(sp =>
+            new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<ICommonConfigStore>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new CommonConfig();
+        });
+
+        // ── Composite: CommonConfig + BlazorConfig ──
+        builder.Services.AddSingleton<CompositeConfig<BlazorConfig>>(sp =>
+            new CompositeConfig<BlazorConfig>(
+                sp.GetRequiredService<CommonConfig>(),
+                sp.GetRequiredService<BlazorConfig>()));
 
         // App-local UI services.
         builder.Services.AddSingleton<BlazorDispatcherAdapter>();

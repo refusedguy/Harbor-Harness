@@ -101,11 +101,37 @@ HARBOR_TUI=ansi       harbor     # default streaming
 HARBOR_TUI=plain      harbor     # no colors, pipe-safe
 HARBOR_TUI=spectre    harbor     # rich panels
 HARBOR_TUI=spectre-fullscreen harbor
-HARBOR_TUI=spectre-tui harbor     # interactive (default in TTY)
-HARBOR_TUI=terminal-gui harbor    # experimental
-HARBOR_TUI=termina     harbor     # experimental
-HARBOR_TUI=razor-console harbor   # experimental
+HARBOR_TUI=spectre-tui harbor     # interactive (default in TTY) ← official widget framework
+HARBOR_TUI=terminal-gui harbor    # mature widget set, menus, dialogs, mouse
+HARBOR_TUI=termina     harbor     # ANSI precision, 24-bit color, reactive MVVM
+HARBOR_TUI=razor       harbor     # .razor components, hot reload
 ```
+
+#### Interactive TUI 4-way comparison (SpectreTui vs Termina vs Terminal.Gui vs RazorConsole)
+
+All four interactive renderers implement the same 13-feature surface
+(streaming chat with role colors, role headers, markdown, GFM tables,
+scrollable history, multi-line input with history + autocomplete, status
+bar, stream bar, hotkeys, session sidebar, command palette, toasts, TEA
+integration). Pick by killer feature:
+
+| Renderer       | Killer feature                                            | Trade-off                                          | Best for                                              |
+|----------------|-----------------------------------------------------------|----------------------------------------------------|-------------------------------------------------------|
+| `spectre-tui`  | Official Spectre widget framework (default)               | Heaviest of the four (~50 MB RSS)                  | Everyday chat — the default                           |
+| `termina`      | ANSI precision: 24-bit true color, Kitty kbd, DCS sync    | More code for less (no widget zoo)                 | Power users on Kitty/WezTerm/Ghostty/iTerm2           |
+| `terminal-gui` | Complete widget set: Window/Menu/Dialog/TextView/TreeView | Synchronous `Application.Run` blocks calling thread| Classic full-screen TUI (tig/htop/lazygit style)      |
+| `razor`        | Component model: `.razor` files, hot reload, React-like   | Stream-based repaint; slower build (Razor codegen) | Web devs moving to TUI; reusable component libraries  |
+
+All four ship the **same hotkey table** (Enter submit, Esc abort/quit,
+Ctrl+L clear, Ctrl+C abort, F2 toggle focus, ↑/↓ line scroll, PgUp/PgDn
+page scroll, Home/End top/bottom, Alt+↑/↓ input history, Tab slash
+autocomplete, Ctrl+P command palette, Alt+1..9 toggle Nth panel,
+Ctrl+Tab cycle panel focus, ? toggle help) and the same **status bar**
+shape (`provider/model/agent · tokens↑↓ · $cost · status · scroll%`).
+
+See [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) for
+the full comparison matrix.
+
 
 ## Common commands (inside REPL)
 

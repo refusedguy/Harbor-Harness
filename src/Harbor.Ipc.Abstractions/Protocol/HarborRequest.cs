@@ -1,0 +1,138 @@
+using MessagePack;
+
+namespace Harbor.Ipc.Protocol;
+
+/// <summary>
+///     Base type for all Harbor IPC requests. Carries a client-generated
+///     <see cref="RequestId" /> so the client can match responses to requests.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>Wire format:</b> MessagePack [Union] tagged union. The integer
+///         tag is the request-kind discriminator; each concrete request
+///         record is annotated with <c>[MessagePackObject]</c> and positional
+///         <c>[Key(N)]</c> members.
+///     </para>
+///     <para>
+///         <b>Inheritance &amp; key ordering:</b> MessagePack requires base
+///         members to be keyed first, then derived members. The base
+///         <see cref="HarborRequest" /> owns <c>[Key(0)] = RequestId</c>.
+///         Concrete derived records therefore start their own keys at
+///         <c>[Key(1)]</c> and MUST NOT redeclare <see cref="RequestId" />.
+///     </para>
+///     <para>
+///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
+///         ModelInfo, ProviderId, ToolResult) are carried inside the
+///         concrete request/response payloads as
+///         <see cref="PayloadBytes"/> — a MessagePack-typeless-serialized
+///         <c>byte[]</c>. The TypelessContractlessStandardResolver handles
+///         them transparently (they are POCOs with public get/init properties).
+///         This keeps the wire contract small and decoupled from the domain
+///         layer's [MemoryPackable] attributes.
+///     </para>
+/// </remarks>
+[MessagePackObject]
+[Union(0, typeof(StartAgentRequest))]
+[Union(1, typeof(AbortAgentRequest))]
+[Union(2, typeof(SendPromptRequest))]
+[Union(3, typeof(CreateSessionRequest))]
+[Union(4, typeof(ListSessionsRequest))]
+[Union(5, typeof(GetSessionRequest))]
+[Union(6, typeof(DeleteSessionRequest))]
+[Union(7, typeof(GetMessagesRequest))]
+[Union(8, typeof(ListProvidersRequest))]
+[Union(9, typeof(ListModelsRequest))]
+[Union(10, typeof(ListToolsRequest))]
+[Union(11, typeof(SubscribeToEventsRequest))]
+[Union(12, typeof(ConnectRequest))]
+[Union(13, typeof(DisconnectRequest))]
+public abstract record HarborRequest
+{
+    /// <summary>
+    ///     Client-generated unique id for this request. The server copies it
+    ///     into the matching <see cref="HarborResponse.RequestId" />.
+    /// </summary>
+    [Key(0)]
+    public Guid RequestId { get; init; } = Guid.NewGuid();
+}
+
+// ── Agent ──────────────────────────────────────────────────────────────────
+
+/// <summary>Bind the agent loop to a session.</summary>
+[MessagePackObject]
+public sealed record StartAgentRequest(
+    [property: Key(1)] string SessionId,
+    [property: Key(2)] string AgentName) : HarborRequest;
+
+/// <summary>Abort the in-flight run.</summary>
+[MessagePackObject]
+public sealed record AbortAgentRequest : HarborRequest;
+
+/// <summary>Submit a user prompt and run the agent loop to completion.</summary>
+[MessagePackObject]
+public sealed record SendPromptRequest(
+    [property: Key(1)] string Prompt) : HarborRequest;
+
+// ── Sessions ───────────────────────────────────────────────────────────────
+
+/// <summary>Create a new session.</summary>
+[MessagePackObject]
+public sealed record CreateSessionRequest(
+    [property: Key(1)] string Directory,
+    [property: Key(2)] string Agent,
+    [property: Key(3)] string Provider,
+    [property: Key(4)] string Model) : HarborRequest;
+
+/// <summary>List all sessions.</summary>
+[MessagePackObject]
+public sealed record ListSessionsRequest : HarborRequest;
+
+/// <summary>Get a session by id.</summary>
+[MessagePackObject]
+public sealed record GetSessionRequest(
+    [property: Key(1)] string SessionId) : HarborRequest;
+
+/// <summary>Delete a session.</summary>
+[MessagePackObject]
+public sealed record DeleteSessionRequest(
+    [property: Key(1)] string SessionId) : HarborRequest;
+
+/// <summary>Get all messages for a session.</summary>
+[MessagePackObject]
+public sealed record GetMessagesRequest(
+    [property: Key(1)] string SessionId) : HarborRequest;
+
+// ── Providers ──────────────────────────────────────────────────────────────
+
+/// <summary>List registered provider ids.</summary>
+[MessagePackObject]
+public sealed record ListProvidersRequest : HarborRequest;
+
+/// <summary>List models, optionally filtered by provider id.</summary>
+[MessagePackObject]
+public sealed record ListModelsRequest(
+    [property: Key(1)] string? ProviderId) : HarborRequest;
+
+// ── Tools ──────────────────────────────────────────────────────────────────
+
+/// <summary>List all registered tools.</summary>
+[MessagePackObject]
+public sealed record ListToolsRequest : HarborRequest;
+
+// ── Streaming events ───────────────────────────────────────────────────────
+
+/// <summary>
+///     Open a server-pushed event stream. The server replies with an
+///     <c>OkResponse</c> ack, then begins streaming <see cref="EventEnvelope" />
+///     frames (out-of-band, not as a normal response).
+/// </summary>
+[MessagePackObject]
+public sealed record SubscribeToEventsRequest : HarborRequest;
+
+/// <summary>Connect handshake.</summary>
+[MessagePackObject]
+public sealed record ConnectRequest : HarborRequest;
+
+/// <summary>Disconnect handshake.</summary>
+[MessagePackObject]
+public sealed record DisconnectRequest : HarborRequest;

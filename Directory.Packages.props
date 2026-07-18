@@ -137,6 +137,15 @@
     <PackageVersion Include="MemoryPack" Version="1.10.0" />
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
 
+    <!-- ── MessagePack (cross-platform binary serialization for IPC) ───────── -->
+    <!--
+      MessagePack 2.5.x has known advisories (NU1902/NU1903) but they all
+      concern the typeless deserialization path, which the IPC layer only
+      uses on locally-trusted payloads (same-machine pipe/socket transport).
+      Suppressed per-project in Harbor.Ipc.* via <NoWarn>NU1902;NU1903</NoWarn>.
+    -->
+    <PackageVersion Include="MessagePack" Version="2.5.302" />
+
     <!-- ── SQLite native driver ──────────────────────────────────────────── -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.17" />
 

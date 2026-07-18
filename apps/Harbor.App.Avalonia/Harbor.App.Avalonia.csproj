@@ -51,6 +51,19 @@
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+
+    <!--
+      Harbor IPC layer. Same pattern as Harbor.App.Cli: the shared contract
+      (Harbor.Ipc.Abstractions) plus the three implementations are all
+      referenced so the app can switch modes via the HARBOR_MODE env var at
+      runtime. Default is 'inprocess' (direct calls). For remote mode, set
+      HARBOR_MODE=ipc-client and the IHarborClient registration switches to
+      IpcHarborClient (the desktop app then talks to a separately-running
+      Harbor.App.Cli ipc-server process).
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

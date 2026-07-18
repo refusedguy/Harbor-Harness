@@ -1,9 +1,15 @@
 // CliConfig.cs — CLI-specific configuration record.
 //
-// The CLI app's own config. Stored at ~/.harbor/cli.json (NON-overlapping with
-// the desktop apps' avalonia.json / wpf.json / maui.json / blazor.json files).
-// Common fields (Theme, LogLevel, LastUsed*, RecentSessions) are inherited from
-// AppConfigBase; CLI-specific fields are declared here.
+// The CLI app's own config. Stored at ~/.harbor/cli.json (NON-overlapping
+// with the desktop apps' avalonia.json / wpf.json / maui.json / blazor.json
+// files, AND non-overlapping with the shared ~/.harbor/config.json which
+// holds CommonConfig).
+//
+// As of task C1, common fields (Theme, LogLevel, LastUsed*, RecentSessions,
+// default storage) live in CommonConfig (~/.harbor/config.json). CliConfig
+// owns ONLY CLI-specific UX preferences. The CLI's HostBuilder reads
+// CommonConfig.StorageBackend for the storage selection — CliConfig no longer
+// carries a duplicate DefaultStorage field.
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -12,17 +18,18 @@ namespace Harbor.Cli.Configuration;
 
 /// <summary>
 ///     Per-app configuration for the Harbor CLI. Stored at
-///     <c>~/.harbor/cli.json</c>. Non-overlapping with desktop app configs.
+///     <c>~/.harbor/cli.json</c>. Non-overlapping with desktop app configs
+///     and with the shared <c>~/.harbor/config.json</c>.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Migrating from HarborConfig:</b> the legacy
-///         <c>Harbor.Application/Configuration/HarborConfig.cs</c> stored CLI
-///         state in <c>~/.harbor/config.json</c> and merged it with auth,
-///         provider presets, and compaction settings. CliConfig is narrower:
-///         it owns only the per-CLI-app UX preferences (TUI renderer, storage
-///         backend, onboarding flags). Auth + provider presets stay in
-///         HarborConfig (config.json) for now — see docs/CONFIGURATION.md §Migrating.
+///         <b>Shared vs app-specific:</b> fields that the user expects to be
+///         the same across every Harbor app (API keys, default provider /
+///         model / agent, storage backend, log level, permission mode, plugin
+///         enablement, HTTP proxy, compaction tuning) live in
+///         <see cref="CommonConfig"/>. CliConfig owns ONLY the CLI's UX
+///         preferences (TUI renderer, onboarding flag, slash-command enable,
+///         input history).
 ///     </para>
 /// </remarks>
 public sealed record CliConfig : AppConfigBase
@@ -38,16 +45,10 @@ public sealed record CliConfig : AppConfigBase
     ///     <c>"plain"</c>, <c>"spectre"</c>, <c>"spectre-tui"</c>,
     ///     <c>"fullscreen"</c>, <c>"terminal-gui"</c>, <c>"termina"</c>,
     ///     <c>"razor"</c>. The <c>HARBOR_TUI</c> env var overrides this at
-    ///     startup. Defaults to <c>"auto"</c>.
+    ///     startup. Defaults to <c>"auto"</c> (which resolves to
+    ///     <c>"spectre-tui"</c> in the CLI composition root).
     /// </summary>
     public string DefaultTuiRenderer { get; init; } = "auto";
-
-    /// <summary>
-    ///     Default session storage backend: <c>"jsonl"</c>, <c>"sqlite"</c>,
-    ///     <c>"memory"</c>. The <c>HARBOR_STORAGE</c> env var overrides this at
-    ///     startup. Defaults to <c>"jsonl"</c>.
-    /// </summary>
-    public string DefaultStorage { get; init; } = "jsonl";
 
     /// <summary>
     ///     Whether to run the first-run onboarding wizard on the next launch.
@@ -69,4 +70,17 @@ public sealed record CliConfig : AppConfigBase
     ///     Empty by default — all builtins are enabled.
     /// </summary>
     public ImmutableList<string> DisabledTools { get; init; } = ImmutableList<string>.Empty;
+
+    /// <summary>
+    ///     Path to the readline-style history file. Empty (the default)
+    ///     means <c>~/.harbor/history</c>. Set to an absolute path to keep
+    ///     per-project or per-machine history separate.
+    /// </summary>
+    public string HistoryFile { get; init; } = "";
+
+    /// <summary>
+    ///     Maximum number of input-history entries to retain. Older entries
+    ///     are evicted FIFO when this cap is hit. Defaults to <c>1000</c>.
+    /// </summary>
+    public int MaxHistoryEntries { get; init; } = 1000;
 }
