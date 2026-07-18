@@ -10,6 +10,9 @@ artifacts/
 *.user
 *.suo
 *.cache
+
+## Desktop app build tasks (Avalonia etc. — generated, not source)
+.avalonia-build-tasks/
 *.log
 *.tlog
 

@@ -14,9 +14,9 @@
     <GenerateDocumentationFile Condition="$(IsTestProject) == 'true'">false</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <!-- Test projects: TUnit + Microsoft Testing Platform -->
+  <!-- Test projects: TUnit + Microsoft Testing Platform (version pinned via Directory.Packages.props) -->
   <ItemGroup Condition="$(IsTestProject) == 'true'">
-    <PackageReference Include="TUnit" Version="0.50.0"/>
+    <PackageReference Include="TUnit"/>
   </ItemGroup>
 
   <!-- Source generators: enable for all projects -->

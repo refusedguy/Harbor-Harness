@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Directory.Packages.props — Central Package Management (CPM) for the Harbor solution.
+
+  Every NuGet package consumed by any project in the repo has its version pinned
+  here. Individual .csproj files declare only `<PackageReference Include="..." />`
+  (no Version attribute) and inherit the version from this file.
+
+  See docs/CENTRAL_PACKAGE_MANAGEMENT.md for the full guide.
+
+  CPM is enabled by `<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>`
+  in /Directory.Build.props.
+
+  Grouping convention (top→bottom):
+    1. Microsoft.Extensions.*  (logging, DI, hosting, options, http, configuration)
+    2. Microsoft.CodeAnalysis.* (Roslyn, analyzers, banned-api)
+    3. Microsoft.Data.*        (storage drivers)
+    4. Microsoft.NET.* / test SDK
+    5. TUnit + Moq + NetArchTest (test framework + architecture rules)
+    6. CommunityToolkit.*      (MVVM, HighPerformance)
+    7. Spectre.*               (console + TUI libraries)
+    8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
+    9. Jint                     (scripting engine)
+   10. Roslyn analyzers         (Roslynator, Sonar, Meziantou, AsyncFixer, Reflection)
+   11. Performance              (ZLinq, DotNext, NonBlocking, KZDev, MemoryPack, CSharpFunctionalExtensions)
+   12. SQLite drivers
+   13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
+-->
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!--
+      NuGet 6.0+ supports central package management. When a project declares a
+      <PackageReference Include="X" /> (no Version), NuGet resolves the version
+      from this file. <CentralPackageTransitivePinningEnabled> additionally
+      pins transitive dependencies to the versions declared here, so a vulnerable
+      transitive cannot sneak in via a deep dependency.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ── Microsoft.Extensions.* ────────────────────────────────────────── -->
+    <!--
+      All Microsoft.Extensions.* packages are pinned to the latest 10.0.10
+      servicing release. Transitive dependencies (e.g. Terminal.Gui →
+      Configuration.Binder 10.0.7, Termina → Hosting.Abstractions 10.0.8)
+      require >= 10.0.7 / 10.0.8 / 10.0.9 depending on the chain; pinning
+      to 10.0.10 satisfies all transitive minimums and CentralPackageTransitivePinningEnabled
+      keeps them locked to this version.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
+
+    <!-- ── Microsoft.CodeAnalysis.* (Roslyn + analyzers) ─────────────────── -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="3.11.0" />
+
+    <!-- ── Microsoft.Data.* (storage drivers) ────────────────────────────── -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+
+    <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+
+    <!-- ── TUnit + Moq + NetArchTest (test framework + arch rules) ───────── -->
+    <PackageVersion Include="TUnit" Version="0.50.0" />
+    <PackageVersion Include="TUnit.Assertions" Version="0.50.0" />
+    <PackageVersion Include="Moq" Version="4.20.70" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+
+    <!-- ── BenchmarkDotNet ───────────────────────────────────────────────── -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.0" />
+
+    <!-- ── CommunityToolkit.* (MVVM, HighPerformance) ────────────────────── -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageVersion Include="CommunityToolkit.HighPerformance" Version="8.4.0" />
+
+    <!-- ── Spectre.* (console + TUI) ─────────────────────────────────────── -->
+    <PackageVersion Include="Spectre.Console" Version="0.54.0" />
+    <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
+    <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
+
+    <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
+    <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
+    <PackageVersion Include="Termina" Version="0.15.0" />
+    <PackageVersion Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409" />
+    <PackageVersion Include="Avalonia" Version="11.2.7" />
+    <PackageVersion Include="Avalonia.Desktop" Version="11.2.7" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="11.2.7" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="11.2.7" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.2.7" />
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="11.2.0" />
+    <PackageVersion Include="Markdig" Version="1.3.2" />
+    <PackageVersion Include="AvalonEdit" Version="6.3.0.90" />
+    <PackageVersion Include="Dirkster.AvalonDock" Version="4.2.1" />
+    <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.0-rc6" />
+
+    <!-- ── .NET MAUI (workload-supplied; version matches the maui-windows
+         workload pack installed on the build machine) ──────────────────── -->
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Xaml" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Core" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Resizetizer" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Build.Tasks" Version="10.0.20" />
+
+    <!-- ── Scripting engines ─────────────────────────────────────────────── -->
+    <PackageVersion Include="Jint" Version="4.4.1" />
+
+    <!-- ── Roslyn analyzers (consumed via Directory.Build.props) ─────────── -->
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.14.0" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.8.0.113526" />
+    <PackageVersion Include="AsyncFixer" Version="1.6.0" />
+    <PackageVersion Include="ReflectionAnalyzers" Version="0.3.1" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.182" />
+
+    <!-- ── Performance / collections / serialization ─────────────────────── -->
+    <PackageVersion Include="ZLinq" Version="1.5.6" />
+    <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />
+    <PackageVersion Include="DotNext" Version="6.4.1" />
+    <PackageVersion Include="DotNext.Threading" Version="6.4.1" />
+    <PackageVersion Include="NonBlocking" Version="2.1.2" />
+    <PackageVersion Include="KZDev.PerfUtils" Version="3.0.1" />
+    <PackageVersion Include="MemoryPack" Version="1.10.0" />
+    <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
+
+    <!-- ── SQLite native driver ──────────────────────────────────────────── -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.17" />
+
+    <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
+    <PackageVersion Include="Termina.Generators" Version="0.15.0" />
+  </ItemGroup>
+
+</Project>
