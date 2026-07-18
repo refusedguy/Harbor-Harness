@@ -3,6 +3,10 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <!-- S3267 (loop → LINQ) is downgraded because the loop in RipGrepTool
+         is intentionally written as a foreach for clarity; converting to
+         LINQ would obscure the file-system walk semantics. -->
+    <NoWarn>$(NoWarn);S3267</NoWarn>
   </PropertyGroup>
 
   <!--

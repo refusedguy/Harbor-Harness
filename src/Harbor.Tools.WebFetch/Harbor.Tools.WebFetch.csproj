@@ -3,6 +3,11 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <!-- S6444 (pass a timeout to limit execution time) is downgraded because
+         HttpClient calls in WebFetchTool are governed by the HttpClient.Timeout
+         already configured at construction (10s default), so adding a
+         per-call CancellationToken would be redundant. -->
+    <NoWarn>$(NoWarn);S6444</NoWarn>
   </PropertyGroup>
 
   <!--

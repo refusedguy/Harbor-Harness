@@ -58,6 +58,10 @@
          EventHandler<T> with plain record payloads (UiState, ToastNotification)
          which is intentional for the simple event contracts in this app. -->
     <NoWarn>$(NoWarn);MA0046</NoWarn>
+
+    <!-- S3267 (loop → LINQ) fires on intentional foreach loops (OnboardingViewModel
+         API-key builder) where the conditional body would be obscured by LINQ. -->
+    <NoWarn>$(NoWarn);S3267</NoWarn>
   </PropertyGroup>
 
   <!-- Expose internals to the DI test project + the E2E test project so they

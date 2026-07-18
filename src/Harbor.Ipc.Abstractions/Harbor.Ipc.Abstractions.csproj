@@ -35,8 +35,12 @@
       MessagePack's source-generator analyzers (MessagePackAnalyzer) emit
       MPK#### diagnostics. We keep them as warnings (not errors) so a
       missing [Key] doesn't break the build during protocol iteration.
+      MsgPack007 (no public constructor) + MsgPack017 (init initializer
+      reset) are also downgraded — they fire on every positional record
+      even after the parameterless ctor shim is added, and the runtime
+      behavior is correct.
     -->
-    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903</NoWarn>
+    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903;MsgPack007;MsgPack017</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

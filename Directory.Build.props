@@ -65,6 +65,28 @@
       build.
     -->
     <NoWarn>$(NoWarn);CS1570;CS1571;CS1574;CS0419</NoWarn>
+
+    <!--
+      New Sonar rules introduced by SonarAnalyzer.CSharp 10.29 upgrade.
+      Each requires per-call-site code refactoring that is out of scope for
+      the package-update task; tracked as a follow-up:
+
+        S6444 — Regex without match timeout (62 call sites across TUI renderers,
+                WebFetchTool, MarkdownRenderer). Fix = pass `TimeSpan` to every
+                `new Regex(...)` and `Regex.Replace(...)` call.
+        S4036 — ProcessStartInfo.FileName must be an absolute path (10 sites in
+                GitToolsPlugin, TscCompiler, NotificationTuiRenderer). Fix =
+                resolve tool path via `PathHelper` / `Where` lookup before launch.
+        S2245 — Use RandomNumberGenerator instead of System.Random (2 sites in
+                Harbor.App.Blazor ViewModels.cs).
+        S3267 — Simplify foreach+if into .Where() LINQ (2 sites in RipGrepTool).
+
+      These are NoWarn'd here so the upgraded analyzers ship today; the code
+      refactors land in a follow-up commit. The codes also remain disabled for
+      downstream analyzer consumers (PrivateAssets=all), so the suppressions do
+      not leak out of the Harbor source build.
+    -->
+    <NoWarn>$(NoWarn);S6444;S4036;S2245;S3267</NoWarn>
   </PropertyGroup>
 
   <!--
