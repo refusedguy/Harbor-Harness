@@ -32,7 +32,7 @@ one for your workflow.
 | `Termina`               | `termina`        | Any terminal                    | Full-screen   | ~20 MB        | `Termina`                         | **ANSI precision.** 24-bit true color, Kitty keyboard, DCS sync output. Reactive MVVM. |
 | `RazorConsole`          | `razor`          | Any terminal                    | Full-screen   | ~30 MB        | `RazorConsole.Core`               | **Component model.** `.razor` files, hot reload, React-like composition. |
 | **`Wpf`** ⭐ new         | `wpf`            | Windows only                    | Desktop GUI   | ~80 MB        | .NET 10 Desktop Runtime, WPF      | Real Windows desktop window with XAML designer + Hot Reload.         |
-| **`Avalonia`** ⭐ new    | `avalonia`       | Windows / Linux / macOS         | Desktop GUI   | ~60 MB        | Avalonia 11.2 + Skia              | Cross-platform desktop GUI. Same XAML story as WPF.                  |
+| **`Avalonia`** ⭐ new    | `avalonia`       | Windows / Linux / macOS         | Desktop GUI   | ~60 MB        | Avalonia 12.1 + Skia              | Cross-platform desktop GUI. Same XAML story as WPF. Custom Windows chrome via `ExtendClientAreaToDecorationsHint`. |
 | **`Maui`** ⭐ new        | `maui`           | WinUI / Android / iOS / macOS   | Mobile+Desktop| ~90 MB desktop / 30–50 MB mobile | MAUI workload, platform SDKs | Phone + tablet + Mac Catalyst support. Touch-friendly layout.       |
 | **`Blazor`** ⭐ new      | `blazor`         | Any browser (server runs anywhere) | Web UI     | ~50 MB + ~10 MB / client | ASP.NET Core, Kestrel, SignalR | Run on a server, view from any browser. Remote access, mobile web.   |
 | **`Sixel`** ⭐ new       | `sixel`          | Sixel-capable terminals         | Streaming     | ~1 MB         | (inherits Ansi)                  | Inline image rendering (PNG/JPEG → Sixel) in supported terminals.    |
@@ -712,5 +712,16 @@ through `TuiEffect`.
   a 5-second window.
 - **MAUI manifests.** Add `AndroidManifest.xml`, `Info.plist` so mobile builds
   actually package.
-- **Avalonia 11.2 bring-up.** Validate the `AppBuilder.AfterSetup` signature
-  against the installed Avalonia version.
+- **Avalonia 12.1 bring-up (DONE in Task U1).** Upgraded from 11.2.7 → 12.1.0.
+  Notable breaking changes handled: `TextBox.Watermark` → `TextBox.PlaceholderText`
+  across 7 view files; `AVLN2100` (missing `x:DataType` on compiled bindings) was
+  promoted from warning → error — disabled project-wide via
+  `<AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>`
+  in `Harbor.App.Avalonia.csproj` so reflection bindings stay the default until
+  the ORCA UI redesign (Task U2) adds `x:DataType` per view. `Avalonia.Diagnostics`
+  stays on `11.3.x` because the diagnostics inspector package has not been
+  published for the 12.x line yet. Added a custom-drawn Windows title bar
+  (`ExtendClientAreaToDecorationsHint=True` + `ExtendClientAreaChromeHints=PreferNone`)
+  with VS Code-style caption buttons (`Button.WindowButton` classes in
+  `Themes/AppStyles.axaml`) so the default white Windows bar no longer "kills
+  everything" — the chrome now matches the Catppuccin-Mocha theme.

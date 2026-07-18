@@ -227,18 +227,124 @@ with placeholder tests. They will not pass in the current sandbox because:
    for the agent's response to render, assert on the visible screen.
 3. Wire tool-call canned responses to exercise the tool-call card UI.
 
-### 6.2 Avalonia desktop E2E
+### 6.2 Avalonia desktop E2E — DELIVERED
 
-**Status:** `tests/Harbor.E2E.App.Avalonia/` exists with a placeholder.
-`HeadlessAvaloniaDriver` is implemented but skipped on Linux because
-`Avalonia.Headless.X11` requires a real X display (or `xvfb`).
+**Status:** ✅ `tests/Harbor.E2E.App.Avalonia/` is implemented and passing.
+7 E2E tests run against the real `Harbor.App.Avalonia` app via
+`Avalonia.Headless`'s in-process off-screen software renderer. No `xvfb` or
+real X display required — the headless platform renders to an in-memory
+bitmap.
 
-**To finish:**
-1. Install `xvfb` in CI: `apt-get install -y xvfb`.
-2. Run tests under `xvfb-run dotnet test tests/Harbor.E2E.App.Avalonia`.
-3. Replace placeholder tests with: open the app, click "New Session", type a
-   prompt, wait for the response in `ChatView`, assert on the rendered
-   `TypewriterStreamingText` content.
+**Architecture:**
+
+```
+Test thread (TUnit)                 UI thread (dedicated)
+─────────────────                   ──────────────────────
+[Before(HookType.Test)]
+  └─ new HeadlessAvaloniaDriver      static ctor starts UI thread
+     └─ InitializeAsync()              └─ UIThreadMain():
+         ├─ AppHost.BuildAsync()  ──┐     1. Dispatcher.UIThread  (binds)
+         │   (on test thread,        │     2. DispatcherReady.SetResult()
+         │    ConfigureAwait(false)) │     3. Dispatcher.UIThread.MainLoop(ct)
+         │                           │        └─ pumps jobs forever
+         └─ Dispatcher.UIThread  ◀───┘
+            .InvokeAsync(setup
+              Avalonia app)
+                                          
+[Test body]
+  └─ Driver.ScreenshotAsync("01-...")
+       └─ Dispatcher.UIThread.InvokeAsync(() => {
+            window.UpdateLayout();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            Dispatcher.UIThread.RunJobs();
+            var bitmap = window.CaptureRenderedFrame();
+            bitmap.Save(fs);  // → ~/.harbor/test-screenshots/01-...png
+          }).GetAwaiter().GetResult();
+```
+
+**Key design decisions:**
+
+1. **Dedicated UI pump thread.** TUnit runs each test method on a fresh
+   threadpool thread, but Avalonia's `Dispatcher` + `Application` are bound
+   to ONE thread for the process lifetime. The driver's static constructor
+   starts a dedicated background thread that binds the dispatcher to itself
+   and enters `Dispatcher.UIThread.MainLoop(ct)`. Test threads then marshal
+   all UI access via `Dispatcher.UIThread.InvokeAsync(...)` — the job lands
+   in the queue, the UI thread's MainLoop picks it up, runs it, and the
+   Task returned by `InvokeAsync` completes. No manual `RunJobs` pumping
+   anywhere in test code.
+
+2. **`InvokeAsync` + `GetAwaiter().GetResult()`** for synchronous-style
+   access (`FindControlByName`, `FindButtonByText`, `OnUIThread`).
+   `DispatcherOperation` doesn't have `ConfigureAwait`, so we block via
+   `GetAwaiter().GetResult()`. Safe because the UI thread's MainLoop is
+   independent — no deadlock.
+
+3. **`ForceRenderTimerTick`** drives a fresh render pass. The headless
+   render timer doesn't fire automatically (no 60Hz vsync), so
+   `CaptureRenderedFrame()` returns the LAST rendered bitmap. We tick the
+   timer explicitly + call `Dispatcher.UIThread.RunJobs()` to drain the
+   queued render job before capturing.
+
+4. **Visual-tree-walking `FindByName`** instead of
+   `ControlExtensions.FindControl<T>`. The latter only searches the
+   immediate `NameScope` of the control it's called on — it doesn't
+   recurse into child `UserControl`s. Since `InputBox` lives inside
+   `ChatView.axaml` (a `UserControl` embedded in `MainWindow`), we walk
+   the visual tree depth-first and match by `StyledElement.Name`.
+
+5. **`OnUIThread<T>(Func<T>)` helper** for reading dispatcher-affine
+   properties (`Button.IsEnabled`, `TextBox.Text`) from the test thread.
+   Without this, tests throw `"calling thread cannot access this object
+   because a different thread owns it"`.
+
+**Tests (7, all passing):**
+
+| Test | Asserts | Screenshot |
+|---|---|---|
+| `MainWindow_OpensWithoutCrash` | App boots; `MainWindow` non-null; PNG > 5KB | `01-main-window.png` |
+| `Sidebar_ShowsHarborBrand` | "Harbor" appears in the rendered visual tree | `02-brand.png` |
+| `ChatInput_AcceptsText` | `InputBox` TextBox accepts typed text; `Text` reflects it | `03-input-typed.png` |
+| `SendButton_ExistsAndIsEnabled` | "Send ▶" button found by text; `IsEnabled` true when input non-empty | `04-send-button.png` |
+| `SessionSidebar_ShowsSearchBox` | "Search sessions" watermark visible | `05-session-sidebar.png` |
+| `StatusBar_ShowsProviderAndModel` | Status bar shows "ollama" (default provider) | `06-status-bar.png` |
+| `OnboardingWindow_RendersWelcomeScreen` | Onboarding window renders; "Harbor" in brand header | `07-onboarding.png` |
+
+**How to run:**
+
+```bash
+dotnet build tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj
+dotnet test tests/Harbor.E2E.App.Avalonia --no-build
+ls -la ~/.harbor/test-screenshots/
+```
+
+Expected: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7`.
+Screenshots at `~/.harbor/test-screenshots/01-main-window.png` through
+`07-onboarding.png` — open them in any image viewer to SEE what the UI
+looks like without running the app.
+
+**Limitations:**
+
+- The Avalonia.Headless software renderer doesn't always pick up dynamic
+  text changes (typed text in a TextBox) in the captured bitmap — the
+  `CaptureRenderedFrame()` API returns the last rendered frame, and
+  `ForceRenderTimerTick` may not fully flush the text formatter's cached
+  text runs. The tests assert on the in-memory `TextBox.Text` property
+  (which IS updated correctly) rather than the rendered bitmap pixels.
+  Visual review of the PNGs shows the static window chrome (title bar,
+  sidebar, status bar) but may not show dynamically typed text.
+- Tests are tagged `[NotInParallel]` because the driver mutates `$HOME`
+  (process-wide env var) and shares the process-wide Avalonia
+  `Application` singleton.
+- Each test class pays a one-time ~500ms init cost (builds the DI host +
+  Avalonia app). Subsequent tests in the same class reuse the singleton.
+- **TwoWay binding race**: the `TextBox.Text ↔ ChatViewModel.InputText`
+  binding is eventually-consistent across dispatcher cycles. Tests that
+  set `TextBox.Text` and then read it back in SEPARATE `InvokeAsync`
+  calls can see the value revert to a previous test's text (a deferred
+  `VM→TextBox` binding update lands between the set and the read). The
+  fix is to set AND read in the SAME `OnUIThread` call — see
+  `ChatInput_AcceptsText` for the pattern.
 
 ### 6.3 WPF / MAUI E2E
 
