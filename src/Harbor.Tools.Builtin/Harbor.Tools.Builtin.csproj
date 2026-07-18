@@ -4,12 +4,45 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Tools.Builtin</PackageId>
-    <Description>Harbor builtin tools — read, write, edit, bash, glob, grep, ls.</Description>
-    <PackageTags>harbor;tools;builtin</PackageTags>
+    <Description>Harbor builtin tools facade — references all 14 individual leaf tool projects (Read/Write/Edit/Bash/Grep/Glob/Ls/Task/WebFetch/Patch/Notebook/RipGrep/Tree/Mcp) so existing consumers of the old single-project API keep compiling without code changes.</Description>
+    <PackageTags>harbor;tools;builtin;facade</PackageTags>
   </PropertyGroup>
 
+  <!--
+    THIN FACADE — this project contains no .cs files of its own (only an empty
+    GlobalUsings.cs). It exists purely to aggregate the 14 leaf tool projects
+    that were split out of the original god-project. Each leaf lives at
+    src/Harbor.Tools.<Name>/ and references Harbor.Abstractions directly.
+
+    Consumers have two choices:
+      1. Reference this facade (Harbor.Tools.Builtin) — get all 14 tools.
+         Existing `using Harbor.Tools.Builtin;` and `AddTool<ReadTool>()`
+         call sites keep working unchanged because every leaf keeps the
+         `namespace Harbor.Tools.Builtin;` declaration.
+      2. Reference only the leaf projects they actually need — smaller
+         dependency closure, suitable for trimmed/NativeAOT scenarios.
+
+    §ARCH-003 carve-out: the cross-Infrastructure edges below (facade → leaf
+    tools) are explicit and intentional. The architecture test
+    NetArch_ToolsBuiltinFacade_DoesNotDependOn_Core_Or_NonLeafInfrastructure
+    enforces that the facade references ONLY Harbor.Abstractions + the 14
+    leaf tool assemblies (NOT Harbor.Core, NOT Providers.*, NOT Storage.*).
+  -->
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Read\Harbor.Tools.Read.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Write\Harbor.Tools.Write.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Edit\Harbor.Tools.Edit.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Bash\Harbor.Tools.Bash.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Grep\Harbor.Tools.Grep.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Glob\Harbor.Tools.Glob.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Ls\Harbor.Tools.Ls.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Task\Harbor.Tools.Task.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.WebFetch\Harbor.Tools.WebFetch.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Patch\Harbor.Tools.Patch.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Notebook\Harbor.Tools.Notebook.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.RipGrep\Harbor.Tools.RipGrep.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Tree\Harbor.Tools.Tree.csproj"/>
+    <ProjectReference Include="..\Harbor.Tools.Mcp\Harbor.Tools.Mcp.csproj"/>
   </ItemGroup>
 
 </Project>

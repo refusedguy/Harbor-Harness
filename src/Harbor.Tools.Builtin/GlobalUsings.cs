@@ -1,11 +1,8 @@
-global using System;
-global using System.Collections.Generic;
-global using System.IO;
-global using System.Linq;
-global using System.Text.Json;
-global using System.Threading;
-global using System.Threading.Tasks;
-global using CSharpFunctionalExtensions;
-global using Harbor.Abstractions.Models;
-global using Harbor.Abstractions.Models.Identifiers;
-global using Harbor.Abstractions.Tools;
+// Harbor.Tools.Builtin — empty GlobalUsings.
+//
+// This project is now a THIN FACADE: it contains no .cs code of its own, only
+// a .csproj that references the 14 individual leaf tool projects split out of
+// the original god-project. The namespace `Harbor.Tools.Builtin` is preserved
+// by every leaf tool's .cs file (each declares `namespace Harbor.Tools.Builtin;`)
+// so existing consumers using `using Harbor.Tools.Builtin;` keep compiling
+// without code changes.
