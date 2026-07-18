@@ -13,10 +13,30 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <UseAvalonia>true</UseAvalonia>
+    <!-- Avalonia 12 enables compiled bindings by default, which require an
+         explicit x:DataType on every binding. This repo's AXAML uses v11-style
+         reflection bindings without x:DataType, so disable compiled bindings
+         project-wide to keep them working unchanged. -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.App.Avalonia</PackageId>
     <Description>Harbor standalone Avalonia desktop app — ORCA-level coding agent GUI.</Description>
     <PackageTags>harbor;avalonia;gui;desktop;ai-agent;coding-agent</PackageTags>
+
+    <!--
+      Windows runtime identifier — required for Avalonia.Win32 (the W32 backend
+      that powers ClassicDesktopStyleApplicationLifetime.Dispatcher.MainLoop) to
+      load correctly. Without a RID, dotnet run/publish on Windows produces a
+      framework-dependent build that misses the native Win32 dispatcher hooks
+      and throws PlatformNotSupportedException at startup. We default to win-x64
+      on Windows when no RID is explicitly passed; other RIDs (win-arm64,
+      linux-x64, osx-arm64, …) can be passed via -r or <RuntimeIdentifier>.
+      See: https://github.com/AvaloniaUI/Avalonia/issues/13593 (the exact
+      PlatformNotSupportedException stack trace reported there matches the
+      user's Windows crash).
+    -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(OS)' == 'Windows_NT' AND '$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
 
     <!-- Avalonia 11.2.7 brings Tmds.DBus.Protocol 0.20.0 transitively (GHSA-xrw6-gwf8-vvr9).
          We can't pin a higher version of a transitive dep, so suppress NU1903 in this project. -->
@@ -67,13 +87,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Avalonia 11.2.x stable -->
+    <!-- Avalonia 12.1.0 stable (all packages kept at the same version via
+         Directory.Packages.props central package management to avoid the
+         PlatformNotSupportedException that results from a mixed 11.2/12.x
+         runtime + theme assembly mismatch). -->
     <PackageReference Include="Avalonia"/>
     <PackageReference Include="Avalonia.Desktop"/>
     <PackageReference Include="Avalonia.Themes.Fluent"/>
     <PackageReference Include="Avalonia.Fonts.Inter"/>
-    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'"/>
-    <!-- Avalonia.AvaloniaEdit 11.2.0 is the build matched to Avalonia 11.2.x -->
+    <!-- Avalonia.AvaloniaEdit 12.0.0 is the build matched to Avalonia 12.x -->
     <PackageReference Include="Avalonia.AvaloniaEdit"/>
     <!-- Markdown parsing (no rendering — we project to Avalonia controls in ChatMarkdown.cs) -->
     <PackageReference Include="Markdig"/>

@@ -27,13 +27,21 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 
 using var host = await AppHost.BuildAsync(args);
 
+
 AppBuilder.Configure<App>()
-    .UsePlatformDetect()
+    .UseWin32()
+    .UseSkia()
+    .UseHarfBuzz()
+    .WithInterFont()
     .LogToTrace()
     .AfterSetup(_ =>
     {
-        // Hand the built ServiceProvider to App so the ViewModels can resolve services.
+        // Hand the built ServiceProvider + IHost to App so the ViewModels can
+        // resolve services and App.OnShutdownRequested can stop the host
+        // cleanly on exit (prevents the "window won't close" hang where
+        // background Task.Run instances kept the process alive).
         App.Services = host.Services;
+        App.Host = host;
     })
     .StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnMainWindowClose);
 
