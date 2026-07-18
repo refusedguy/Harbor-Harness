@@ -415,3 +415,36 @@ dotnet_diagnostic.AsyncFixer05.severity = suggestion # Not used CancellationToke
 # --- Reflection ---
 dotnet_diagnostic.REL0001.severity = suggestion # Use overload with Type
 dotnet_diagnostic.REL0002.severity = suggestion # Use overload
+
+# ============================================================================
+# ARCHITECTURE LAYERING (§ARCH-001..§ARCH-NNN)
+# ============================================================================
+# Harbor follows Clean / Hexagonal / Onion Architecture. The dependency
+# direction is INWARD ONLY:
+#
+#   Presentation  →  Application  →  Domain
+#                       ↑                  ↑
+#   Infrastructure ─────┘──────────────────┘
+#
+# There is no built-in Roslyn analyzer for "assembly A must not reference
+# assembly B" (the closest is a custom BanAssemblies analyzer, which we do not
+# use). Instead, layering is enforced mechanically by:
+#
+#   1. tests/Harbor.Architecture.Tests/LayerDependencyTests.cs — 21 tests that
+#      load every Harbor assembly via reflection and assert on
+#      Assembly.GetReferencedAssemblies(). Run with:
+#        dotnet test tests/Harbor.Architecture.Tests/
+#
+#   2. Code-review checklist in CLAUDE.md §Layering rules — for soft rules
+#      that cannot be mechanically checked (e.g. "concrete impl types are
+#      new'd only in HostBuilder.cs").
+#
+# Canonical reference: docs/ARCHITECTURE_LAYERS.md
+# Audit history:       docs/CODE_PRINCIPLES_AUDIT.md §15
+#
+# Before adding a <ProjectReference> to any .csproj, check the allowed /
+# forbidden matrix in docs/ARCHITECTURE_LAYERS.md §2. If you violate a rule,
+# the corresponding architecture test will fail with a clear list of the
+# forbidden references.
+# ============================================================================
+
