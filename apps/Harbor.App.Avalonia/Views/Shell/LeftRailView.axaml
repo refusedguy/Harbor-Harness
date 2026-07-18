@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:shellVm="clr-namespace:Harbor.App.Avalonia.ViewModels.Shell"
+             xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Shell.LeftRailView">
+
+    <UserControl.Resources>
+        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
+    </UserControl.Resources>
+
+    <!--
+        Orca left rail — 280px wide, dense session rows.
+
+        Layout (top → bottom):
+          • Brand header (⚓ Harbor + new-session "+" button).
+          • Search box (filters FilteredSessions via LeftRailViewModel.SearchText).
+          • Session list (ListBox of SessionRowViewModel rows; each row is
+            rendered by the SessionRowView template — 2-3 lines: title +
+            relative time, meta line (model · mode), status line).
+    -->
+
+    <Border Width="280"
+            Background="{DynamicResource BgRailBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,0,1,0">
+        <Grid RowDefinitions="Auto,Auto,*">
+
+            <!-- ════════════ Brand header ════════════ -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Height="40" Margin="12,0">
+                <StackPanel Grid.Column="0" Orientation="Horizontal"
+                            VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="⚓" FontSize="16"
+                               Foreground="{DynamicResource AccentPrimaryBrush}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="Harbor" FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <Button Grid.Column="1" Classes="Ghost" Content="+"
+                        FontSize="18"
+                        Command="{Binding NewSessionCommand}"
+                        ToolTip.Tip="New session (Ctrl+N)"/>
+            </Grid>
+
+            <!-- ════════════ Search ════════════ -->
+            <TextBox Grid.Row="1"
+                     Margin="8,0,8,8"
+                     Height="30"
+                     PlaceholderText="Search sessions…"
+                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     Background="{DynamicResource BgInputBrush}"
+                     BorderBrush="{DynamicResource BorderDefaultBrush}"
+                     BorderThickness="1"
+                     CornerRadius="4"
+                     Foreground="{DynamicResource TextPrimaryBrush}"
+                     Padding="8,4"/>
+
+            <!-- ════════════ Session list ════════════ -->
+            <ListBox Grid.Row="2"
+                     ItemsSource="{Binding FilteredSessions}"
+                     SelectedItem="{Binding ActiveSession, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="4,0,4,8">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="shellVm:SessionRowViewModel">
+                        <shell:SessionRowView/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.Styles>
+                    <!-- Make the ListBoxItem transparent + tight so the
+                         SessionRowView's own BgActive highlight shows through. -->
+                    <Style Selector="ListBoxItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0,1"/>
+                    </Style>
+                    <Style Selector="ListBoxItem /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="CornerRadius" Value="4"/>
+                        <Setter Property="Padding" Value="0"/>
+                    </Style>
+                    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}"/>
+                    </Style>
+                    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                        <Setter Property="Background" Value="Transparent"/>
+                    </Style>
+                </ListBox.Styles>
+            </ListBox>
+        </Grid>
+    </Border>
+</UserControl>

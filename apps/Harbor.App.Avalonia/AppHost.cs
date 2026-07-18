@@ -1,6 +1,7 @@
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -19,6 +20,8 @@ using Harbor.Ipc;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
 using Harbor.Providers.Ollama;
+using Harbor.Providers.OpenAiCompatible;
+using Harbor.Providers.OpenAiCompatible.Compat;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Tools.Builtin;
@@ -71,6 +74,7 @@ internal static class AppHost
     [Exposes(typeof(ICommonConfigStore))]
     [Exposes(typeof(CommonConfig))]
     [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
+    [Exposes(typeof(OrcaShellViewModel))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -84,6 +88,12 @@ internal static class AppHost
         var builder = Host.CreateApplicationBuilder(args);
 
         ConfigureLogging(builder);
+
+        // HTTP client factory — used by OpenAI-compatible providers (Kilocode,
+        // OpenRouter, DeepSeek, …). Each provider gets its own HttpClient
+        // instance with a per-provider timeout. The factory handles pooling
+        // + lifecycle; named clients can be added later via AddHttpClient(id).
+        builder.Services.AddHttpClient();
 
         // Core services — same as Harbor.Cli.Hosting.HostBuilder.RegisterCore.
         builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
@@ -154,6 +164,19 @@ internal static class AppHost
                 sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
         builder.Services.AddSingleton(commonConfig);
 
+        // ── Auth resolver + model catalog for OpenAI-compatible providers ──
+        // The wizard persists API keys to CommonConfig.ApiKeys. This resolver
+        // reads them (falling back to env vars like KILO_API_KEY) so providers
+        // registered from providers/*.json can authenticate. The model catalog
+        // fetches + caches the /models endpoint per provider.
+        var authResolver = new CommonConfigAuthResolver(
+            commonStore,
+            bootstrapLoggerFactory.CreateLogger<CommonConfigAuthResolver>());
+        var modelCatalog = new DynamicModelCatalog(
+            new HttpClient(),
+            Path.Combine(harborDir, "cache", "providers"),
+            bootstrapLoggerFactory.CreateLogger<DynamicModelCatalog>());
+
         // ── Composite: CommonConfig + AvaloniaConfig ──
         builder.Services.AddSingleton<CompositeConfig<AvaloniaConfig>>(sp =>
             new CompositeConfig<AvaloniaConfig>(
@@ -193,8 +216,12 @@ internal static class AppHost
         tb.AddTool(() => new TreeTool(loggerFactory.CreateLogger<TreeTool>()));
         toolRegistry.Freeze();
 
-        // Providers — start with just Ollama (works offline if user has a local server).
-        // OpenAI-compatible providers are added in SettingsView when the user configures them.
+        // Providers — Ollama (native client, works offline) + all OpenAI-
+        // compatible providers discovered from providers/*.json (Kilocode,
+        // OpenRouter, DeepSeek, Groq, Mistral, xAI, Together, Fireworks,
+        // Cerebras, OpenAI, vLLM). This mirrors the CLI's
+        // ProviderRegistration.RegisterJsonProviders but inlines the logic
+        // (Avalonia doesn't reference Harbor.Cli.Hosting).
         var providerRegistry = new ProviderRegistry(loggerFactory.CreateLogger<ProviderRegistry>());
         var pb = new ProviderRegistryBuilder(providerRegistry);
         pb.AddProvider("ollama", () => new OllamaLlmClient(
@@ -209,12 +236,17 @@ internal static class AppHost
             },
             new OllamaConfig(),
             loggerFactory.CreateLogger<OllamaLlmClient>()));
+        RegisterJsonProviders(pb, authResolver, modelCatalog, loggerFactory);
         providerRegistry.Freeze();
 
-        // Agent registry — register default code/plan/explore agents.
+        // Agent registry — register default code/plan/explore agents using the
+        // CommonConfig default provider/model (or HARBOR_MODEL env override).
+        // The wizard saves DefaultProvider="kilocode" + DefaultModel="tencent/hy3:free"
+        // — combine them into "kilocode/tencent/hy3:free" and split on the first
+        // slash so the agent knows which provider + model to call.
         var agentRegistry = new AgentRegistry();
         var ab = new AgentRegistryBuilder(agentRegistry);
-        string defaultModel = Environment.GetEnvironmentVariable("HARBOR_MODEL") ?? "ollama/qwen2.5-coder:7b";
+        string defaultModel = ResolveDefaultModel(commonConfig);
         string[] parts = defaultModel.Split('/', 2);
         string defaultProviderId = parts[0];
         string defaultModelId = parts.Length > 1 ? parts[1] : defaultModel;
@@ -304,6 +336,15 @@ internal static class AppHost
         // step, typed API key) that we explicitly want to discard on close.
         builder.Services.AddTransient<OnboardingViewModel>();
 
+        // ── Experimental Orca shell VM (Task F2) ────────────────────────────
+        // Singleton so it survives across the app lifetime (same lifetime
+        // as the MainViewModel it wraps). Resolved ONLY when HARBOR_SHELL=orca
+        // (App.ShowMain branches on App.IsOrcaShell); in classic mode the
+        // singleton is constructed lazily on first resolve and never resolved,
+        // so its constructor side-effects (event subscriptions on MainViewModel)
+        // never run.
+        builder.Services.AddSingleton<OrcaShellViewModel>();
+
         var host = builder.Build();
 
         // Bind the UiStore → AvaloniaDispatcherAdapter exactly once, here in the
@@ -317,11 +358,133 @@ internal static class AppHost
 
         // Initialize the agent with a fresh session so the user can start chatting
         // immediately. The SessionManager owns the active session and re-initializes
-        // the agent whenever the user switches/branches.
+        // the agent whenever the user switches/branches. NOTE: when onboarding is
+        // required, the wizard runs AFTER BuildAsync returns — App.axaml.cs calls
+        // SessionManager.EnsureDefaultSessionAsync() again once the wizard saves
+        // the new CommonConfig so the agent picks up the user's chosen provider.
         var sessionManager = host.Services.GetRequiredService<SessionManager>();
         await sessionManager.EnsureDefaultSessionAsync().ConfigureAwait(false);
 
         return host;
+    }
+
+    /// <summary>
+    ///     Resolve the default "provider/model" string from (1) the HARBOR_MODEL
+    ///     env var, or (2) CommonConfig's DefaultProvider + DefaultModel. The
+    ///     model may already contain the provider prefix (e.g. the user typed
+    ///     "kilocode/tencent/hy3:free" in the wizard) — in that case we use it
+    ///     as-is. Otherwise we prepend the provider: "kilocode" + "/" +
+    ///     "tencent/hy3:free" → "kilocode/tencent/hy3:free".
+    /// </summary>
+    private static string ResolveDefaultModel(CommonConfig commonConfig)
+    {
+        string? env = Environment.GetEnvironmentVariable("HARBOR_MODEL");
+        if (!string.IsNullOrWhiteSpace(env)) return env;
+
+        string model = commonConfig.DefaultModel;
+        string provider = commonConfig.DefaultProvider;
+        string prefix = provider + "/";
+        return model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? model
+            : prefix + model;
+    }
+
+    /// <summary>
+    ///     Discover and register OpenAI-compatible providers from every
+    ///     <c>providers/*.json</c> candidate directory. Mirrors the CLI's
+    ///     <c>ProviderRegistration.RegisterJsonProviders</c> but inlined so
+    ///     Avalonia doesn't need to reference <c>Harbor.Cli.Hosting</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Directories searched (first wins on id collision):</b>
+    ///     </para>
+    ///     <list type="number">
+    ///         <item><c>~/.harbor/providers/</c> — user overrides.</item>
+    ///         <item><c>&lt;exeDir&gt;/providers/</c> — bundled (single-file publish).</item>
+    ///         <item>Walk up from <c>exeDir</c> looking for a sibling <c>providers/</c> — dev-clone layout.</item>
+    ///     </list>
+    ///     <para>
+    ///         Providers with <c>apiType != "openai-compatible"</c> (e.g.
+    ///         Anthropic, which needs its native client) and <c>ollama</c>
+    ///         (already registered above with the native OllamaLlmClient) are
+    ///         skipped. The first matching id wins; duplicates are silently
+    ///         dropped so user overrides in <c>~/.harbor/providers/</c> take
+    ///         precedence over bundled JSON.
+    ///     </para>
+    /// </remarks>
+    private static void RegisterJsonProviders(
+        ProviderRegistryBuilder pb,
+        IAuthResolver authResolver,
+        IModelCatalog modelCatalog,
+        ILoggerFactory loggerFactory)
+    {
+        var seenIds = new HashSet<string>(StringComparer.Ordinal) { "ollama" };
+        var logger = loggerFactory.CreateLogger(typeof(AppHost).FullName ?? "AppHost");
+
+        foreach (string dir in FindProvidersDirectories())
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (string file in Directory.EnumerateFiles(dir, "*.json"))
+            {
+                try
+                {
+                    var result = ProviderConfig.LoadFromFile(file);
+                    if (result.IsFailure)
+                    {
+                        logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
+                        continue;
+                    }
+                    var config = result.Value;
+                    if (config.ApiType != "openai-compatible")
+                    {
+                        logger.LogDebug("Skipping provider '{Id}' (apiType={Type}, not openai-compatible)",
+                            config.Id, config.ApiType);
+                        continue;
+                    }
+                    if (!seenIds.Add(config.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate provider '{Id}' from '{File}'", config.Id, file);
+                        continue;
+                    }
+
+                    var http = new HttpClient { Timeout = TimeSpan.FromSeconds(config.Timeout) };
+                    config.Quirks = ProviderCompatFlags.For(config.GetProviderId());
+                    var configRef = config;
+                    pb.AddProvider(config.Id, () => new OpenAiCompatibleLlmClient(
+                        http, configRef, authResolver, modelCatalog,
+                        loggerFactory.CreateLogger<OpenAiCompatibleLlmClient>()));
+                    logger.LogInformation("Registered OpenAI-compatible provider '{Id}' from '{File}'", config.Id, file);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to load provider config '{File}'", file);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Enumerate every candidate providers directory in precedence order:
+    ///     user config (<c>~/.harbor/providers/</c>) first, then bundled
+    ///     (<c>&lt;exeDir&gt;/providers/</c> and any ancestor). User config wins
+    ///     on id collisions so E2E tests (and power users) can override a
+    ///     bundled provider with their own JSON.
+    /// </summary>
+    private static IEnumerable<string> FindProvidersDirectories()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        yield return Path.Combine(home, ".harbor", "providers");
+
+        string exeDir = AppContext.BaseDirectory;
+        yield return Path.Combine(exeDir, "providers");
+
+        string? current = exeDir;
+        for (int i = 0; i < 8 && current is not null; i++)
+        {
+            yield return Path.Combine(current, "providers");
+            current = Path.GetDirectoryName(current);
+        }
     }
 
     private static void ConfigureLogging(HostApplicationBuilder builder)

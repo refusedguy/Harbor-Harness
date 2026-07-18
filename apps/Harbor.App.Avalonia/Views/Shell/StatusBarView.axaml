@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Shell.StatusBarView">
+
+    <UserControl.Resources>
+        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
+    </UserControl.Resources>
+
+    <!--
+        Orca segmented status bar.
+
+        Groups (left → right):
+          1. Status dot + label (idle/running/error/success).
+          2. Agent · model — JetBrains Mono.
+          3. Tokens ↓ in / ↑ out — JetBrains Mono.
+          4. Cost (USD) — colored by CostLow/Mid/High thresholds (Phase C).
+          5. (right) Session count.
+
+        Each group is a StackPanel; groups separated by a 1px hairline
+        (Border.StatusBarSeparator). Binds to the MainViewModel (the
+        OrcaShellView sets DataContext to its MainViewModel via the parent).
+    -->
+
+    <Border Background="{DynamicResource BgRailBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,1,0,0"
+            Height="28"
+            Padding="12,0">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
+
+            <!-- Group 1: status -->
+            <Ellipse Grid.Column="0" Width="6" Height="6"
+                     VerticalAlignment="Center" Margin="0,0,6,0"
+                     Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"/>
+            <TextBlock Grid.Column="1" Text="{Binding StatusText}"
+                       VerticalAlignment="Center" FontSize="11"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+            <Border Grid.Column="2" Width="1" Margin="12,4"
+                    Background="{DynamicResource BorderSubtleBrush}"/>
+
+            <!-- Group 2: agent · model -->
+            <TextBlock Grid.Column="3" Text="{Binding AgentLabel}"
+                       FontFamily="{DynamicResource FontMono}" FontSize="11"
+                       Foreground="{DynamicResource AccentPrimaryBrush}"
+                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock Grid.Column="4" Text="·"
+                       Foreground="{DynamicResource TextTertiaryBrush}"
+                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBlock Grid.Column="5" Text="{Binding ModelLabel}"
+                       FontFamily="{DynamicResource FontMono}" FontSize="11"
+                       Foreground="{DynamicResource TextMonoBrush}"
+                       VerticalAlignment="Center" Margin="0,0,0,0"
+                       TextTrimming="CharacterEllipsis"/>
+
+            <Border Grid.Column="6" Width="1" Margin="12,4"
+                    Background="{DynamicResource BorderSubtleBrush}"/>
+
+            <!-- Group 3: tokens -->
+            <TextBlock Grid.Column="7"
+                       Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
+                       FontFamily="{DynamicResource FontMono}" FontSize="11"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <TextBlock Grid.Column="8"
+                       Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
+                       FontFamily="{DynamicResource FontMono}" FontSize="11"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       VerticalAlignment="Center" Margin="0,0,0,0"/>
+
+            <!-- Spacer -->
+            <TextBlock Grid.Column="9" Text=""/>
+
+            <!-- Group 4 (right): cost -->
+            <Border Grid.Column="10" Width="1" Margin="12,4"
+                    Background="{DynamicResource BorderSubtleBrush}"/>
+            <TextBlock Grid.Column="11"
+                       Text="{Binding CostUsd, StringFormat='${0:F4}'}"
+                       FontFamily="{DynamicResource FontMono}" FontSize="11"
+                       Foreground="{DynamicResource TextWarningBrush}"
+                       VerticalAlignment="Center"/>
+        </Grid>
+    </Border>
+</UserControl>

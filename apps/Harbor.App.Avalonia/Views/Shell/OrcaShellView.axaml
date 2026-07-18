@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:shellVm="clr-namespace:Harbor.App.Avalonia.ViewModels.Shell"
+             xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Shell.OrcaShellView"
+             Background="{DynamicResource BgAppBrush}">
+
+    <UserControl.Resources>
+        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
+        <conv:EqualityConverter x:Key="EqualityConv"/>
+    </UserControl.Resources>
+
+    <!--
+        Orca shell root layout — three-column grid:
+          • Left rail (sessions, dense rows) — fixed 280px default width.
+          • Main work area — session header bar + message stream + composer.
+          • Right panel — collapsed by default (Phase D).
+
+        The left rail's width binds to ShellState.LeftRailWidth so future
+        Phase D resize work can drive it from the VM. When ShellState.LeftRailCollapsed
+        is true, the rail's column width collapses to 0.
+    -->
+
+    <Grid ColumnDefinitions="Auto,*,Auto">
+
+        <!-- ════════════ Left rail ════════════ -->
+        <shell:LeftRailView Grid.Column="0"
+                            DataContext="{Binding Sessions}"
+                            IsVisible="{Binding !$parent[UserControl].DataContext.ShellState.LeftRailCollapsed}"/>
+
+        <!-- ════════════ Main work area ════════════ -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+
+            <!-- Session header bar (model · workdir · status) -->
+            <Border Grid.Row="0" Height="36"
+                    Background="{DynamicResource BgPanelBrush}"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="12,0">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ActiveSessionTitle}"
+                               VerticalAlignment="Center"
+                               FontWeight="Medium"
+                               FontSize="13"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding ActiveModel}"
+                               FontFamily="{DynamicResource FontMono}"
+                               FontSize="11"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding ActiveWorkdir}"
+                               FontFamily="{DynamicResource FontMono}"
+                               FontSize="11"
+                               Foreground="{DynamicResource TextTertiaryBrush}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,12,0"
+                               TextTrimming="CharacterEllipsis"/>
+
+                    <!-- Mode switch (Chat / Code) -->
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
+                                VerticalAlignment="Center">
+                        <RadioButton Classes="TabButton" Content="Chat" GroupName="OrcaMode"
+                                     IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Chat}"/>
+                        <RadioButton Classes="TabButton" Content="Code" GroupName="OrcaMode"
+                                     IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Code}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Message stream: reuse existing ChatView + CodeEditorView.
+                 The ChatView's own input area is hidden via ShowInputArea=False
+                 so the Orca ComposerView (below) takes over the input role. -->
+            <Grid Grid.Row="1">
+                <views:ChatView DataContext="{Binding Chat}"
+                                ShowInputArea="False"
+                                IsVisible="{Binding IsChatMode}"/>
+                <views:CodeEditorView DataContext="{Binding CodeEditor}"
+                                      IsVisible="{Binding IsCodeMode}"/>
+            </Grid>
+
+            <!-- Composer (input + send/stop + helper line) -->
+            <shell:ComposerView Grid.Row="2" DataContext="{Binding Chat}"/>
+        </Grid>
+
+        <!-- ════════════ Right panel (collapsed by default — Phase D) ════════════ -->
+        <Border Grid.Column="2" Width="0" IsVisible="False"/>
+    </Grid>
+</UserControl>

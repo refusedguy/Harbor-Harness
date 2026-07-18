@@ -7,6 +7,14 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Dark.axaml"/>
+                <!-- HarborDark — Orca-inspired design tokens. Loaded always
+                     (alongside the classic Catppuccin-Mocha Dark.axaml).
+                     Token keys (BgAppBrush, AccentPrimaryBrush, …) are
+                     distinct from the classic theme's keys so both themes
+                     coexist without overwriting each other. The Orca shell
+                     views under Views/Shell/ bind to these keys; the classic
+                     MainWindow.axaml never references them. -->
+                <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/HarborDark.axaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
@@ -15,6 +23,10 @@
         <FluentTheme/>
         <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/Typography.axaml"/>
         <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/AppStyles.axaml"/>
+        <!-- HarborDarkStyles — Orca button classes (Primary/Danger/Ghost)
+             + dense ListBoxItem.OrcaRow style. Loaded always; the Orca
+             shell views opt in via Classes="Primary" etc. -->
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/HarborDarkStyles.axaml"/>
     </Application.Styles>
 
 </Application>

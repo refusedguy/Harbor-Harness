@@ -1,0 +1,67 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shellVm="clr-namespace:Harbor.App.Avalonia.ViewModels.Shell"
+             xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Shell.SessionRowView">
+
+    <UserControl.Resources>
+        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
+    </UserControl.Resources>
+
+    <!--
+        Orca dense session row — 2-3 line layout:
+
+          Line 1: ● status dot | title (medium weight)        | relative time
+          Line 2:               | meta line (model · mode) — JetBrains Mono
+          Line 3:               | status line (error / running) — only when HasStatusLine
+
+        The active row's background + left accent border are driven by the
+        SessionRowViewModel.RowBackgroundKey / RowBorderKey resource keys
+        (BgActiveBrush + AccentPrimaryBrush when active, transparent otherwise).
+    -->
+
+    <Border Padding="8,6"
+            CornerRadius="4"
+            Background="{Binding RowBackgroundKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"
+            BorderBrush="{Binding RowBorderKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"
+            BorderThickness="2,0,0,0">
+        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+
+            <!-- Status dot -->
+            <Ellipse Grid.Row="0" Grid.Column="0"
+                     Width="6" Height="6"
+                     Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"
+                     VerticalAlignment="Top"
+                     Margin="0,4,4,0"/>
+
+            <!-- Title -->
+            <TextBlock Grid.Row="0" Grid.Column="1"
+                       Text="{Binding Title}"
+                       FontWeight="Medium" FontSize="13"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource TextPrimaryBrush}"
+                       VerticalAlignment="Center"/>
+
+            <!-- Time -->
+            <TextBlock Grid.Row="0" Grid.Column="2"
+                       Text="{Binding RelativeTime}" FontSize="11"
+                       Foreground="{DynamicResource TextTertiaryBrush}"
+                       VerticalAlignment="Top"/>
+
+            <!-- Meta line: model · mode -->
+            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                       Text="{Binding MetaLine}" FontSize="11"
+                       FontFamily="{DynamicResource FontMono}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,2,0,0"/>
+
+            <!-- Status line (only when present) -->
+            <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                       Text="{Binding StatusLine}" FontSize="11"
+                       Foreground="{DynamicResource TextDangerBrush}"
+                       IsVisible="{Binding HasStatusLine}"
+                       Margin="0,2,0,0"/>
+        </Grid>
+    </Border>
+</UserControl>

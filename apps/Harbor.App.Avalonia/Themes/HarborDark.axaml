@@ -1,0 +1,118 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        HarborDark — Orca-inspired design tokens for the experimental shell.
+
+        Loaded as a merged dictionary in App.axaml alongside the classic
+        Catppuccin-Mocha Dark.axaml. Token names (BgAppBrush, BgRailBrush,
+        AccentPrimaryBrush, …) are DISTINCT from the classic theme's
+        (AppBackgroundBrush, SidebarBackgroundBrush, …) so both themes can
+        coexist in the same resource tree without overwriting each other.
+
+        Reference spec: docs/ALTERNATIVE_UIS.md (Orca-inspired Harbor Desktop Shell).
+        Activated with HARBOR_SHELL=orca env var or with the shell=orca CLI arg.
+    -->
+
+    <!-- ════════════ Surfaces (neutral black depth hierarchy) ════════════ -->
+    <Color x:Key="BgAppColor">#0D0D0F</Color>
+    <Color x:Key="BgRailColor">#101012</Color>
+    <Color x:Key="BgPanelColor">#141416</Color>
+    <Color x:Key="BgPanelElevatedColor">#1A1A1E</Color>
+    <Color x:Key="BgHoverColor">#1C1C21</Color>
+    <Color x:Key="BgActiveColor">#241C12</Color>
+    <Color x:Key="BgInputColor">#0A0A0C</Color>
+
+    <!-- ════════════ Borders (thin, alpha-white hairlines) ════════════ -->
+    <Color x:Key="BorderSubtleColor">#FFFFFF14</Color>
+    <Color x:Key="BorderDefaultColor">#FFFFFF1F</Color>
+    <Color x:Key="BorderStrongColor">#FFFFFF33</Color>
+
+    <!-- ════════════ Text ════════════ -->
+    <Color x:Key="TextPrimaryColor">#ECECEF</Color>
+    <Color x:Key="TextSecondaryColor">#9A9AA3</Color>
+    <Color x:Key="TextTertiaryColor">#6B6B75</Color>
+    <Color x:Key="TextMonoColor">#C0C0C8</Color>
+    <Color x:Key="TextWarningColor">#E0B567</Color>
+    <Color x:Key="TextDangerColor">#F07178</Color>
+    <Color x:Key="TextSuccessColor">#3DD68C</Color>
+
+    <!-- ════════════ Accent (amber — Harbor identity) ════════════ -->
+    <Color x:Key="AccentPrimaryColor">#F5A623</Color>
+    <Color x:Key="AccentHoverColor">#FFB938</Color>
+    <Color x:Key="AccentMutedColor">#F5A62333</Color>
+
+    <!-- ════════════ State (status dot, banner, indicator) ════════════ -->
+    <Color x:Key="StateRunningColor">#F5A623</Color>
+    <Color x:Key="StateIdleColor">#6B6B75</Color>
+    <Color x:Key="StateErrorColor">#F07178</Color>
+    <Color x:Key="StateSuccessColor">#3DD68C</Color>
+    <Color x:Key="StateWarningColor">#E0B567</Color>
+
+    <!-- ════════════ Cost coloring (status bar / rail meta) ════════════ -->
+    <Color x:Key="CostLowColor">#3DD68C</Color>
+    <Color x:Key="CostMidColor">#E0B567</Color>
+    <Color x:Key="CostHighColor">#F07178</Color>
+
+    <!-- ════════════ Brushes ════════════ -->
+    <SolidColorBrush x:Key="TransparentBrush" Color="Transparent"/>
+    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource BgAppColor}"/>
+    <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource BgRailColor}"/>
+    <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource BgPanelColor}"/>
+    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource BgPanelElevatedColor}"/>
+    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}"/>
+    <SolidColorBrush x:Key="BgActiveBrush" Color="{StaticResource BgActiveColor}"/>
+    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource BgInputColor}"/>
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}"/>
+    <SolidColorBrush x:Key="BorderDefaultBrush" Color="{StaticResource BorderDefaultColor}"/>
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiaryColor}"/>
+    <SolidColorBrush x:Key="TextMonoBrush" Color="{StaticResource TextMonoColor}"/>
+    <SolidColorBrush x:Key="TextWarningBrush" Color="{StaticResource TextWarningColor}"/>
+    <SolidColorBrush x:Key="TextDangerBrush" Color="{StaticResource TextDangerColor}"/>
+    <SolidColorBrush x:Key="TextSuccessBrush" Color="{StaticResource TextSuccessColor}"/>
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource AccentPrimaryColor}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}"/>
+    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource StateRunningColor}"/>
+    <SolidColorBrush x:Key="StateIdleBrush" Color="{StaticResource StateIdleColor}"/>
+    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource StateErrorColor}"/>
+    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource StateSuccessColor}"/>
+    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource StateWarningColor}"/>
+    <SolidColorBrush x:Key="CostLowBrush" Color="{StaticResource CostLowColor}"/>
+    <SolidColorBrush x:Key="CostMidBrush" Color="{StaticResource CostMidColor}"/>
+    <SolidColorBrush x:Key="CostHighBrush" Color="{StaticResource CostHighColor}"/>
+
+    <!-- ════════════ Typography ════════════ -->
+    <!-- FontUi intentionally reuses the bundled Inter (UiFont) resource
+         registered by Dark.axaml. We declare a separate key here so the
+         Orca shell can swap font stacks without touching the classic theme.
+         FontMono prefers JetBrains Mono with a broad dev-station fallback
+         chain (same chain as Dark.axaml's CodeFont). -->
+    <FontFamily x:Key="FontUi">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+    <FontFamily x:Key="FontMono">JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+
+    <!-- ════════════ Spacing scale ════════════ -->
+    <x:Double x:Key="Space1">4</x:Double>
+    <x:Double x:Key="Space2">8</x:Double>
+    <x:Double x:Key="Space3">12</x:Double>
+    <x:Double x:Key="Space4">16</x:Double>
+    <x:Double x:Key="Space5">24</x:Double>
+    <x:Double x:Key="Space6">32</x:Double>
+
+    <!-- ════════════ Layout constants ════════════ -->
+    <x:Double x:Key="RailWidthDefault">280</x:Double>
+    <x:Double x:Key="RailWidthMin">220</x:Double>
+    <x:Double x:Key="RailWidthMax">400</x:Double>
+    <x:Double x:Key="StatusBarHeight">28</x:Double>
+    <x:Double x:Key="TabStripHeight">36</x:Double>
+    <x:Double x:Key="ComposerMinHeight">44</x:Double>
+    <x:Double x:Key="ComposerMaxHeight">160</x:Double>
+
+    <!-- ════════════ Corner radius ════════════ -->
+    <x:Double x:Key="RadiusSm">4</x:Double>
+    <x:Double x:Key="RadiusMd">6</x:Double>
+    <x:Double x:Key="RadiusLg">8</x:Double>
+</ResourceDictionary>

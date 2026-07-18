@@ -5,7 +5,9 @@ using Avalonia.Threading;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views;
+using Harbor.App.Avalonia.Views.Shell;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -35,6 +37,32 @@ public class App : Application
     ///     store, disposes the DI container). Set by <c>Program.cs</c>.
     /// </summary>
     public static Microsoft.Extensions.Hosting.IHost? Host { get; set; }
+
+    /// <summary>
+    ///     Shell layout mode — <c>"classic"</c> (default) or <c>"orca"</c>
+    ///     (experimental Orca-inspired Harbor Desktop Shell).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Set by <c>Program.cs</c> from the <c>--shell</c> CLI arg OR the
+    ///         <c>HARBOR_SHELL</c> env var, BEFORE the Avalonia lifetime
+    ///         starts. <c>MainWindow</c> reads this in its constructor to
+    ///         decide between the classic Catppuccin-Mocha layout and the
+    ///         Orca shell root view.
+    ///     </para>
+    ///     <para>
+    ///         The E2E test driver (<c>HeadlessAvaloniaDriver</c>) sets this
+    ///         directly via reflection before initializing the app, so the
+    ///         Orca E2E test can opt in without spinning up a second process.
+    ///     </para>
+    /// </remarks>
+    public static string ShellMode { get; set; } = "orca";
+
+    /// <summary>
+    ///     Convenience flag: <c>true</c> when <see cref="ShellMode"/> is
+    ///     <c>"orca"</c>.
+    /// </summary>
+    public static bool IsOrcaShell => string.Equals(ShellMode, "orca", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public override void Initialize()
@@ -105,9 +133,17 @@ public class App : Application
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
+        // In Orca shell mode, the MainWindow's DataContext is an
+        // OrcaShellViewModel wrapping MainViewModel; in classic mode it's the
+        // MainViewModel directly. MainWindow.axaml.cs checks App.IsOrcaShell
+        // in its constructor and swaps its Content to OrcaShellView accordingly.
+        object windowDataContext = IsOrcaShell
+            ? Services.GetRequiredService<OrcaShellViewModel>()
+            : mainViewModel;
+
         var mainWindow = new MainWindow
         {
-            DataContext = mainViewModel,
+            DataContext = windowDataContext,
             IsVisible = false, // hidden until onboarding completes
         };
         desktop.MainWindow = mainWindow;
@@ -127,6 +163,23 @@ public class App : Application
                 // way, open the main window. (Skip leaves OnboardingCompleted
                 // false in the persisted config, so the wizard will reappear
                 // next launch — that matches user intent: "I'll do this later".)
+
+                // Rebind the agent to the wizard's saved provider/model. The
+                // agent was initialized in AppHost.BuildAsync with the pre-wizard
+                // CommonConfig defaults — the wizard just wrote a new config with
+                // the user's selections, so we reload and rebind here. This makes
+                // "kilocode/tencent/hy3:free" work immediately after the wizard
+                // without requiring an app restart.
+                var sessionManager = Services.GetRequiredService<SessionManager>();
+                try
+                {
+                    await sessionManager.RebindFromCommonConfigAsync();
+                }
+                catch (Exception ex)
+                {
+                    Services.GetService<ILogger<App>>()?.LogWarning(ex, "RebindFromCommonConfig after onboarding failed");
+                }
+
                 mainWindow.Show();
             }
             else
@@ -144,9 +197,17 @@ public class App : Application
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
+        // In Orca shell mode, the MainWindow's DataContext is an
+        // OrcaShellViewModel wrapping MainViewModel; in classic mode it's the
+        // MainViewModel directly. MainWindow.axaml.cs checks App.IsOrcaShell
+        // in its constructor and swaps its Content to OrcaShellView accordingly.
+        object windowDataContext = IsOrcaShell
+            ? Services.GetRequiredService<OrcaShellViewModel>()
+            : mainViewModel;
+
         var mainWindow = new MainWindow
         {
-            DataContext = mainViewModel,
+            DataContext = windowDataContext,
         };
         desktop.MainWindow = mainWindow;
     }
