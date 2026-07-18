@@ -10,12 +10,12 @@ artifacts/
 *.user
 *.suo
 *.cache
-
-## Desktop app build tasks (Avalonia etc. — generated, not source)
-.avalonia-build-tasks/
 *.log
 *.tlog
+*.binlog
 
+## Build log artifacts (MSBuild binary logs)
+ds.binlog
 ## Visual Studio / Rider / VSCode
 .vs/
 .vscode/

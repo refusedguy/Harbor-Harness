@@ -15,6 +15,8 @@
     </Folder>
     <Folder Name="/src/">
         <Project Path="src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
+        <Project Path="src/Harbor.Application/Harbor.Application.csproj"/>
+        <Project Path="src/Harbor.Registries/Harbor.Registries.csproj"/>
         <Project Path="src/Harbor.Core/Harbor.Core.csproj"/>
         <Project Path="src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj"/>
         <Project Path="src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj"/>
@@ -37,9 +39,27 @@
         <Project Path="src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
         <Project Path="src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj"/>
         <Project Path="src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
+        <Project Path="src/Harbor.Tools.Bash/Harbor.Tools.Bash.csproj"/>
+        <Project Path="src/Harbor.Tools.Edit/Harbor.Tools.Edit.csproj"/>
+        <Project Path="src/Harbor.Tools.Glob/Harbor.Tools.Glob.csproj"/>
+        <Project Path="src/Harbor.Tools.Grep/Harbor.Tools.Grep.csproj"/>
+        <Project Path="src/Harbor.Tools.Ls/Harbor.Tools.Ls.csproj"/>
+        <Project Path="src/Harbor.Tools.Mcp/Harbor.Tools.Mcp.csproj"/>
+        <Project Path="src/Harbor.Tools.Notebook/Harbor.Tools.Notebook.csproj"/>
+        <Project Path="src/Harbor.Tools.Patch/Harbor.Tools.Patch.csproj"/>
+        <Project Path="src/Harbor.Tools.Read/Harbor.Tools.Read.csproj"/>
+        <Project Path="src/Harbor.Tools.RipGrep/Harbor.Tools.RipGrep.csproj"/>
+        <Project Path="src/Harbor.Tools.Task/Harbor.Tools.Task.csproj"/>
+        <Project Path="src/Harbor.Tools.Tree/Harbor.Tools.Tree.csproj"/>
+        <Project Path="src/Harbor.Tools.WebFetch/Harbor.Tools.WebFetch.csproj"/>
+        <Project Path="src/Harbor.Tools.Write/Harbor.Tools.Write.csproj"/>
         <Project Path="src/Harbor.Tui.Abstractions/Harbor.Tui.Abstractions.csproj"/>
         <Project Path="src/Harbor.Tui.Ansi/Harbor.Tui.Ansi.csproj"/>
         <Project Path="src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj"/>
+        <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
+        <Project Path="src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj"/>
+        <Project Path="src/Harbor.Desktop.DesignSystem/Harbor.Desktop.DesignSystem.csproj"/>
+        <Project Path="src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj"/>
         <Project Path="src/Harbor.Tui.Plain/Harbor.Tui.Plain.csproj"/>
         <Project Path="src/Harbor.Tui.RazorConsole/Harbor.Tui.RazorConsole.csproj"/>
         <Project Path="src/Harbor.Tui.Sixel/Harbor.Tui.Sixel.csproj"/>
