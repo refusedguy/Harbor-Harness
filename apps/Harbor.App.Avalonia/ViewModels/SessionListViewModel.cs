@@ -47,73 +47,106 @@ public sealed partial class SessionListViewModel : ObservableObject
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        var result = await _sessionStore.ListAsync().ConfigureAwait(false);
-        if (result.IsFailure)
+        try
         {
-            _logger.LogError("List sessions failed: {Error}", result.Error);
-            return;
+            var result = await _sessionStore.ListAsync().ConfigureAwait(false);
+            if (result.IsFailure)
+            {
+                _logger.LogError("List sessions failed: {Error}", result.Error);
+                return;
+            }
+            var filtered = string.IsNullOrWhiteSpace(SearchText)
+                ? result.Value
+                : result.Value.Where(s => s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                    || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+            Dispatcher.UIThread.Post(() =>
+            {
+                Sessions.Clear();
+                foreach (var s in filtered)
+                {
+                    Sessions.Add(new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount));
+                }
+                if (_sessionManager.Active is { } active)
+                {
+                    ActiveSession = Sessions.FirstOrDefault(x => x.Id == active.Id);
+                }
+            });
         }
-        var filtered = string.IsNullOrWhiteSpace(SearchText)
-            ? result.Value
-            : result.Value.Where(s => s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
-        Dispatcher.UIThread.Post(() =>
+        catch (Exception ex)
         {
-            Sessions.Clear();
-            foreach (var s in filtered)
-            {
-                Sessions.Add(new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount));
-            }
-            if (_sessionManager.Active is { } active)
-            {
-                ActiveSession = Sessions.FirstOrDefault(x => x.Id == active.Id);
-            }
-        });
+            _logger.LogError(ex, "Refresh sessions crashed");
+            _toasts.Show($"Could not load sessions: {ex.Message}", ToastKind.Error);
+        }
     }
 
     /// <summary>Create a new session and switch to it.</summary>
     [RelayCommand]
     private async Task NewSessionAsync()
     {
-        var session = await _sessionManager.NewSessionAsync().ConfigureAwait(false);
-        if (session is null)
+        try
         {
-            _toasts.Show("Failed to create session.", ToastKind.Error);
-            return;
+            var session = await _sessionManager.NewSessionAsync().ConfigureAwait(false);
+            if (session is null)
+            {
+                _toasts.Show("Failed to create session — check that a provider + model are configured.", ToastKind.Error);
+                return;
+            }
+            await RefreshAsync().ConfigureAwait(false);
+            ActiveSession = Sessions.FirstOrDefault(x => x.Id == session.Id);
+            _toasts.Show($"New session: {session.Title}", ToastKind.Success);
         }
-        await RefreshAsync().ConfigureAwait(false);
-        ActiveSession = Sessions.FirstOrDefault(x => x.Id == session.Id);
-        _toasts.Show($"New session: {session.Title}", ToastKind.Success);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "NewSession crashed");
+            _toasts.Show($"Failed to create session: {ex.Message}", ToastKind.Error);
+        }
     }
 
     /// <summary>Branch the active session.</summary>
     [RelayCommand]
     private async Task BranchAsync()
     {
-        var branch = await _sessionManager.BranchActiveAsync().ConfigureAwait(false);
-        if (branch is null)
+        try
         {
-            _toasts.Show("Branch failed — no active session.", ToastKind.Error);
-            return;
+            var branch = await _sessionManager.BranchActiveAsync().ConfigureAwait(false);
+            if (branch is null)
+            {
+                _toasts.Show("Branch failed — no active session.", ToastKind.Error);
+                return;
+            }
+            await RefreshAsync().ConfigureAwait(false);
+            ActiveSession = Sessions.FirstOrDefault(x => x.Id == branch.Id);
+            _toasts.Show($"Branched → {branch.Title}", ToastKind.Success);
         }
-        await RefreshAsync().ConfigureAwait(false);
-        ActiveSession = Sessions.FirstOrDefault(x => x.Id == branch.Id);
-        _toasts.Show($"Branched → {branch.Title}", ToastKind.Success);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Branch crashed");
+            _toasts.Show($"Branch failed: {ex.Message}", ToastKind.Error);
+        }
     }
+
     /// <summary>Open the selected session.</summary>
     /// <param name="item">Session to open.</param>
     [RelayCommand]
     private async Task OpenAsync(SessionItemViewModel? item)
     {
         if (item is null) return;
-        var ok = await _sessionManager.OpenSessionAsync(item.Id).ConfigureAwait(false);
-        if (!ok)
+        try
         {
-            _toasts.Show($"Could not open session '{item.Title}'.", ToastKind.Error);
-            return;
+            var ok = await _sessionManager.OpenSessionAsync(item.Id).ConfigureAwait(false);
+            if (!ok)
+            {
+                _toasts.Show($"Could not open session '{item.Title}'.", ToastKind.Error);
+                return;
+            }
+            ActiveSession = item;
+            _toasts.Show($"Opened: {item.Title}", ToastKind.Info);
         }
-        ActiveSession = item;
-        _toasts.Show($"Opened: {item.Title}", ToastKind.Info);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Open session crashed");
+            _toasts.Show($"Could not open session: {ex.Message}", ToastKind.Error);
+        }
     }
 
     /// <summary>Delete the selected session (with confirm).</summary>
@@ -121,14 +154,22 @@ public sealed partial class SessionListViewModel : ObservableObject
     private async Task DeleteAsync(SessionItemViewModel? item)
     {
         if (item is null) return;
-        var ok = await _sessionManager.DeleteSessionAsync(item.Id).ConfigureAwait(false);
-        if (!ok)
+        try
         {
-            _toasts.Show($"Could not delete session '{item.Title}'.", ToastKind.Error);
-            return;
+            var ok = await _sessionManager.DeleteSessionAsync(item.Id).ConfigureAwait(false);
+            if (!ok)
+            {
+                _toasts.Show($"Could not delete session '{item.Title}'.", ToastKind.Error);
+                return;
+            }
+            await RefreshAsync().ConfigureAwait(false);
+            _toasts.Show($"Deleted: {item.Title}", ToastKind.Warning);
         }
-        await RefreshAsync().ConfigureAwait(false);
-        _toasts.Show($"Deleted: {item.Title}", ToastKind.Warning);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Delete session crashed");
+            _toasts.Show($"Could not delete session: {ex.Message}", ToastKind.Error);
+        }
     }
 
     /// <summary>
@@ -141,13 +182,21 @@ public sealed partial class SessionListViewModel : ObservableObject
     private async Task RenameAsync(SessionItemViewModel? item)
     {
         if (item is null) return;
-        var ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
-        if (!ok)
+        try
         {
-            _toasts.Show("Rename not yet supported — coming in v0.8.", ToastKind.Warning);
-            return;
+            var ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
+            if (!ok)
+            {
+                _toasts.Show("Rename not yet supported — coming in v0.8.", ToastKind.Warning);
+                return;
+            }
+            await RefreshAsync().ConfigureAwait(false);
         }
-        await RefreshAsync().ConfigureAwait(false);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Rename session crashed");
+            _toasts.Show($"Rename failed: {ex.Message}", ToastKind.Error);
+        }
     }
 }
 

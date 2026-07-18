@@ -12,7 +12,7 @@
         FontFamily="{StaticResource UiFont}"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
-        SystemDecorations="Full">
+        WindowDecorations="Full">
 
     <Window.Resources>
         <views:EqualityConverter x:Key="EqualityConv"/>

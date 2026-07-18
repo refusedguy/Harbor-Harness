@@ -3,6 +3,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
+using Harbor.App.Avalonia.Views.Shell;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views;
@@ -15,6 +17,17 @@ namespace Harbor.App.Avalonia.Views;
 ///     cleanly — without this, the dispatcher subscription can keep the UI
 ///     thread busy after the window is gone (the "window won't close" hang).
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Experimental shell-mode switch (Task F2):</b> when
+///         <see cref="App.IsOrcaShell"/> is <c>true</c> (set via the
+///         <c>--shell orca</c> CLI arg or <c>HARBOR_SHELL=orca</c> env var),
+///         the classic Catppuccin-Mocha XAML body is replaced with an
+///         <see cref="OrcaShellView"/> whose <c>DataContext</c> is an
+///         <see cref="OrcaShellViewModel"/> wrapping the shared
+///         <see cref="MainViewModel"/>. Classic mode is unaffected.
+///     </para>
+/// </remarks>
 public partial class MainWindow : Window
 {
     /// <summary>Construct the main window. Avalonia's generated InitializeComponent runs first.</summary>
@@ -27,6 +40,17 @@ public partial class MainWindow : Window
         // is available yet (design-time previewer, or first-run before the config
         // file is written).
         ApplyConfiguredGeometry();
+
+        // ── Experimental Orca shell swap (Task F2) ──────────────────────────
+        // When HARBOR_SHELL=orca (or --shell orca), replace the classic
+        // Catppuccin-Mocha body with the OrcaShellView. The DataContext
+        // (OrcaShellViewModel wrapping MainViewModel) is set by App.ShowMain
+        // AFTER the constructor returns; the OrcaShellView inherits the
+        // window's DataContext via the standard Avalonia inheritance chain.
+        if (App.IsOrcaShell)
+        {
+            Content = new OrcaShellView();
+        }
 
         // Defensive: ensure Chat is the active view and NO modal is open when the
         // shell first appears. Without this, a stale state from a previous launch
@@ -44,6 +68,11 @@ public partial class MainWindow : Window
                 vm.IsCommandPaletteOpen = false;
                 vm.IsSettingsOpen = false;
                 vm.IsProviderBrowserOpen = false;
+            }
+            else if (DataContext is OrcaShellViewModel orcaVm)
+            {
+                // Orca shell initial state: chat mode, no right panel.
+                orcaVm.SwitchModeCommand.Execute("Chat");
             }
         };
 

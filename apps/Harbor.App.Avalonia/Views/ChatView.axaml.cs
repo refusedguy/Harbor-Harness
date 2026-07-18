@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
@@ -24,17 +25,49 @@ namespace Harbor.App.Avalonia.Views;
 ///         typing immediately — a small ORCA-style polish that makes the chat feel
 ///         responsive.
 ///     </para>
+///     <para>
+///         <b>ShowInputArea (Task F2):</b> styled property that toggles the
+///         visibility of the input Border at the bottom of the chat view.
+///         Defaults to <c>true</c> (classic MainWindow path). The Orca shell
+///         sets it to <c>false</c> so the Orca <c>ComposerView</c> can take
+///         over the input role without duplicating the input area.
+///     </para>
 /// </remarks>
 public partial class ChatView : UserControl
 {
+    /// <summary>
+    ///     Defines the <see cref="ShowInputArea"/> styled property.
+    ///     Default <c>true</c> so the classic shell keeps its inline input.
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowInputAreaProperty =
+        AvaloniaProperty.Register<ChatView, bool>(
+            nameof(ShowInputArea),
+            defaultValue: true);
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the chat view's own input
+    ///     area is visible. Set <c>false</c> when an external composer (e.g.
+    ///     the Orca <c>ComposerView</c>) takes over the input role.
+    /// </summary>
+    public bool ShowInputArea
+    {
+        get => GetValue(ShowInputAreaProperty);
+        set => SetValue(ShowInputAreaProperty, value);
+    }
+
     /// <summary>Construct the chat view.</summary>
     public ChatView()
     {
         InitializeComponent();
         Loaded += (_, _) =>
         {
-            // Focus the input on first load — ORCA pattern.
-            InputBox.Focus();
+            // Focus the input on first load — ORCA pattern. Only focus when
+            // the input area is visible (Orca shell hides it; focusing a
+            // hidden control is a no-op but spurious).
+            if (ShowInputArea)
+            {
+                InputBox.Focus();
+            }
         };
     }
 

@@ -62,6 +62,12 @@
     <!-- S3267 (loop → LINQ) fires on intentional foreach loops (OnboardingViewModel
          API-key builder) where the conditional body would be obscured by LINQ. -->
     <NoWarn>$(NoWarn);S3267</NoWarn>
+
+    <!-- S125 (commented-out code) flags documentation comments that mention CLI
+         flags like the shell switch as if they were dead code. The Program.cs
+         shell-mode switch has a multi-line explanation that legitimately
+         references the shell flag — false positive. -->
+    <NoWarn>$(NoWarn);S125</NoWarn>
   </PropertyGroup>
 
   <!-- Expose internals to the DI test project + the E2E test project so they

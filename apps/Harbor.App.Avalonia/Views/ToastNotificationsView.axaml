@@ -2,25 +2,36 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:srv="clr-namespace:Harbor.App.Avalonia.Services"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
-             x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView">
+             x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView"
+             Background="Transparent"
+             IsHitTestVisible="True">
 
     <!--
         Toast container — floating, bottom-right, ABOVE the status bar.
 
-        Parent (MainWindow.axaml) places this UserControl with:
-            ZIndex="500"
+        Parent (MainWindow.axaml) places this UserControl as a SIBLING of the
+        main DockPanel inside the root <Grid> (no row defs) with:
+            ZIndex="1000"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
-            Margin="0,0,16,40"   (40 = status bar height)
+            Margin="0,0,16,48"   (48 = status bar height + breathing room)
+            IsHitTestVisible="True"
+            Background="Transparent"
 
         So this UserControl just needs to stack the toasts vertically. We
         also clamp the width so very long messages don't stretch across the
         chat area, and align the stack to the right edge.
+
+        The UserControl itself has Background="Transparent" + IsHitTestVisible="True"
+        so the empty area around the toasts doesn't capture clicks (lets the
+        underlying UI receive them) while the toasts themselves remain
+        interactive (close button etc.).
     -->
 
     <ItemsControl ItemsSource="{Binding Toasts}"
                   HorizontalAlignment="Right"
-                  VerticalAlignment="Bottom">
+                  VerticalAlignment="Bottom"
+                  Background="Transparent">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
                 <StackPanel Orientation="Vertical" Spacing="8"/>

@@ -13,7 +13,7 @@
         FontFamily="{StaticResource UiFont}"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="-1"
-        SystemDecorations="Full">
+        WindowDecorations="Full">
 
     <Window.Resources>
         <views:BrushKeyConverter x:Key="BrushKeyConv"/>
@@ -21,14 +21,28 @@
     </Window.Resources>
 
     <!--
-        Root layout is a DockPanel so we can dock a custom-drawn title bar
-        (WindowButton styles in Themes/AppStyles.axaml) at the top while
-        leaving the ORCA-redesigned body (menu + 3-pane + status bar + modal
-        overlays) intact below it. ExtendClientAreaToDecorationsHint=True
-        tells Avalonia 12 to extend the client area into the system title bar
-        region; ExtendClientAreaChromeHints=PreferNone hides the default
-        Windows caption buttons so our custom ⬜ ✕ are the only controls.
+        ROOT LAYOUT — a plain <Grid> (no row/column definitions) so all
+        children FILL the entire window and stack on top of each other in
+        document order. This is what makes overlays FLOAT above the main
+        content rather than being constrained to a row of a row-def grid
+        (the bug: "тосты пидорасят весь интерфейс, будто они не поверх
+        появляются, а на каком-то row").
+
+        Children:
+          1. DockPanel — main content (title bar + menu + 3-pane + status bar)
+          2. CommandPaletteView — full-window modal, ZIndex=800
+          3. SettingsView — centered modal, ZIndex=600
+          4. ProviderBrowserView — centered modal, ZIndex=600
+          5. DiffView — centered modal, ZIndex=600
+          6. TokenUsageView — centered modal, ZIndex=600
+          7. ToastNotificationsView — bottom-right floating, ZIndex=1000 (on top of everything)
+
+        Each overlay's IsVisible is bound to $parent[Window].DataContext.IsXxxOpen,
+        which walks up to the Window regardless of nesting depth — so moving
+        them out of the inner row-def Grid doesn't break that binding.
     -->
+    <Grid>
+
     <DockPanel LastChildFill="True">
 
         <!-- ════════════ Custom Windows title bar (drawn in client area) ════════════
@@ -274,37 +288,49 @@
                            VerticalAlignment="Center"/>
             </Grid>
         </Border>
-
-        <!-- ════════════ Modal overlays ════════════
-             IsVisible binds to $parent[Window].DataContext.IsXxxOpen (the
-             MainViewModel) rather than the local DataContext (the per-overlay
-             ViewModel). Without this, the IsVisible binding would re-evaluate
-             against the local DataContext once it's assigned and fail to find
-             IsXxxOpen, falling back to FallbackValue=False and never reflecting
-             the actual MainViewModel state. FallbackValue=False keeps the
-             overlay hidden until the binding resolves (e.g. during the very
-             first frame before the Window's DataContext is set). -->
-        <views:CommandPaletteView IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
-                                  DataContext="{Binding CommandPalette}"
-                                  ZIndex="100"/>
-        <views:SettingsView IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
-                            DataContext="{Binding Settings}"
-                            ZIndex="200"/>
-        <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
-                                   DataContext="{Binding ProviderBrowser}"
-                                   ZIndex="200"/>
-        <views:DiffView IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
-                        DataContext="{Binding Diff}"
-                        ZIndex="200"/>
-        <views:TokenUsageView IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
-                              DataContext="{Binding TokenUsage}"
-                              ZIndex="200"/>
-
-        <!-- Toast container — always-on-top floating -->
-        <views:ToastNotificationsView ZIndex="500"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Bottom"
-                                      Margin="0,0,16,40"/>
     </Grid>
     </DockPanel>
+
+        <!-- ════════════ Modal overlays — FLOATING SIBLINGS of the main DockPanel ════════════
+             These sit in the root <Grid> (no row defs) so they fill the entire
+             window and float ABOVE the main content via ZIndex. Each one's
+             own internal Border uses HorizontalAlignment="Center"/"Stretch"
+             + VerticalAlignment to position itself.
+
+             IsVisible binds to $parent[Window].DataContext.IsXxxOpen (the
+             MainViewModel). $parent[Window] walks up through any nesting
+             depth, so this works regardless of where the overlay sits in
+             the visual tree. FallbackValue=False keeps the overlay hidden
+             until the binding resolves (e.g. during the very first frame
+             before the Window's DataContext is set). -->
+        <views:CommandPaletteView IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
+                                  DataContext="{Binding CommandPalette}"
+                                  ZIndex="800"/>
+        <views:SettingsView IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
+                            DataContext="{Binding Settings}"
+                            ZIndex="600"/>
+        <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
+                                   DataContext="{Binding ProviderBrowser}"
+                                   ZIndex="600"/>
+        <views:DiffView IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
+                        DataContext="{Binding Diff}"
+                        ZIndex="600"/>
+        <views:TokenUsageView IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
+                              DataContext="{Binding TokenUsage}"
+                              ZIndex="600"/>
+
+        <!-- Toast container — always-on-top floating overlay.
+             ZIndex=1000 puts it above every other overlay including the
+             command palette (800) and modals (600). Margin bottom 48 =
+             status bar (~28px) + 20px breathing room so toasts never
+             overlap the status bar. IsHitTestVisible=True on the container
+             (set in ToastNotificationsView.axaml) so close buttons work;
+             Background=Transparent on the container so clicks outside the
+             toasts fall through to the underlying UI. -->
+        <views:ToastNotificationsView ZIndex="1000"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,16,48"
+                                      IsHitTestVisible="True"/>
+    </Grid>
 </Window>

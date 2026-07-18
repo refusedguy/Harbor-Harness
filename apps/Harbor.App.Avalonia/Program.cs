@@ -16,14 +16,21 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 {
     Console.WriteLine("Harbor.App.Avalonia — standalone desktop GUI for the Harbor AI coding agent.");
     Console.WriteLine();
-    Console.WriteLine("Usage: dotnet run --project apps/Harbor.App.Avalonia");
+    Console.WriteLine("Usage: dotnet run --project apps/Harbor.App.Avalonia [--shell classic|orca]");
+    Console.WriteLine();
+    Console.WriteLine("Options:");
+    Console.WriteLine("  --shell classic|orca   Shell layout (default: classic).");
+    Console.WriteLine("                         'orca' = experimental Orca-inspired Harbor shell.");
     Console.WriteLine();
     Console.WriteLine("Environment variables:");
+    Console.WriteLine("  HARBOR_SHELL     classic | orca (default: classic — same as --shell).");
     Console.WriteLine("  HARBOR_MODEL     provider/model (default: ollama/qwen2.5-coder:7b)");
     Console.WriteLine("  HARBOR_STORAGE   memory | jsonl (default: memory)");
     Console.WriteLine("  HARBOR_LOGLEVEL  Trace|Debug|Information|Warning|Error (default: Information)");
     return 0;
 }
+
+App.ShellMode = ResolveShellMode(args);
 
 using var host = await AppHost.BuildAsync(args);
 
@@ -43,3 +50,47 @@ AppBuilder.Configure<App>()
     .StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnMainWindowClose);
 
 return 0;
+
+// Local functions
+
+// Resolve the shell mode from CLI args + env var. Returns "classic" or "orca".
+// Unknown values fall back to "classic" (with a stderr warning) so a typo
+// never breaks the app launch.
+static string ResolveShellMode(string[] args)
+{
+    // --shell <mode> takes precedence.
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--shell", StringComparison.OrdinalIgnoreCase))
+        {
+            string value = args[i + 1].Trim().ToLowerInvariant();
+            return value switch
+            {
+                "orca" => "orca",
+                "classic" => "classic",
+                _ => LogFallback($"unknown --shell value '{args[i + 1]}', falling back to classic"),
+            };
+        }
+    }
+
+    // HARBOR_SHELL env var.
+    string? env = Environment.GetEnvironmentVariable("HARBOR_SHELL");
+    if (!string.IsNullOrWhiteSpace(env))
+    {
+        string value = env.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "orca" => "orca",
+            "classic" => "classic",
+            _ => LogFallback($"unknown HARBOR_SHELL value '{env}', falling back to classic"),
+        };
+    }
+
+    return "classic";
+
+    static string LogFallback(string message)
+    {
+        Console.Error.WriteLine($"[HARBOR_SHELL] {message}");
+        return "classic";
+    }
+}

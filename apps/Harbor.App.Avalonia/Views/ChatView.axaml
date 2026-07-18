@@ -3,7 +3,8 @@
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
-             x:Class="Harbor.App.Avalonia.Views.ChatView">
+             x:Class="Harbor.App.Avalonia.Views.ChatView"
+             x:Name="Root">
 
     <!--
         ORCA-level ChatView.
@@ -146,10 +147,13 @@
             </StackPanel>
         </Border>
 
-        <!-- ════════════ Input area (ORCA-style) ════════════ -->
+        <!-- ════════════ Input area (ORCA-style) ════════════
+             IsVisible binds to #Root.ShowInputArea so the Orca shell can hide
+             the inline input area when its own ComposerView takes over. -->
         <Border Grid.Row="2" Background="{StaticResource MochaMantle}"
                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
-                Padding="12,10">
+                Padding="12,10"
+                IsVisible="{Binding #Root.ShowInputArea}">
             <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBox Grid.Column="0"
                          x:Name="InputBox"
