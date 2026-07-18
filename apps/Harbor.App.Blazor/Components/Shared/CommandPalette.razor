@@ -1,0 +1,100 @@
+@* CommandPalette — Ctrl+P fuzzy finder overlay. Reads from
+   CommandPaletteService. Replaces the action of "nav.*" commands with
+   NavigationManager.NavigateTo so navigation works without circular DI. @*@
+
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Nav
+@inject CommandPaletteService Palette
+@implements IDisposable
+
+@if (Palette.IsOpen)
+{
+    <div class="command-palette-backdrop" @onclick="CloseAsync">
+        <div class="command-palette" @onclick:stopPropagation="true">
+            <input class="palette-input"
+                   placeholder="Type a command…"
+                   value="@Palette.Query"
+                   @oninput="OnInputAsync"
+                   @onkeydown="OnKeyDownAsync"
+                   autofocus
+                   autocomplete="off"/>
+            <div class="palette-list">
+                @if (Palette.Filtered.Count == 0)
+                {
+                    <div class="palette-item" style="cursor:default;opacity:0.6;">
+                        No commands match "@Palette.Query"
+                    </div>
+                }
+                else
+                {
+                    @for (int i = 0; i < Palette.Filtered.Count; i++)
+                    {
+                        var entry = Palette.Filtered[i];
+                        var idx = i;
+                        <div class="palette-item @(idx == Palette.SelectedIndex ? "selected" : "")"
+                             @onclick="() => ExecuteAsync(entry)">
+                            <span>@entry.Title</span>
+                            @if (!string.IsNullOrEmpty(entry.Hint))
+                            {
+                                <span class="palette-hint">@entry.Hint</span>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Palette.Changed += OnChanged;
+    }
+
+    private async void OnChanged(object? _, EventArgs __)
+    {
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs e)
+    {
+        await Palette.SetQueryAsync(e.Value?.ToString() ?? string.Empty).ConfigureAwait(false);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                await Palette.MoveSelectionAsync(1).ConfigureAwait(false);
+                break;
+            case "ArrowUp":
+                await Palette.MoveSelectionAsync(-1).ConfigureAwait(false);
+                break;
+            case "Enter":
+                await Palette.ExecuteSelectedAsync().ConfigureAwait(false);
+                break;
+            case "Escape":
+                await Palette.CloseAsync().ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private async Task ExecuteAsync(CommandEntry entry)
+    {
+        if (!string.IsNullOrEmpty(entry.NavigateUri))
+        {
+            Nav.NavigateTo(entry.NavigateUri);
+        }
+        await entry.ExecuteAsync().ConfigureAwait(false);
+        await Palette.CloseAsync().ConfigureAwait(false);
+    }
+
+    private Task CloseAsync() => Palette.CloseAsync();
+
+    public void Dispose()
+    {
+        Palette.Changed -= OnChanged;
+    }
+}

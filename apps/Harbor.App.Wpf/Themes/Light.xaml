@@ -1,0 +1,56 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      Catppuccin Latte light palette — paired with Dark.xaml so ThemeService
+      can swap dictionaries at runtime. Colors stored as resources so other
+      XAML can reuse them with the same key prefix.
+    -->
+    <Color x:Key="Latte.Base">#EFF1F5</Color>
+    <Color x:Key="Latte.Mantle">#E6E9EF</Color>
+    <Color x:Key="Latte.Crust">#DCE0E8</Color>
+    <Color x:Key="Latte.Surface0">#CCD0DA</Color>
+    <Color x:Key="Latte.Surface1">#BCC0CC</Color>
+    <Color x:Key="Latte.Surface2">#ACB0BE</Color>
+    <Color x:Key="Latte.Overlay0">#9CA0B0</Color>
+    <Color x:Key="Latte.Overlay1">#8C8FA1</Color>
+    <Color x:Key="Latte.Overlay2">#7C7F93</Color>
+    <Color x:Key="Latte.Text">#4C4F69</Color>
+    <Color x:Key="Latte.Subtext0">#6C6F85</Color>
+    <Color x:Key="Latte.Subtext1">#5C5F77</Color>
+    <Color x:Key="Latte.Blue">#1E66F5</Color>
+    <Color x:Key="Latte.Lavender">#7287FD</Color>
+    <Color x:Key="Latte.Sapphire">#209FB5</Color>
+    <Color x:Key="Latte.Sky">#04A5E5</Color>
+    <Color x:Key="Latte.Teal">#179299</Color>
+    <Color x:Key="Latte.Green">#40A02B</Color>
+    <Color x:Key="Latte.Yellow">#DF8E1D</Color>
+    <Color x:Key="Latte.Peach">#FE640B</Color>
+    <Color x:Key="Latte.Maroon">#E64553</Color>
+    <Color x:Key="Latte.Red">#D20F39</Color>
+    <Color x:Key="Latte.Mauve">#8839EF</Color>
+    <Color x:Key="Latte.Pink">#EA76CB</Color>
+    <Color x:Key="Latte.Flamingo">#DD7878</Color>
+    <Color x:Key="Latte.Rosewater">#DCDCE8</Color>
+
+    <SolidColorBrush x:Key="Light.BaseBrush" Color="{StaticResource Latte.Base}"/>
+    <SolidColorBrush x:Key="Light.MantleBrush" Color="{StaticResource Latte.Mantle}"/>
+    <SolidColorBrush x:Key="Light.CrustBrush" Color="{StaticResource Latte.Crust}"/>
+    <SolidColorBrush x:Key="Light.Surface0Brush" Color="{StaticResource Latte.Surface0}"/>
+    <SolidColorBrush x:Key="Light.Surface1Brush" Color="{StaticResource Latte.Surface1}"/>
+    <SolidColorBrush x:Key="Light.Surface2Brush" Color="{StaticResource Latte.Surface2}"/>
+    <SolidColorBrush x:Key="Light.Overlay0Brush" Color="{StaticResource Latte.Overlay0}"/>
+    <SolidColorBrush x:Key="Light.Overlay1Brush" Color="{StaticResource Latte.Overlay1}"/>
+    <SolidColorBrush x:Key="Light.Overlay2Brush" Color="{StaticResource Latte.Overlay2}"/>
+    <SolidColorBrush x:Key="Light.TextBrush" Color="{StaticResource Latte.Text}"/>
+    <SolidColorBrush x:Key="Light.Subtext0Brush" Color="{StaticResource Latte.Subtext0}"/>
+    <SolidColorBrush x:Key="Light.Subtext1Brush" Color="{StaticResource Latte.Subtext1}"/>
+    <SolidColorBrush x:Key="Light.BlueBrush" Color="{StaticResource Latte.Blue}"/>
+    <SolidColorBrush x:Key="Light.LavenderBrush" Color="{StaticResource Latte.Lavender}"/>
+    <SolidColorBrush x:Key="Light.GreenBrush" Color="{StaticResource Latte.Green}"/>
+    <SolidColorBrush x:Key="Light.YellowBrush" Color="{StaticResource Latte.Yellow}"/>
+    <SolidColorBrush x:Key="Light.PeachBrush" Color="{StaticResource Latte.Peach}"/>
+    <SolidColorBrush x:Key="Light.RedBrush" Color="{StaticResource Latte.Red}"/>
+    <SolidColorBrush x:Key="Light.MauveBrush" Color="{StaticResource Latte.Mauve}"/>
+
+</ResourceDictionary>

@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             x:Class="Harbor.App.Avalonia.Views.ProviderBrowserView">
+
+    <Border Background="#80000000" ZIndex="200">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
+                Width="900" Height="600" Padding="16">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+                    <TextBlock Grid.Column="0" Text="Provider browser" FontSize="16" FontWeight="Bold"
+                               Foreground="{StaticResource MochaBlue}"/>
+                    <Button Grid.Column="1" Classes="Subtle" Content="Close (Esc)" Click="Close_Click"/>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,2*">
+                    <!-- Provider list -->
+                    <Border Grid.Column="0" Classes="Card" Margin="0,0,8,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <TextBlock Grid.Row="0" Text="Providers" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding Providers}"
+                                     SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
+                                     SelectionChanged="Provider_SelectionChanged"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Model list -->
+                    <Border Grid.Column="1" Classes="Card" Margin="8,0,0,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <TextBlock Grid.Row="0" Text="Models" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <ScrollViewer Grid.Row="1">
+                                <ItemsControl ItemsSource="{Binding Models}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:ModelRowViewModel">
+                                            <Border Background="{StaticResource MochaMantle}" CornerRadius="6" Padding="10" Margin="0,2">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding Id}" FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                                               Foreground="{StaticResource MochaOverlay2}"/>
+                                                    <TextBlock Text="{Binding Features}" FontSize="11"
+                                                               Foreground="{StaticResource MochaGreen}"/>
+                                                    <TextBlock Text="{Binding PricingLabel}" FontSize="11"
+                                                               Foreground="{StaticResource MochaYellow}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

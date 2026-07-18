@@ -1,0 +1,87 @@
+@page "/code"
+@using Harbor.App.Blazor.Components.Shared
+@inject HarborJsInterop Js
+
+<h1>Code Editor</h1>
+<p>Monaco-powered editor. Changes sync to the C# VM on blur.</p>
+
+<div class="editor-toolbar">
+    <label>Language:
+        <select class="select-input" @bind="_language">
+            <option value="markdown">Markdown</option>
+            <option value="csharp">C#</option>
+            <option value="typescript">TypeScript</option>
+            <option value="javascript">JavaScript</option>
+            <option value="json">JSON</option>
+            <option value="python">Python</option>
+            <option value="rust">Rust</option>
+            <option value="go">Go</option>
+        </select>
+    </label>
+    <button class="btn-primary" @onclick="SaveAsync">Save</button>
+    <button class="btn-secondary" @onclick="CopyAsync">Copy</button>
+</div>
+
+<MonacoEditor @ref="_editor"
+              Value="@_value"
+              Language="@_language"
+              Theme="vs-dark"
+              Height="560px"/>
+
+<style>
+    .editor-toolbar {
+        display: flex;
+        gap: var(--space-3);
+        align-items: center;
+        margin-bottom: var(--space-3);
+    }
+    .editor-toolbar label { color: var(--text-dim); font-size: var(--font-size-sm); }
+</style>
+
+@code {
+    private MonacoEditor? _editor;
+    private string _value = @"// Welcome to the Harbor code editor.
+// This wraps the Monaco editor via JS interop.
+
+using System;
+
+Console.WriteLine(""Hello, Harbor!"");
+
+public static class Fibonacci
+{
+    public static IEnumerable<int> Stream()
+    {
+        int a = 0, b = 1;
+        while (true)
+        {
+            yield return a;
+            (a, b) = (b, a + b);
+        }
+    }
+}";
+    private string _language = "csharp";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _editor is not null)
+        {
+            // Wait a tick to ensure Monaco has initialised.
+            await Task.Delay(100);
+            await _editor.SetLanguageAsync(_language);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editor is null) return;
+        string current = await _editor.GetValueAsync().ConfigureAwait(false);
+        _value = current;
+    }
+
+    private async Task CopyAsync()
+    {
+        if (_editor is null) return;
+        string current = await _editor.GetValueAsync().ConfigureAwait(false);
+        await Js.CopyToClipboardAsync(current).ConfigureAwait(false);
+    }
+}

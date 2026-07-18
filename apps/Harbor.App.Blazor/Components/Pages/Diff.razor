@@ -1,0 +1,77 @@
+@page "/diff"
+@inject HarborJsInterop Js
+
+<h1>Diff Viewer</h1>
+<p>Paste two snippets and see them side-by-side. (Line-level diff — word-level diffing ships when the agent is wired up.)</p>
+
+<div class="diff-shell">
+    <div class="diff-pane">
+        <h3>Before</h3>
+        <textarea @bind="_before" @bind:event="oninput" spellcheck="false"></textarea>
+    </div>
+    <div class="diff-pane">
+        <h3>After</h3>
+        <textarea @bind="_after" @bind:event="oninput" spellcheck="false"></textarea>
+    </div>
+</div>
+
+<div class="diff-actions">
+    <button class="btn-primary" @onclick="Compare">Compare</button>
+    <button class="btn-secondary" @onclick="CopyDiff">Copy diff</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_diff))
+{
+    <pre class="diff-output">@_diff</pre>
+}
+
+<style>
+    .diff-actions { display: flex; gap: var(--space-2); margin: var(--space-3) 0; }
+    .diff-output {
+        background: var(--ctp-crust);
+        padding: var(--space-4);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
+        color: var(--text);
+        overflow: auto;
+        max-height: 320px;
+    }
+</style>
+
+@code {
+    private string _before = "Hello, world!\nThis is the original.";
+    private string _after = "Hello, Harbor!\nThis is the original.\nWith a new line.";
+    private string? _diff;
+
+    private void Compare()
+    {
+        var beforeLines = _before.Split('\n');
+        var afterLines = _after.Split('\n');
+        var sb = new System.Text.StringBuilder();
+        int max = Math.Max(beforeLines.Length, afterLines.Length);
+        for (int i = 0; i < max; i++)
+        {
+            string b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
+            string a = i < afterLines.Length ? afterLines[i] : string.Empty;
+            if (b == a)
+            {
+                sb.AppendLine("  " + a);
+            }
+            else
+            {
+                if (i < beforeLines.Length) sb.AppendLine("- " + b);
+                if (i < afterLines.Length) sb.AppendLine("+ " + a);
+            }
+        }
+        _diff = sb.ToString();
+    }
+
+    private async Task CopyDiff()
+    {
+        if (!string.IsNullOrEmpty(_diff))
+        {
+            await Js.CopyToClipboardAsync(_diff).ConfigureAwait(false);
+        }
+    }
+}

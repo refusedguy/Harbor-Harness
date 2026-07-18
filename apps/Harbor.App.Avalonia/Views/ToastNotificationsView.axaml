@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:srv="clr-namespace:Harbor.App.Avalonia.Services"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView">
+
+    <ItemsControl ItemsSource="{Binding Toasts}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Vertical" Spacing="6"/>
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="srv:ToastNotification">
+                <Border Background="{StaticResource MochaSurface0}"
+                        CornerRadius="6"
+                        Padding="12,8"
+                        BorderBrush="{StaticResource MochaSurface2}"
+                        BorderThickness="1,0,0,0"
+                        BoxShadow="0 4 12 0 #60000000"
+                        MinWidth="260" MaxWidth="380">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Kind, Converter={x:Static views:ToastIconConverter.Instance}}"
+                                   FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                   Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                    </StackPanel>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

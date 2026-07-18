@@ -1,0 +1,78 @@
+@page "/"
+@using Harbor.App.Blazor.ViewModels
+@inject ChatViewModel Chat
+@inject ToastService Toasts
+
+<div class="page-home">
+    <h1>Harbor</h1>
+    <p class="tagline">A production-ready .NET 10 AI agent harness.</p>
+
+    <div class="quick-actions">
+        <a class="card lift-on-hover" href="/chat">
+            <div class="card-icon">💬</div>
+            <div class="card-title">Start Chatting</div>
+            <div class="card-sub">Open the chat page and send your first prompt.</div>
+        </a>
+        <a class="card lift-on-hover" href="/sessions">
+            <div class="card-icon">📚</div>
+            <div class="card-title">Browse Sessions</div>
+            <div class="card-sub">Pick up a previous conversation or fork one.</div>
+        </a>
+        <a class="card lift-on-hover" href="/providers">
+            <div class="card-icon">🔌</div>
+            <div class="card-title">Configure Providers</div>
+            <div class="card-sub">Set up OpenAI / Anthropic / Ollama / vLLM.</div>
+        </a>
+        <a class="card lift-on-hover" href="/code">
+            <div class="card-icon">📝</div>
+            <div class="card-title">Code Editor</div>
+            <div class="card-sub">Monaco-powered editor for snippets and diffs.</div>
+        </a>
+    </div>
+
+    <div class="hint">
+        <kbd>Ctrl</kbd> + <kbd>P</kbd> to open the command palette.
+    </div>
+</div>
+
+<style>
+    .page-home { max-width: 960px; margin: 0 auto; padding: var(--space-6); }
+    .page-home h1 { font-size: var(--font-size-3xl); color: var(--accent); margin: 0 0 var(--space-2); }
+    .tagline { color: var(--text-dim); margin-bottom: var(--space-6); }
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-6);
+    }
+    .card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        text-decoration: none;
+        color: var(--text);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
+    .card .card-icon { font-size: 28px; }
+    .card .card-title { font-weight: 700; color: var(--accent); }
+    .card .card-sub { color: var(--text-dim); font-size: var(--font-size-sm); }
+    .hint { color: var(--text-faint); font-size: var(--font-size-sm); }
+    kbd {
+        background: var(--panel);
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-xs);
+        border: 1px solid var(--border);
+    }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Toasts.InfoAsync("Welcome to Harbor Blazor", "Demo shell").ConfigureAwait(false);
+    }
+}

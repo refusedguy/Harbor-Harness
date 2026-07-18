@@ -1,0 +1,78 @@
+@page "/chat"
+@using Harbor.App.Blazor.ViewModels
+@using Harbor.Tui.Abstractions.State
+@inject ChatViewModel Vm
+@inject NavigationManager Nav
+
+<div class="chat-shell">
+    <div class="chat-history" id="chat-history">
+        @if (Vm.State.Lines.Length == 0 && !Vm.State.IsStreaming)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">💬</div>
+                <h2>Start a conversation</h2>
+                <p>Type a message below. The assistant will respond.</p>
+            </div>
+        }
+        else
+        {
+            @foreach (var line in Vm.State.Lines)
+            {
+                <MessageBubble Line="@line"/>
+            }
+        }
+
+        @if (Vm.State.IsStreaming && !string.IsNullOrEmpty(Vm.State.Active.TextBuffer))
+        {
+            <div class="chat-streaming">
+                ● streaming
+                <span style="color:var(--text-dim);margin-left:8px;">@Vm.State.Active.TextBuffer</span>
+            </div>
+        }
+    </div>
+
+    <div class="chat-input-row">
+        <textarea class="chat-input"
+                  @bind="Vm.Input"
+                  @bind:event="oninput"
+                  @onkeydown="OnKeyDownAsync"
+                  placeholder="Type a message…  (Enter = send, Shift+Enter = newline)"
+                  rows="3"></textarea>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            <button class="btn-primary" @onclick="Vm.SendAsync" disabled="@Vm.State.IsAgentRunning">
+                @(Vm.State.IsAgentRunning ? "…" : "Send")
+            </button>
+            <button class="btn-secondary" @onclick="Vm.CancelAsync" disabled="@(!Vm.State.IsAgentRunning)">
+                Cancel
+            </button>
+            <button class="btn-secondary" @onclick="ClearLocal">Clear</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .empty-state { text-align: center; padding: var(--space-8); color: var(--text-dim); }
+    .empty-icon { font-size: 48px; margin-bottom: var(--space-3); }
+    .empty-state h2 { color: var(--accent); margin: 0 0 var(--space-2); }
+</style>
+
+@code {
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Auto-scroll to bottom whenever the history updates.
+        // The actual scrolling is handled by harborInterop.scrollToBottom
+        // in production; here we rely on the browser's default anchor
+        // behaviour (last child) which is good enough for the demo.
+        return Task.CompletedTask;
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await Vm.SendAsync().ConfigureAwait(false);
+        }
+    }
+
+    private void ClearLocal() => Vm.Clear();
+}

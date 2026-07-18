@@ -1,3 +1,5 @@
+using Harbor.Scripting.Abstractions;
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;

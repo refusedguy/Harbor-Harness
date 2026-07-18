@@ -1,0 +1,53 @@
+@page "/providers"
+@using Harbor.App.Blazor.ViewModels
+@inject ProviderBrowserViewModel Vm
+
+<div class="page">
+    <div class="page-header">
+        <h1>Providers</h1>
+        <button class="btn-primary" @onclick="Vm.ReloadAsync">Reload</button>
+    </div>
+
+    <div class="provider-grid">
+        <div class="provider-list">
+            @if (Vm.Providers.Count == 0)
+            {
+                <div class="empty">No providers configured. Drop JSON files in the providers/ directory.</div>
+            }
+            else
+            {
+                @foreach (var p in Vm.Providers)
+                {
+                    <div class="provider-row" @onclick="() => Vm.Select(p)">
+                        <div class="provider-name">@p.Name</div>
+                        <div class="provider-url">@p.BaseUrl</div>
+                    </div>
+                }
+            }
+        </div>
+        <div>
+            <h3>Raw JSON</h3>
+            @if (string.IsNullOrEmpty(Vm.SelectedJson))
+            {
+                <div class="empty">Select a provider on the left.</div>
+            }
+            else
+            {
+                <pre style="background:var(--ctp-crust);padding:16px;border-radius:8px;overflow:auto;font-family:var(--font-mono);font-size:13px;color:var(--text);">@Vm.SelectedJson</pre>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+    .page-header h1 { margin: 0; color: var(--accent); }
+    .empty { padding: var(--space-3); color: var(--text-dim); font-size: var(--font-size-sm); }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Vm.ReloadAsync().ConfigureAwait(false);
+    }
+}

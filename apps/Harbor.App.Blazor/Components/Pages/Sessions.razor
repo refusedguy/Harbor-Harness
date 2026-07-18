@@ -1,0 +1,48 @@
+@page "/sessions"
+@using Harbor.App.Blazor.ViewModels
+@inject SessionListViewModel Vm
+
+<div class="page">
+    <div class="page-header">
+        <h1>Sessions</h1>
+        <button class="btn-primary" @onclick="Vm.ReloadAsync">Reload</button>
+    </div>
+
+    @if (Vm.IsLoading)
+    {
+        <div class="loading"><div class="spinner"></div> Loading…</div>
+    }
+    else if (Vm.Sessions.Count == 0)
+    {
+        <div class="empty">No sessions yet. Start a chat to create one.</div>
+    }
+    else
+    {
+        <div class="session-list">
+            @foreach (var s in Vm.Sessions)
+            {
+                <div class="session-row">
+                    <div>
+                        <div class="session-title">@s.Title</div>
+                        <div class="session-id">@s.Id</div>
+                    </div>
+                    <div class="session-date">@s.LastModified.ToString("u")</div>
+                    <div class="session-date">@(s.SizeBytes > 0 ? s.SizeBytes.ToString("N0") + " B" : "—")</div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
+    .page-header h1 { margin: 0; color: var(--accent); }
+    .loading, .empty { padding: var(--space-5); text-align: center; color: var(--text-dim); }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Vm.ReloadAsync().ConfigureAwait(false);
+    }
+}

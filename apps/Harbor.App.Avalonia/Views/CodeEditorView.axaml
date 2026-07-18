@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             xmlns:avaloniaEdit="https://github.com/avaloniaui/avaloniaedit"
+             x:Class="Harbor.App.Avalonia.Views.CodeEditorView">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Tab strip + toolbar -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Background="{StaticResource MochaMantle}">
+            <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Tabs}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:EditorTabViewModel">
+                            <Border Padding="10,4" Background="{StaticResource MochaSurface0}" Margin="2,2,0,2"
+                                    CornerRadius="4,4,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding FileName}" FontFamily="{StaticResource CodeFont}" FontSize="12"/>
+                                    <TextBlock Text="●" Foreground="{StaticResource MochaYellow}" FontSize="9"
+                                               IsVisible="{Binding IsDirty}"/>
+                                    <Button Classes="Subtle" Content="×" Padding="6,2"
+                                            Command="{Binding $parent[views:CodeEditorView].(UserControl.DataContext).CloseTabCommand}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="8,0">
+                <Button Classes="Subtle" Content="Open (Ctrl+O)" Command="{Binding OpenFileCommand}"/>
+                <Button Classes="Subtle" Content="Save (Ctrl+S)" Command="{Binding SaveCommand}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Active editor -->
+        <Border Grid.Row="1" Classes="CodeEditorHost" Margin="0">
+            <Grid>
+                <TextBlock Text="No file open — press Ctrl+O to open a file."
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSubtleBrush}"
+                           IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectIsNullConverter.Instance}}"/>
+                <avaloniaEdit:TextEditor
+                    x:Name="Editor"
+                    IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectNotNullConverter.Instance}}"
+                    ShowLineNumbers="True"
+                    FontFamily="JetBrains Mono, Cascadia Code, monospace"
+                    FontSize="13"
+                    Background="Transparent"
+                    Foreground="{StaticResource MochaText}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

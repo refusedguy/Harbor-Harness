@@ -1,0 +1,37 @@
+@* StatusBar — bottom strip showing current status + token/cost counts.
+   Reads from UiStore. @*@
+
+@using Harbor.Tui.Abstractions.State
+@inject UiStore Store
+@implements IDisposable
+
+<div class="statusbar">
+    <div class="status-section">
+        <span class="@(Store.State.IsAgentRunning ? "status-running" : "")">
+            @(Store.State.IsAgentRunning ? "● running" : "● idle")
+        </span>
+        <span>@Store.State.Status</span>
+    </div>
+    <div class="status-section">
+        <span class="status-pill">in: @(Store.State.Cost.TokensIn.ToString("N0"))</span>
+        <span class="status-pill">out: @(Store.State.Cost.TokensOut.ToString("N0"))</span>
+        <span class="status-pill">$@(Store.State.Cost.CostUsd.ToString("F4"))</span>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Store.Changed += OnChanged;
+    }
+
+    private async void OnChanged(object? _, UiStateChangedEventArgs __)
+    {
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+    }
+
+    public void Dispose()
+    {
+        Store.Changed -= OnChanged;
+    }
+}

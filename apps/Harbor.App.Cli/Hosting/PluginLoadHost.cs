@@ -1,3 +1,4 @@
+using Harbor.Plugins.Abstractions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;

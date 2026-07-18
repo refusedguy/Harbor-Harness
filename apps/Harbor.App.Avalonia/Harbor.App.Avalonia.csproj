@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Avalonia — standalone ORCA-level desktop GUI for Harbor.
+    Composition root: depends on Harbor.Abstractions + Harbor.Tui.Abstractions + Harbor.Core +
+    Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama + Harbor.Providers.OpenAiCompatible.
+    Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 11.2
+    desktop lifetime with Catppuccin-Mocha dark theme, code editor (AvaloniaEdit), streaming chat,
+    session manager, command palette, diff view, token-usage chart, plugin panel host.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <UseAvalonia>true</UseAvalonia>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.App.Avalonia</PackageId>
+    <Description>Harbor standalone Avalonia desktop app — ORCA-level coding agent GUI.</Description>
+    <PackageTags>harbor;avalonia;gui;desktop;ai-agent;coding-agent</PackageTags>
+
+    <!-- Avalonia 11.2.7 brings Tmds.DBus.Protocol 0.20.0 transitively (GHSA-xrw6-gwf8-vvr9).
+         We can't pin a higher version of a transitive dep, so suppress NU1903 in this project. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+
+    <!-- Avalonia XAML codegen emits some pattern-matching warnings under .NET 10 analyzers. -->
+    <NoWarn>$(NoWarn);AVLN1000;AVLN1001</NoWarn>
+
+    <!-- Source-generator MVVM emits some unused-field warnings. -->
+    <NoWarn>$(NoWarn);CS0169;CS0414;CA1823</NoWarn>
+
+    <!-- Meziantou MA0046 insists on EventArgs-derived payload types; we use
+         EventHandler<T> with plain record payloads (UiState, ToastNotification)
+         which is intentional for the simple event contracts in this app. -->
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Composition-root references: the app wires Harbor services, exactly like Harbor.Cli. -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Avalonia 11.2.x stable -->
+    <PackageReference Include="Avalonia"/>
+    <PackageReference Include="Avalonia.Desktop"/>
+    <PackageReference Include="Avalonia.Themes.Fluent"/>
+    <PackageReference Include="Avalonia.Fonts.Inter"/>
+    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'"/>
+    <!-- Avalonia.AvaloniaEdit 11.2.0 is the build matched to Avalonia 11.2.x -->
+    <PackageReference Include="Avalonia.AvaloniaEdit"/>
+    <!-- Markdown parsing (no rendering — we project to Avalonia controls in ChatMarkdown.cs) -->
+    <PackageReference Include="Markdig"/>
+    <!-- MVVM source generators ([ObservableProperty], [RelayCommand]) -->
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <!-- DI + hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+  </ItemGroup>
+
+</Project>

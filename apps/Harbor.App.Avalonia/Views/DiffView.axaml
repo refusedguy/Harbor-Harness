@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.DiffView">
+
+    <Border Background="#80000000" ZIndex="200">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
+                Width="900" Height="600" Padding="16">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <TextBlock Grid.Row="0" Text="Diff viewer" FontSize="16" FontWeight="Bold"
+                           Foreground="{StaticResource MochaBlue}" Margin="0,0,0,12"/>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,Auto,*,Auto" Margin="0,0,0,8">
+                    <TextBox Grid.Column="0" Watermark="Left (before)" Text="{Binding LeftText}" AcceptsReturn="True" Height="60"/>
+                    <TextBlock Grid.Column="1" Text="→" Margin="8,16" Foreground="{StaticResource MochaOverlay2}"/>
+                    <TextBox Grid.Column="2" Watermark="Right (after)" Text="{Binding RightText}" AcceptsReturn="True" Height="60"/>
+                    <Button Grid.Column="3" Classes="Primary" Content="Compute" Command="{Binding ComputeCommand}" Margin="8,0,0,0"/>
+                </Grid>
+
+                <ScrollViewer Grid.Row="2" Background="{StaticResource MochaMantle}" CornerRadius="6">
+                    <ItemsControl ItemsSource="{Binding Rows}" Padding="8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:DiffRowViewModel">
+                                <Grid ColumnDefinitions="40,*,*" Margin="0,1">
+                                    <TextBlock Grid.Column="0" Text="{Binding LineNumber}" Foreground="{StaticResource MochaOverlay2}"
+                                               FontFamily="{StaticResource CodeFont}" FontSize="11"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Left}" FontFamily="{StaticResource CodeFont}" FontSize="12"
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Right}" FontFamily="{StaticResource CodeFont}" FontSize="12"
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                    <Button Classes="Subtle" Content="Close (Esc)" Click="Close_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

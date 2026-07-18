@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Catppuccin-Mocha dark palette — https://catppuccin.com/palette
+        The canonical dark theme for Harbor.App.Avalonia.
+    -->
+
+    <!-- Font families (UI + code) — used across Typography.axaml styles. -->
+    <FontFamily x:Key="UiFont">"Inter, Segoe UI, San Francisco, Roboto, Arial"</FontFamily>
+    <FontFamily x:Key="CodeFont">"JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, monospace"</FontFamily>
+
+    <!-- Base background shades -->
+    <Color x:Key="MochaBase">#1E1E2E</Color>
+    <Color x:Key="MochaMantle">#181825</Color>
+    <Color x:Key="MochaCrust">#11111B</Color>
+    <Color x:Key="MochaSurface0">#313244</Color>
+    <Color x:Key="MochaSurface1">#45475A</Color>
+    <Color x:Key="MochaSurface2">#585B70</Color>
+
+    <!-- Text -->
+    <Color x:Key="MochaText">#CDD6F4</Color>
+    <Color x:Key="MochaSubtext1">#BAC2DE</Color>
+    <Color x:Key="MochaSubtext0">#A6ADC8</Color>
+    <Color x:Key="MochaOverlay2">#9399B2</Color>
+
+    <!-- Accents -->
+    <Color x:Key="MochaBlue">#89B4FA</Color>
+    <Color x:Key="MochaLavender">#B4BEFE</Color>
+    <Color x:Key="MochaPink">#F5C2E7</Color>
+    <Color x:Key="MochaRed">#F38BA8</Color>
+    <Color x:Key="MochaGreen">#A6E3A1</Color>
+    <Color x:Key="MochaYellow">#F9E2AF</Color>
+    <Color x:Key="MochaPeach">#FAB387</Color>
+    <Color x:Key="MochaTeal">#94E2D5</Color>
+    <Color x:Key="MochaSky">#89DCEB</Color>
+    <Color x:Key="MochaMaroon">#EBA0AC</Color>
+    <Color x:Key="MochaMauve">#CBA6F7</Color>
+
+    <!-- Semantic role colors for chat -->
+    <SolidColorBrush x:Key="ChatUserBrush"        Color="{StaticResource MochaSky}"/>
+    <SolidColorBrush x:Key="ChatAssistantBrush"   Color="{StaticResource MochaText}"/>
+    <SolidColorBrush x:Key="ChatThinkingBrush"    Color="{StaticResource MochaOverlay2}"/>
+    <SolidColorBrush x:Key="ChatToolBrush"        Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="ChatToolResultBrush"  Color="{StaticResource MochaGreen}"/>
+    <SolidColorBrush x:Key="ChatSystemBrush"      Color="{StaticResource MochaYellow}"/>
+    <SolidColorBrush x:Key="ChatErrorBrush"       Color="{StaticResource MochaRed}"/>
+
+    <!-- Background brushes -->
+    <SolidColorBrush x:Key="AppBackgroundBrush"        Color="{StaticResource MochaBase}"/>
+    <SolidColorBrush x:Key="PanelBackgroundBrush"      Color="{StaticResource MochaMantle}"/>
+    <SolidColorBrush x:Key="SidebarBackgroundBrush"    Color="{StaticResource MochaCrust}"/>
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush"  Color="{StaticResource MochaMantle}"/>
+    <SolidColorBrush x:Key="CardBackgroundBrush"       Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="HoverBackgroundBrush"      Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="SelectedBackgroundBrush"   Color="{StaticResource MochaSurface1}"/>
+    <SolidColorBrush x:Key="BorderBrush"               Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="AccentBrush"               Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="AccentForegroundBrush"     Color="#11111B"/>
+    <SolidColorBrush x:Key="SuccessBrush"              Color="{StaticResource MochaGreen}"/>
+    <SolidColorBrush x:Key="WarningBrush"              Color="{StaticResource MochaPeach}"/>
+    <SolidColorBrush x:Key="ErrorBrush"                Color="{StaticResource MochaRed}"/>
+    <SolidColorBrush x:Key="TextBrush"                 Color="{StaticResource MochaText}"/>
+    <SolidColorBrush x:Key="TextSubtleBrush"           Color="{StaticResource MochaSubtext0}"/>
+
+    <!-- Status bar state colors -->
+    <SolidColorBrush x:Key="StatusIdleBrush"     Color="{StaticResource MochaSubtext0}"/>
+    <SolidColorBrush x:Key="StatusRunningBrush"  Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="StatusCompactBrush"  Color="{StaticResource MochaYellow}"/>
+    <SolidColorBrush x:Key="StatusErrorBrush"    Color="{StaticResource MochaRed}"/>
+
+</ResourceDictionary>

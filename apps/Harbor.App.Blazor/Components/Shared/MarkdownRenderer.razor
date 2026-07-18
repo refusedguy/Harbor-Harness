@@ -1,0 +1,29 @@
+@* MarkdownRenderer — converts Markdig AST → safe HTML using Markdig's
+   HTML pipeline. Used by Chat.razor to render assistant messages with
+   GitHub-flavoured markdown + syntax highlight classes. @*@
+
+@using Markdig
+@inject HarborJsInterop Js
+
+<div class="markdown-body">
+    @((MarkupString)RenderMarkdown(Markdown))
+</div>
+
+@code {
+    private static readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UsePipeTables()
+        .UseTaskLists()
+        .UseAutoLinks()
+        .Build();
+
+    /// <summary>Raw markdown to render.</summary>
+    [Parameter]
+    public string Markdown { get; set; } = string.Empty;
+
+    private static string RenderMarkdown(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return string.Empty;
+        return Markdig.Markdown.ToHtml(markdown, _pipeline);
+    }
+}

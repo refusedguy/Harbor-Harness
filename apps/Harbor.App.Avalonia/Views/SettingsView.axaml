@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.SettingsView">
+
+    <Border Background="#80000000" ZIndex="200">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
+                Width="600" Height="520" Padding="16">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <TextBlock Grid.Row="0" Text="Settings" FontSize="16" FontWeight="Bold"
+                           Foreground="{StaticResource MochaBlue}" Margin="0,0,0,12"/>
+
+                <StackPanel Grid.Row="1" Spacing="14">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Model (provider/model)" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                        <TextBox Text="{Binding Model, Mode=TwoWay}" Watermark="ollama/qwen2.5-coder:7b"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Storage backend" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                        <ComboBox SelectedItem="{Binding Storage, Mode=TwoWay}">
+                            <ComboBoxItem Content="memory"/>
+                            <ComboBoxItem Content="jsonl"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Log level" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                        <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}">
+                            <ComboBoxItem Content="Trace"/>
+                            <ComboBoxItem Content="Debug"/>
+                            <ComboBoxItem Content="Information"/>
+                            <ComboBoxItem Content="Warning"/>
+                            <ComboBoxItem Content="Error"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Ollama host" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                        <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" Watermark="http://localhost:11434"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Theme" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <CheckBox Content="Dark (Mocha)" IsChecked="{Binding IsDarkTheme, Mode=TwoWay}"/>
+                            <Button Classes="Subtle" Content="Apply" Command="{Binding ApplyThemeCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+                    <Button Classes="Subtle" Content="Close (Esc)" Click="Close_Click"/>
+                    <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

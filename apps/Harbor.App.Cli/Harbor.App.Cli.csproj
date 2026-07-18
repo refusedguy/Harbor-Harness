@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Cli — the canonical CLI app for Harbor.
+
+    This was previously `src/Harbor.Cli/`. Moved to `apps/` to make the
+    solution layout explicit: `src/` holds libraries, `apps/` holds runnable
+    applications. The CLI is just one possible app — sibling apps include
+    Harbor.App.Avalonia, Harbor.App.Wpf, Harbor.App.Blazor, Harbor.App.Maui.
+
+    The .NET namespace stays `Harbor.Cli.*` for backward compat with
+    existing user code and docs.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>harbor</ToolCommandName>
+    <PackageId>Harbor.App.Cli</PackageId>
+    <Description>Harbor CLI app — modular AI coding agent.</Description>
+    <PackageTags>harbor;cli;ai;agent;app</PackageTags>
+    <EmbedProviders>true</EmbedProviders>
+    <!-- The .NET namespace stays Harbor.Cli for backward compat. -->
+    <RootNamespace>Harbor.Cli</RootNamespace>
+    <AssemblyName>Harbor.App.Cli</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Harbor.Plugins.* — full pipeline (facade + each layer directly). -->
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+
+    <!-- Harbor.Scripting.* — full pipeline. -->
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Storage\Harbor.Scripting.Storage.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Compilation\Harbor.Scripting.Compilation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Engines\Harbor.Scripting.Engines.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Bridge\Harbor.Scripting.Bridge.csproj"/>
+
+    <!-- Other infrastructure. -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Http"/>
+  </ItemGroup>
+
+</Project>

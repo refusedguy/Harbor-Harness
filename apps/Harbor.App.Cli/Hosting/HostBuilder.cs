@@ -1,3 +1,4 @@
+using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
@@ -11,11 +12,11 @@ using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
 using Harbor.Plugins.Runtime;
-using Harbor.Plugins.Runtime.Compilation;
-using Harbor.Plugins.Runtime.Hosting;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
-using Harbor.Plugins.Runtime.Storage;
+using Harbor.Plugins.Compilation;
+using Harbor.Plugins.Hosting;
+using Harbor.Plugins.Instantiation;
+using Harbor.Plugins.Registration;
+using Harbor.Plugins.Storage;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
@@ -65,10 +66,10 @@ internal static class HostBuilder
 
         _logger.LogInformation("Building host");
         RegisterCore(builder);
-        RegisterHttpClients(builder);
         RegisterRegistries(builder, harborDir);
         RegisterStorage(builder, sessionsDir, sqlitePath);
         RegisterTui(builder);
+        RegisterHttpClients(builder);
         return builder.Build();
     }
 
@@ -120,16 +121,11 @@ internal static class HostBuilder
         // The instances are then registered as singletons so the final ServiceProvider uses
         // the same registry objects the plugin loader wrote into.
         var agentRegistry = CreateAgentRegistry(config);
-        builder.Services.AddSingleton<IAgentRegistry>(agentRegistry);
         // MCP registry is constructed eagerly so the builtin `mcp` tool can be wired with
         // a concrete registry reference at tool-registration time (ToolContext.Services is
         // not populated by the default AgentLoop, so we can't rely on late resolution).
         var mcpRegistry = new InMemoryMcpRegistry(
             loggerFactory.CreateLogger<InMemoryMcpRegistry>());
-        builder.Services.AddSingleton<IMcpRegistry>(mcpRegistry);
-        // Rebuild the temporary ServiceProvider so eager registry construction below
-        // (e.g. TaskTool resolving IAgentRegistry) can resolve already-registered services.
-        tempSp = builder.Services.BuildServiceProvider();
         var toolRegistry = CreateToolRegistry(tempSp, mcpRegistry);
         var providerRegistry = CreateProviderRegistry(tempSp, harborDir, config);
         var eventBus = tempSp.GetRequiredService<IEventBus>();
@@ -200,10 +196,11 @@ internal static class HostBuilder
 
         // Register the already-constructed instances as singletons. The previous factory
         // descriptors remain in the ServiceCollection but the instance descriptors win.
-
+        builder.Services.AddSingleton<IAgentRegistry>(agentRegistry);
         builder.Services.AddSingleton<IToolRegistry>(toolRegistry);
         builder.Services.AddSingleton<IProviderRegistry>(providerRegistry);
         builder.Services.AddSingleton<IEventBus>(eventBus);
+        builder.Services.AddSingleton<IMcpRegistry>(mcpRegistry);
         builder.Services.AddSingleton(panelRegistry);
         builder.Services.AddSingleton<IPanelRegistry>(panelRegistry);
         builder.Services.AddSingleton<ICompactionService>(sp => new CompactionService(

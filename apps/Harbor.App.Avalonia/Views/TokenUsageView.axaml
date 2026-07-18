@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             x:Class="Harbor.App.Avalonia.Views.TokenUsageView">
+
+    <Border Background="#80000000" ZIndex="200">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
+                Width="800" Height="500" Padding="16">
+            <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+                <TextBlock Grid.Row="0" Text="Token usage per turn" FontSize="16" FontWeight="Bold"
+                           Foreground="{StaticResource MochaBlue}" Margin="0,0,0,12"/>
+
+                <!-- Summary tiles -->
+                <Grid Grid.Row="1" ColumnDefinitions="*,*,*" Margin="0,0,0,12">
+                    <Border Grid.Column="0" Classes="Card" Margin="0,0,6,0">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Total input" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                            <TextBlock Text="{Binding TotalTokensIn, StringFormat='{}{0:N0}'}" FontFamily="{StaticResource CodeFont}" FontSize="20"
+                                       Foreground="{StaticResource MochaSky}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="Card" Margin="6,0,6,0">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Total output" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                            <TextBlock Text="{Binding TotalTokensOut, StringFormat='{}{0:N0}'}" FontFamily="{StaticResource CodeFont}" FontSize="20"
+                                       Foreground="{StaticResource MochaPeach}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Classes="Card" Margin="6,0,0,0">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Cumulative cost" Foreground="{StaticResource TextSubtleBrush}" FontSize="11"/>
+                            <TextBlock Text="{Binding TotalCostUsd, StringFormat='{}${0:F4}'}" FontFamily="{StaticResource CodeFont}" FontSize="20"
+                                       Foreground="{StaticResource MochaYellow}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Bar chart -->
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Bars}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:TokenUsageBarViewModel">
+                                <Grid Width="24" Height="280" Margin="2,0">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" VerticalAlignment="Bottom" HorizontalAlignment="Center">
+                                        <!-- Input bar -->
+                                        <Rectangle Width="8" Height="{Binding InFraction}"
+                                                   Fill="{StaticResource MochaSky}"
+                                                   Margin="0,0,1,0" RadiusX="1" RadiusY="1"/>
+                                        <!-- Output bar -->
+                                        <Rectangle Width="8" Height="{Binding OutFraction}"
+                                                   Fill="{StaticResource MochaPeach}"
+                                                   Margin="1,0,0,0" RadiusX="1" RadiusY="1"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Text="{Binding Turn}" FontSize="9"
+                                               Foreground="{StaticResource MochaOverlay2}"
+                                               HorizontalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0" Spacing="8">
+                    <Button Classes="Subtle" Content="Clear" Command="{Binding ClearCommand}"/>
+                    <Button Classes="Subtle" Content="Close (Esc)" Click="Close_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

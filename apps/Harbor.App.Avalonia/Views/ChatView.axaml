@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.ChatView">
+
+    <Grid RowDefinitions="*,Auto,Auto">
+
+        <!-- Chat history -->
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Lines}" Padding="12,8">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:ChatLineViewModel">
+                        <Grid Margin="0,4" ColumnDefinitions="100,*">
+                            <Border Grid.Column="0" Background="{StaticResource MochaCrust}"
+                                    CornerRadius="4" Padding="6,2" VerticalAlignment="Top"
+                                    HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
+                                       Margin="10,0,0,0"
+                                       FontFamily="{StaticResource CodeFont}"
+                                       FontSize="13"
+                                       Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Streaming buffer -->
+        <Border Grid.Row="1" Background="{StaticResource MochaCrust}" CornerRadius="6"
+                Padding="10,6" Margin="12,4,12,2"
+                IsVisible="{Binding IsStreaming}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
+                <TextBlock Text="● streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="{Binding StreamingBuffer}" Foreground="{StaticResource MochaSubtext0}"
+                           TextTrimming="CharacterEllipsis"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           MaxWidth="900" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Thinking indicator -->
+        <Border Grid.Row="1" Background="{StaticResource MochaCrust}" CornerRadius="6"
+                Padding="10,6" Margin="12,4,12,2"
+                IsVisible="{Binding IsThinking}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="🤔" VerticalAlignment="Center"/>
+                <TextBlock Text="thinking…" Foreground="{StaticResource MochaOverlay2}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Input -->
+        <Grid Grid.Row="2" Margin="12,4,12,8" ColumnDefinitions="*,Auto,Auto">
+            <TextBox Grid.Column="0"
+                     Text="{Binding InputText, Mode=TwoWay}"
+                     Watermark="Message Harbor…  (Enter to send, Shift+Enter for newline)"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MinHeight="40" MaxHeight="160"
+                     KeyDown="InputBox_KeyDown"/>
+            <Button Grid.Column="1" Classes="Primary" Content="Send"
+                    Command="{Binding SendCommand}"
+                    Margin="6,0,0,0"
+                    Padding="20,8"/>
+            <Button Grid.Column="2" Classes="Subtle" Content="Stop"
+                    Command="{Binding StopCommand}"
+                    Margin="6,0,0,0"
+                    Padding="16,8"
+                    IsVisible="{Binding IsThinking}"/>
+        </Grid>
+    </Grid>
+</UserControl>

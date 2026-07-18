@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             x:Class="Harbor.App.Avalonia.Views.CommandPaletteView"
+             Background="#60000000">
+
+    <Border Background="{StaticResource MochaCrust}"
+            CornerRadius="8"
+            Width="600" MaxHeight="440"
+            VerticalAlignment="Top"
+            Margin="0,80,0,0"
+            Padding="0"
+            BoxShadow="0 8 24 0 #80000000">
+        <Grid RowDefinitions="Auto,*">
+
+            <TextBox Grid.Row="0"
+                     x:Name="QueryBox"
+                     Text="{Binding Query, Mode=TwoWay}"
+                     Watermark="Type a command, /slash, or search…"
+                     Padding="16,12"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FontSize="14"
+                     KeyDown="QueryBox_KeyDown"/>
+
+            <ListBox Grid.Row="1"
+                     ItemsSource="{Binding Results}"
+                     SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     MaxHeight="380"
+                     KeyDown="ResultsList_KeyDown">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="vm:CommandResultViewModel">
+                        <Grid ColumnDefinitions="24,*,Auto" Margin="0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Icon}"
+                                       HorizontalAlignment="Center" FontFamily="{StaticResource CodeFont}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="11"
+                                       Foreground="{StaticResource MochaOverlay2}" Margin="8,0,0,0"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Border>
+</UserControl>

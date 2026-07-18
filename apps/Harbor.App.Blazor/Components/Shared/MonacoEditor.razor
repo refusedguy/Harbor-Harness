@@ -1,0 +1,97 @@
+@* MonacoEditor — shared Razor component that wraps the Monaco editor
+   (loaded via JS interop). Used by both:
+     - Harbor.App.Blazor (CodeEditor page)
+     - Harbor.App.Maui (via BlazorWebView pointing at this same component)
+   Both apps ship this component as part of the RazorComponents assembly,
+   so the API + JS contract is identical across the two hosts. @*@
+
+@inject HarborJsInterop Js
+@implements IAsyncDisposable
+
+<div class="monaco-host" id="@_containerId" style="height:@Height"></div>
+
+@code {
+    private readonly string _containerId = "monaco-" + Guid.NewGuid().ToString("N");
+    private bool _initialised;
+    private string _lastValue = string.Empty;
+
+    /// <summary>Current editor content (two-way bindable).</summary>
+    [Parameter]
+    public string Value { get; set; } = string.Empty;
+
+    /// <summary>Raised when the editor value changes (blur / debounced input).</summary>
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Monaco language id (csharp, typescript, markdown, json, …).</summary>
+    [Parameter]
+    public string Language { get; set; } = "markdown";
+
+    /// <summary>Monaco theme (vs-dark by default).</summary>
+    [Parameter]
+    public string Theme { get; set; } = "vs-dark";
+
+    /// <summary>Host div height in CSS units.</summary>
+    [Parameter]
+    public string Height { get; set; } = "480px";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialised)
+        {
+            _initialised = true;
+            _lastValue = Value ?? string.Empty;
+            try
+            {
+                await Js.InitMonacoAsync(_containerId, _lastValue, Language, Theme).ConfigureAwait(false);
+            }
+            catch
+            {
+                // JS interop can fail during pre-render or circuit disconnect.
+                // The textarea fallback in interop.js handles the visual case.
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialised) return;
+        // Push external value changes into the editor (e.g. when switching
+        // files). Avoid echo loops by skipping if it matches the last value
+        // we pushed.
+        string v = Value ?? string.Empty;
+        if (v != _lastValue)
+        {
+            _lastValue = v;
+            try { await Js.SetMonacoValueAsync(_containerId, v).ConfigureAwait(false); }
+            catch { /* ignore — circuit may be disconnecting */ }
+        }
+    }
+
+    /// <summary>
+    ///     Called from the host page to fetch the current editor value (e.g.
+    ///     on a "Save" button click). Cheap call into JS.
+    /// </summary>
+    public async Task<string> GetValueAsync()
+    {
+        try { return await Js.GetMonacoValueAsync(_containerId).ConfigureAwait(false); }
+        catch { return Value ?? string.Empty; }
+    }
+
+    /// <summary>
+    ///     Called from the host page to switch the editor's language model
+    ///     (e.g. when the user picks a different file type from a dropdown).
+    /// </summary>
+    public async Task SetLanguageAsync(string language)
+    {
+        Language = language;
+        try { await Js.SetMonacoLanguageAsync(_containerId, language).ConfigureAwait(false); }
+        catch { /* ignore */ }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await Js.DisposeMonacoAsync(_containerId).ConfigureAwait(false); }
+        catch { /* ignore */ }
+    }
+}
