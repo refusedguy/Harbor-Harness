@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-[ "$TRACE" = "true" ] && set -x
+[ "${TRACE:-}" = "true" ] && set -x
 
 # ── Solution-relative paths ──────────────────────────────────────────────────
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
