@@ -6,6 +6,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
 
+// ReSharper disable once CheckNamespace
 namespace Harbor.App.Avalonia.ViewModels;
 
 /// <summary>
@@ -55,7 +56,7 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
             new OnboardingProviderOption("together",   "Together AI", "TOGETHER_API_KEY",    requiresKey: true,  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", icon: "🤝"),
             new OnboardingProviderOption("fireworks",  "Fireworks",   "FIREWORKS_API_KEY",   requiresKey: true,  defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct", icon: "🎆"),
             new OnboardingProviderOption("cerebras",   "Cerebras",    "CEREBRAS_API_KEY",    requiresKey: true,  defaultModel: "llama-3.3-70b",            icon: "🧠"),
-            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILOCODE_API_KEY",    requiresKey: true,  defaultModel: "kilocode/sonnet",          icon: "⌨️"),
+            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILO_API_KEY",        requiresKey: true,  defaultModel: "tencent/hy3:free",         icon: "⌨️"),
             new OnboardingProviderOption("ollama",     "Ollama (local)", null,               requiresKey: false, defaultModel: "qwen2.5-coder:7b",         icon: "🦙"),
         ];
 
@@ -89,10 +90,12 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
 
     /// <summary>API key currently being entered for the provider on step 3.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdvance))]
     private string _apiKey = string.Empty;
 
     /// <summary>Default model id typed/selected on step 4.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdvance))]
     private string _defaultModel = string.Empty;
 
     /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
@@ -126,13 +129,33 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
     };
 
     /// <summary>True when the user can advance to the next step.</summary>
+    /// <remarks>
+    ///     Validation is intentionally soft — the user can always finish the
+    ///     wizard and edit any incomplete field later in Settings. The only
+    ///     hard block is step 2 (must pick at least one provider) and step 4
+    ///     (must have a default model id — otherwise new sessions have nothing
+    ///     to call). Step 3 (API key) is always allowed because Ollama needs
+    ///     no key and other providers' keys can be entered later.
+    /// </remarks>
     public bool CanAdvance => CurrentStep switch
     {
         2 => Providers.Any(p => p.IsSelected),
-        3 => SelectedProvider is null || !SelectedProvider.RequiresKey || !string.IsNullOrWhiteSpace(ApiKey),
+        3 => true, // API key is optional — Ollama needs none, others can be added later in Settings.
         4 => !string.IsNullOrWhiteSpace(DefaultModel),
         _ => true,
     };
+
+    /// <summary>
+    ///     Re-raise <see cref="CanAdvance"/> when any of the inputs that affect
+    ///     it change. Without these, the Next button's <c>IsEnabled</c> binding
+    ///     never refreshes after the user types in the API-key / model field,
+    ///     so the button appears stuck (the bug: "в wizard не работает next
+    ///     если ключ ввести").
+    /// </summary>
+    partial void OnApiKeyChanged(string value) => OnPropertyChanged(nameof(CanAdvance));
+    partial void OnDefaultModelChanged(string value) => OnPropertyChanged(nameof(CanAdvance));
+    partial void OnSelectedProviderChanged(OnboardingProviderOption? value) => OnPropertyChanged(nameof(CanAdvance));
+    partial void OnCurrentStepChanged(int value) => OnPropertyChanged(nameof(CanAdvance));
 
     /// <summary>Advance to the next step (or complete on step 5).</summary>
     [RelayCommand]
@@ -199,37 +222,37 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         StatusText = "Saving configuration…";
         try
         {
-            // Build the API-key dictionary from the selected providers. Ollama
-            // (and any provider with RequiresKey=false) gets no entry.
-            var keysBuilder = ImmutableDictionary.CreateBuilder<string, string>();
-            foreach (var p in Providers.Where(p => p.IsSelected && p.RequiresKey))
-            {
-                // The view binds the ApiKey field to the currently-selected
-                // provider on step 3. We accept the typed value for that one
-                // and leave any others blank (the user can add them later in
-                // Settings). For the common single-provider onboarding flow
-                // this is sufficient.
-                // NOTE: kept as a foreach (rather than a second .Where clause)
-                // because the loop body has an `if` that selects the entry to
-                // add — collapsing it into LINQ would obscure the conditional.
-                if (p == SelectedProvider && !string.IsNullOrWhiteSpace(ApiKey))
-                {
-                    keysBuilder.Add(p.Id, ApiKey.Trim());
-                }
-            }
-
+            // The wizard collects an API key for the currently-selected provider
+            // only (step 3 binds the TextBox to ApiKey + SelectedProvider). Any
+            // other selected providers keep their existing key in config — the
+            // user can fill them in later via Settings. We MERGE with the
+            // existing ApiKeys dictionary (not replace) so re-running the
+            // wizard for a second provider doesn't wipe the first one's key.
             var provider = SelectedProvider?.Id ?? "ollama";
             var model = string.IsNullOrWhiteSpace(DefaultModel)
                 ? (SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b")
                 : DefaultModel.Trim();
+            var newKey = (SelectedProvider is not null
+                          && SelectedProvider.RequiresKey
+                          && !string.IsNullOrWhiteSpace(ApiKey))
+                ? ApiKey.Trim()
+                : null;
 
-            var updateResult = await _configStore.UpdateAsync(cfg => cfg with
+            var updateResult = await _configStore.UpdateAsync(cfg =>
             {
-                OnboardingCompleted = true,
-                ApiKeys = keysBuilder.ToImmutable(),
-                DefaultProvider = provider,
-                DefaultModel = model,
-                StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend,
+                var mergedKeys = cfg.ApiKeys.ToBuilder();
+                if (newKey is not null)
+                {
+                    mergedKeys[provider] = newKey;
+                }
+                return cfg with
+                {
+                    OnboardingCompleted = true,
+                    ApiKeys = mergedKeys.ToImmutable(),
+                    DefaultProvider = provider,
+                    DefaultModel = model,
+                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend,
+                };
             }, _wizardCts.Token).ConfigureAwait(true);
 
             if (updateResult.IsFailure)

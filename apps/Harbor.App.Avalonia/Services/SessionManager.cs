@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -42,7 +43,10 @@ public sealed class SessionManager
 
     /// <summary>
     ///     Create a default session if none exists yet and bind it to the agent.
-    ///     Called once at app startup.
+    ///     Called once at app startup. Reads the fresh <see cref="CommonConfig"/>
+    ///     from disk so the wizard's saved provider/model take effect even though
+    ///     the DI singleton <see cref="CommonConfig"/> was loaded before the wizard
+    ///     ran.
     /// </summary>
     public async Task EnsureDefaultSessionAsync()
     {
@@ -53,6 +57,16 @@ public sealed class SessionManager
         var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault()
             ?? throw new InvalidOperationException("No agents registered.");
+
+        // Override the agent definition with the fresh CommonConfig values.
+        // The agent registry was built from the startup CommonConfig snapshot
+        // (which is stale if the wizard just ran). Reloading here picks up the
+        // user's wizard selections (DefaultProvider / DefaultModel).
+        var (providerId, modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))
+        {
+            agentDef = agentDef.WithModel(modelId, providerId);
+        }
 
         string directory = Environment.CurrentDirectory;
         var createResult = await _sessionStore.CreateAsync(
@@ -67,7 +81,82 @@ public sealed class SessionManager
         _agent.Initialize(session, agentDef);
         _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
         Active = session;
-        _logger.LogInformation("Default session created: {Id} ({Title})", session.Id, session.Title);
+        _logger.LogInformation("Default session created: {Id} ({Title}) provider={Provider} model={Model}",
+            session.Id, session.Title, agentDef.ProviderId, agentDef.Model);
+    }
+
+    /// <summary>
+    ///     Rebind the active session to the freshly-loaded <see cref="CommonConfig"/>
+    ///     values. Called by <c>App.axaml.cs</c> after the onboarding wizard saves
+    ///     a new config — the wizard runs AFTER <see cref="AppHost.BuildAsync"/>,
+    ///     so the agent registry + active session were initialized with the
+    ///     pre-wizard defaults. This method picks up the user's wizard selections
+    ///     (DefaultProvider / DefaultModel) without requiring an app restart.
+    /// </summary>
+    /// <remarks>
+    ///     If no active session exists, delegates to <see cref="EnsureDefaultSessionAsync"/>.
+    ///     Otherwise, derives a new <see cref="AgentDefinition"/> from the "code"
+    ///     agent with the fresh provider/model, re-initializes the agent, and
+    ///     updates the in-memory session record + UiStore binding so the status
+    ///     bar reflects the change. The session store is NOT updated (it has no
+    ///     metadata-update API) — the stale persisted record is harmless and will
+    ///     be replaced the next time the user creates a session.
+    /// </remarks>
+    public async Task RebindFromCommonConfigAsync()
+    {
+        if (Active is null)
+        {
+            await EnsureDefaultSessionAsync().ConfigureAwait(false);
+            return;
+        }
+
+        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
+        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
+            ?? agents.GetAllAgents().FirstOrDefault()
+            ?? throw new InvalidOperationException("No agents registered.");
+
+        var (providerId, modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
+        {
+            _logger.LogInformation("RebindFromCommonConfig: no provider/model in config, keeping current agent");
+            return;
+        }
+
+        agentDef = agentDef.WithModel(modelId, providerId);
+        _agent.Initialize(Active, agentDef);
+        _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
+        // Update the in-memory session record so the status bar shows the new
+        // provider/model. The persisted session record is NOT updated (ISessionStore
+        // has no metadata-update API) — the stale persisted copy is harmless.
+        Active = Active with { ProviderId = providerId, Model = modelId };
+        _logger.LogInformation("Rebound session {Id} to provider={Provider} model={Model}",
+            Active.Id, providerId, modelId);
+    }
+
+    /// <summary>
+    ///     Load the fresh <see cref="CommonConfig"/> from disk and split the
+    ///     DefaultProvider/DefaultModel into a (providerId, modelId) pair.
+    ///     Returns (null, null) if the config can't be loaded.
+    /// </summary>
+    private async Task<(string? ProviderId, string? ModelId)> ResolveProviderModelFromConfigAsync()
+    {
+        var configStore = _services.GetService<ICommonConfigStore>();
+        if (configStore is null) return (null, null);
+
+        var result = await configStore.LoadAsync().ConfigureAwait(false);
+        if (!result.IsSuccess) return (null, null);
+
+        var cfg = result.Value;
+        string provider = cfg.DefaultProvider;
+        string model = cfg.DefaultModel;
+        // The model may already start with the provider prefix (e.g. the user
+        // typed "kilocode/tencent/hy3:free"). Strip it so we get the bare model id.
+        string prefix = provider + "/";
+        if (model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            model = model[prefix.Length..];
+        }
+        return (provider, model);
     }
 
     /// <summary>
