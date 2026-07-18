@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
@@ -70,4 +71,28 @@ public partial class OnboardingWindow : Window
             vm.RefreshSelectedProviderCommand.Execute(null);
         }
     }
+
+    // ── Custom Windows title bar handlers (Task U1) ──
+    // See MainWindow.axaml.cs for the full rationale — same pattern, just
+    // without a Maximize button because this window is CanResize=False.
+
+    /// <summary>Begin a window drag when the user presses the mouse on the custom title bar.</summary>
+    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            // No-op on a fixed-size window, but swallow the click so the
+            // drag below doesn't start on the second press of a double-click.
+            e.Handled = true;
+            return;
+        }
+        BeginMoveDrag(e);
+    }
+
+    /// <summary>Minimize button — collapses to the taskbar.</summary>
+    private void Minimize_Click(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    /// <summary>Close button — triggers the standard Window.Close path.</summary>
+    private void Close_Click(object? sender, RoutedEventArgs e) => Close();
 }

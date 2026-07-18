@@ -10,12 +10,70 @@
         MinWidth="900" MinHeight="600"
         Background="{StaticResource AppBackgroundBrush}"
         WindowStartupLocation="CenterScreen"
-        FontFamily="{StaticResource UiFont}">
+        FontFamily="{StaticResource UiFont}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        SystemDecorations="Full">
 
     <Window.Resources>
         <views:BrushKeyConverter x:Key="BrushKeyConv"/>
         <views:EqualityConverter x:Key="EqualityConv"/>
     </Window.Resources>
+
+    <!--
+        Root layout is a DockPanel so we can dock a custom-drawn title bar
+        (WindowButton styles in Themes/AppStyles.axaml) at the top while
+        leaving the ORCA-redesigned body (menu + 3-pane + status bar + modal
+        overlays) intact below it. ExtendClientAreaToDecorationsHint=True
+        tells Avalonia 12 to extend the client area into the system title bar
+        region; ExtendClientAreaChromeHints=PreferNone hides the default
+        Windows caption buttons so our custom ⬜ ✕ are the only controls.
+    -->
+    <DockPanel LastChildFill="True">
+
+        <!-- ════════════ Custom Windows title bar (drawn in client area) ════════════
+             The whole bar is also the drag region (PointerPressed → BeginDragMove)
+             so the user can move the window by grabbing anywhere in the bar
+             except on the caption buttons. -->
+        <Border x:Name="TitleBar"
+                DockPanel.Dock="Top"
+                Height="36"
+                Background="{StaticResource MochaCrust}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                PointerPressed="TitleBar_PointerPressed">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Brand -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="14,0,0,0"
+                            VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Text="⚓" FontSize="16" VerticalAlignment="Center"
+                               Foreground="{StaticResource MochaBlue}"/>
+                    <TextBlock Text="Harbor" FontSize="13" FontWeight="SemiBold"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextBrush}"/>
+                    <TextBlock Text="— AI Coding Agent" FontSize="12"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextMutedBrush}"/>
+                </StackPanel>
+
+                <!-- Window caption buttons: minimize / maximize / close.
+                     Button.WindowButton styles (with red :pointerover for the
+                     close button) live in Themes/AppStyles.axaml. -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Stretch">
+                    <Button Classes="WindowButton" Click="Minimize_Click"
+                            ToolTip.Tip="Minimize"
+                            Content="&#xE949;"/>
+                    <Button Classes="WindowButton" Click="Maximize_Click"
+                            ToolTip.Tip="Maximize / Restore"
+                            Content="&#xE922;"/>
+                    <Button Classes="WindowButton WindowButtonClose" Click="Close_Click"
+                            ToolTip.Tip="Close"
+                            Content="&#xE8BB;"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
     <Grid RowDefinitions="Auto,*,Auto">
 
@@ -70,7 +128,7 @@
 
                     <!-- Search -->
                     <TextBox Grid.Row="1" Margin="10,4,10,8"
-                             Watermark="Search sessions…"
+                             PlaceholderText="Search sessions…"
                              Text="{Binding Sessions.SearchText}"/>
 
                     <!-- Session list -->
@@ -138,43 +196,71 @@
             </Border>
         </Grid>
 
-        <!-- ════════════ Status bar ════════════ -->
+        <!-- ════════════ Status bar — grouped with separators (ORCA pattern) ════════════
+             Group 1: status dot + label
+             Group 2: agent · model
+             Group 3: tokens in ↓ out ↑ · sparkline
+             Group 4: cost · sessions
+             Each group is a StackPanel with horizontal children; groups separated
+             by a 1px vertical hairline (Border.StatusBarSeparator). -->
         <Border Grid.Row="2" Classes="StatusBar">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto,Auto">
-                <!-- Status dot + text -->
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+                <!-- Group 1: status -->
                 <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
+                         Margin="0,0,6,0"
                          Fill="{Binding StatusBrushKey, Converter={StaticResource BrushKeyConv}}"/>
-                <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="6,0,16,0"
-                           VerticalAlignment="Center" FontWeight="SemiBold"/>
+                <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,0"
+                           VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12"/>
 
-                <!-- Agent / model / provider -->
-                <TextBlock Grid.Column="2" Text="{Binding AgentLabel}" Foreground="{StaticResource MochaBlue}"
-                           Margin="0,0,4,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="3" Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
-                           Margin="6,0,12,0" VerticalAlignment="Center"
+                <Border Grid.Column="2" Classes="StatusBarSeparator"/>
+
+                <!-- Group 2: agent + model -->
+                <TextBlock Grid.Column="3" Text="{Binding AgentLabel}"
+                           Foreground="{StaticResource MochaBlue}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="·" Foreground="{StaticResource TextMutedBrush}"
+                           Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="5" Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,0,0" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"/>
 
-                <!-- Token counts + cost -->
-                <TextBlock Grid.Column="4" Text="{Binding TokensIn, StringFormat='{}↓ {0:N0}'}"
-                           Foreground="{StaticResource MochaSky}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="5" Text="{Binding TokensOut, StringFormat='{}↑ {0:N0}'}"
-                           Foreground="{StaticResource MochaPeach}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <Border Grid.Column="6" Classes="StatusBarSeparator"/>
 
-                <!-- Task R1 — killer feature #4: live token-usage sparkline.
-                     80×16 px inline chart of the last 30 turns' output-token
-                     counts. Updates live as the agent runs. Ports the
-                     sparkline pattern from Opencode + Kilocode. -->
-                <ctrl:Sparkline Grid.Column="6"
+                <!-- Group 3: tokens in/out + sparkline -->
+                <TextBlock Grid.Column="7" Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
+                           Foreground="{StaticResource MochaSky}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,10,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="8" Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
+                           Foreground="{StaticResource MochaPeach}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,10,0" VerticalAlignment="Center"/>
+                <ctrl:Sparkline Grid.Column="9"
                                 Values="{Binding TokenUsage.RecentOutputTokens}"
-                                Width="80" Height="16"
-                                Margin="0,0,12,0"
+                                Width="80" Height="14"
+                                Margin="0,0,0,0"
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Recent output tokens per turn"/>
 
-                <TextBlock Grid.Column="7" Text="{Binding CostUsd, StringFormat='{}${0:F4}'}"
-                           Foreground="{StaticResource MochaYellow}" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="8" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
-                           Foreground="{StaticResource TextSubtleBrush}" VerticalAlignment="Center"/>
+                <Border Grid.Column="10" Classes="StatusBarSeparator"/>
+
+                <!-- Group 4 (left of *): cost -->
+                <TextBlock Grid.Column="11" Text="{Binding CostUsd, StringFormat='${0:F4}'}"
+                           Foreground="{StaticResource MochaYellow}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,0,0" VerticalAlignment="Center"/>
+
+                <!-- Spacer (*) — pushes session count to the right -->
+                <TextBlock Grid.Column="12" Text=""/>
+
+                <!-- Group 4 (right of *): sessions -->
+                <Border Grid.Column="13" Classes="StatusBarSeparator"/>
+                <TextBlock Grid.Column="14" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
+                           Foreground="{StaticResource TextMutedBrush}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -201,4 +287,5 @@
                                       VerticalAlignment="Bottom"
                                       Margin="0,0,16,40"/>
     </Grid>
+    </DockPanel>
 </Window>

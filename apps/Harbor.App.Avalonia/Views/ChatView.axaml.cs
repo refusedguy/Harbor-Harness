@@ -8,12 +8,34 @@ namespace Harbor.App.Avalonia.Views;
 ///     Chat view code-behind. Forwards Enter / Ctrl+Enter from the input box to the
 ///     <see cref="ChatViewModel.SendCommand"/>.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Input fix (Task U2):</b> The plain-Enter send path was fragile because
+///         the original handler called <c>vm.SendCommand.Execute(null)</c> without
+///         first checking <c>CanExecute</c>, and the TextBox's <c>AcceptsReturn=True</c>
+///         meant that any handler exception would leave a stray newline in the input.
+///         We now (1) check <c>CanExecute</c>, (2) set <c>e.Handled = true</c> BEFORE
+///         invoking the command (so the TextBox never inserts the newline), and
+///         (3) re-focus the input after sending so the user can immediately type
+///         the next message.
+///     </para>
+///     <para>
+///         The view also auto-focuses the input box on load so the user can start
+///         typing immediately — a small ORCA-style polish that makes the chat feel
+///         responsive.
+///     </para>
+/// </remarks>
 public partial class ChatView : UserControl
 {
     /// <summary>Construct the chat view.</summary>
     public ChatView()
     {
         InitializeComponent();
+        Loaded += (_, _) =>
+        {
+            // Focus the input on first load — ORCA pattern.
+            InputBox.Focus();
+        };
     }
 
     private ChatViewModel? Vm => DataContext as ChatViewModel;
@@ -23,11 +45,24 @@ public partial class ChatView : UserControl
         var vm = Vm;
         if (vm is null) return;
 
-        // Plain Enter (no Shift) sends. Shift+Enter inserts newline (default).
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        // Plain Enter (no Shift, no Ctrl) sends. Shift+Enter inserts newline (default).
+        // Ctrl+Enter also sends (alternative convention).
+        bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        bool isCtrlEnter  = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
+
+        if (isPlainEnter || isCtrlEnter)
         {
+            // Mark handled BEFORE invoking the command — this prevents the
+            // TextBox from inserting a newline character. Without this, the
+            // newline would race the InputText = string.Empty in Send().
             e.Handled = true;
-            vm.SendCommand.Execute(null);
+
+            if (vm.SendCommand.CanExecute(null))
+            {
+                vm.SendCommand.Execute(null);
+                // Refocus so the user can immediately type the next message.
+                InputBox.Focus();
+            }
         }
     }
 }

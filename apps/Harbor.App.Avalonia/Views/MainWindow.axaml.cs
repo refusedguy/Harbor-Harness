@@ -153,4 +153,46 @@ public partial class MainWindow : Window
 
     private void ViewCode_Click(object? sender, RoutedEventArgs e) =>
         Vm?.SwitchViewCommand.Execute("code");
+
+    // ── Custom Windows title bar handlers (ExtendClientAreaToDecorationsHint) ──
+    //
+    // With ExtendClientAreaChromeHints=PreferNone, the native Windows caption
+    // buttons are gone. We draw our own in MainWindow.axaml (Button.WindowButton
+    // classes styled in Themes/AppStyles.axaml) and wire up the three behaviours
+    // here. This kills the "ugly Windows bar that ruins everything" symptom the
+    // user reported — the bar now matches the Catppuccin-Mocha theme instead of
+    // the default white Windows bar.
+
+    /// <summary>
+    ///     Begin a window drag when the user presses the mouse on the custom
+    ///     title bar. Buttons inside the bar swallow the event (Button eats
+    ///     PointerPressed) so caption clicks never start a drag.
+    /// </summary>
+    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            // Double-click anywhere on the bar → toggle maximize, like Win32.
+            WindowState = WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized;
+            e.Handled = true;
+            return;
+        }
+
+        BeginMoveDrag(e);
+    }
+
+    /// <summary>Minimize button — collapses to the taskbar.</summary>
+    private void Minimize_Click(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    /// <summary>Maximize / restore button — toggles the maximized state.</summary>
+    private void Maximize_Click(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+
+    /// <summary>Close button — triggers the standard Window.Close path.</summary>
+    private void Close_Click(object? sender, RoutedEventArgs e) => Close();
 }

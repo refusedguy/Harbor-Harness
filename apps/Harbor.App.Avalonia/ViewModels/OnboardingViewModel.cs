@@ -45,18 +45,18 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         // wizard then collects keys + a default model + theme.
         Providers =
         [
-            new OnboardingProviderOption("anthropic",  "Anthropic",   "ANTHROPIC_API_KEY",   requiresKey: true,  defaultModel: "claude-sonnet-4-20250514"),
-            new OnboardingProviderOption("openai",     "OpenAI",      "OPENAI_API_KEY",      requiresKey: true,  defaultModel: "gpt-4o"),
-            new OnboardingProviderOption("openrouter", "OpenRouter",  "OPENROUTER_API_KEY",  requiresKey: true,  defaultModel: "anthropic/claude-sonnet-4"),
-            new OnboardingProviderOption("deepseek",   "DeepSeek",    "DEEPSEEK_API_KEY",    requiresKey: true,  defaultModel: "deepseek-chat"),
-            new OnboardingProviderOption("groq",       "Groq",        "GROQ_API_KEY",        requiresKey: true,  defaultModel: "llama-3.3-70b-versatile"),
-            new OnboardingProviderOption("mistral",    "Mistral",     "MISTRAL_API_KEY",     requiresKey: true,  defaultModel: "mistral-large-latest"),
-            new OnboardingProviderOption("xai",        "xAI",         "XAI_API_KEY",         requiresKey: true,  defaultModel: "grok-3"),
-            new OnboardingProviderOption("together",   "Together AI", "TOGETHER_API_KEY",    requiresKey: true,  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
-            new OnboardingProviderOption("fireworks",  "Fireworks",   "FIREWORKS_API_KEY",   requiresKey: true,  defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct"),
-            new OnboardingProviderOption("cerebras",   "Cerebras",    "CEREBRAS_API_KEY",    requiresKey: true,  defaultModel: "llama-3.3-70b"),
-            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILOCODE_API_KEY",    requiresKey: true,  defaultModel: "kilocode/sonnet"),
-            new OnboardingProviderOption("ollama",     "Ollama (local)", null,               requiresKey: false, defaultModel: "qwen2.5-coder:7b"),
+            new OnboardingProviderOption("anthropic",  "Anthropic",   "ANTHROPIC_API_KEY",   requiresKey: true,  defaultModel: "claude-sonnet-4-20250514", icon: "🤖"),
+            new OnboardingProviderOption("openai",     "OpenAI",      "OPENAI_API_KEY",      requiresKey: true,  defaultModel: "gpt-4o",                   icon: "🌐"),
+            new OnboardingProviderOption("openrouter", "OpenRouter",  "OPENROUTER_API_KEY",  requiresKey: true,  defaultModel: "anthropic/claude-sonnet-4", icon: "🛰️"),
+            new OnboardingProviderOption("deepseek",   "DeepSeek",    "DEEPSEEK_API_KEY",    requiresKey: true,  defaultModel: "deepseek-chat",            icon: "🐋"),
+            new OnboardingProviderOption("groq",       "Groq",        "GROQ_API_KEY",        requiresKey: true,  defaultModel: "llama-3.3-70b-versatile",  icon: "⚡"),
+            new OnboardingProviderOption("mistral",    "Mistral",     "MISTRAL_API_KEY",     requiresKey: true,  defaultModel: "mistral-large-latest",     icon: "🌬️"),
+            new OnboardingProviderOption("xai",        "xAI",         "XAI_API_KEY",         requiresKey: true,  defaultModel: "grok-3",                   icon: "✖️"),
+            new OnboardingProviderOption("together",   "Together AI", "TOGETHER_API_KEY",    requiresKey: true,  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", icon: "🤝"),
+            new OnboardingProviderOption("fireworks",  "Fireworks",   "FIREWORKS_API_KEY",   requiresKey: true,  defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct", icon: "🎆"),
+            new OnboardingProviderOption("cerebras",   "Cerebras",    "CEREBRAS_API_KEY",    requiresKey: true,  defaultModel: "llama-3.3-70b",            icon: "🧠"),
+            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILOCODE_API_KEY",    requiresKey: true,  defaultModel: "kilocode/sonnet",          icon: "⌨️"),
+            new OnboardingProviderOption("ollama",     "Ollama (local)", null,               requiresKey: false, defaultModel: "qwen2.5-coder:7b",         icon: "🦙"),
         ];
 
         // Default-select Ollama (works offline, no key needed) so the user
@@ -296,14 +296,18 @@ public sealed partial class OnboardingProviderOption : ObservableObject
     /// <summary>Suggested default model id for this provider.</summary>
     public string DefaultModel { get; }
 
+    /// <summary>Emoji icon shown next to the provider name in the wizard.</summary>
+    public string Icon { get; }
+
     /// <summary>Construct a provider option.</summary>
-    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel)
+    public OnboardingProviderOption(string id, string displayName, string? authEnvVar, bool requiresKey, string defaultModel, string icon = "🔧")
     {
         Id = id;
         DisplayName = displayName;
         AuthEnvVar = authEnvVar;
         RequiresKey = requiresKey;
         DefaultModel = defaultModel;
+        Icon = icon;
     }
 
     /// <summary>Two-way bound checkbox state.</summary>

@@ -5,16 +5,28 @@
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              x:Class="Harbor.App.Avalonia.Views.ChatView">
 
-    <Grid RowDefinitions="*,Auto,Auto,Auto">
+    <!--
+        ORCA-level ChatView.
 
-        <!-- Chat history -->
+        Visual language:
+          • Chat content uses UiFont (Inter) — no monospace pollution.
+          • Role gutter (left) is a small accent pill in JetBrains Mono.
+          • Each chat line is a card with rounded corners + subtle surface.
+          • Tool-call cards slide in from the left (animation in AppStyles).
+          • Streaming buffer sits above the input — soft accent background.
+          • Input: multi-line TextBox, Enter = send, Shift+Enter = newline.
+            The KeyDown handler sets e.Handled = true BEFORE invoking Send,
+            which prevents Avalonia's TextBox from inserting a newline.
+          • Send button is Primary (accent fill, dark text, hover = sky).
+    -->
+
+    <Grid RowDefinitions="*,Auto,Auto">
+
+        <!-- ════════════ Chat history ════════════ -->
         <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
-                <!-- Tool-call cards (Task R1 — killer feature #2).
-                     Rendered above the transcript so tool calls are
-                     visually distinct from text lines. Each card
-                     collapses to a single header row by default. -->
-                <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,4,12,0">
+                <!-- Tool-call cards (killer feature #2). -->
+                <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,8,12,4">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:ToolCallViewModel">
                             <ctrl:ToolCallCardView/>
@@ -22,23 +34,39 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <!-- Text transcript (non-tool lines) -->
+                <!-- Text transcript (non-tool lines) — ORCA-style chat rows. -->
                 <ItemsControl ItemsSource="{Binding Lines}" Padding="12,4">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:ChatLineViewModel">
-                            <Grid Margin="0,4" ColumnDefinitions="100,*">
-                                <Border Grid.Column="0" Background="{StaticResource MochaCrust}"
-                                        CornerRadius="4" Padding="6,2" VerticalAlignment="Top"
-                                        HorizontalAlignment="Left">
+                            <Grid Margin="0,6" ColumnDefinitions="100,*">
+                                <!-- Role pill (JetBrains Mono, accent color) -->
+                                <Border Grid.Column="0"
+                                        Background="{StaticResource MochaSurface0}"
+                                        CornerRadius="6"
+                                        Padding="8,3"
+                                        VerticalAlignment="Top"
+                                        HorizontalAlignment="Left"
+                                        BorderBrush="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"
+                                        BorderThickness="2,0,0,0">
                                     <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
                                                FontSize="11" FontWeight="SemiBold"
                                                Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
                                 </Border>
-                                <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
-                                           Margin="10,0,0,0"
-                                           FontFamily="{StaticResource CodeFont}"
-                                           FontSize="13"
-                                           Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                <!-- Message body (Inter, comfortable line-height) -->
+                                <Border Grid.Column="1"
+                                        Background="{StaticResource MochaMantle}"
+                                        CornerRadius="8"
+                                        Padding="14,10"
+                                        Margin="10,0,0,0"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1">
+                                    <TextBlock Text="{Binding Text}"
+                                               TextWrapping="Wrap"
+                                               FontFamily="{StaticResource UiFont}"
+                                               FontSize="14"
+                                               LineHeight="20"
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                </Border>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -46,16 +74,15 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Streaming buffer — Task R1 killer feature #1: animated
-             typewriter cursor. The TypewriterStreamingText control
-             blinks a ▋ at the tail of the streaming buffer while
-             IsStreaming is true. -->
-        <Border Grid.Row="1" Background="{StaticResource MochaCrust}" CornerRadius="6"
-                Padding="10,6" Margin="12,4,12,2"
+        <!-- ════════════ Streaming / thinking indicators ════════════ -->
+        <!-- Streaming buffer with typewriter cursor (killer feature #1). -->
+        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                Padding="14,8" Margin="12,4,12,4"
+                BorderBrush="{StaticResource MochaPeach}" BorderThickness="2,0,0,0"
                 IsVisible="{Binding IsStreaming}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
                 <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
-                <TextBlock Text="● streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
+                <TextBlock Text="streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
                            FontFamily="{StaticResource CodeFont}" FontSize="11"
                            VerticalAlignment="Center"/>
                 <ctrl:TypewriterStreamingText
@@ -66,35 +93,45 @@
         </Border>
 
         <!-- Thinking indicator -->
-        <Border Grid.Row="1" Background="{StaticResource MochaCrust}" CornerRadius="6"
-                Padding="10,6" Margin="12,4,12,2"
+        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                Padding="14,8" Margin="12,4,12,4"
+                BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
                 IsVisible="{Binding IsThinking}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="🤔" VerticalAlignment="Center"/>
-                <TextBlock Text="thinking…" Foreground="{StaticResource MochaOverlay2}"
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14"/>
+                <TextBlock Text="thinking…" Foreground="{StaticResource MochaBlue}"
                            FontFamily="{StaticResource CodeFont}" FontSize="11"
                            VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
 
-        <!-- Input -->
-        <Grid Grid.Row="3" Margin="12,4,12,8" ColumnDefinitions="*,Auto,Auto">
-            <TextBox Grid.Column="0"
-                     Text="{Binding InputText, Mode=TwoWay}"
-                     Watermark="Message Harbor…  (Enter to send, Shift+Enter for newline)"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap"
-                     MinHeight="40" MaxHeight="160"
-                     KeyDown="InputBox_KeyDown"/>
-            <Button Grid.Column="1" Classes="Primary" Content="Send"
-                    Command="{Binding SendCommand}"
-                    Margin="6,0,0,0"
-                    Padding="20,8"/>
-            <Button Grid.Column="2" Classes="Subtle" Content="Stop"
-                    Command="{Binding StopCommand}"
-                    Margin="6,0,0,0"
-                    Padding="16,8"
-                    IsVisible="{Binding IsThinking}"/>
-        </Grid>
+        <!-- ════════════ Input area (ORCA-style) ════════════ -->
+        <Border Grid.Row="2" Background="{StaticResource MochaMantle}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="12,10">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBox Grid.Column="0"
+                         x:Name="InputBox"
+                         Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         PlaceholderText="Message Harbor…  (Enter to send, Shift+Enter for newline)"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         MinHeight="48" MaxHeight="160"
+                         FontSize="14"
+                         Padding="12,10"
+                         KeyDown="InputBox_KeyDown"/>
+                <Button Grid.Column="1" Classes="Primary" Content="Send ▶"
+                        Command="{Binding SendCommand}"
+                        Margin="8,0,0,0"
+                        Padding="20,12"
+                        VerticalAlignment="Bottom"/>
+                <Button Grid.Column="2" Classes="Secondary" Content="Stop ■"
+                        Command="{Binding StopCommand}"
+                        Margin="8,0,0,0"
+                        Padding="16,12"
+                        VerticalAlignment="Bottom"
+                        IsVisible="{Binding IsThinking}"/>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
