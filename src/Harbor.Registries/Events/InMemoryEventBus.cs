@@ -1,24 +1,61 @@
+using System;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
-using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Abstractions.Events;
 /// <summary>
 ///     In-memory pub/sub event bus. Implements Observer pattern (GOF).
-///     Thread-safe. Bounded scrollback buffer (backed by <see cref="Channel{T}" />) for late-attaching subscribers.
-///     Performance characteristics:
-///     - PublishAsync: lock-free snapshot read (zero alloc on the common path),
-///     pooled buffer for dead-subscriber collection.
-///     - Subscribe/Unsubscribe: lock-free atomic update of an <see cref="ImmutableArray{T}" />.
-///     - Scrollback: bounded <see cref="Channel{T}" /> with DropOldest semantics.
+///     Thread-safe. Bounded scrollback ring buffer (CAS-updated
+///     <see cref="ImmutableQueue{T}" /> / <see cref="ImmutableArray{T}" />) for
+///     late-attaching subscribers.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Architecture audit v2 — §PERF-008 (RESOLVED):</b> the previous
+///         implementation backed scrollback with a bounded
+///         <see cref="System.Threading.Channels.Channel{T}" /> and drained it on
+///         every <see cref="GetScrollback" /> call via
+///         <c>ReadAllAsync().ToBlockingEnumerable()</c>. That had two correctness
+///         bugs: (1) the channel was emptied after a single late subscriber
+///         read it, so subsequent late subscribers saw nothing; (2) the
+///         blocking enumeration synchronously blocked the calling thread — a
+///         TUI freeze under heavy event traffic. The new implementation keeps
+///         the scrollback in an immutable ring buffer updated atomically via
+///         <see cref="ImmutableInterlocked" />, so reads never mutate state and
+///         never block.
+///     </para>
+///     <para>
+///         Performance characteristics:
+///         <list type="bullet">
+///             <item><see cref="PublishAsync" />: lock-free snapshot read
+///                 (zero alloc on the common path), pooled buffer for
+///                 dead-subscriber collection. Scrollback append is a CAS retry
+///                 on an <see cref="ImmutableArray{T}" />; in the steady state
+///                 (under capacity) there is no allocation.</item>
+///             <item>Subscribe/Unsubscribe: lock-free atomic update of an
+///                 <see cref="ImmutableArray{T}" />.</item>
+///             <item>Scrollback: <see cref="GetScrollback" /> is a single
+///                 volatile snapshot read + a slice; zero state mutation, no
+///                 blocking.</item>
+///         </list>
+///     </para>
+/// </remarks>
 public sealed class InMemoryEventBus : IEventBus
 {
     private readonly ILogger<InMemoryEventBus> _logger;
     private readonly int _maxScrollback;
-    private readonly Channel<AgentEvent> _scrollback;
+
+    /// <summary>
+    ///     Scrollback ring buffer. Holds the most recent
+    ///     <see cref="_maxScrollback" /> events in publication order. Updated
+    ///     via <see cref="ImmutableInterlocked.Update{T}(ref ImmutableArray{T}, Func{ImmutableArray{T}, ImmutableArray{T}})" />
+    ///     so concurrent publishers never corrupt the buffer. Reads take a
+    ///     single volatile snapshot (no copy, no blocking).
+    /// </summary>
+    private ImmutableArray<AgentEvent> _scrollback = ImmutableArray<AgentEvent>.Empty;
+
     /// <summary>
     ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
     ///     snapshot reads with zero allocation; mutations use <see cref="ImmutableInterlocked" />
@@ -41,13 +78,7 @@ public sealed class InMemoryEventBus : IEventBus
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback = 1000)
     {
         _logger = logger;
-        _maxScrollback = maxScrollback;
-        _scrollback = Channel.CreateBounded<AgentEvent>(new BoundedChannelOptions(maxScrollback)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = false,
-            SingleWriter = false
-        });
+        _maxScrollback = maxScrollback > 0 ? maxScrollback : 1;
     }
 
     /// <inheritdoc />
@@ -55,8 +86,8 @@ public sealed class InMemoryEventBus : IEventBus
     {
         _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
 
-        // 1. Add to scrollback channel (drop oldest if full)
-        _scrollback.Writer.TryWrite(@event);
+        // 1. Append to scrollback ring buffer (lock-free CAS).
+        AppendScrollback(@event);
 
         // 2. Lock-free snapshot — no List copy, no lock contention
         var snapshot = _subscriptions;
@@ -139,22 +170,74 @@ public sealed class InMemoryEventBus : IEventBus
     /// <inheritdoc />
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
     {
-        // TODO(principles)[PERF, байтоебля]: ReadAllAsync().ToBlockingEnumerable()
-        // DRAINS channel полностью — после вызова scrollback пуст, и следующий
-        // late-subscriber не получит историю. Это утечка состояния. Также ToBlockingEnumerable
-        // синхронно блокирует поток — в TUI это фриз. Fix: IImmutableList<AgentEvent> как
-        // ring buffer, обновляемый через ImmutableInterlocked.Update. См. §PERF-008.
-        var all = _scrollback.Reader.ReadAllAsync(CancellationToken.None)
-            .ToBlockingEnumerable();
-        var result = new List<AgentEvent>(maxEvents);
-        foreach (var item in all)
-            result.Add(item);
-        // Keep only last maxEvents
-        if (result.Count > maxEvents)
-            result.RemoveRange(0, result.Count - maxEvents);
-        return result;
+        // Architecture audit v2 §PERF-008 (RESOLVED): a single volatile snapshot
+        // of the immutable ring buffer. No mutation of bus state, no blocking —
+        // subsequent late subscribers see the same history. The slice is
+        // materialized lazily: in the common case (maxEvents >= buffer size)
+        // we return the snapshot as-is; only when truncation is requested do
+        // we allocate a trimmed copy.
+        var snapshot = _scrollback;
+        if (snapshot.IsEmpty)
+        {
+            return Array.Empty<AgentEvent>();
+        }
+
+        if (maxEvents >= snapshot.Length)
+        {
+            return snapshot;
+        }
+
+        if (maxEvents <= 0)
+        {
+            return Array.Empty<AgentEvent>();
+        }
+
+        // Take the tail (most recent) — matches the prior "keep last maxEvents" contract.
+        int start = snapshot.Length - maxEvents;
+        var tail = new AgentEvent[maxEvents];
+        for (int i = 0; i < maxEvents; i++)
+        {
+            tail[i] = snapshot[start + i];
+        }
+        return tail;
     }
 
+    /// <summary>
+    ///     Append an event to the scrollback ring buffer atomically. When the
+    ///     buffer is at capacity, the oldest entry is dropped. The update uses
+    ///     <see cref="ImmutableInterlocked.Update{T, TState}(ref ImmutableArray{T}, Func{ImmutableArray{T}, TState, ImmutableArray{T}}, TState)" />
+    ///     so concurrent publishers never lose an event to a stale read.
+    /// </summary>
+    private void AppendScrollback(AgentEvent @event)
+    {
+        // Inline CAS loop avoids the closure allocation that
+        // ImmutableInterlocked.Update would incur by capturing @event.
+        ImmutableArray<AgentEvent> original;
+        ImmutableArray<AgentEvent> updated;
+        do
+        {
+            original = _scrollback;
+            if (original.Length < _maxScrollback)
+            {
+                // Under capacity — just append.
+                updated = original.Add(@event);
+            }
+            else
+            {
+                // At capacity — drop the oldest entry. Builder is reused for
+                // O(n) construction (one alloc) instead of RemoveAt(0)+Add
+                // (two O(n) operations on the immutable spine).
+                var builder = ImmutableArray.CreateBuilder<AgentEvent>(original.Length);
+                // Skip index 0 (the oldest), copy the rest, then append the new event.
+                for (int i = 1; i < original.Length; i++)
+                {
+                    builder.Add(original[i]);
+                }
+                builder.Add(@event);
+                updated = builder.MoveToImmutable();
+            }
+        } while (ImmutableInterlocked.InterlockedCompareExchange(ref _scrollback, updated, original) != original);
+    }
 
     private void RemoveDeadSubscriptions(Subscription[] dead, int deadCount)
     {

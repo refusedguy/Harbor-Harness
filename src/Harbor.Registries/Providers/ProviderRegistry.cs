@@ -15,15 +15,24 @@ namespace Harbor.Abstractions.Providers;
 /// </summary>
 public sealed class ProviderRegistry : IProviderRegistry
 {
+    // Architecture audit v2 §CONCURRENCY-001 (RESOLVED): InvalidateFrozenSnapshot
+    // previously took `lock(_frozenLock)` to null a single reference field.
+    // Under plugin hot-reload or runtime provider re-registration this
+    // serialised every Register/Unregister call and forced concurrent GetClient
+    // readers through the ConcurrentDictionary slow path while the lock was
+    // held. Replaced with a single Interlocked.Exchange on a volatile field —
+    // see ToolRegistry.cs for the full rationale.
     private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
-    private readonly object _frozenLock = new();
     private readonly ILogger<ProviderRegistry> _logger;
     private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
-    ///     <see cref="Freeze" /> is called.
+    ///     <see cref="Freeze" /> is called. Marked <c>volatile</c> so reads have
+    ///     acquire semantics (the lock-free <see cref="InvalidateFrozenSnapshot" />
+    ///     publishes null via <see cref="Interlocked.Exchange(ref object?, object?)" />
+    ///     which already implies a full barrier on success).
     /// </summary>
-    private FrozenDictionary<ProviderId, Lazy<ILlmClient>>? _frozenClients;
+    private volatile FrozenDictionary<ProviderId, Lazy<ILlmClient>>? _frozenClients;
 
     public ProviderRegistry() : this(NullLogger<ProviderRegistry>.Instance) { }
 
@@ -224,18 +233,20 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// </summary>
     public void Freeze()
     {
-        lock (_frozenLock)
-        {
-            _frozenClients = _clients.ToFrozenDictionary();
-        }
+        // Atomic publish: readers observe either the prior snapshot or the new
+        // one — never a half-built dictionary. Volatile write has release
+        // semantics, so the frozen dictionary is fully visible before the
+        // reference is published.
+        _frozenClients = _clients.ToFrozenDictionary();
     }
 
     private void InvalidateFrozenSnapshot()
     {
-        lock (_frozenLock)
-        {
-            _frozenClients = null;
-        }
+        // Lock-free invalidation — see ToolRegistry.InvalidateFrozenSnapshot
+        // for the full rationale. Concurrent GetClient readers may observe the
+        // stale-but-consistent prior snapshot or null (falling through to the
+        // ConcurrentDictionary slow path); both outcomes are safe.
+        Interlocked.Exchange(ref _frozenClients, null);
     }
 
     /// <summary>
@@ -265,8 +276,27 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
     }
 
     /// <inheritdoc />
+    // S1133 fires on [Obsolete] asking "remember to remove this deprecated code someday".
+    // We will — in v0.6, per the [Obsolete] message. Suppress until then.
+#pragma warning disable S1133
+    [Obsolete("Use AddProvider(ProviderId, Func<ILlmClient>) or AddProvider(string, Func<ILlmClient>) " +
+              "to avoid eager factory invocation. This overload instantiates the client once at " +
+              "registration time just to read ProviderId, which defeats the Lazy<ILlmClient> wrapping " +
+              "in ProviderRegistry. See Architecture audit v2 §3.4.")]
     public void AddProvider(Func<ILlmClient> factory)
+#pragma warning restore S1133
     {
+        // Architecture audit v2 §3.4: this overload eagerly invokes the factory
+        // just to read ProviderId. The ProviderRegistry wraps the same factory
+        // in a Lazy<ILlmClient> so subsequent invocations are lazy, but the
+        // first call constructs the full client object (HttpClient config,
+        // auth resolver, logger) at startup — even if the provider is never
+        // used during the session.
+        //
+        // Prefer the explicit-id overloads:
+        //   AddProvider(ProviderId providerId, Func<ILlmClient> factory)
+        //   AddProvider(string providerId, Func<ILlmClient> factory)
+        // which never invoke the factory until a client is actually requested.
         var tempClient = factory();
         _registry.Register(tempClient.ProviderId, factory);
     }
@@ -274,7 +304,16 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
     /// <inheritdoc />
     public void AddProvider(ProviderId providerId, Func<ILlmClient> factory) => _registry.Register(providerId, factory);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Register a provider by its string id. Parses <paramref name="providerId" />
+    ///     via <see cref="ProviderId.TryCreate" /> and delegates to
+    ///     <see cref="AddProvider(ProviderId, Func{ILlmClient})" />. The factory
+    ///     is never invoked at registration time — see §3.4 of the architecture
+    ///     audit for the lazy-init rationale.
+    /// </summary>
+    /// <param name="providerId">The string form of the provider id (e.g. <c>ollama</c>).</param>
+    /// <param name="factory">The factory that constructs the <see cref="ILlmClient" /> on first use.</param>
+    /// <exception cref="ArgumentException"><paramref name="providerId" /> is not a valid <see cref="ProviderId" />.</exception>
     public void AddProvider(string providerId, Func<ILlmClient> factory)
     {
         var result = ProviderId.TryCreate(providerId);

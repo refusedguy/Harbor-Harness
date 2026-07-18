@@ -63,6 +63,16 @@ public sealed record CommonConfig
     /// </summary>
     public string ConfigVersion { get; init; } = "1";
 
+    /// <summary>
+    ///     Whether the first-launch onboarding wizard has been completed.
+    ///     Defaults to <c>false</c> — every Harbor app shows the wizard once
+    ///     before opening the main window, then flips this to <c>true</c> and
+    ///     persists it to <c>~/.harbor/config.json</c>. The user can re-run
+    ///     the wizard at any time from Settings (which sets this back to
+    ///     <c>false</c> and restarts the app).
+    /// </summary>
+    public bool OnboardingCompleted { get; init; } = false;
+
     // ── API keys ──────────────────────────────────────────────────────────
 
     /// <summary>

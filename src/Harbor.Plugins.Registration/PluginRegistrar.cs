@@ -137,9 +137,26 @@ public sealed class PluginRegistrar : IPluginRegistrar
             _logger = logger;
         }
 
+        /// <summary>
+        ///     Register a provider by invoking the factory once to read
+        ///     <see cref="ILlmClient.ProviderId" />, then delegating to the
+        ///     host's <c>RegisterProvider(ProviderId, Func&lt;ILlmClient&gt;)</c>.
+        /// </summary>
+        /// <remarks>
+        ///     <b>Architecture audit v2 §3.4:</b> this overload eagerly invokes
+        ///     <paramref name="factory" /> just to read <c>ProviderId</c>.
+        ///     Plugin authors should prefer the explicit-id overload
+        ///     <see cref="AddProvider(ProviderId, Func{ILlmClient})" /> which
+        ///     never invokes the factory at registration time. The eager
+        ///     overload is retained for source compatibility with existing
+        ///     plugins that don't know their provider id until they construct
+        ///     the client.
+        /// </remarks>
         public void AddProvider(Func<ILlmClient> factory)
         {
-            // Force the factory once to read the provider id (matches Harbor.Core's behavior).
+            // Eager invocation: needed to read ProviderId. Plugin authors
+            // who know their provider id upfront should use the
+            // AddProvider(ProviderId, Func<ILlmClient>) overload instead.
             ILlmClient tempClient = factory();
             var r = _host.RegisterProvider(tempClient.ProviderId, factory);
             if (r.IsFailure)

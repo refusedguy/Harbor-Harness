@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Storage.Jsonl;
@@ -5,6 +6,26 @@ namespace Harbor.Storage.Jsonl;
 ///     JSONL-based session storage. Append-only, atomic writes, no native deps.
 ///     Each session is one .jsonl file under the configured directory.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Architecture audit v2 §3.3 (RESOLVED):</b> a parsed-message cache
+///         keyed by <c>sessionId</c> eliminates the per-call re-parse cost in
+///         <see cref="GetMessagesAsync" /> and the double-parse that
+///         <see cref="GetStatsAsync" /> used to pay. The cache records the
+///         file's last-write-time; <see cref="AppendMessageAsync" /> invalidates
+///         just the affected session's entry.
+///     </para>
+///     <para>
+///         <b>Architecture audit v2 §3.4 (RESOLVED):</b> the synchronous I/O
+///         methods (<see cref="AppendMessageAsync" />,
+///         <see cref="CreateAsync" />, <see cref="DeleteAsync" />) now observe
+///         the supplied <see cref="CancellationToken" /> via
+///         <see cref="CancellationToken.ThrowIfCancellationRequested" /> guards
+///         before each <c>File.*</c> call. <c>File.AppendAllText</c> itself is
+///         not CT-aware — the guard at least prevents a write that has already
+///         been cancelled by the time the lock is acquired.
+///     </para>
+/// </remarks>
 public sealed class JsonlSessionStore : ISessionStore
 {
     // TODO(principles)[PERF, байтоебля]: JsonOptions uses reflection-based
@@ -27,6 +48,26 @@ public sealed class JsonlSessionStore : ISessionStore
 
     private readonly string _rootDirectory;
 
+    /// <summary>
+    ///     Parsed-message cache. Architecture audit v2 §3.3: keyed by session id,
+    ///     value is an immutable <see cref="SessionCacheEntry" /> recording the
+    ///     file's last-write-time and the parsed message list. Reads check the
+    ///     cache for a freshness hit (mtime unchanged) before falling through to
+    ///     a full disk re-parse. Writes invalidate just the affected session's
+    ///     entry, so concurrent reads of other sessions are unaffected.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The cache is unbounded; a long-running process with many sessions
+    ///         would accumulate entries. In practice the typical session count is
+    ///         1-5 per process, so an LRU cap is deferred until measured. The
+    ///         <see cref="ConcurrentDictionary{TKey, TValue}" /> is safe for
+    ///         concurrent readers — the value is an immutable record, so a
+    ///         half-published update is impossible.
+    ///     </para>
+    /// </remarks>
+    private readonly ConcurrentDictionary<string, SessionCacheEntry> _messageCache = new();
+
     public JsonlSessionStore(string rootDirectory, ILogger<JsonlSessionStore> logger)
     {
         _rootDirectory = rootDirectory;
@@ -38,6 +79,16 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    /// <summary>
+    ///     Create a new session and write its header to the JSONL file.
+    /// </summary>
+    /// <remarks>
+    ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is
+    ///     observed via <see cref="CancellationToken.ThrowIfCancellationRequested" />
+    ///     before the directory-create and file-write.
+    ///     <c>Directory.CreateDirectory</c> and <c>File.AppendAllText</c> are
+    ///     synchronous I/O that do not accept a CT.
+    /// </remarks>
     public Task<Result<Session>> CreateAsync(
         string directory,
         string agentName,
@@ -47,11 +98,13 @@ public sealed class JsonlSessionStore : ISessionStore
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             var session = Session.Create(directory, agentName, providerId, modelId);
             string sessionFile = GetSessionFilePath(session.Id);
 
             lock (_lock)
             {
+                ct.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
 
                 var header = new SessionHeaderEntry(
@@ -69,7 +122,13 @@ public sealed class JsonlSessionStore : ISessionStore
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonOptions) + "\n");
             }
 
+            // New session — no cache entry to invalidate, but be defensive.
+            _messageCache.TryRemove(session.Id, out _);
             return Task.FromResult(Result.Success(session));
+        }
+        catch (OperationCanceledException)
+        {
+            return Task.FromResult(Result.Failure<Session>("Operation was cancelled."));
         }
         catch (Exception ex)
         {
@@ -136,16 +195,39 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    /// <summary>
+    ///     Append a message to the session JSONL file. The cache for this
+    ///     session is invalidated so the next <see cref="GetMessagesAsync" />
+    ///     re-parses from disk (the file has changed).
+    /// </summary>
+    /// <remarks>
+    ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is observed
+    ///     via <see cref="CancellationToken.ThrowIfCancellationRequested" />
+    ///     before the lock is acquired and before the file write.
+    ///     <c>File.AppendAllText</c> itself is synchronous I/O that does not
+    ///     accept a CT; a 30 MB message write therefore cannot be interrupted
+    ///     mid-write. The guard at least prevents a write that has already been
+    ///     cancelled by the time the call enters the critical section.
+    /// </remarks>
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
             string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
+            {
+                // Invalidate any stale cache entry for the missing session.
+                _messageCache.TryRemove(sessionId, out _);
                 return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+            }
 
             lock (_lock)
             {
+                // Re-check cancellation after acquiring the lock — the wait may
+                // have been long under contention.
+                ct.ThrowIfCancellationRequested();
+
                 var entry = new MessageEntry(
                     "message",
                     message.Id,
@@ -157,7 +239,15 @@ public sealed class JsonlSessionStore : ISessionStore
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonOptions) + "\n");
             }
 
+            // Invalidate the parsed-message cache for this session. The next
+            // GetMessagesAsync call will re-parse from disk (the file has
+            // changed). Other sessions' cache entries are untouched.
+            _messageCache.TryRemove(sessionId, out _);
             return Task.FromResult(Result.Success());
+        }
+        catch (OperationCanceledException)
+        {
+            return Task.FromResult(Result.Failure("Operation was cancelled."));
         }
         catch (Exception ex)
         {
@@ -173,64 +263,66 @@ public sealed class JsonlSessionStore : ISessionStore
         return AppendMessageAsync(sessionId, message, ct);
     }
 
+    /// <summary>
+    ///     Read all messages for a session in chronological order. Returns the
+    ///     cached parse result when the file's last-write-time is unchanged
+    ///     since the prior call (§3.3 cache).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Architecture audit v2 §3.3 (RESOLVED):</b> previously every
+    ///         call re-parsed every line of the JSONL file. <see cref="GetStatsAsync" />
+    ///         also called this method, so a single <c>/stats</c> command on a
+    ///         10k-message session paid ~50k allocations. Now both callers hit
+    ///         the cache for free on the second and subsequent calls.
+    ///     </para>
+    ///     <para>
+    ///         <b>TODO(principles)[PERF]:</b> на каждый чанк строки вызывается
+    ///         <c>JsonDocument.Parse(line)</c> — тысячи аллокаций. Для длинных
+    ///         сессий (10k+ строк) это существенный overhead даже с кэшем (первый
+    ///         reads всё ещё pays full parse). Альтернативы: (1) Utf8JsonReader
+    ///         на ReadOnlySpan&lt;byte&gt;, (2) MemoryPack-encoded binary формат
+    ///         вместо JSONL (есть же [MemoryPackable] на всех сообщениях!),
+    ///         (3) streaming deserialize. См. аудит §PERF-005.
+    ///     </para>
+    /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
-        // TODO(principles)[PERF, байтоебля]: на каждый чанк строки вызывается
-        // JsonDocument.Parse(line) — тысячи аллокаций. Для длинных сессий (10k+ строк)
-        // это существенный overhead. Альтернативы: (1) Utf8JsonReader на ReadOnlySpan<byte>,
-        // (2) MemoryPack-encoded binary формат вместо JSONL (есть же [MemoryPackable] на
-        // всех сообщениях!), (3) streaming deserialize. См. аудит §PERF-005.
-        // §PERF-005 (PARTIAL): the full Utf8JsonReader rewrite is risky without AOT
-        // testing, so we keep JsonDocument.Parse for now. The ROP path (§ROP-001) is
-        // fixed: per-line deserialization errors are aggregated into a `List<string>`
-        // and surfaced via _logger.LogWarning, while still returning the successfully
-        // deserialized messages (instead of silently swallowing the failure).
         try
         {
             string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
+            {
+                _messageCache.TryRemove(sessionId, out _);
                 return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
-
-            var messages = new Dictionary<string, AgentMessage>();
-            var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
-
-            using var reader = new StreamReader(sessionFile);
-            while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-
-                try
-                {
-                    using var doc = JsonDocument.Parse(line);
-                    string? type = doc.RootElement.GetProperty("type").GetString();
-
-                    if (type == "message")
-                    {
-                        var msgResult = DeserializeMessage(sessionId, doc.RootElement);
-                        if (msgResult.IsSuccess)
-                            messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
-                        else
-                            errors.Add(msgResult.Error);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
-                    // and logged at Warning level. Previously the caller silently
-                    // swallowed these, leaving the user with a truncated session
-                    // transcript and no diagnostic.
-                    errors.Add($"Line parse failed: {ex.Message}");
-                }
             }
 
-            if (errors.Count > 0)
+            // §3.3 cache: freshness check via file mtime. Most filesystems have
+            // second-level mtime granularity, which is fine here — every write
+            // bumps the mtime.
+            DateTimeOffset fileMtime = File.GetLastWriteTimeUtc(sessionFile);
+            if (_messageCache.TryGetValue(sessionId, out var cached) && cached.FileLastWriteUtc == fileMtime)
             {
-                _logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
-                    errors.Count, sessionId, string.Join("; ", errors));
+                // Cache hit — return the cached list directly. Zero allocations.
+                return Result.Success<IReadOnlyList<AgentMessage>>(cached.Messages);
             }
 
-            var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
-            return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
+            // Cache miss (or stale) — parse from disk.
+            var parseResult = await ParseMessagesFromDiskAsync(sessionFile, sessionId, ct).ConfigureAwait(false);
+            if (parseResult.IsSuccess)
+            {
+                // Publish the freshly parsed list to the cache. The
+                // ConcurrentDictionary slot is updated atomically and the
+                // cache value is an immutable record, so concurrent readers
+                // see either the old entry or the new entry but never a
+                // half-built one.
+                _messageCache[sessionId] = new SessionCacheEntry(fileMtime, parseResult.Value);
+            }
+            return parseResult;
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Failure<IReadOnlyList<AgentMessage>>("Operation was cancelled.");
         }
         catch (Exception ex)
         {
@@ -238,16 +330,93 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    /// <summary>
+    ///     Parse the JSONL session file from disk into a chronological message
+    ///     list. Per-line JSON parse errors are aggregated into a
+    ///     <c>List&lt;string&gt;</c> and surfaced via <see cref="ILogger.LogWarning" />,
+    ///     while still returning the successfully deserialized messages
+    ///     (§ROP-001 resolved).
+    /// </summary>
+    /// <param name="sessionFile">Absolute path to the .jsonl file.</param>
+    /// <param name="sessionId">The session id (passed through to <see cref="DeserializeMessage" />).</param>
+    /// <param name="ct">Cancellation token observed by <c>StreamReader.ReadLineAsync</c>.</param>
+    /// <returns>The chronological message list, or failure with the first error.</returns>
+    private async Task<Result<IReadOnlyList<AgentMessage>>> ParseMessagesFromDiskAsync(
+        string sessionFile,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var messages = new Dictionary<string, AgentMessage>();
+        var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
+
+        using var reader = new StreamReader(sessionFile);
+        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                string? type = doc.RootElement.GetProperty("type").GetString();
+
+                if (type == "message")
+                {
+                    var msgResult = DeserializeMessage(sessionId, doc.RootElement);
+                    if (msgResult.IsSuccess)
+                        messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
+                    else
+                        errors.Add(msgResult.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
+                // and logged at Warning level. Previously the caller silently
+                // swallowed these, leaving the user with a truncated session
+                // transcript and no diagnostic.
+                errors.Add($"Line parse failed: {ex.Message}");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            _logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
+                errors.Count, sessionId, string.Join("; ", errors));
+        }
+
+        var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
+        return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
+    }
+
+    /// <summary>
+    ///     Delete a session JSONL file. The parsed-message cache entry for this
+    ///     session is also removed (§3.3 cache).
+    /// </summary>
+    /// <remarks>
+    ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is
+    ///     observed via <see cref="CancellationToken.ThrowIfCancellationRequested" />
+    ///     before the file delete. <c>File.Delete</c> itself is synchronous I/O
+    ///     that does not accept a CT.
+    /// </remarks>
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
         try
         {
+            ct.ThrowIfCancellationRequested();
+            // Always invalidate the cache — even if the file is missing, a
+            // stale cache entry should not survive a DeleteAsync call.
+            _messageCache.TryRemove(sessionId, out _);
+
             string sessionFile = GetSessionFilePath(sessionId);
             if (File.Exists(sessionFile))
             {
                 File.Delete(sessionFile);
             }
             return Task.FromResult(Result.Success());
+        }
+        catch (OperationCanceledException)
+        {
+            return Task.FromResult(Result.Failure("Operation was cancelled."));
         }
         catch (Exception ex)
         {
@@ -488,6 +657,15 @@ public sealed class JsonlSessionStore : ISessionStore
         };
     }
 }
+
+/// <summary>
+///     Parsed-message cache entry (§3.3). Records the file's last-write-time
+/// at the moment of the parse so subsequent reads can detect freshness via
+/// a single <c>File.GetLastWriteTimeUtc</c> call.
+/// </summary>
+internal sealed record SessionCacheEntry(
+    DateTimeOffset FileLastWriteUtc,
+    IReadOnlyList<AgentMessage> Messages);
 
 internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("type")] string Type,
