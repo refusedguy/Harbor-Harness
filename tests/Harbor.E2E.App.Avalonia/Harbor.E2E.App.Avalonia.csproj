@@ -1,25 +1,80 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Harbor.E2E.App.Avalonia - end-to-end tests for the standalone Avalonia
-    desktop app. Uses HeadlessAvaloniaDriver (Avalonia.Headless on Windows,
-    skipped on Linux/macOS without a virtual framebuffer).
+    Harbor.E2E.App.Avalonia — REAL end-to-end tests for the Harbor Avalonia
+    desktop app, with SCREENSHOT capture.
+
+    Uses Avalonia.Headless (in-process off-screen renderer) to spin up the
+    actual App + MainWindow + full DI host (AppHost.BuildAsync) on the test
+    thread, drive it like a user would, and capture PNG screenshots of the
+    rendered window to ~/.harbor/test-screenshots/.
+
+    Output:
+      * Test results (pass/fail per TUnit).
+      * PNGs at ~/.harbor/test-screenshots/01-main-window.png, etc.
+        Inspect these to SEE what the UI looks like without running the app.
   -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591;CA1707;S3267;S2365;S2445;S6618;TUnit0055</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <!--
+      The driver constructs Avalonia Application instances and drives the
+      dispatcher from the test thread. Several Meziantou/Sonar rules around
+      async void (the App.OnShutdownRequested handler) and EventHandler<T>
+      signatures (the Avalonia event surface) don't apply to test code.
+    -->
+    <NoWarn>$(NoWarn);CS1591;CA1707;S3267;S2365;S2445;S6618;MA0046;TUnit0055</NoWarn>
+    <!-- Avalonia XAML codegen emits some pattern-matching warnings under .NET 10 analyzers. -->
+    <NoWarn>$(NoWarn);AVLN1000;AVLN1001</NoWarn>
+    <!-- Test-only relaxations:
+         CS0618 — Bitmap.Save(Stream, int?) is obsolete in Avalonia 12.x but
+                  still works; the new BitmapEncoderOptions API adds no value
+                  for our PNG dump use case.
+         CS8602 — null-deref warnings on the bitmap return from
+                  CaptureRenderedFrame; we throw on null immediately after.
+         DI006  — IHost stored in a static field: intentional. The Avalonia
+                  Application is a process-wide singleton; the matching IHost
+                  is held statically so subsequent test classes reuse it.
+         TUnit0200 — GetAwaiter().GetResult() in InitializeAsync: required
+                  because AppBuilder.SetupWithoutStarting is synchronous but
+                  AppHost.BuildAsync is async. The driver is called from a
+                  [Before(HookType.Class)] hook on a thread with no
+                  SynchronizationContext, so the deadlock risk doesn't apply.
+         S2696  — Static field mutation from instance method: same singleton
+                  rationale as DI006. -->
+    <NoWarn>$(NoWarn);CS0618;CS8602;DI006;TUnit0200;S2696</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Framework + the app under test. The app project grants
+         InternalsVisibleTo to Harbor.E2E.App.Avalonia so the driver can
+         call AppHost.BuildAsync() directly — same pattern as the DI tests. -->
     <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
     <ProjectReference Include="..\..\apps\Harbor.App.Avalonia\Harbor.App.Avalonia.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+    <!-- Avalonia.Headless — in-process off-screen Avalonia renderer. Lets us
+         build the real App + MainWindow + full layout/render pipeline on the
+         test thread, then capture the rendered pixels as a Bitmap → PNG. -->
+    <PackageReference Include="Avalonia.Headless"/>
+    <!-- Avalonia.Skia — software renderer that backs Avalonia.Headless when
+         UseHeadlessDrawing=false. Required for CaptureRenderedFrame() to
+         produce a real Bitmap (the default headless drawing pipeline returns
+         null from CaptureRenderedFrame). -->
+    <PackageReference Include="Avalonia.Skia"/>
+    <!-- Avalonia.Desktop pulls in ClassicDesktopStyleApplicationLifetime
+         (the IApplicationLifetime that App.OnFrameworkInitializationCompleted
+         casts to and creates the MainWindow under). -->
+    <PackageReference Include="Avalonia.Desktop"/>
+    <!-- Avalonia.Themes.Fluent is referenced by App.axaml (FluentTheme). -->
+    <PackageReference Include="Avalonia.Themes.Fluent"/>
+    <!-- Inter font (UiFont resource in Dark.axaml). -->
+    <PackageReference Include="Avalonia.Fonts.Inter"/>
   </ItemGroup>
 
 </Project>
