@@ -11,10 +11,10 @@
     <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Termina" Version="0.15.0"/>
-    <PackageReference Include="Termina.Generators" Version="0.15.0" PrivateAssets="all"/>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="Termina"/>
+    <PackageReference Include="Termina.Generators" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>

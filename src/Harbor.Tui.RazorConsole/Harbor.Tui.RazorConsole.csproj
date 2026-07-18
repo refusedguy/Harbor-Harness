@@ -11,9 +11,9 @@
     <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409"/>
-    <PackageReference Include="Spectre.Console" Version="0.54.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="RazorConsole.Core"/>
+    <PackageReference Include="Spectre.Console"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>

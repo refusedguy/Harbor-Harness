@@ -8,15 +8,29 @@
     <PackageTags>harbor;tui;abstractions;mvvm</PackageTags>
   </PropertyGroup>
 
+  <!--
+    Expose the internal UiStore.Transition helper to Presentation-layer apps that need
+    to fold non-agent state transitions (e.g. inserting a user-input line into the
+    transcript before the agent emits a UserMessage event). Harbor.Cli uses the agent
+    loop's events to drive state, so it does not need this; the desktop GUIs do.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Avalonia"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Wpf"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Maui"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Blazor"/>
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
-    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="CSharpFunctionalExtensions" Version="3.7.0"/>
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <PackageReference Include="CommunityToolkit.HighPerformance"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
 </Project>

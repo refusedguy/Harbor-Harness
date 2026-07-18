@@ -4,6 +4,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Abstractions;
 using Harbor.Tui.Abstractions.Renderers;
+using Harbor.Tui.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.Notifications;
@@ -190,7 +191,7 @@ internal sealed class MacOsascriptBackend : INotificationBackend
         string script = $"display notification \"{safeBody}\" with title \"{safeTitle}\"";
         try
         {
-            var psi = new ProcessStartInfo("osascript", "-e", script)
+            var psi = new ProcessStartInfo("osascript", new[] { "-e", script })
             {
                 RedirectStandardError = true,
                 UseShellExecute = false
@@ -220,7 +221,7 @@ internal sealed class WindowsToastBackend : INotificationBackend
         // msg.exe shows a modal dialog; for proper toasts, swap in snoretoast.exe.
         try
         {
-            var psi = new ProcessStartInfo("msg", "*", "/TIME:10", $"{title}\n{body}")
+            var psi = new ProcessStartInfo("msg", new[] { "*", "/TIME:10", $"{title}\n{body}" })
             {
                 RedirectStandardError = true,
                 UseShellExecute = false

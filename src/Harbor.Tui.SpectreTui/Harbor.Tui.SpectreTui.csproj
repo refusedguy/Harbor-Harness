@@ -11,9 +11,9 @@
     <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Spectre.Tui" Version="0.14.0"/>
-    <PackageReference Include="Spectre.Tui.App" Version="0.14.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="Spectre.Tui"/>
+    <PackageReference Include="Spectre.Tui.App"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>

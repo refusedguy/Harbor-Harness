@@ -12,8 +12,8 @@
     <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Terminal.Gui" Version="2.4.17"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="Terminal.Gui"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
