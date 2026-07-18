@@ -5,11 +5,13 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Wpf;
+using Harbor.App.Wpf.Configuration;
 using Harbor.App.Wpf.Services;
 using Harbor.App.Wpf.ViewModels;
 using Harbor.App.Wpf.Views;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using TUnit.Core;
@@ -123,6 +125,21 @@ public class AppDiTests
     public async Task BuildHost_Registers_WpfDispatcherAdapter()
         => await Assert.That(Services.GetService<WpfDispatcherAdapter>()).IsNotNull();
 
+    // ── Per-app config (~/.harbor/wpf.json) ───────────────────────────────
+
+    [Test]
+    public async Task BuildHost_Registers_IAppConfigStore_WpfConfig()
+        => await Assert.That(Services.GetService<IAppConfigStore<WpfConfig>>()).IsNotNull();
+
+    [Test]
+    public async Task BuildHost_Registers_WpfConfig()
+    {
+        var config = Services.GetService<WpfConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.AppId).IsEqualTo("wpf");
+        await Assert.That(config.ConfigFileName).IsEqualTo("wpf.json");
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -212,6 +229,8 @@ public class AppDiTests
             typeof(WpfFilePicker),
             typeof(DialogService),
             typeof(WpfDispatcherAdapter),
+            typeof(IAppConfigStore<WpfConfig>),
+            typeof(WpfConfig),
             typeof(MainViewModel),
             typeof(ChatViewModel),
             typeof(SessionListViewModel),

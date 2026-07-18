@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using Harbor.App.Wpf.Configuration;
 using Harbor.App.Wpf.Services;
 using Harbor.App.Wpf.ViewModels;
 using Harbor.App.Wpf.Views;
@@ -12,6 +13,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Excubo.Analyzers.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -119,6 +121,8 @@ public partial class App : Application
     [Exposes(typeof(WpfFilePicker))]
     [Exposes(typeof(DialogService))]
     [Exposes(typeof(WpfDispatcherAdapter))]
+    [Exposes(typeof(IAppConfigStore<WpfConfig>))]
+    [Exposes(typeof(WpfConfig))]
     [Exposes(typeof(MainViewModel))]
     [Exposes(typeof(ChatViewModel))]
     [Exposes(typeof(SessionListViewModel))]
@@ -195,6 +199,21 @@ public partial class App : Application
             var eventBus = sp.GetRequiredService<IEventBus>();
             var logger = sp.GetRequiredService<ILogger<DefaultAgent>>();
             return new DefaultAgent(sessionStore, loop, eventBus, logger);
+        });
+
+        // ── Per-app WPF configuration (~/.harbor/wpf.json) ──
+        // Non-overlapping with CLI/Avalonia/MAUI/Blazor config files.
+        services.AddSingleton<IAppConfigStore<WpfConfig>>(sp =>
+            new JsonAppConfigStore<WpfConfig>(
+                new WpfConfig(),
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<WpfConfig>>>()));
+        services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<IAppConfigStore<WpfConfig>>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new WpfConfig();
         });
     }
 

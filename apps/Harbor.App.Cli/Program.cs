@@ -1,5 +1,7 @@
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_SCRIPTING
 using Harbor.Scripting.Abstractions;
+#endif
+#if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
 #endif
 using Harbor.Abstractions.Agents;
@@ -13,7 +15,7 @@ using Harbor.Cli.Logging;
 using Harbor.Cli.Repl;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_SCRIPTING
 using Harbor.Scripting.Bridge;
 using Harbor.Scripting.Compilation;
 using Harbor.Scripting.Engines;
@@ -39,23 +41,44 @@ public static class Program
         string? scriptPath = ExtractScriptArg(args, out var remainingArgs);
         args = remainingArgs;
 
-        var logLevel = ResolveLogLevel(args);
+        // Console level: Debug under debugger, Information by default. User can
+        // override via --loglevel/-ll/HARBOR_LOGLEVEL. The previous default was
+        // Warning, which is why the user "only saw a minimal log".
+        var consoleLevel = HarborLogManager.ResolveConsoleLevel(args);
+        // Shared file logger — also used by HostBuilder. The file ALWAYS captures
+        // down to Debug so post-mortem has the full picture. Per-run timestamped
+        // file (harbor-cli-{timestamp}.log), FileMode.Append — never overwrites
+        // a previous run. Rolling cleanup keeps the last 50 files.
+        var fileProvider = HarborLogManager.Initialize("cli", LogLevel.Debug);
         var loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.AddProvider(new FileLoggerProvider(logLevel));
-            if (logLevel <= LogLevel.Information)
+            builder.AddProvider(fileProvider);
+            builder.AddSimpleConsole(o =>
             {
-                builder.AddSimpleConsole(o =>
+                o.SingleLine = true;
+                o.TimestampFormat = "HH:mm:ss.fff ";
+                o.IncludeScopes = false;
+            });
+            builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
+                (category, level) =>
                 {
-                    o.SingleLine = true;
-                    o.TimestampFormat = "HH:mm:ss ";
+                    if (category is not null && consoleLevel > LogLevel.Debug &&
+                        (category.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||
+                         category.StartsWith("Microsoft.Extensions.Hosting", StringComparison.Ordinal) ||
+                         category.StartsWith("Microsoft.Hosting", StringComparison.Ordinal)))
+                    {
+                        return level >= LogLevel.Warning;
+                    }
+                    return level >= consoleLevel;
                 });
-            }
-            builder.SetMinimumLevel(logLevel);
+            // File provider filters itself by its own _fileLevel; set the
+            // pipeline floor to Debug so the file actually receives Debug events.
+            builder.SetMinimumLevel(LogLevel.Debug);
         });
         _logger = loggerFactory.CreateLogger(typeof(Program).FullName ?? "Program");
 
         _logger.LogInformation("Starting Harbor CLI with {ArgCount} args: {Args}", args.Length, string.Join(' ', args));
+        _logger.LogInformation("Console log level: {ConsoleLevel}; file log: {FilePath}", consoleLevel, fileProvider.FilePath);
         try
         {
             if (args.Length == 0)
@@ -77,6 +100,7 @@ public static class Program
                 "setup" => await RunSetupAsync(),
                 "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
                 "config" => await RunConfigAsync(args.Skip(1).ToArray()),
+                "logs" => RunLogsCommand(args.Skip(1).ToArray()),
                 "help" or "--help" or "-h" => PrintHelp(),
                 "version" or "--version" or "-v" => PrintVersion(),
                 _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
@@ -136,13 +160,13 @@ public static class Program
         {
             return CSharpFunctionalExtensions.Result.Success();
         }
-#if HARBOR_MINIMAL
-        // Minimal build excludes the entire Harbor.Scripting.* stack —
+#if !HARBOR_WITH_SCRIPTING
+        // No-scripting build excludes the entire Harbor.Scripting.* stack —
         // --script is reported as unsupported rather than silently ignored.
         _ = services;
-        _logger.LogWarning("--script flag ignored: HARBOR_MINIMAL build excludes the scripting stack");
+        _logger.LogWarning("--script flag ignored: HARBOR_WITH_SCRIPTING build flag is off");
         return CSharpFunctionalExtensions.Result.Failure(
-            "Scripting is disabled in this minimal build. Use the full build (./build.sh PublishCliFull) to enable --script.");
+            "Scripting is disabled in this build. Use the full build (./build.sh Publish) with --with-scripting to enable --script.");
 #else
         var tools = services.GetRequiredService<IToolRegistry>();
         var providers = services.GetRequiredService<IProviderRegistry>();
@@ -380,10 +404,13 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
 
                           --script <path>   Run a .js or .ts script at startup (registers tools via Harbor.registerTool).
                                             See docs/SCRIPTING.md for the full comparison of CS / Jint / SharpTS / MCP.
+                          --loglevel <lvl>  Console log level (Trace/Debug/Information/Warning/Error/Critical).
+                                            Defaults to Debug under debugger, Information otherwise.
+                                            File log always captures down to Debug.
                           """);
         return 0;
     }
@@ -395,22 +422,24 @@ public static class Program
         return 0;
     }
 
-    // ── Helpers ──
-    internal static LogLevel ResolveLogLevel(string[] args)
+    /// <summary>
+    ///     <c>harbor logs</c> — view/manage the per-run log files under
+    ///     <c>~/.harbor/logs/</c>. Subcommands: <c>--list</c> (default),
+    ///     <c>--last</c> (print the latest file), <c>--follow</c> (tail -f),
+    ///     <c>--clean</c> (delete all log files).
+    /// </summary>
+    private static int RunLogsCommand(string[] args)
     {
-        string? raw = null;
-        for (int i = 0; i < args.Length - 1; i++)
-        {
-            if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
-                args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
-            {
-                raw = args[i + 1];
-                break;
-            }
-        }
-        raw ??= Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL");
-        return Enum.TryParse<LogLevel>(raw, true, out var level) ? level : LogLevel.Warning;
+        var cmd = new LogsCommand(Console.Out, Console.Error);
+        return cmd.Execute(args);
     }
+
+    // ── Helpers ──
+    // Delegates to HarborLogManager.ResolveConsoleLevel so the default level
+    // (Debug under debugger, Information otherwise) and the --log-level /
+    // --loglevel / -ll / HARBOR_LOGLEVEL forms stay in one place. Kept for
+    // backward compat with any internal caller that still hits Program.ResolveLogLevel.
+    internal static LogLevel ResolveLogLevel(string[] args) => HarborLogManager.ResolveConsoleLevel(args);
 
     internal static string[] StripLogArgs(string[] args)
     {
@@ -419,9 +448,17 @@ public static class Program
         while (i < args.Length)
         {
             if (args[i].Equals("--loglevel", StringComparison.OrdinalIgnoreCase) ||
+                args[i].Equals("--log-level", StringComparison.OrdinalIgnoreCase) ||
                 args[i].Equals("-ll", StringComparison.OrdinalIgnoreCase))
             {
                 i += 2;
+                continue;
+            }
+            // Also strip the --loglevel=Info / --log-level=Info inline form.
+            if (args[i].StartsWith("--loglevel=", StringComparison.OrdinalIgnoreCase) ||
+                args[i].StartsWith("--log-level=", StringComparison.OrdinalIgnoreCase))
+            {
+                i += 1;
                 continue;
             }
             result.Add(args[i]);

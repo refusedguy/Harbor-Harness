@@ -1,5 +1,7 @@
+using Harbor.App.Blazor.Configuration;
 using Harbor.App.Blazor.Services;
 using Harbor.App.Blazor.ViewModels;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
 using Excubo.Analyzers.DependencyInjection;
@@ -7,6 +9,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Blazor;
 
@@ -47,6 +50,8 @@ internal static class Program
     [Exposes(typeof(CommandPaletteService))]
     [Exposes(typeof(SessionBrowserService))]
     [Exposes(typeof(ProviderBrowserService))]
+    [Exposes(typeof(IAppConfigStore<BlazorConfig>))]
+    [Exposes(typeof(BlazorConfig))]
     [Exposes(typeof(ChatViewModel))]
     [Exposes(typeof(SessionListViewModel))]
     [Exposes(typeof(ProviderBrowserViewModel))]
@@ -54,11 +59,17 @@ internal static class Program
     [Exposes(typeof(TokenUsageViewModel))]
     public static async Task Main(string[] args)
     {
-        bool autoOpen = !Array.Exists(args, a => a is "--no-open-browser" or "--no-browser");
+        bool autoOpenArg = !Array.Exists(args, a => a is "--no-open-browser" or "--no-browser");
 
         WebApplication app = BuildApp(args);
 
-        string url = "http://localhost:5000";
+        // Resolve BlazorConfig from the built host so Main can honour the
+        // persisted ListenPort + AutoOpenBrowser preferences. The CLI flag
+        // (--no-open-browser) still wins over the persisted preference.
+        var blazorConfig = app.Services.GetRequiredService<BlazorConfig>();
+        bool autoOpen = autoOpenArg && blazorConfig.AutoOpenBrowser;
+        int port = blazorConfig.ListenPort <= 0 ? 5000 : blazorConfig.ListenPort;
+        string url = $"http://localhost:{port}";
         if (autoOpen)
         {
             TryOpenBrowser(url);
@@ -106,6 +117,21 @@ internal static class Program
         // store as a fallback when no JSONL directory is configured.
         builder.Services.AddSingleton<UiStore>();
         builder.Services.AddSingleton<MemorySessionStore>();
+
+        // ── Per-app Blazor configuration (~/.harbor/blazor.json) ──
+        // Non-overlapping with CLI/Avalonia/WPF/MAUI config files.
+        builder.Services.AddSingleton<IAppConfigStore<BlazorConfig>>(sp =>
+            new JsonAppConfigStore<BlazorConfig>(
+                new BlazorConfig(),
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<BlazorConfig>>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<IAppConfigStore<BlazorConfig>>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new BlazorConfig();
+        });
 
         // App-local UI services.
         builder.Services.AddSingleton<BlazorDispatcherAdapter>();

@@ -1,4 +1,4 @@
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;

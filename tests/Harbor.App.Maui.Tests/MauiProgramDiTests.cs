@@ -5,9 +5,11 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Maui;
+using Harbor.App.Maui.Configuration;
 using Harbor.Core.Agents;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using TUnit.Core;
 using TUnit.Assertions;
@@ -80,6 +82,21 @@ public class MauiProgramDiTests
     public async Task CreateMauiApp_Registers_IAgent()
         => await Assert.That(Services.GetService<IAgent>()).IsNotNull();
 
+    // ── Per-app config (~/.harbor/maui.json) ──────────────────────────────
+
+    [Test]
+    public async Task CreateMauiApp_Registers_IAppConfigStore_MauiConfig()
+        => await Assert.That(Services.GetService<IAppConfigStore<MauiConfig>>()).IsNotNull();
+
+    [Test]
+    public async Task CreateMauiApp_Registers_MauiConfig()
+    {
+        var config = Services.GetService<MauiConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.AppId).IsEqualTo("maui");
+        await Assert.That(config.ConfigFileName).IsEqualTo("maui.json");
+    }
+
     /// <summary>
     ///     Aggregate: resolves every service declared with [Exposes(typeof(T))]
     ///     on MauiProgram.CreateMauiApp in one shot.
@@ -101,6 +118,8 @@ public class MauiProgramDiTests
             typeof(ICompactionService),
             typeof(AgentLoop),
             typeof(IAgent),
+            typeof(IAppConfigStore<MauiConfig>),
+            typeof(MauiConfig),
         };
 
         var missing = new List<Type>();

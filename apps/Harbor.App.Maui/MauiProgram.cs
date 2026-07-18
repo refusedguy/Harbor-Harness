@@ -4,10 +4,12 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.App.Maui.Configuration;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Excubo.Analyzers.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -54,6 +56,8 @@ public static class MauiProgram
     [Exposes(typeof(ICompactionService))]
     [Exposes(typeof(AgentLoop))]
     [Exposes(typeof(IAgent))]
+    [Exposes(typeof(IAppConfigStore<MauiConfig>))]
+    [Exposes(typeof(MauiConfig))]
     public static MauiApp CreateMauiApp()
     {
         var builder = MauiApp.CreateBuilder();
@@ -79,6 +83,21 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
         builder.Services.AddLogging();
+
+        // ── Per-app MAUI configuration (~/.harbor/maui.json) ──
+        // Non-overlapping with CLI/Avalonia/WPF/Blazor config files.
+        builder.Services.AddSingleton<IAppConfigStore<MauiConfig>>(sp =>
+            new JsonAppConfigStore<MauiConfig>(
+                new MauiConfig(),
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<MauiConfig>>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<IAppConfigStore<MauiConfig>>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            return result.IsSuccess ? result.Value : new MauiConfig();
+        });
 
 #if DEBUG
         builder.Logging.SetMinimumLevel(LogLevel.Debug);

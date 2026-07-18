@@ -38,6 +38,14 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <!--
+      CSharpFunctionalExtensions provides Result<T> used directly in the public
+      IAppConfigStore<T> / JsonAppConfigStore<T> API surface (Configuration/).
+      Pulled in transitively via Harbor.Abstractions too, but declaring it
+      explicitly here keeps the contract stable if Harbor.Abstractions ever
+      drops the dependency.
+    -->
+    <PackageReference Include="CSharpFunctionalExtensions"/>
   </ItemGroup>
 
 </Project>

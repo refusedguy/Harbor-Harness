@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
 #endif
@@ -14,7 +14,7 @@ namespace Harbor.Cli.Hosting;
 /// </summary>
 internal static class ProviderRegistration
 {
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
     public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
         IHttpClientFactory httpClientFactory,

@@ -7,21 +7,22 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
 using Harbor.Core.Configuration;
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 #endif
 namespace Harbor.Cli.Hosting;
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
 /// <summary>Adapter that resolves API key via AuthStore.</summary>
 /// <remarks>
-///     Excluded from <c>HARBOR_MINIMAL</c> builds — the interfaces it implements
-///     (IAnthropicAuthResolver, IOpenAIAuthResolver, IAuthResolver) live in
-///     Harbor.Providers.{Anthropic,OpenAI,OpenAiCompatible} which are removed
-///     from the minimal project reference graph. Ollama (kept in minimal) has
-///     no auth resolver because OllamaLlmClient doesn't take an auth resolver
-///     — it talks to a local daemon that doesn't require an API key.
+///     Excluded when <c>HARBOR_WITH_ALL_PROVIDERS</c> is undefined — the
+///     interfaces it implements (IAnthropicAuthResolver, IOpenAIAuthResolver,
+///     IAuthResolver) live in Harbor.Providers.{Anthropic,OpenAI,OpenAiCompatible}
+///     which are removed from the project reference graph when
+///     HarborWithAllProviders=false. Ollama (always included) has no auth
+///     resolver because OllamaLlmClient doesn't take an auth resolver — it
+///     talks to a local daemon that doesn't require an API key.
 /// </remarks>
 internal sealed class ConfigAuthResolver : IAnthropicAuthResolver, IOpenAIAuthResolver, IAuthResolver
 {

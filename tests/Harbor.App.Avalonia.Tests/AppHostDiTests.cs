@@ -5,10 +5,12 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia;
+using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Plugins.Abstractions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -199,6 +201,25 @@ public class AppHostDiTests
         await Assert.That(Services.GetService<ToastService>()).IsNotNull();
     }
 
+    // ── Per-app config (~/.harbor/avalonia.json) ──────────────────────────
+
+    [Test]
+    public async Task BuildAsync_Registers_IAppConfigStore_AvaloniaConfig()
+    {
+        await GetHostAsync();
+        await Assert.That(Services.GetService<IAppConfigStore<AvaloniaConfig>>()).IsNotNull();
+    }
+
+    [Test]
+    public async Task BuildAsync_Registers_AvaloniaConfig()
+    {
+        await GetHostAsync();
+        var config = Services.GetService<AvaloniaConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.AppId).IsEqualTo("avalonia");
+        await Assert.That(config.ConfigFileName).IsEqualTo("avalonia.json");
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -249,6 +270,8 @@ public class AppHostDiTests
             typeof(AvaloniaFilePicker),
             typeof(SessionManager),
             typeof(ToastService),
+            typeof(IAppConfigStore<AvaloniaConfig>),
+            typeof(AvaloniaConfig),
         };
 
         var missing = new List<Type>();

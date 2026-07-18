@@ -1,3 +1,4 @@
+using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Abstractions.Agents;
@@ -13,6 +14,7 @@ using Harbor.Core.Configuration;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.Ollama;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
@@ -59,6 +61,8 @@ internal static class AppHost
     [Exposes(typeof(AvaloniaFilePicker))]
     [Exposes(typeof(SessionManager))]
     [Exposes(typeof(ToastService))]
+    [Exposes(typeof(IAppConfigStore<AvaloniaConfig>))]
+    [Exposes(typeof(AvaloniaConfig))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -82,6 +86,25 @@ internal static class AppHost
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
+
+        // ── Per-app Avalonia configuration (~/.harbor/avalonia.json) ──
+        // Non-overlapping with CLI/WPF/MAUI/Blazor config files. JsonAppConfigStore
+        // handles atomic write (temp + rename) + SemaphoreSlim thread safety.
+        builder.Services.AddSingleton<IAppConfigStore<AvaloniaConfig>>(sp =>
+            new JsonAppConfigStore<AvaloniaConfig>(
+                new AvaloniaConfig(),
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>()));
+        // Eagerly load AvaloniaConfig so the rest of the composition root
+        // (ThemeService, MainViewModel) can resolve it synchronously.
+        var configStore = new JsonAppConfigStore<AvaloniaConfig>(
+            new AvaloniaConfig(),
+            builder.Services.BuildServiceProvider()
+                .GetRequiredService<ILogger<JsonAppConfigStore<AvaloniaConfig>>>());
+        var avaloniaConfigResult = await configStore.LoadAsync().ConfigureAwait(false);
+        var avaloniaConfig = avaloniaConfigResult.IsSuccess
+            ? avaloniaConfigResult.Value
+            : new AvaloniaConfig();
+        builder.Services.AddSingleton(avaloniaConfig);
 
         // Storage — opt-in via HARBOR_STORAGE env var. Defaults to in-memory (ephemeral).
         string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "memory";

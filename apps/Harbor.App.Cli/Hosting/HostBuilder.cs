@@ -4,13 +4,16 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.Cli.Configuration;
 using Harbor.Core.Agents;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
-#if !HARBOR_MINIMAL
+using Harbor.Desktop.Abstractions.Configuration;
+using System.Reflection;
+#if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime;
 using Harbor.Plugins.Compilation;
@@ -18,9 +21,13 @@ using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Storage;
+#endif
+#if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Storage.Sqlite;
+#endif
+#if HARBOR_WITH_SPECTRE_TUI
 using Harbor.Tui.Ansi;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Spectre;
@@ -47,7 +54,7 @@ using Microsoft.Extensions.Logging;
 // this is the documented pattern from sub-agent 1 (Plugins.Runtime) and
 // is preserved until a full async-HostBuilder refactor lands.
 #pragma warning disable DI014, DI016
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_PLUGINS
 using Excubo.Analyzers.DependencyInjection;
 #endif
 namespace Harbor.Cli.Hosting;
@@ -60,6 +67,25 @@ internal static class HostBuilder
     private static ILoggerFactory _loggerFactory = null!;
     private static ILogger _logger = null!;
 
+    /// <summary>
+    ///     Runtime probe: returns true if the named assembly has been loaded
+    ///     into the current AppDomain. Used as defense-in-depth to skip
+    ///     service registration for optional features whose ProjectReference
+    ///     has been excluded at build time (via the HarborWith* MSBuild flags).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the runtime safety net on top of the compile-time
+    ///         <c>#if HARBOR_WITH_*</c> guards. It catches the case where a
+    ///         plugin/scripting assembly is referenced but never loaded (e.g.
+    ///         if the type isn't directly used during startup, the CLR doesn't
+    ///         eagerly load its assembly).
+    ///     </para>
+    /// </remarks>
+    private static bool IsAssemblyLoaded(string name) =>
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Any(a => string.Equals(a.GetName().Name, name, StringComparison.OrdinalIgnoreCase));
+
     // Each [Exposes(typeof(T))] declaration below is enforced by
     // Excubo.Analyzers.DependencyInjectionValidation (rules EDI01–EDI04) and
     // exercised by Harbor.App.Cli.Tests/HostBuilderDiTests.cs which builds the
@@ -67,10 +93,11 @@ internal static class HostBuilder
     // IServiceProvider. Keep this list in sync with the actual services.AddXxx
     // calls in RegisterCore / RegisterRegistries / RegisterStorage / RegisterTui.
     //
-    // Note: under HARBOR_MINIMAL the Excubo attributes are intentionally
-    // omitted (the package is conditionally referenced) — the DI tests still
-    // resolve these services, they just don't have the compile-time check.
-#if !HARBOR_MINIMAL
+    // Note: the [Exposes] attributes are emitted only when Excubo is
+    // referenced (i.e. when at least one optional ProjectReference that
+    // brings it transitively is included — currently Harbor.Plugins.*).
+    // The DI tests still resolve these services in all build variants.
+#if HARBOR_WITH_PLUGINS
     [Exposes(typeof(IConfigStore))]
     [Exposes(typeof(AuthStore))]
     [Exposes(typeof(OnboardingWizard))]
@@ -90,6 +117,8 @@ internal static class HostBuilder
     [Exposes(typeof(IPermissionService))]
     [Exposes(typeof(ISessionStore))]
     [Exposes(typeof(ITuiRenderer))]
+    [Exposes(typeof(IAppConfigStore<CliConfig>))]
+    [Exposes(typeof(CliConfig))]
 #endif
     public static IHost Build(params string[] args)
     {
@@ -110,6 +139,13 @@ internal static class HostBuilder
         _logger = _loggerFactory.CreateLogger(typeof(HostBuilder).FullName ?? "HostBuilder");
 
         _logger.LogInformation("Building host");
+        _logger.LogInformation("Feature flags: plugins={Plugins}, scripting={Scripting}, " +
+            "spectre-tui={SpectreTui}, all-providers={AllProviders}",
+            IsAssemblyLoaded("Harbor.Plugins.Runtime"),
+            IsAssemblyLoaded("Harbor.Scripting.Hosting"),
+            IsAssemblyLoaded("Harbor.Tui.Spectre"),
+            IsAssemblyLoaded("Harbor.Providers.Anthropic"));
+
         RegisterCore(builder);
         // HTTP clients must be registered BEFORE RegisterRegistries because
         // CreateProviderRegistry resolves IHttpClientFactory from the temporary
@@ -152,6 +188,29 @@ internal static class HostBuilder
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
+
+        // ── Per-app CLI configuration (~/.harbor/cli.json) ──
+        // Registered early so RegisterTui / RegisterStorage can resolve CliConfig
+        // synchronously from the temp ServiceProvider. JsonAppConfigStore uses a
+        // SemaphoreSlim for thread-safe atomic writes; LoadAsync falls back to
+        // the default CliConfig() when the file is missing.
+        builder.Services.AddSingleton<IAppConfigStore<CliConfig>>(sp =>
+            new JsonAppConfigStore<CliConfig>(
+                new CliConfig(),
+                sp.GetRequiredService<ILogger<JsonAppConfigStore<CliConfig>>>()));
+        builder.Services.AddSingleton(sp =>
+        {
+            var store = sp.GetRequiredService<IAppConfigStore<CliConfig>>();
+#pragma warning disable RS0030 // Sync-over-async at startup — no SynchronizationContext, safe to block.
+            var result = store.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+            if (result.IsFailure)
+            {
+                _logger.LogWarning("Failed to load CliConfig, using defaults: {Error}", result.Error);
+                return new CliConfig();
+            }
+            return result.Value;
+        });
     }
 
     private static void RegisterRegistries(HostApplicationBuilder builder, string harborDir)
@@ -189,7 +248,7 @@ internal static class HostBuilder
         var panelRegistry = new PanelRegistry(
             loggerFactory.CreateLogger<PanelRegistry>());
 
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_PLUGINS
         // Run the CS-source plugin loader. Adds tools / providers / agents / TUI plugins
         // contributed via Roslyn-compiled .cs files in ~/.harbor/plugins/ or
         // <cwd>/.harbor/plugins/.
@@ -199,7 +258,7 @@ internal static class HostBuilder
         // (ReflectionPluginInstantiator) → registration (SafePluginRegistrar over
         // PluginRegistrar). Each layer is independently swappable.
         //
-        // EXCLUDED from HARBOR_MINIMAL builds — the entire Harbor.Plugins.* stack
+        // EXCLUDED when HarborWithPlugins=false — the entire Harbor.Plugins.* stack
         // is removed from the project reference graph, so the plugin host can't be
         // constructed. See apps/Harbor.App.Cli/Harbor.App.Cli.csproj.
         var pluginHost = new PluginLoadHost(
@@ -248,7 +307,7 @@ internal static class HostBuilder
             _logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
         }
 #else
-        _logger.LogInformation("HARBOR_MINIMAL build — plugin runtime disabled");
+        _logger.LogInformation("Plugin runtime disabled (HarborWithPlugins=false)");
 #endif
 
         // Re-freeze the registries so post-Build() lookups hit the frozen O(1) snapshot.
@@ -349,7 +408,7 @@ internal static class HostBuilder
             httpFactory.CreateClient("ollama"), new OllamaConfig(),
             loggerFactory.CreateLogger<OllamaLlmClient>()));
 
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
         // Native providers — Anthropic + OpenAI excluded from minimal builds.
         pb.AddProvider("anthropic", () => new AnthropicLlmClient(
             httpFactory.CreateClient("anthropic"), new AnthropicConfig(),
@@ -372,12 +431,19 @@ internal static class HostBuilder
 
     private static void RegisterStorage(HostApplicationBuilder builder, string sessionsDir, string sqlitePath)
     {
-        string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? "jsonl";
+        // Resolve CliConfig from a temp ServiceProvider so we can read the
+        // per-app DefaultStorage preference. The HARBOR_STORAGE env var still
+        // wins (matches the legacy HarborConfig behavior — env vars override
+        // persisted config).
+        var tempSp = builder.Services.BuildServiceProvider();
+        var cliConfig = tempSp.GetRequiredService<CliConfig>();
+        string defaultStorage = string.IsNullOrEmpty(cliConfig.DefaultStorage) ? "jsonl" : cliConfig.DefaultStorage;
+        string storage = Environment.GetEnvironmentVariable("HARBOR_STORAGE") ?? defaultStorage;
         _logger.LogInformation("Storage backend: {Storage}", storage);
         builder.Services.AddSingleton<ISessionStore>(sp => storage.ToLowerInvariant() switch
         {
             "memory" => new MemorySessionStore(),
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
             "sqlite" => new SqliteSessionStore(sqlitePath, sp.GetRequiredService<ILogger<SqliteSessionStore>>()),
 #endif
             _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>())
@@ -386,48 +452,56 @@ internal static class HostBuilder
 
     private static void RegisterTui(HostApplicationBuilder builder)
     {
-        var configStore = new JsonConfigStore(logger: builder.Services.BuildServiceProvider().GetRequiredService<ILogger<JsonConfigStore>>());
-#pragma warning disable RS0030 // Do not use APIs banned for analyzers — DI setup is synchronous, no SynchronizationContext present
-        var config = configStore.LoadAsync().GetAwaiter().GetResult().Value;
-#pragma warning restore RS0030
-
-        string tui = config.Tui ?? Environment.GetEnvironmentVariable("HARBOR_TUI") ?? "spectre-tui";
-#if HARBOR_MINIMAL
-        // Minimal builds ship only PlainTuiRenderer; force the default to "plain".
-        tui = "plain";
-        _logger.LogInformation("TUI renderer: {Tui} (HARBOR_MINIMAL forces plain)", tui);
-#else
+        // Resolve CliConfig from a temp ServiceProvider so we can read the
+        // per-app DefaultTuiRenderer preference. The HARBOR_TUI env var still
+        // wins. The literal "auto" is resolved to "spectre-tui" here (the
+        // CLI's default for interactive sessions).
+        var tempSp = builder.Services.BuildServiceProvider();
+        var cliConfig = tempSp.GetRequiredService<CliConfig>();
+        string defaultTui = string.IsNullOrEmpty(cliConfig.DefaultTuiRenderer) || cliConfig.DefaultTuiRenderer == "auto"
+            ? "spectre-tui"
+            : cliConfig.DefaultTuiRenderer;
+#if HARBOR_WITH_SPECTRE_TUI
+        string tui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? defaultTui;
         _logger.LogInformation("TUI renderer: {Tui}", tui);
-#endif
-        builder.Services.AddSingleton<ITuiRenderer>(sp => tui.ToLowerInvariant() switch
-        {
-            "plain" => new PlainTuiRenderer(),
-#if !HARBOR_MINIMAL
-            "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
-            "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
-            "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(
-                sp.GetRequiredService<ILogger<Tui.SpectreTui.SpectreTuiRenderer>>(),
-                sp.GetService<PanelRegistry>()),
-            "terminal-gui" => new TerminalGuiRenderer(sp.GetRequiredService<ILogger<TerminalGuiRenderer>>()),
-            "termina" => new TerminaRenderer(sp.GetRequiredService<ILogger<TerminaRenderer>>()),
-            "razor" => new RazorConsoleRenderer(sp.GetRequiredService<ILogger<RazorConsoleRenderer>>()),
-
-            // ── Alternative UI renderers (see docs/ALTERNATIVE_UIS.md) ──
-            // To enable, add the matching ProjectReference to Harbor.Cli.csproj and
-            // (for MAUI) install the workload: `dotnet workload install maui`.
-            // Then uncomment the case you need.
-            //
-            // "wpf"            => new Harbor.Tui.Wpf.WpfTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Wpf.WpfTuiRenderer>>()),
-            // "avalonia"       => new Harbor.Tui.Avalonia.AvaloniaTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Avalonia.AvaloniaTuiRenderer>>()),
-            // "maui"           => new Harbor.Tui.Maui.MauiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Maui.MauiTuiRenderer>>()),
-            // "blazor"         => new Harbor.Tui.Blazor.BlazorTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Blazor.BlazorTuiRenderer>>()),
-            // "sixel"          => new Harbor.Tui.Sixel.SixelTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Sixel.SixelTuiRenderer>>()),
-            // "notifications"  => new Harbor.Tui.Notifications.NotificationTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Notifications.NotificationTuiRenderer>>()),
-
-            // AnsiTuiRenderer is the only non-Plain fallback in full builds.
-            _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
 #else
-            _ => new PlainTuiRenderer()
+        // Minimal / no-Spectre builds ship only PlainTuiRenderer; force the default to "plain".
+        const string tui = "plain";
+        _logger.LogInformation("TUI renderer: {Tui} (HARBOR_WITH_SPECTRE_TUI forces plain)", tui);
+#endif
+        builder.Services.AddSingleton<ITuiRenderer>(sp =>
+        {
+#if HARBOR_WITH_SPECTRE_TUI
+            return tui.ToLowerInvariant() switch
+            {
+                "plain" => (ITuiRenderer)new PlainTuiRenderer(),
+                "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
+                "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
+                "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(
+                    sp.GetRequiredService<ILogger<Tui.SpectreTui.SpectreTuiRenderer>>(),
+                    sp.GetService<PanelRegistry>()),
+                "terminal-gui" => new TerminalGuiRenderer(sp.GetRequiredService<ILogger<TerminalGuiRenderer>>()),
+                "termina" => new TerminaRenderer(sp.GetRequiredService<ILogger<TerminaRenderer>>()),
+                "razor" => new RazorConsoleRenderer(sp.GetRequiredService<ILogger<RazorConsoleRenderer>>()),
+
+                // ── Alternative UI renderers (see docs/ALTERNATIVE_UIS.md) ──
+                // To enable, add the matching ProjectReference to Harbor.Cli.csproj and
+                // (for MAUI) install the workload: `dotnet workload install maui`.
+                // Then uncomment the case you need.
+                //
+                // "wpf"            => new Harbor.Tui.Wpf.WpfTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Wpf.WpfTuiRenderer>>()),
+                // "avalonia"       => new Harbor.Tui.Avalonia.AvaloniaTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Avalonia.AvaloniaTuiRenderer>>()),
+                // "maui"           => new Harbor.Tui.Maui.MauiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Maui.MauiTuiRenderer>>()),
+                // "blazor"         => new Harbor.Tui.Blazor.BlazorTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Blazor.BlazorTuiRenderer>>()),
+                // "sixel"          => new Harbor.Tui.Sixel.SixelTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Sixel.SixelTuiRenderer>>()),
+                // "notifications"  => new Harbor.Tui.Notifications.NotificationTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Notifications.NotificationTuiRenderer>>()),
+
+                // AnsiTuiRenderer is the only non-Plain fallback in full builds.
+                _ => new AnsiTuiRenderer(sp.GetRequiredService<ILogger<AnsiTuiRenderer>>())
+            };
+#else
+            // Minimal / no-Spectre builds ship PlainTuiRenderer only.
+            return new PlainTuiRenderer();
 #endif
         });
     }
@@ -436,13 +510,13 @@ internal static class HostBuilder
     {
         _logger.LogInformation("Registering HTTP clients");
         builder.Services.AddHttpClient("ollama");
-#if !HARBOR_MINIMAL
+#if HARBOR_WITH_ALL_PROVIDERS
         builder.Services.AddHttpClient("anthropic");
         builder.Services.AddHttpClient("openai");
         builder.Services.AddHttpClient("providers");
         builder.Services.AddHttpClient("default");
 #else
-        _logger.LogInformation("HARBOR_MINIMAL — registered only the ollama HTTP client");
+        _logger.LogInformation("HARBOR_WITH_ALL_PROVIDERS=false — registered only the ollama HTTP client");
 #endif
     }
 }

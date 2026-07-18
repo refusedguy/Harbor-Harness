@@ -1,6 +1,8 @@
 using Harbor.App.Blazor;
+using Harbor.App.Blazor.Configuration;
 using Harbor.App.Blazor.Services;
 using Harbor.App.Blazor.ViewModels;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -73,6 +75,21 @@ public class ProgramDiTests
     public async Task BuildApp_Registers_ProviderBrowserService()
         => await Assert.That(Services.GetService<ProviderBrowserService>()).IsNotNull();
 
+    // ── Per-app config (~/.harbor/blazor.json) ────────────────────────────
+
+    [Test]
+    public async Task BuildApp_Registers_IAppConfigStore_BlazorConfig()
+        => await Assert.That(Services.GetService<IAppConfigStore<BlazorConfig>>()).IsNotNull();
+
+    [Test]
+    public async Task BuildApp_Registers_BlazorConfig()
+    {
+        var config = Services.GetService<BlazorConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.AppId).IsEqualTo("blazor");
+        await Assert.That(config.ConfigFileName).IsEqualTo("blazor.json");
+    }
+
     // ── ViewModels ────────────────────────────────────────────────────────
 
     [Test]
@@ -117,6 +134,8 @@ public class ProgramDiTests
             typeof(CommandPaletteService),
             typeof(SessionBrowserService),
             typeof(ProviderBrowserService),
+            typeof(IAppConfigStore<BlazorConfig>),
+            typeof(BlazorConfig),
             typeof(ChatViewModel),
             typeof(SessionListViewModel),
             typeof(ProviderBrowserViewModel),

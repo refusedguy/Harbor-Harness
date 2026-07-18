@@ -8,7 +8,9 @@ using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
+using Harbor.Cli.Configuration;
 using Harbor.Cli.Hosting;
+using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Plugins.Abstractions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
@@ -203,6 +205,23 @@ public class HostBuilderDiTests
         await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();
     }
 
+    // ── Per-app config (~/.harbor/cli.json) ───────────────────────────────
+
+    [Test]
+    public async Task Build_Registers_IAppConfigStore_CliConfig()
+    {
+        await Assert.That(Services.GetService<IAppConfigStore<CliConfig>>()).IsNotNull();
+    }
+
+    [Test]
+    public async Task Build_Registers_CliConfig()
+    {
+        var config = Services.GetService<CliConfig>();
+        await Assert.That(config).IsNotNull();
+        await Assert.That(config!.AppId).IsEqualTo("cli");
+        await Assert.That(config.ConfigFileName).IsEqualTo("cli.json");
+    }
+
     // ── Aggregate / cross-cutting ─────────────────────────────────────────
 
     /// <summary>
@@ -236,6 +255,8 @@ public class HostBuilderDiTests
             typeof(IPermissionService),
             typeof(ISessionStore),
             typeof(ITuiRenderer),
+            typeof(IAppConfigStore<CliConfig>),
+            typeof(CliConfig),
         };
 
         var missing = new List<Type>();
