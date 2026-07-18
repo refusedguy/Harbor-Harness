@@ -1,16 +1,30 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- App-wide style overrides (above Fluent) -->
+    <!--
+        ORCA-level AppStyles — micro-interactions, button variants, card chrome.
 
+        Design language (port from Orca Electron app):
+          • 150ms brush transition on hover/focus (smooth, not jarring)
+          • 200ms opacity transition on press
+          • 8px corner radius for buttons/inputs, 12px for cards
+          • Primary = solid accent fill with dark text (high contrast)
+          • Secondary = transparent fill with border, hover = subtle surface
+          • Subtle  = transparent, no border, hover = subtle surface
+          • Card    = surface fill + 1px border + 4-12px shadow
+          • Input   = surface fill + 1px border, focus = accent border
+    -->
+
+    <!-- ════════════ Base Window ════════════ -->
     <Style Selector="Window">
         <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
     </Style>
 
+    <!-- ════════════ Layout panels (Sidebar / StatusBar / Card host) ════════════ -->
     <Style Selector="Border.CodeEditorHost">
         <Setter Property="Background" Value="{StaticResource MochaMantle}"/>
-        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
     </Style>
@@ -25,9 +39,43 @@
         <Setter Property="Background" Value="{StaticResource StatusBarBackgroundBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="0,1,0,0"/>
-        <Setter Property="Padding" Value="12,4"/>
+        <Setter Property="Padding" Value="12,6"/>
     </Style>
 
+    <!-- Status-bar separator (vertical hairline between groups) -->
+    <Style Selector="Border.StatusBarSeparator">
+        <Setter Property="Background" Value="{StaticResource SeparatorBrush}"/>
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Margin" Value="12,3"/>
+        <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+
+    <!-- ════════════ Cards (ORCA card pattern) ════════════ -->
+    <Style Selector="Border.Card">
+        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}"/>
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BoxShadow" Value="0 2 8 0 #20000000"/>
+    </Style>
+
+    <Style Selector="Border.CardElevated">
+        <Setter Property="Background" Value="{StaticResource CardElevatedBackgroundBrush}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}"/>
+        <Setter Property="Padding" Value="20"/>
+        <Setter Property="BoxShadow" Value="0 8 24 0 #40000000"/>
+    </Style>
+
+    <Style Selector="Border.CodeBlock">
+        <Setter Property="Background" Value="{StaticResource MochaCrust}"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12,10"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- ════════════ Streaming indicator ════════════ -->
     <Style Selector="Ellipse.StreamingDot">
         <Setter Property="Fill" Value="{StaticResource MochaPeach}"/>
         <Setter Property="Transitions">
@@ -37,18 +85,45 @@
         </Setter>
     </Style>
 
-    <Style Selector="Border.CodeBlock">
-        <Setter Property="Background" Value="{StaticResource MochaCrust}"/>
-        <Setter Property="CornerRadius" Value="6"/>
-        <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
+    <!-- ════════════ Killer-feature: ToolCallCard slide-in ════════════ -->
+    <!-- NOTE: RenderTransform animation removed for Avalonia 12.x compat.
+         Avalonia 12.x's default Animation.Animators collection doesn't
+         include a TransformAnimator, so animating RenderTransform throws
+         "No animator registered for the property RenderTransform" at
+         style-attach time. The Opacity fade-in still works; the slide-in
+         can be re-added by either (a) registering a custom
+         TransformAnimator in code-behind, or (b) using Transitions on
+         a TranslateTransform instead of an Animation. Tracked in Task U2. -->
+    <Style Selector="Border.ToolCallCard">
+        <Style.Animations>
+            <Animation Duration="0:0:0.25" FillMode="Forward">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0"/>
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1"/>
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
     </Style>
 
-    <!-- ════════════ Killer-feature styles (Task R1) ════════════ -->
+    <!-- ════════════ Killer-feature: Toast slide-in ════════════ -->
+    <!-- NOTE: RenderTransform animation removed for Avalonia 12.x compat —
+         see Border.ToolCallCard note above for details. -->
+    <Style Selector="Border.ToastCard">
+        <Style.Animations>
+            <Animation Duration="0:0:0.3" FillMode="Forward">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0"/>
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1"/>
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
 
-    <!-- Blinking cursor for TypewriterStreamingText — opacity transition
-         gives a soft fade-blink rather than a hard toggle. -->
+    <!-- ════════════ TextBlock.BlinkingCursor ════════════ -->
     <Style Selector="TextBlock.BlinkingCursor">
         <Setter Property="Transitions">
             <Transitions>
@@ -58,57 +133,95 @@
         <Setter Property="Opacity" Value="1"/>
     </Style>
 
-    <!-- Tool-call card slide-in. Uses Style.Animations rather than
-         Transitions because Transitions require an explicit property
-         change to fire — without an initial RenderTransform setter,
-         the previous declaration animated nothing. Style.Animations
-         run once when the element enters the visual tree, which is
-         exactly the "card slides in when tool call starts" effect
-         Orca and Opencode ship. -->
-    <Style Selector="Border.ToolCallCard">
-        <Setter Property="RenderTransform">
-            <Setter.Value>
-                <TranslateTransform X="0"/>
-            </Setter.Value>
+    <!-- ════════════ Onboarding progress stepper ════════════ -->
+    <Style Selector="Ellipse.StepperDot">
+        <Setter Property="Width" Value="10"/>
+        <Setter Property="Height" Value="10"/>
+        <Setter Property="Fill" Value="{StaticResource StepperPendingBrush}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Fill" Duration="0:0:0.2"/>
+                <DoubleTransition Property="Width" Duration="0:0:0.2"/>
+                <DoubleTransition Property="Height" Duration="0:0:0.2"/>
+            </Transitions>
         </Setter>
-        <Style.Animations>
-            <Animation Duration="0:0:0.25" FillMode="Forward">
-                <KeyFrame Cue="0%">
-                    <Setter Property="Opacity" Value="0"/>
-                    <Setter Property="TranslateTransform.X" Value="-16"/>
-                </KeyFrame>
-                <KeyFrame Cue="100%">
-                    <Setter Property="Opacity" Value="1"/>
-                    <Setter Property="TranslateTransform.X" Value="0"/>
-                </KeyFrame>
-            </Animation>
-        </Style.Animations>
     </Style>
 
-    <!-- ════════════ Task R1 enhancement: toast slide-in ════════════ -->
+    <!-- ════════════ Headings / typography helpers (used inline) ════════════ -->
+    <Style Selector="TextBlock.Heading1">
+        <Setter Property="FontSize" Value="28"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.Heading2">
+        <Setter Property="FontSize" Value="20"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.Heading3">
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.Caption">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.Label">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource TextSubtleBrush}"/>
+    </Style>
 
-    <!-- Toast cards slide in from the right edge (where the toast
-         container is anchored) and fade in. This is the Orca "sonner"
-         pattern — without it, toasts pop in jarringly. Animation runs
-         once on visual-tree entry (per-toast). -->
-    <Style Selector="Border.ToastCard">
-        <Setter Property="RenderTransform">
-            <Setter.Value>
-                <TranslateTransform X="0"/>
-            </Setter.Value>
+    <!-- ════════════ Custom Windows caption buttons (Task U1) ════════════
+         Drawn in the client area because ExtendClientAreaChromeHints=PreferNone
+         hides the native Windows caption buttons. Matches the VS Code /
+         Windows Terminal pattern: 46×36 flat buttons, transparent background,
+         subtle hover gray, red close-button hover. FontFamily is set to
+         "Segoe Fluent Icons" so the &#xE949; / &#xE922; / &#xE8BB; glyphs
+         render as the modern Win11 minimize/maximize/close icons; on Linux/Mac
+         the FontFamily falls back to the default UI font and the glyphs render
+         as plain text (acceptable since those platforms keep their native
+         chrome anyway). -->
+    <Style Selector="Button.WindowButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Width" Value="46"/>
+        <Setter Property="Height" Value="36"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.08"/>
+            </Transitions>
         </Setter>
-        <Style.Animations>
-            <Animation Duration="0:0:0.3" FillMode="Forward">
-                <KeyFrame Cue="0%">
-                    <Setter Property="Opacity" Value="0"/>
-                    <Setter Property="TranslateTransform.X" Value="40"/>
-                </KeyFrame>
-                <KeyFrame Cue="100%">
-                    <Setter Property="Opacity" Value="1"/>
-                    <Setter Property="TranslateTransform.X" Value="0"/>
-                </KeyFrame>
-            </Animation>
-        </Style.Animations>
+    </Style>
+
+    <!-- Hover on minimize / maximize → subtle gray. -->
+    <Style Selector="Button.WindowButton:pointerover">
+        <Setter Property="Background" Value="#1f1f1f"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+    </Style>
+
+    <!-- Pressed feedback. -->
+    <Style Selector="Button.WindowButton:pressed">
+        <Setter Property="Background" Value="#2a2a2a"/>
+    </Style>
+
+    <!-- Close button hover → Win11-style red. -->
+    <Style Selector="Button.WindowButtonClose:pointerover">
+        <Setter Property="Background" Value="#e81123"/>
+        <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.WindowButtonClose:pressed">
+        <Setter Property="Background" Value="#c50f1f"/>
+        <Setter Property="Foreground" Value="White"/>
     </Style>
 
 </Styles>

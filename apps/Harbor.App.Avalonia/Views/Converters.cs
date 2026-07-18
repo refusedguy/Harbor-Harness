@@ -97,3 +97,39 @@ public sealed class FinishLabelConverter : IValueConverter
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+///     Resolves a brush for the onboarding progress stepper dot at position
+///     <c>ConverterParameter</c> based on the bound <c>CurrentStep</c> value:
+///     <list type="bullet">
+///         <item>step &lt; parameter → <c>StepperPendingBrush</c> (not yet reached)</item>
+///         <item>step == parameter → <c>StepperActiveBrush</c> (current step, highlighted)</item>
+///         <item>step &gt; parameter → <c>StepperDoneBrush</c> (completed)</item>
+///     </list>
+///     Returns a brush (resolved from app resources) directly, so the
+///     Ellipse can bind <c>Fill</c> without needing a second converter.
+/// </summary>
+public sealed class StepToStepperBrushConverter : IValueConverter
+{
+    /// <summary>Singleton instance.</summary>
+    public static readonly StepToStepperBrushConverter Instance = new();
+
+    /// <inheritdoc />
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not int currentStep) return null;
+        if (!int.TryParse(parameter?.ToString(), out int dotStep)) return null;
+
+        string key = currentStep switch
+        {
+            _ when currentStep > dotStep  => "StepperDoneBrush",
+            _ when currentStep == dotStep => "StepperActiveBrush",
+            _                             => "StepperPendingBrush",
+        };
+        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
+    }
+
+    /// <inheritdoc />
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

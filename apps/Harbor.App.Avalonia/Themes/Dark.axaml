@@ -2,15 +2,34 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        Catppuccin-Mocha dark palette — https://catppuccin.com/palette
-        The canonical dark theme for Harbor.App.Avalonia.
+        ORCA-level dark theme — Catppuccin-Mocha base with ORCA polish.
+        Reference: https://github.com/stablyai/orca (Electron+Tailwind+shadcn)
+
+        Key ORCA visual elements applied here:
+          • Inter font for UI (bundled), JetBrains Mono for code (system fallback).
+          • Card-based layout with subtle shadows + 8–12px corner radius.
+          • Accent color = blue (#89b4fa); hover = sky (#74c7ec); pressed = deeper.
+          • Micro-interaction transitions (150ms brush, 200ms opacity).
+          • Status-bar separator color (subtle 1px between groups).
+          • Onboarding step dot accents.
     -->
 
-    <!-- Font families (UI + code) — used across Typography.axaml styles. -->
-    <FontFamily x:Key="UiFont">"Inter, Segoe UI, San Francisco, Roboto, Arial"</FontFamily>
-    <FontFamily x:Key="CodeFont">"JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, monospace"</FontFamily>
+    <!-- ════════════ Fonts ════════════
+         UiFont uses the bundled Inter package (real Inter TTF, no system
+         dependency). CodeFont prefers JetBrains Mono when installed (most
+         dev workstations have it), falling back to Cascadia Code (Win11+),
+         Menlo (macOS), Consolas, or DejaVu Sans Mono (Linux).
 
-    <!-- Base background shades -->
+         The JetBrainsMono Avalonia NuGet package was removed from nuget.org
+         for the 12.x line, so we rely on system installation + a broad
+         fallback chain. This keeps the build green on all platforms. -->
+    <FontFamily x:Key="UiFont">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+    <FontFamily x:Key="CodeFont">JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+
+    <!-- ════════════ Catppuccin-Mocha palette ════════════ -->
+    <!-- https://catppuccin.com/palette -->
+
+    <!-- Base background shades (deepest → lightest surface) -->
     <Color x:Key="MochaBase">#1E1E2E</Color>
     <Color x:Key="MochaMantle">#181825</Color>
     <Color x:Key="MochaCrust">#11111B</Color>
@@ -23,21 +42,35 @@
     <Color x:Key="MochaSubtext1">#BAC2DE</Color>
     <Color x:Key="MochaSubtext0">#A6ADC8</Color>
     <Color x:Key="MochaOverlay2">#9399B2</Color>
+    <Color x:Key="MochaOverlay1">#7F849C</Color>
+    <Color x:Key="MochaOverlay0">#6C7086</Color>
 
     <!-- Accents -->
     <Color x:Key="MochaBlue">#89B4FA</Color>
     <Color x:Key="MochaLavender">#B4BEFE</Color>
-    <Color x:Key="MochaPink">#F5C2E7</Color>
-    <Color x:Key="MochaRed">#F38BA8</Color>
+    <Color x:Key="MochaSapphire">#74C7EC</Color>
+    <Color x:Key="MochaSky">#89DCEB</Color>
+    <Color x:Key="MochaTeal">#94E2D5</Color>
     <Color x:Key="MochaGreen">#A6E3A1</Color>
     <Color x:Key="MochaYellow">#F9E2AF</Color>
     <Color x:Key="MochaPeach">#FAB387</Color>
-    <Color x:Key="MochaTeal">#94E2D5</Color>
-    <Color x:Key="MochaSky">#89DCEB</Color>
     <Color x:Key="MochaMaroon">#EBA0AC</Color>
+    <Color x:Key="MochaRed">#F38BA8</Color>
     <Color x:Key="MochaMauve">#CBA6F7</Color>
+    <Color x:Key="MochaPink">#F5C2E7</Color>
+    <Color x:Key="MochaFlamingo">#F2CDCD</Color>
+    <Color x:Key="MochaRosewater">#F5E0DC</Color>
 
-    <!-- Semantic role colors for chat -->
+    <!-- ════════════ Semantic colors (ORCA convention) ════════════ -->
+    <Color x:Key="AccentColor">#89B4FA</Color>
+    <Color x:Key="AccentHoverColor">#74C7EC</Color>
+    <Color x:Key="AccentPressedColor">#89B4FA</Color>
+    <Color x:Key="SuccessColor">#A6E3A1</Color>
+    <Color x:Key="WarningColor">#FAB387</Color>
+    <Color x:Key="ErrorColor">#F38BA8</Color>
+    <Color x:Key="InfoColor">#89DCEB</Color>
+
+    <!-- ════════════ Chat role colors (semantic per role) ════════════ -->
     <SolidColorBrush x:Key="ChatUserBrush"        Color="{StaticResource MochaSky}"/>
     <SolidColorBrush x:Key="ChatAssistantBrush"   Color="{StaticResource MochaText}"/>
     <SolidColorBrush x:Key="ChatThinkingBrush"    Color="{StaticResource MochaOverlay2}"/>
@@ -46,27 +79,56 @@
     <SolidColorBrush x:Key="ChatSystemBrush"      Color="{StaticResource MochaYellow}"/>
     <SolidColorBrush x:Key="ChatErrorBrush"       Color="{StaticResource MochaRed}"/>
 
-    <!-- Background brushes -->
+    <!-- ════════════ Background brushes (depth hierarchy) ════════════ -->
     <SolidColorBrush x:Key="AppBackgroundBrush"        Color="{StaticResource MochaBase}"/>
     <SolidColorBrush x:Key="PanelBackgroundBrush"      Color="{StaticResource MochaMantle}"/>
     <SolidColorBrush x:Key="SidebarBackgroundBrush"    Color="{StaticResource MochaCrust}"/>
     <SolidColorBrush x:Key="StatusBarBackgroundBrush"  Color="{StaticResource MochaMantle}"/>
     <SolidColorBrush x:Key="CardBackgroundBrush"       Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="CardElevatedBackgroundBrush" Color="{StaticResource MochaSurface1}"/>
     <SolidColorBrush x:Key="HoverBackgroundBrush"      Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="HoverStrongBackgroundBrush" Color="{StaticResource MochaSurface1}"/>
     <SolidColorBrush x:Key="SelectedBackgroundBrush"   Color="{StaticResource MochaSurface1}"/>
     <SolidColorBrush x:Key="BorderBrush"               Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="BorderSubtleBrush"         Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="BorderStrongBrush"         Color="{StaticResource MochaSurface1}"/>
+    <SolidColorBrush x:Key="SeparatorBrush"            Color="{StaticResource MochaSurface0}"/>
+
+    <!-- ════════════ Accent + semantic brushes ════════════ -->
     <SolidColorBrush x:Key="AccentBrush"               Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="AccentHoverBrush"          Color="{StaticResource MochaSapphire}"/>
+    <SolidColorBrush x:Key="AccentPressedBrush"        Color="{StaticResource MochaLavender}"/>
     <SolidColorBrush x:Key="AccentForegroundBrush"     Color="#11111B"/>
     <SolidColorBrush x:Key="SuccessBrush"              Color="{StaticResource MochaGreen}"/>
     <SolidColorBrush x:Key="WarningBrush"              Color="{StaticResource MochaPeach}"/>
     <SolidColorBrush x:Key="ErrorBrush"                Color="{StaticResource MochaRed}"/>
+    <SolidColorBrush x:Key="InfoBrush"                 Color="{StaticResource MochaSky}"/>
+
+    <!-- ════════════ Text brushes (hierarchy) ════════════ -->
     <SolidColorBrush x:Key="TextBrush"                 Color="{StaticResource MochaText}"/>
     <SolidColorBrush x:Key="TextSubtleBrush"           Color="{StaticResource MochaSubtext0}"/>
+    <SolidColorBrush x:Key="TextMutedBrush"            Color="{StaticResource MochaOverlay2}"/>
+    <SolidColorBrush x:Key="TextDisabledBrush"         Color="{StaticResource MochaOverlay1}"/>
+    <SolidColorBrush x:Key="TextOnAccentBrush"         Color="#11111B"/>
 
-    <!-- Status bar state colors -->
+    <!-- ════════════ Status bar state colors ════════════ -->
     <SolidColorBrush x:Key="StatusIdleBrush"     Color="{StaticResource MochaSubtext0}"/>
     <SolidColorBrush x:Key="StatusRunningBrush"  Color="{StaticResource MochaBlue}"/>
     <SolidColorBrush x:Key="StatusCompactBrush"  Color="{StaticResource MochaYellow}"/>
     <SolidColorBrush x:Key="StatusErrorBrush"    Color="{StaticResource MochaRed}"/>
+    <SolidColorBrush x:Key="StatusSuccessBrush"  Color="{StaticResource MochaGreen}"/>
+
+    <!-- ════════════ Onboarding progress-stepper colors ════════════ -->
+    <SolidColorBrush x:Key="StepperActiveBrush"   Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="StepperDoneBrush"     Color="{StaticResource MochaBlue}"/>
+    <SolidColorBrush x:Key="StepperPendingBrush"  Color="{StaticResource MochaSurface1}"/>
+    <SolidColorBrush x:Key="StepperConnectorBrush" Color="{StaticResource MochaSurface1}"/>
+
+    <!-- ════════════ Shadows (ORCA cards use soft 4–12px shadow) ════════════ -->
+    <!-- BoxShadow format: "offsetX offsetY blur spread color" -->
+    <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="ButtonCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="InputCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="PillCornerRadius">12</CornerRadius>
 
 </ResourceDictionary>
