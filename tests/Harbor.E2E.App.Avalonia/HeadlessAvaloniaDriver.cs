@@ -572,6 +572,11 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 vm.IsProviderBrowserOpen = false;
                 vm.IsDiffOpen = false;
                 vm.IsTokenUsageOpen = false;
+                // Clear any leftover toasts from previous tests. Without this,
+                // a "Settings saved" toast from a prior test bleeds into the
+                // next test's screenshot (e.g. 02-input-typed showed a stale
+                // toast even though that test never opened Settings).
+                vm.Toasts.Clear();
                 // Clear the chat transcript + reset the UiStore so the next
                 // test starts from a clean status (idle, no agent running).
                 // Without this, a previous test that triggered the agent loop

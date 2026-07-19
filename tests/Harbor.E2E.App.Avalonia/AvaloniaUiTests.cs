@@ -251,6 +251,15 @@ public sealed class AvaloniaUiTests
         var inputText = Driver.OnUIThread(() => input!.Text);
         await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
 
+        // BUGFIX: WaitForTextAsync's AppendText walks the visual tree and
+        // finds TextBlocks regardless of IsVisible — but the ItemsControl's
+        // container materialization + ScrollViewer layout pass needs one more
+        // dispatcher cycle before the chat row is actually painted. Without
+        // this delay, the screenshot captured a blank chat area even though
+        // the message was already in the visual tree. 150ms is enough for the
+        // UI thread's MainLoop to drain the layout/render queue.
+        await Task.Delay(150).ConfigureAwait(false);
+
         await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }
 
