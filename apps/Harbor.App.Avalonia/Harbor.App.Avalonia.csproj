@@ -101,6 +101,7 @@
     -->
     <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Logging/Harbor.Logging.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
   </ItemGroup>
 
@@ -120,6 +121,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm"/>
     <!-- DI + hosting -->
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Serilog.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
   </ItemGroup>

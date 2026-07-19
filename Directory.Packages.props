@@ -199,6 +199,12 @@
     <PackageVersion Include="DependencyInjection.Lifetime.Analyzers" Version="2.18.24" />
     <PackageVersion Include="Excubo.Analyzers.DependencyInjectionValidation" Version="1.0.33" />
     <PackageVersion Include="Excubo.Analyzers.Annotations" Version="1.0.1" />
-  </ItemGroup>
+      <!-- Serilog — structured logging with file, console, and rolling sinks -->
+    <PackageVersion Include="Serilog" Version="4.3.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
+</ItemGroup>
 
 </Project>

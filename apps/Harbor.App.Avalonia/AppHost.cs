@@ -29,6 +29,8 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Extensions.Logging;
 using Excubo.Analyzers.DependencyInjection;
 
 namespace Harbor.App.Avalonia;
@@ -66,6 +68,7 @@ internal static class AppHost
     [Exposes(typeof(DialogService))]
     [Exposes(typeof(AvaloniaFilePicker))]
     [Exposes(typeof(SessionManager))]
+    [Exposes(typeof(GitService))]
     [Exposes(typeof(ToastService))]
     [Exposes(typeof(AvaloniaDispatcherAdapter))]
     [Exposes(typeof(IHarborClient))]
@@ -127,7 +130,13 @@ internal static class AppHost
         // eagerly below. Disposing the factory at end-of-method would silence
         // those singletons. The factory is intentionally leaked to process
         // lifetime (same effective lifetime as the previous tempSp pattern).
-        var bootstrapLoggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole());
+        // Bootstrap logger — uses Serilog directly (before DI is built).
+        var serilogLogger = Harbor.Logging.LoggerSetup.Create(
+            appPrefix: "avalonia",
+            logDir: Path.Combine(homeDir, ".harbor", "logs"),
+            consoleLevel: Serilog.Events.LogEventLevel.Warning,
+            fileLevel: Serilog.Events.LogEventLevel.Debug);
+        var bootstrapLoggerFactory = new SerilogLoggerFactory(serilogLogger, true);
         var bootstrapConfigLogger = bootstrapLoggerFactory.CreateLogger<JsonAppConfigStore<AvaloniaConfig>>();
         var configStore = new JsonAppConfigStore<AvaloniaConfig>(
             new AvaloniaConfig(),
@@ -285,6 +294,7 @@ internal static class AppHost
         builder.Services.AddSingleton<DialogService>();
         builder.Services.AddSingleton<AvaloniaFilePicker>();
         builder.Services.AddSingleton<SessionManager>();
+        builder.Services.AddSingleton<GitService>();
         builder.Services.AddSingleton<ToastService>();
         // AvaloniaDispatcherAdapter is the UiStore→UI-thread bridge. Bound to
         // the UiStore exactly once below (after host.Build()) so VMs that
@@ -489,16 +499,24 @@ internal static class AppHost
 
     private static void ConfigureLogging(HostApplicationBuilder builder)
     {
-        string? env = Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL");
-        LogLevel level = env is not null && Enum.TryParse(env, true, out LogLevel parsed)
-            ? parsed
-            : LogLevel.Warning;
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string logDir = Path.Combine(homeDir, ".harbor", "logs");
+        
+        // Use Serilog for all logging — writes to BOTH file and console.
+        // File: ~/.harbor/logs/harbor-avalonia-{timestamp}.log (always Debug level)
+        // Console: stderr (Avalonia doesn't use stdout for UI)
+        var serilogLogger = Harbor.Logging.LoggerSetup.Create(
+            appPrefix: "avalonia",
+            logDir: logDir,
+            consoleLevel: Serilog.Events.LogEventLevel.Warning,  // console only shows warnings+ in UI mode
+            fileLevel: Serilog.Events.LogEventLevel.Debug);       // file captures everything
+        
+        // Clean up old logs
+        Harbor.Logging.LoggerSetup.CleanupOldLogs(logDir, 50);
+        
+        // Replace .NET logging with Serilog
         builder.Logging.ClearProviders();
-        builder.Logging.AddSimpleConsole(o =>
-        {
-            o.SingleLine = true;
-            o.TimestampFormat = "HH:mm:ss ";
-        });
-        builder.Logging.SetMinimumLevel(level);
+        builder.Services.AddSerilog(serilogLogger, dispose: true);
+        builder.Logging.SetMinimumLevel(LogLevel.Debug);
     }
 }
