@@ -488,17 +488,30 @@ public sealed class AvaloniaUiTests
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         // Open settings, change Theme to "light", save.
+        // Open settings + change Theme + save — all on UI thread.
+        MainViewModel? settingsVm = null;
         Driver.OnUIThread(() =>
         {
             if (Driver.MainWindow.DataContext is MainViewModel vm)
             {
                 vm.IsSettingsOpen = true;
                 vm.Settings.Theme = "light";
-                _ = vm.Settings.SaveCommand.ExecuteAsync(null);
+                settingsVm = vm;
             }
         });
+        // Save is async — run on UI thread, block until done.
+        if (settingsVm is not null)
+        {
+            // SaveAsync is async — must await on UI thread.
+            // Dispatcher.UIThread.InvokeAsync<T> returns DispatcherOperation<T>
+            // which supports GetAwaiter().GetResult().
+            global::Avalonia.Threading.Dispatcher.UIThread
+                .InvokeAsync(() => settingsVm.Settings.SaveCommand.ExecuteAsync(null))
+                .GetAwaiter().GetResult();  // Wait for dispatch
+            // The inner Task (SaveAsync) might still be running — wait a bit.
+            await Task.Delay(500).ConfigureAwait(false);
+        }
         await Task.Delay(400).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("09-settings-saved").ConfigureAwait(false);
 
         // Verify ~/.harbor/config.json (CommonConfig) contains "light".
         var configPath = Path.Combine(TempHome, ".harbor", "config.json");
