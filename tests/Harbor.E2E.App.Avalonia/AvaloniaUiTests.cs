@@ -256,9 +256,13 @@ public sealed class AvaloniaUiTests
         // container materialization + ScrollViewer layout pass needs one more
         // dispatcher cycle before the chat row is actually painted. Without
         // this delay, the screenshot captured a blank chat area even though
-        // the message was already in the visual tree. 150ms is enough for the
-        // UI thread's MainLoop to drain the layout/render queue.
-        await Task.Delay(150).ConfigureAwait(false);
+        // the message was already in the visual tree. 250ms gives the UI
+        // thread's MainLoop enough time to drain the layout/render queue
+        // AND lets the PromptAsync background failure path complete so the
+        // user-message + error-message rows are both rendered before the
+        // screenshot is captured. (Task S1 bumped this from 150ms → 250ms
+        // and ScreenshotAsync now runs 3 layout+render cycles.)
+        await Task.Delay(250).ConfigureAwait(false);
 
         await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }

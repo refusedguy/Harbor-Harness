@@ -314,11 +314,23 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         // flaky "Expected 'Hello...' but found 'test prompt'" failures.
         // The UI thread's MainLoop pumps jobs continuously; ForceRenderTimerTick
         // is enough to drive a render pass without disturbing the binding state.
+        //
+        // BUGFIX (Task S1): ItemsControl container materialization needs
+        // multiple layout+render cycles to actually paint chat rows. The
+        // previous single UpdateLayout + 3 ticks captured a frame where
+        // the TextBlock was in the visual tree (so WaitForTextAsync passed)
+        // but not yet painted (so the screenshot was blank). We now interleave
+        // UpdateLayout + ForceRenderTimerTick three times — each cycle drains
+        // one batch of layout/render work so containers are fully realised
+        // before the final capture.
         var path = Dispatcher.UIThread.InvokeAsync<string>(() =>
         {
             var window = MainWindow;
-            window.UpdateLayout();
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            for (int i = 0; i < 3; i++)
+            {
+                window.UpdateLayout();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            }
 
             var bitmap = window.CaptureRenderedFrame();
             if (bitmap is null)
