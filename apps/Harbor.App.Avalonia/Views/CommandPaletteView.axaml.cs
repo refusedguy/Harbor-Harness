@@ -44,6 +44,10 @@ public partial class CommandPaletteView : UserControl
                 ClosePalette();
                 e.Handled = true;
                 break;
+            case Key.Escape:
+                ClosePalette();
+                e.Handled = true;
+                break;
         }
         base.OnKeyDown(e);
     }
@@ -56,6 +60,20 @@ public partial class CommandPaletteView : UserControl
         if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
         {
             main.IsCommandPaletteOpen = false;
+        }
+    }
+
+    /// <summary>
+    ///     Click on the backdrop (the semi-transparent UserControl background)
+    ///     closes the palette — same behaviour as Esc. The inner Border with
+    ///     the actual palette card has a Background set so its clicks don't
+    ///     bubble up to the UserControl.
+    /// </summary>
+    private void Backdrop_Click(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender) || ReferenceEquals(e.Source, this))
+        {
+            ClosePalette();
         }
     }
 }

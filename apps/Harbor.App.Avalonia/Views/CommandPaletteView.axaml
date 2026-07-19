@@ -2,7 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              x:Class="Harbor.App.Avalonia.Views.CommandPaletteView"
-             Background="#60000000">
+             Background="#60000000"
+             PointerPressed="Backdrop_Click">
 
     <Border Background="{StaticResource MochaCrust}"
             CornerRadius="8"

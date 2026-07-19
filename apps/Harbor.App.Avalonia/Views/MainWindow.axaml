@@ -330,7 +330,7 @@
         <views:ToastNotificationsView ZIndex="1000"
                                       HorizontalAlignment="Right"
                                       VerticalAlignment="Bottom"
-                                      Margin="0,0,16,48"
+                                      Margin="0,0,16,80"
                                       IsHitTestVisible="True"/>
     </Grid>
 </Window>

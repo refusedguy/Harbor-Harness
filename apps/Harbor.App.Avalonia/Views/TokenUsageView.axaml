@@ -3,7 +3,8 @@
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              x:Class="Harbor.App.Avalonia.Views.TokenUsageView">
 
-    <Border Background="#80000000" ZIndex="200">
+    <Border Background="#80000000" ZIndex="200"
+            PointerPressed="Backdrop_Click">
         <Border Background="{StaticResource MochaBase}" CornerRadius="8"
                 Width="800" Height="500" Padding="16">
             <Grid RowDefinitions="Auto,Auto,*,Auto">

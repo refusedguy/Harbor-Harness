@@ -14,9 +14,15 @@
     </UserControl.Resources>
 
     <!--
-        Orca shell root layout — three-column grid:
+        Orca shell root layout.
+
+        Outer Grid = ZIndex stack: main shell (default) + modal overlays floating
+        on top via ZIndex (same pattern as the classic MainWindow.axaml).
+
+        Inner three-column grid:
           • Left rail (sessions, dense rows) — fixed 280px default width.
-          • Main work area — session header bar + message stream + composer.
+          • Main work area — session header bar + message stream + composer +
+            status bar.
           • Right panel — collapsed by default (Phase D).
 
         The left rail's width binds to ShellState.LeftRailWidth so future
@@ -24,73 +30,114 @@
         is true, the rail's column width collapses to 0.
     -->
 
-    <Grid ColumnDefinitions="Auto,*,Auto">
+    <Grid>
+        <Grid ColumnDefinitions="Auto,*,Auto">
 
-        <!-- ════════════ Left rail ════════════ -->
-        <shell:LeftRailView Grid.Column="0"
-                            DataContext="{Binding Sessions}"
-                            IsVisible="{Binding !$parent[UserControl].DataContext.ShellState.LeftRailCollapsed}"/>
+            <!-- ════════════ Left rail ════════════ -->
+            <shell:LeftRailView Grid.Column="0"
+                                DataContext="{Binding Sessions}"
+                                IsVisible="{Binding !$parent[UserControl].DataContext.ShellState.LeftRailCollapsed}"/>
 
-        <!-- ════════════ Main work area ════════════ -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+            <!-- ════════════ Main work area ════════════ -->
+            <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto,Auto">
 
-            <!-- Session header bar (model · workdir · status) -->
-            <Border Grid.Row="0" Height="36"
-                    Background="{DynamicResource BgPanelBrush}"
-                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                    BorderThickness="0,0,0,1"
-                    Padding="12,0">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding ActiveSessionTitle}"
-                               VerticalAlignment="Center"
-                               FontWeight="Medium"
-                               FontSize="13"
-                               Foreground="{DynamicResource TextPrimaryBrush}"
-                               TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding ActiveModel}"
-                               FontFamily="{DynamicResource FontMono}"
-                               FontSize="11"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,12,0"/>
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding ActiveWorkdir}"
-                               FontFamily="{DynamicResource FontMono}"
-                               FontSize="11"
-                               Foreground="{DynamicResource TextTertiaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,12,0"
-                               TextTrimming="CharacterEllipsis"/>
+                <!-- Session header bar (model · workdir · status) -->
+                <Border Grid.Row="0" Height="36"
+                        Background="{DynamicResource BgPanelBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,0">
+                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding ActiveSessionTitle}"
+                                   VerticalAlignment="Center"
+                                   FontWeight="Medium"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding ActiveModel}"
+                                   FontFamily="{DynamicResource FontMono}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"/>
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding ActiveWorkdir}"
+                                   FontFamily="{DynamicResource FontMono}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextTertiaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0"
+                                   TextTrimming="CharacterEllipsis"/>
 
-                    <!-- Mode switch (Chat / Code) -->
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
-                                VerticalAlignment="Center">
-                        <RadioButton Classes="TabButton" Content="Chat" GroupName="OrcaMode"
-                                     IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Chat}"/>
-                        <RadioButton Classes="TabButton" Content="Code" GroupName="OrcaMode"
-                                     IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Code}"/>
-                    </StackPanel>
+                        <!-- Mode switch (Chat / Code) -->
+                        <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
+                                    VerticalAlignment="Center">
+                            <RadioButton Classes="TabButton" Content="Chat" GroupName="OrcaMode"
+                                         IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Chat}"/>
+                            <RadioButton Classes="TabButton" Content="Code" GroupName="OrcaMode"
+                                         IsChecked="{Binding ShellState.ActiveMode, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=Code}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Message stream: reuse existing ChatView + CodeEditorView.
+                     The ChatView's own input area is hidden via ShowInputArea=False
+                     so the Orca ComposerView (below) takes over the input role.
+
+                     IsVisible binds to $parent[UserControl].DataContext.IsChatMode
+                     (the OrcaShellViewModel) — NOT the local DataContext (the
+                     ChatViewModel / CodeEditorViewModel). Without the $parent walk,
+                     the binding would resolve against the local DataContext and
+                     silently fail, leaving both views visible at once. -->
+                <Grid Grid.Row="1">
+                    <views:ChatView DataContext="{Binding Chat}"
+                                    ShowInputArea="False"
+                                    IsVisible="{Binding $parent[UserControl].DataContext.IsChatMode, FallbackValue=True}"/>
+                    <views:CodeEditorView DataContext="{Binding CodeEditor}"
+                                          IsVisible="{Binding $parent[UserControl].DataContext.IsCodeMode, FallbackValue=False}"/>
                 </Grid>
-            </Border>
 
-            <!-- Message stream: reuse existing ChatView + CodeEditorView.
-                 The ChatView's own input area is hidden via ShowInputArea=False
-                 so the Orca ComposerView (below) takes over the input role. -->
-            <Grid Grid.Row="1">
-                <views:ChatView DataContext="{Binding Chat}"
-                                ShowInputArea="False"
-                                IsVisible="{Binding IsChatMode}"/>
-                <views:CodeEditorView DataContext="{Binding CodeEditor}"
-                                      IsVisible="{Binding IsCodeMode}"/>
+                <!-- Composer (input + send/stop + helper line) -->
+                <shell:ComposerView Grid.Row="2" DataContext="{Binding Chat}"/>
+
+                <!-- Status bar -->
+                <shell:StatusBarView Grid.Row="3" DataContext="{Binding Main}"/>
             </Grid>
 
-            <!-- Composer (input + send/stop + helper line) -->
-            <shell:ComposerView Grid.Row="2" DataContext="{Binding Chat}"/>
+            <!-- ════════════ Right panel (collapsed by default — Phase D) ════════════ -->
+            <Border Grid.Column="2" Width="0" IsVisible="False"/>
         </Grid>
 
-        <!-- ════════════ Right panel (collapsed by default — Phase D) ════════════ -->
-        <Border Grid.Column="2" Width="0" IsVisible="False"/>
+        <!-- ════════════ Modal overlays — FLOATING SIBLINGS of the main shell ════════════
+             Same pattern as the classic MainWindow.axaml: each overlay's IsVisible
+             binds to $parent[Window].DataContext.Main.IsXxxOpen (the MainViewModel,
+             reached through the OrcaShellViewModel wrapper). $parent[Window] walks
+             up through any nesting depth so this works regardless of where the
+             overlay sits in the visual tree. FallbackValue=False keeps the overlay
+             hidden until the binding resolves. -->
+        <views:CommandPaletteView IsVisible="{Binding $parent[Window].DataContext.Main.IsCommandPaletteOpen, FallbackValue=False}"
+                                  DataContext="{Binding Main.CommandPalette}"
+                                  ZIndex="800"/>
+        <views:SettingsView IsVisible="{Binding $parent[Window].DataContext.Main.IsSettingsOpen, FallbackValue=False}"
+                            DataContext="{Binding Main.Settings}"
+                            ZIndex="600"/>
+        <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.Main.IsProviderBrowserOpen, FallbackValue=False}"
+                                   DataContext="{Binding Main.ProviderBrowser}"
+                                   ZIndex="600"/>
+        <views:DiffView IsVisible="{Binding $parent[Window].DataContext.Main.IsDiffOpen, FallbackValue=False}"
+                        DataContext="{Binding Main.Diff}"
+                        ZIndex="600"/>
+        <views:TokenUsageView IsVisible="{Binding $parent[Window].DataContext.Main.IsTokenUsageOpen, FallbackValue=False}"
+                              DataContext="{Binding Main.TokenUsage}"
+                              ZIndex="600"/>
+
+        <!-- Toast container — always-on-top floating overlay. -->
+        <views:ToastNotificationsView ZIndex="1000"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,16,48"
+                                      IsHitTestVisible="True"/>
     </Grid>
 </UserControl>

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
 
@@ -16,6 +17,23 @@ public partial class TokenUsageView : UserControl
     }
 
     private void Close_Click(object? sender, RoutedEventArgs e)
+    {
+        CloseModal();
+    }
+
+    /// <summary>
+    ///     Click on the backdrop (the dark scrim outside the card) closes the
+    ///     modal — same behaviour as Esc and the Close button.
+    /// </summary>
+    private void Backdrop_Click(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender))
+        {
+            CloseModal();
+        }
+    }
+
+    private void CloseModal()
     {
         if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
         {

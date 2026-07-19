@@ -22,7 +22,15 @@
           • Footer: Cancel (revert + close) + Save (persist + close).
     -->
 
-    <Border Background="#80000000" ZIndex="200">
+    <!--
+        Backdrop: 50% black scrim that captures clicks via Backdrop_Click so a
+        click outside the card reads as "dismiss" (Bug fix: popups not closing
+        on outside click). The inner Border has Background set so its clicks
+        don't bubble to the backdrop (PointerPressed is a tunneling/bubbling
+        routed event — the inner Border eats it before it reaches the outer).
+    -->
+    <Border Background="#80000000" ZIndex="200"
+            PointerPressed="Backdrop_Click">
         <Border Background="{StaticResource MochaBase}" CornerRadius="12"
                 Width="640" Height="560" Padding="20"
                 HorizontalAlignment="Center" VerticalAlignment="Center"

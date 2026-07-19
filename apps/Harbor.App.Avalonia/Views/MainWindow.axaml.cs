@@ -110,7 +110,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private MainViewModel? Vm => DataContext as MainViewModel;
+    private MainViewModel? Vm => DataContext switch
+    {
+        MainViewModel vm => vm,
+        Harbor.App.Avalonia.ViewModels.Shell.OrcaShellViewModel orca => orca.Main,
+        _ => null,
+    };
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)

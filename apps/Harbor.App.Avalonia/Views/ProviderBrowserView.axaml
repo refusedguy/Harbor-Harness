@@ -3,7 +3,8 @@
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              x:Class="Harbor.App.Avalonia.Views.ProviderBrowserView">
 
-    <Border Background="#80000000" ZIndex="200">
+    <Border Background="#80000000" ZIndex="200"
+            PointerPressed="Backdrop_Click">
         <Border Background="{StaticResource MochaBase}" CornerRadius="8"
                 Width="900" Height="600" Padding="16">
             <Grid RowDefinitions="Auto,*,Auto">
@@ -19,10 +20,32 @@
                     <Border Grid.Column="0" Classes="Card" Margin="0,0,8,0">
                         <Grid RowDefinitions="Auto,*">
                             <TextBlock Grid.Row="0" Text="Providers" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <!-- BUGFIX: without an ItemTemplate, the ListBox
+                                 showed the raw type name ("ProviderRowViewModel")
+                                 for every row. The ProviderRowViewModel record
+                                 exposes Id/Name/Status — bind them explicitly. -->
                             <ListBox Grid.Row="1"
                                      ItemsSource="{Binding Providers}"
                                      SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
-                                     SelectionChanged="Provider_SelectionChanged"/>
+                                     SelectionChanged="Provider_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="vm:ProviderRowViewModel">
+                                        <StackPanel Margin="2,4" Spacing="2">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Id}" FontSize="10"
+                                                           FontFamily="{StaticResource CodeFont}"
+                                                           Foreground="{StaticResource TextMutedBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="·" Foreground="{StaticResource TextMutedBrush}"/>
+                                                <TextBlock Text="{Binding Status}" FontSize="10"
+                                                           Foreground="{StaticResource MochaGreen}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
                         </Grid>
                     </Border>
 
