@@ -18,6 +18,13 @@ public sealed class BrushKeyConverter : IValueConverter
     {
         if (value is not string key) return null;
         if (global::Avalonia.Application.Current is null) return null;
+        
+        // Avalonia 12: TryGetResource searches merged dictionaries too.
+        // Direct indexer (Resources[key]) only checks the top-level dictionary.
+        if (global::Avalonia.Application.Current.TryGetResource(key, null, out var resource) && resource is IBrush)
+            return (IBrush)resource;
+        
+        // Fallback: direct indexer
         return global::Avalonia.Application.Current.Resources[key] as IBrush;
     }
 

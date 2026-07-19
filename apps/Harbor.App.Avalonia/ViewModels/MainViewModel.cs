@@ -52,8 +52,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Diff = services.GetRequiredService<DiffViewModel>();
         TokenUsage = services.GetRequiredService<TokenUsageViewModel>();
         ProviderBrowser = services.GetRequiredService<ProviderBrowserViewModel>();
+        ProviderModelPicker = services.GetRequiredService<ProviderModelPickerViewModel>();
         Settings = services.GetRequiredService<SettingsViewModel>();
         CommandPalette = services.GetRequiredService<CommandPaletteViewModel>();
+
+        // Wire the picker into Settings so the embedded "Browse Models"
+        // section uses the same VM as the status-bar flyout.
+        Settings.Picker = ProviderModelPicker;
+
+        // Close the picker flyout as soon as the user selects a model. The
+        // picker VM raises ModelSelected after persisting the choice and
+        // rebinding the active session — at that point the flyout has served
+        // its purpose and lingering would only confuse the user.
+        ProviderModelPicker.ModelSelected += () =>
+        {
+            Dispatcher.UIThread.Post(() => IsModelPickerOpen = false);
+        };
 
         // Subscribe to UiStore transitions on the UI thread. NOTE: _dispatcher.Bind(store)
         // is intentionally NOT called here — the composition root (AppHost.BuildAsync) binds
@@ -85,6 +99,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Provider browser view-model.</summary>
     public ProviderBrowserViewModel ProviderBrowser { get; }
 
+    /// <summary>
+    ///     Provider + model picker view-model. Backs the
+    ///     <c>ProviderModelPicker</c> control shown when the user clicks the
+    ///     status-bar model label.
+    /// </summary>
+    public ProviderModelPickerViewModel ProviderModelPicker { get; }
+
     /// <summary>Settings view-model.</summary>
     public SettingsViewModel Settings { get; }
 
@@ -108,6 +129,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool _isProviderBrowserOpen;
+
+    /// <summary>
+    ///     True when the provider/model picker flyout is open. Toggled by
+    ///     clicking the status-bar model label (wired in MainWindow.axaml) and
+    ///     auto-reset to false after a model is selected.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isModelPickerOpen;
 
     [ObservableProperty]
     private bool _isDiffOpen;
@@ -163,6 +192,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             TokensOut = state.Cost.TokensOut;
             CostUsd = state.Cost.CostUsd;
             IsRunning = state.IsAgentRunning;
+            // Refresh the status bar's session-count group from the live
+            // sidebar collection so it tracks New / Open / Delete without
+            // waiting for a RefreshAsync round-trip (Task S2 / Problem 2 —
+            // the count was frozen at the initial value of 1 forever).
+            ActiveSessionCount = Math.Max(1, Sessions.Sessions.Count);
             OnPropertyChanged(nameof(StatusBrushKey));
 
             // Track token-usage history for the chart.
@@ -203,6 +237,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void OpenProviderBrowser()
     {
         IsProviderBrowserOpen = true;
+    }
+
+    /// <summary>
+    ///     Open the provider/model picker flyout. Wired to a click handler on
+    ///     the status-bar's <c>ModelLabel</c> TextBlock so the user can swap
+    ///     models without leaving the chat view.
+    /// </summary>
+    [RelayCommand]
+    private void OpenModelPicker()
+    {
+        IsModelPickerOpen = true;
     }
 
     /// <summary>Open diff view.</summary>

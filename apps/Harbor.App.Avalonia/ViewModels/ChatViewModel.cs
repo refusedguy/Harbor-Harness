@@ -131,10 +131,15 @@ public sealed partial class ChatViewModel : ObservableObject
     {
         Dispatcher.UIThread.Post(() =>
         {
+            // Debug: log state changes to diagnose missing messages
+            _logger.LogDebug("OnStoreChanged: lines={Lines}, rendered={Rendered}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
+                state.Lines.Length, _renderedLineCount, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
+            
             // Append only new lines (idempotent under repeated notifications).
             while (_renderedLineCount < state.Lines.Length)
             {
                 var line = state.Lines[_renderedLineCount];
+                _logger.LogDebug("Adding line {Index}: role={Role}, textLen={TextLen}", _renderedLineCount, line.Role, line.Text?.Length ?? 0);
                 // Tool / ToolResult lines are projected into ToolCalls
                 // cards instead of (or in addition to) the transcript.
                 if (line.Role is ChatRole.Tool or ChatRole.ToolResult)
@@ -143,7 +148,7 @@ public sealed partial class ChatViewModel : ObservableObject
                 }
                 else
                 {
-                    Lines.Add(new ChatLineViewModel(line.Role, line.Text));
+                    Lines.Add(new ChatLineViewModel(line.Role, line.Text ?? string.Empty));
                 }
                 _renderedLineCount++;
             }
@@ -152,17 +157,42 @@ public sealed partial class ChatViewModel : ObservableObject
             IsThinking = state.IsAgentRunning && !state.IsStreaming;
             IsAgentRunning = state.IsAgentRunning;
 
-            // Update session status based on agent state.
-            if (_sessionManager?.Active is { } active)
+            // Update session status based on agent state (Task S2 / Problem 1).
+            //   IsAgentRunning → Working (amber pulse)
+            //   !IsAgentRunning && state.Status == "error" → Error (red)
+            //   !IsAgentRunning && last line was assistant → Done (green)
+            //   otherwise → Idle (grey)
+            if (_sessionManager?.Active is { } activeSession)
             {
-                _sessionManager.SetStatus(active.Id,
-                    state.IsAgentRunning ? SessionStatus.Working :
-                    IsAgentRunning ? SessionStatus.Working : SessionStatus.Idle);
+                SessionStatus newStatus;
+                if (state.IsAgentRunning)
+                {
+                    newStatus = SessionStatus.Working;
+                }
+                else if (string.Equals(state.Status, "error", StringComparison.OrdinalIgnoreCase))
+                {
+                    newStatus = SessionStatus.Error;
+                }
+                else if (state.Lines.Length > 0
+                    && state.Lines[^1].Role == ChatRole.Assistant)
+                {
+                    newStatus = SessionStatus.Done;
+                }
+                else
+                {
+                    newStatus = SessionStatus.Idle;
+                }
+                _sessionManager.SetStatus(activeSession.Id, newStatus);
+
+                // Push the live message count so the sidebar row's "N msgs"
+                // label tracks new messages without a full RefreshAsync
+                // round-trip (Task S2 / Problem 2).
+                _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
             }
             StatusMessage = state.IsAgentRunning
                 ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
                 : string.Empty;
-            StreamingBuffer = state.Active.TextBuffer;
+            StreamingBuffer = state.Active.TextBuffer ?? string.Empty;
         });
     }
 
@@ -345,16 +375,50 @@ public sealed partial class ChatViewModel : ObservableObject
         _effects.Run(new TuiEffect.AbortAgent());
         _toasts.Show("Abort requested — agent will stop at the next safe boundary.", ToastKind.Warning);
     }
-
     /// <summary>Clear the chat transcript (Ctrl+L).</summary>
     [RelayCommand]
     private void Clear()
     {
         _store.Reset();
+        ResetRendering();
+    }
+
+    /// <summary>
+    ///     Reset rendering state — called when switching sessions so the
+    ///     previous session's chat lines + tool-call cards are evicted and
+    ///     the new session's messages render fresh from the replayed
+    ///     <see cref="UiStore"/> state.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Without this call, <see cref="Lines"/> still holds the previous
+    ///         session's chat rows after <see cref="SessionManager.OpenSessionAsync"/>
+    ///         resets the UiStore. <see cref="_renderedLineCount"/> would also
+    ///         stay at its old value, so <see cref="OnStoreChanged"/> would
+    ///         skip the new session's replayed lines (thinking they were
+    ///         already rendered).
+    ///     </para>
+    ///     <para>
+    ///         Must run on the UI thread because <see cref="Lines"/> /
+    ///         <see cref="ToolCalls"/> are <see cref="ObservableCollection{T}"/>
+    ///         bound to the chat view. Callers in <see cref="SessionManager"/>
+    ///         wrap the call in <see cref="Dispatcher.UIThread.Post"/>.
+    ///     </para>
+    /// </remarks>
+    public void ResetRendering()
+    {
         Lines.Clear();
         ToolCalls.Clear();
         _toolCallById.Clear();
         _renderedLineCount = 0;
+        // Clear streaming/transient UI so a stale "Agent is running…" banner
+        // from the previous session doesn't linger until the new session's
+        // first agent event arrives.
+        IsStreaming = false;
+        IsThinking = false;
+        IsAgentRunning = false;
+        StatusMessage = string.Empty;
+        StreamingBuffer = string.Empty;
     }
 }
 

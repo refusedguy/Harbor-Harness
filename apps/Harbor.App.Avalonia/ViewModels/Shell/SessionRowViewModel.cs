@@ -70,14 +70,26 @@ public sealed partial class SessionRowViewModel : ObservableObject
     /// <summary>Last-updated timestamp.</summary>
     public DateTimeOffset UpdatedAt { get; init; }
 
-    /// <summary>Total messages in the session.</summary>
-    public int MessageCount { get; init; }
+    /// <summary>
+    ///     Total messages in the session. Originally populated from the
+    ///     inner <see cref="SessionItemViewModel.MessageCount"/> at
+    ///     projection time, but also updated in place by
+    ///     <see cref="LeftRailViewModel.OnItemMessageCountChanged"/> so
+    ///     the count tracks new messages without a full ReprojectAll
+    ///     (Task S2 / Problem 2).
+    /// </summary>
+    [ObservableProperty]
+    private int _messageCount;
 
     /// <summary>
     ///     Session status: <c>idle</c> | <c>running</c> | <c>error</c> |
     ///     <c>completed</c>. Drives the status dot color + status-line text.
+    ///     Updated in place by <see cref="LeftRailViewModel.OnItemStatusChanged"/>
+    ///     so the dot colour tracks the agent state in real time (Task S2 /
+    ///     Problem 1: "status indicator always green").
     /// </summary>
-    public string Status { get; init; }
+    [ObservableProperty]
+    private string _status = "idle";
 
     /// <summary>Optional workdir short label (basename of the session root).</summary>
     public string Workdir { get; init; }
@@ -158,4 +170,34 @@ public sealed partial class SessionRowViewModel : ObservableObject
     /// <summary>True when this row is the currently selected session.</summary>
     [ObservableProperty]
     private bool _isActive;
+
+    /// <summary>
+    ///     Source-generated partial invoked by <c>[ObservableProperty]</c>
+    ///     whenever <see cref="Status"/> changes. Forwards the change to
+    ///     the derived <see cref="StatusBrushKey"/> / <see cref="StatusLine"/>
+    ///     / <see cref="HasStatusLine"/> properties so bindings to the
+    ///     status dot's <c>Fill</c> and the status line's <c>Text</c> /
+    ///     <c>IsVisible</c> refresh live (the derived props are computed
+    ///     getters — without this, the dot colour would never update).
+    /// </summary>
+    /// <param name="value">The new Status value.</param>
+    partial void OnStatusChanged(string value)
+    {
+        OnPropertyChanged(nameof(StatusBrushKey));
+        OnPropertyChanged(nameof(StatusLine));
+        OnPropertyChanged(nameof(HasStatusLine));
+    }
+
+    /// <summary>
+    ///     Source-generated partial invoked by <c>[ObservableProperty]</c>
+    ///     whenever <see cref="MessageCount"/> changes. Currently a no-op
+    ///     (no derived props depend on it) but kept here so future
+    ///     derived display strings (e.g. "N msgs" in MetaLine) can hook
+    ///     in without re-trawling for the call site.
+    /// </summary>
+    /// <param name="value">The new MessageCount value.</param>
+    partial void OnMessageCountChanged(int value)
+    {
+        // Intentionally empty — MessageCount is bound directly.
+    }
 }

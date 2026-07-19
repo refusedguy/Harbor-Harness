@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.App.Avalonia.ViewModels.Shell;
 
@@ -36,6 +37,11 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
     {
         _inner = inner;
         _inner.Sessions.CollectionChanged += OnInnerCollectionChanged;
+        // Subscribe to live status + message-count updates so the dense
+        // rows track the agent state in real time (Task S2 / Problem 1 + 2)
+        // without waiting for a full ReprojectAll cycle.
+        _inner.ItemStatusChanged += OnItemStatusChanged;
+        _inner.ItemMessageCountChanged += OnItemMessageCountChanged;
         // Project whatever is already there.
         ReprojectAll();
     }
@@ -120,7 +126,7 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
                 providerId: s.ProviderId,
                 updatedAt: s.UpdatedAt,
                 messageCount: s.MessageCount,
-                status: "idle",
+                status: MapStatus(s.Status),
                 mode: "Chat",
                 workdir: null,
                 costTotal: null)
@@ -150,11 +156,55 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    ///     Map the domain <see cref="SessionStatus"/> enum to the
+    ///     <see cref="SessionRowViewModel.Status"/> string the Orca rail
+    ///     template expects (idle/running/error/completed). The mapping
+    ///     is the single source of truth — <see cref="ReprojectAll"/>
+    ///     and <see cref="OnItemStatusChanged"/> both go through here so
+    ///     a full re-projection and a live update produce identical
+    ///     dot colours for the same underlying state.
+    /// </summary>
+    private static string MapStatus(SessionStatus status) => status switch
+    {
+        SessionStatus.Working => "running",
+        SessionStatus.Error => "error",
+        SessionStatus.Done => "completed",
+        SessionStatus.Aborted => "error",
+        _ => "idle",
+    };
+
+    private void OnItemStatusChanged(string sessionId, SessionStatus status)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var row = FilteredSessions.FirstOrDefault(r => r.Id == sessionId);
+            if (row is not null)
+            {
+                row.Status = MapStatus(status);
+            }
+        });
+    }
+
+    private void OnItemMessageCountChanged(string sessionId, int count)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var row = FilteredSessions.FirstOrDefault(r => r.Id == sessionId);
+            if (row is not null)
+            {
+                row.MessageCount = count;
+            }
+        });
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _inner.Sessions.CollectionChanged -= OnInnerCollectionChanged;
+        _inner.ItemStatusChanged -= OnItemStatusChanged;
+        _inner.ItemMessageCountChanged -= OnItemMessageCountChanged;
     }
 }

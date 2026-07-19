@@ -16,7 +16,17 @@ public sealed partial class SessionItemViewModel : ObservableObject
     public string Model { get; }
     public string ProviderId { get; }
     public DateTimeOffset UpdatedAt { get; }
-    public int MessageCount { get; }
+
+    /// <summary>
+    ///     Live message count for this session. Originally populated from the
+    ///     persisted <c>SessionMetadata.MessageCount</c> at refresh time, but
+    ///     also updated in real time by <see cref="SessionListViewModel"/>
+    ///     (subscribed to <see cref="Services.SessionManager.MessageCountChanged"/>)
+    ///     so the count tracks new messages without a full RefreshAsync round-trip
+    ///     (Task S2 / Problem 2: “stale message count after send”).
+    /// </summary>
+    [ObservableProperty]
+    private int _messageCount;
 
     [ObservableProperty] private SessionStatus _status = SessionStatus.Idle;
     [ObservableProperty] private string? _gitBranch;
@@ -33,7 +43,7 @@ public sealed partial class SessionItemViewModel : ObservableObject
         Model = model;
         ProviderId = providerId;
         UpdatedAt = updatedAt;
-        MessageCount = messageCount;
+        _messageCount = messageCount;
         WorkingDirectory = workingDirectory;
     }
 

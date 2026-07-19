@@ -92,9 +92,15 @@ public sealed partial class TokenUsageViewModel : ObservableObject
         _lastTokensOut = state.Cost.TokensOut;
     }
 
-    /// <summary>Clear all bars.</summary>
+    /// <summary>
+    ///     Clear all bars + sparkline + baseline. Called when the user
+    ///     switches sessions so the chart reflects only the active
+    ///     session's token usage (not the cumulative total across all
+    ///     sessions — UiStore.Reset() zeroes Cost, but the previous
+    ///     session's bars would otherwise linger).
+    /// </summary>
     [RelayCommand]
-    private void Clear()
+    public void Clear()
     {
         Bars.Clear();
         RecentOutputTokens.Clear();

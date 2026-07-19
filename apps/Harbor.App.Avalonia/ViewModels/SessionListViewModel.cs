@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Microsoft.Extensions.Logging;
@@ -29,6 +30,60 @@ public sealed partial class SessionListViewModel : ObservableObject
         _sessionManager = sessionManager;
         _logger = logger;
         _toasts = toasts;
+
+        // Subscribe to live status + message-count changes from the
+        // SessionManager so the sidebar rows update in real time without
+        // a full RefreshAsync round-trip (Task S2 / Problem 1 + 2).
+        // StatusChanged fires when ChatViewModel.OnStoreChanged calls
+        // SetStatus(working/done/error/idle); MessageCountChanged fires
+        // when ChatViewModel.OnStoreChanged pushes the current line count.
+        // Both handlers marshal to the UI thread because Sessions is an
+        // ObservableCollection bound to the sidebar ListBox.
+        _sessionManager.StatusChanged += OnSessionStatusChanged;
+        _sessionManager.MessageCountChanged += OnSessionMessageCountChanged;
+    }
+
+    /// <summary>
+    ///     Pushed by <see cref="LeftRailViewModel"/> (and any other
+    ///     consumer) when it needs to know about live status updates
+    ///     beyond the inner <see cref="Sessions"/> collection. Fires
+    ///     after the matching <see cref="SessionItemViewModel.Status"/>
+    ///     has already been updated in place, so subscribers can either
+    ///     read the new value from the item or use the payload directly.
+    /// </summary>
+    public event Action<string, SessionStatus>? ItemStatusChanged;
+
+    /// <summary>
+    ///     Raised when a session's live message count changes (new message
+    ///     appended). Subscribers (e.g. <see cref="Shell.LeftRailViewModel"/>)
+    ///     update the corresponding row's count in place.
+    /// </summary>
+    public event Action<string, int>? ItemMessageCountChanged;
+
+    private void OnSessionStatusChanged(string sessionId, SessionStatus status)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var item = Sessions.FirstOrDefault(s => s.Id == sessionId);
+            if (item is not null)
+            {
+                item.Status = status;
+            }
+            ItemStatusChanged?.Invoke(sessionId, status);
+        });
+    }
+
+    private void OnSessionMessageCountChanged(string sessionId, int count)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            var item = Sessions.FirstOrDefault(s => s.Id == sessionId);
+            if (item is not null)
+            {
+                item.MessageCount = count;
+            }
+            ItemMessageCountChanged?.Invoke(sessionId, count);
+        });
     }
 
     /// <summary>All sessions visible in the sidebar.</summary>

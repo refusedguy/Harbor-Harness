@@ -1,8 +1,13 @@
+using System.Collections.Immutable;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Abstractions.Providers;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
+using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels;
@@ -38,6 +43,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ToastService _toasts;
     private readonly ICommonConfigStore _commonStore;
     private readonly IAppConfigStore<AvaloniaConfig> _appStore;
+    private readonly IProviderRegistry _providers;
+    private readonly IAuthResolver _authResolver;
     private CommonConfig _common;
     private AvaloniaConfig _app;
 
@@ -47,13 +54,17 @@ public sealed partial class SettingsViewModel : ObservableObject
         ILogger<SettingsViewModel> logger,
         ToastService toasts,
         ICommonConfigStore commonStore,
-        IAppConfigStore<AvaloniaConfig> appStore)
+        IAppConfigStore<AvaloniaConfig> appStore,
+        IProviderRegistry providers,
+        IAuthResolver authResolver)
     {
         _themeService = theme;
         _logger = logger;
         _toasts = toasts;
         _commonStore = commonStore;
         _appStore = appStore;
+        _providers = providers;
+        _authResolver = authResolver;
 
         // Load synchronously — the constructor runs once on app start and
         // the stores complete IO in <10ms on a local disk. Blocking here
@@ -68,6 +79,52 @@ public sealed partial class SettingsViewModel : ObservableObject
         StorageBackend = string.IsNullOrEmpty(_common.StorageBackend) ? "jsonl" : _common.StorageBackend;
         LogLevel = string.IsNullOrEmpty(_common.LogLevel) ? "info" : _common.LogLevel;
         OllamaHost = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434";
+
+        LoadProviderConfigs();
+    }
+
+    /// <summary>
+    ///     Per-provider configuration rows (API key input + auth status). Built
+    ///     from the registry + persisted <c>ApiKeys</c> dictionary.
+    /// </summary>
+    public ObservableCollection<ProviderConfigRowViewModel> ProviderConfigs { get; } = new();
+
+    /// <summary>
+    ///     Reusable picker view-model used inside Settings to browse models.
+    ///     Resolved lazily on first access so the constructor stays cheap.
+    /// </summary>
+    public ProviderModelPickerViewModel? Picker { get; set; }
+
+    /// <summary>
+    ///     Populate <see cref="ProviderConfigs"/> from the registry, attaching
+    ///     the persisted API key (if any) and the resolved auth status.
+    /// </summary>
+    private void LoadProviderConfigs()
+    {
+        ProviderConfigs.Clear();
+        foreach (var pid in _providers.GetRegisteredProviderIds())
+        {
+            var id = pid.Value;
+            var preset = ProviderPresets.Find(id);
+            string displayName = preset?.DisplayName ?? id;
+            bool requiresKey = preset?.RequiresApiKey ?? true;
+            _common.ApiKeys.TryGetValue(id, out var savedKey);
+            string apiKey = savedKey ?? string.Empty;
+
+            // Resolve auth status (env var fallback is included by the resolver).
+            bool authenticated = false;
+            try
+            {
+                authenticated = _authResolver.ResolveApiKeyAsync(id).GetAwaiter().GetResult().IsSuccess;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Settings auth resolution threw for {Provider}", id);
+            }
+
+            ProviderConfigs.Add(new ProviderConfigRowViewModel(
+                id, displayName, apiKey, requiresKey, authenticated));
+        }
     }
 
     [ObservableProperty]
@@ -117,6 +174,12 @@ public sealed partial class SettingsViewModel : ObservableObject
             DefaultModel = DefaultModel,
             StorageBackend = StorageBackend,
             LogLevel = LogLevel,
+            // Persist every provider's API key from the per-provider rows.
+            // Empty strings are dropped so we don't overwrite an existing key
+            // with nothing if the user cleared a row.
+            ApiKeys = ProviderConfigs
+                .Where(r => !string.IsNullOrWhiteSpace(r.ApiKey))
+                .ToImmutableDictionary(r => r.Id, r => r.ApiKey, StringComparer.Ordinal),
         };
         _app = _app with { FontFamily = FontFamily, Theme = Theme };
 
@@ -192,4 +255,160 @@ public sealed partial class SettingsViewModel : ObservableObject
             _logger.LogError("Onboarding reset failed: {Error}", result.Error);
         }
     }
+
+    /// <summary>
+    ///     Save a single provider's API key immediately, without requiring the
+    ///     user to click the global "Save" button. Persists via
+    ///     <see cref="ICommonConfigStore.UpdateAsync"/> so the key is available
+    ///     to the agent + picker right away (the in-process auth resolver
+    ///     reloads the config on every request).
+    /// </summary>
+    /// <param name="row">The provider row whose key should be persisted.</param>
+    [RelayCommand]
+    private async Task SaveProviderKeyAsync(ProviderConfigRowViewModel? row)
+    {
+        if (row is null) return;
+
+        var result = await _commonStore.UpdateAsync(cfg =>
+        {
+            var keys = cfg.ApiKeys;
+            if (string.IsNullOrWhiteSpace(row.ApiKey))
+            {
+                keys = keys.Remove(row.Id);
+            }
+            else
+            {
+                keys = keys.SetItem(row.Id, row.ApiKey);
+            }
+            return cfg with { ApiKeys = keys };
+        }).ConfigureAwait(true);
+
+        if (result.IsSuccess)
+        {
+            // Re-resolve auth status so the row's badge updates.
+            try
+            {
+                row.IsAuthenticated = _authResolver.ResolveApiKeyAsync(row.Id).GetAwaiter().GetResult().IsSuccess;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Re-resolve auth failed for {Provider}", row.Id);
+            }
+            row.TestResult = row.IsAuthenticated ? "✓ Key saved" : "Key saved (will check on next request)";
+            _toasts.Show($"API key saved for {row.DisplayName}.", ToastKind.Success);
+        }
+        else
+        {
+            row.TestResult = $"✗ Save failed: {result.Error}";
+            _toasts.Show($"Could not save key for {row.DisplayName}: {result.Error}", ToastKind.Error);
+        }
+    }
+
+    /// <summary>
+    ///     Test a single provider's connection by fetching its model list
+    ///     with a 5-second timeout. Persists the row's current API key first
+    ///     (so the test sees the value the user just typed, not the on-disk
+    ///     one). Used by the "Test" button on each provider row.
+    /// </summary>
+    /// <param name="row">The provider row to test.</param>
+    [RelayCommand]
+    private async Task TestProviderConnectionAsync(ProviderConfigRowViewModel? row)
+    {
+        if (row is null) return;
+
+        row.IsTesting = true;
+        row.TestResult = "Testing…";
+        try
+        {
+            // Persist the typed key first so the auth resolver (which reads
+            // from CommonConfig on every call) sees the latest value.
+            await SaveProviderKeyAsync(row).ConfigureAwait(true);
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var modelsResult = await _providers.GetAllModelsAsync(cts.Token).ConfigureAwait(true);
+            if (modelsResult.IsSuccess)
+            {
+                int count = modelsResult.Value.Count(m => m.ProviderId == row.Id);
+                row.IsAuthenticated = count > 0 || !row.RequiresApiKey;
+                row.TestResult = count > 0
+                    ? $"✓ {count} model(s) available"
+                    : (row.RequiresApiKey ? "✓ Reachable but no models returned" : "✓ Reachable (no key needed)");
+            }
+            else
+            {
+                row.IsAuthenticated = false;
+                row.TestResult = $"✗ {modelsResult.Error}";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            row.TestResult = "✗ Timed out after 5s — is the provider running?";
+        }
+        catch (Exception ex)
+        {
+            row.TestResult = $"✗ {ex.Message}";
+        }
+        finally
+        {
+            row.IsTesting = false;
+        }
+    }
+}
+
+/// <summary>
+///     One row in the Settings "Provider Configuration" section. Holds the
+///     provider id, display name, the editable API key TextBox content, and
+///     the live auth status / test-connection result.
+/// </summary>
+public sealed partial class ProviderConfigRowViewModel : ObservableObject
+{
+    /// <summary>Construct a provider config row.</summary>
+    public ProviderConfigRowViewModel(
+        string id,
+        string displayName,
+        string apiKey,
+        bool requiresApiKey,
+        bool isAuthenticated)
+    {
+        Id = id;
+        DisplayName = displayName;
+        _apiKey = apiKey;
+        RequiresApiKey = requiresApiKey;
+        _isAuthenticated = isAuthenticated;
+    }
+
+    /// <summary>Provider id (e.g. <c>ollama</c>, <c>kilocode</c>).</summary>
+    public string Id { get; }
+
+    /// <summary>Human-readable display name.</summary>
+    public string DisplayName { get; }
+
+    /// <summary>Whether this provider requires an API key (false for Ollama).</summary>
+    public bool RequiresApiKey { get; }
+
+    /// <summary>Auth status icon — <c>✓</c> or <c>✗</c>.</summary>
+    public string AuthIcon => IsAuthenticated ? "✓" : (RequiresApiKey ? "✗" : "—");
+
+    /// <summary>Auth status text — e.g. "Authenticated", "No key".</summary>
+    public string AuthText => !RequiresApiKey
+        ? "No key needed"
+        : (IsAuthenticated ? "Authenticated" : "No key");
+
+    /// <summary>API key (editable in the UI).</summary>
+    [ObservableProperty]
+    private string _apiKey;
+
+    /// <summary>Whether an API key has been resolved for this provider.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AuthIcon))]
+    [NotifyPropertyChangedFor(nameof(AuthText))]
+    private bool _isAuthenticated;
+
+    /// <summary>True while a Test connection request is in flight.</summary>
+    [ObservableProperty]
+    private bool _isTesting;
+
+    /// <summary>Human-readable result of the last Test connection attempt.</summary>
+    [ObservableProperty]
+    private string _testResult = string.Empty;
 }
