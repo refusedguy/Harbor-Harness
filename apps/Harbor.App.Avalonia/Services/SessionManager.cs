@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.App.Avalonia.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.State;
 using System.Collections.Immutable;
@@ -33,6 +34,25 @@ public sealed class SessionManager
     /// <summary>Per-session git info.</summary>
     private readonly Dictionary<string, (string? Branch, bool IsDirty)> _gitInfo = new();
 
+    /// <summary>
+    ///     Raised whenever <see cref="SetStatus"/> changes a session's
+    ///     status. Subscribers (e.g. <see cref="SessionListViewModel"/>)
+    ///     use this to push live updates to the sidebar rows so the status
+    ///     dot colour tracks the agent state in real time (idle → working →
+    ///     done) instead of being frozen at the last <c>RefreshAsync</c>.
+    /// </summary>
+    public event Action<string, SessionStatus>? StatusChanged;
+
+    /// <summary>
+    ///     Raised whenever <see cref="NotifyMessageCount"/> pushes a fresh
+    ///     message count for a session. Subscribers (e.g.
+    ///     <see cref="SessionListViewModel"/>) update the corresponding
+    ///     sidebar row's <c>MessageCount</c> in place so the count tracks
+    ///     new messages without a full <c>RefreshAsync</c> round-trip
+    ///     (Task S2 / Problem 2: “stale message count after send”).
+    /// </summary>
+    public event Action<string, int>? MessageCountChanged;
+
     /// <summary>The active session, or null if none.</summary>
     public Session? Active { get; private set; }
 
@@ -40,10 +60,30 @@ public sealed class SessionManager
     public SessionStatus GetStatus(string sessionId) =>
         _sessionStatuses.TryGetValue(sessionId, out var s) ? s : SessionStatus.Idle;
 
-    /// <summary>Set the status of a session.</summary>
+    /// <summary>
+    ///     Set the status of a session and notify subscribers via
+    ///     <see cref="StatusChanged"/> so the sidebar can update the row's
+    ///     status dot without a full <c>RefreshAsync</c> round-trip.
+    /// </summary>
     public void SetStatus(string sessionId, SessionStatus status)
     {
+        if (_sessionStatuses.TryGetValue(sessionId, out var current) && current == status) return;
         _sessionStatuses[sessionId] = status;
+        StatusChanged?.Invoke(sessionId, status);
+    }
+
+    /// <summary>
+    ///     Push a fresh message count for a session. Subscribers (e.g.
+    ///     <see cref="SessionListViewModel"/>) update the sidebar row's
+    ///     <c>MessageCount</c> in place so the count tracks new messages
+    ///     without a full <c>RefreshAsync</c> round-trip (Task S2 /
+    ///     Problem 2).
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="count">The new message count.</param>
+    public void NotifyMessageCount(string sessionId, int count)
+    {
+        MessageCountChanged?.Invoke(sessionId, count);
     }
 
     /// <summary>Get git info for a session's working directory.</summary>
@@ -117,6 +157,9 @@ public sealed class SessionManager
         var session = createResult.Value;
         _agent.Initialize(session, agentDef);
         _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
+        // Reset rendering for the default session.
+        var chatVm3 = _services.GetService<ChatViewModel>();
+        Dispatcher.UIThread.Post(() => chatVm3?.ResetRendering());
         Active = session;
         RefreshGitInfo(session.Id, session.Directory);
         SetStatus(session.Id, SessionStatus.Idle);
@@ -232,7 +275,24 @@ public sealed class SessionManager
         _agent.Initialize(session, agentDef);
         _store.Reset();
         _store.BindSession(model, provider, agentName ?? agentDef.Name.Value);
+        // Reset the ChatViewModel's rendering state so old messages are
+        // cleared and the new session's messages render fresh. Without this,
+        // ChatViewModel._renderedLineCount stays at its old value and
+        // OnStoreChanged skips the new session's lines (they're appended to
+        // UiStore via Transition but the renderer thinks they were already
+        // shown).
+        var newChatVm = _services.GetService<ChatViewModel>();
+        if (newChatVm is not null)
+        {
+            Dispatcher.UIThread.Post(() => newChatVm.ResetRendering());
+            _logger.LogInformation("NewSession: scheduled ChatViewModel.ResetRendering for new session {Id}", session.Id);
+        }
         Active = session;
+        // Clear the token-usage chart so it reflects only the new session's
+        // usage (UiStore.Reset zeroes Cost, but the chart's bars + sparkline
+        // are session-scoped state and would otherwise leak the previous
+        // session's history into the new one — Task S2 / Problem 3).
+        ClearTokenUsageForActiveSession();
         _logger.LogInformation("New session: {Id} ({Title})", session.Id, session.Title);
         return session;
     }
@@ -265,7 +325,25 @@ public sealed class SessionManager
 
         _agent.Initialize(session, agentDef);
         _store.Reset();
+        // Reset ChatViewModel rendering state so old messages are cleared
+        // and new session's messages are rendered fresh.
+        var chatVm = _services.GetService<ChatViewModel>();
+        Dispatcher.UIThread.Post(() => chatVm?.ResetRendering());
         _store.BindSession(session.Model, session.ProviderId, session.Agent);
+
+        // Reset the ChatViewModel's rendering state so old messages are
+        // cleared and the new session's messages render fresh. Without this,
+        // ChatViewModel._renderedLineCount stays at its old value, the
+        // previous session's chat rows linger in Lines, and OnStoreChanged
+        // silently skips every replayed line below (it thinks they were
+        // already rendered). The user-visible symptom was: switching sessions
+        // had no effect — the chat still showed the old conversation.
+        var openChatVm = _services.GetService<ChatViewModel>();
+        if (openChatVm is not null)
+        {
+            Dispatcher.UIThread.Post(() => openChatVm.ResetRendering());
+            _logger.LogInformation("OpenSession: scheduled ChatViewModel.ResetRendering for new session {Id}", session.Id);
+        }
 
         // Restore saved chat state for this session (if any), otherwise replay from store.
         if (_savedLines.TryGetValue(session.Id, out var savedLines) && savedLines.Length > 0)
@@ -290,6 +368,10 @@ public sealed class SessionManager
         RefreshGitInfo(session.Id, session.Directory);
 
         Active = session;
+        // Clear the token-usage chart so it reflects only the newly-opened
+        // session's usage (the previous session's bars would otherwise
+        // linger — Task S2 / Problem 3).
+        ClearTokenUsageForActiveSession();
         _logger.LogInformation("Opened session {Id}, dir={Dir}", session.Id, session.Directory);
         return true;
     }
@@ -382,6 +464,18 @@ public sealed class SessionManager
             "Rename session {Id} → '{Title}' ignored — ISessionStore has no metadata-update API. Coming in v0.8.",
             sessionId, newTitle);
         return Task.FromResult(false);
+    }
+
+    /// <summary>
+    ///     Resolve the singleton <see cref="TokenUsageViewModel"/> from the
+    ///     DI container and clear its bars + sparkline + baseline. Called
+    ///     on every session switch (open + new) so the chart tracks only
+    ///     the active session's tokens, not the cumulative total across
+    ///     every session the user has ever opened (Task S2 / Problem 3).
+    /// </summary>
+    private void ClearTokenUsageForActiveSession()
+    {
+        _services.GetService<TokenUsageViewModel>()?.Clear();
     }
 
     /// <summary>Convert an <see cref="AgentMessage"/> into a chat-line role + text for the UI store.</summary>
