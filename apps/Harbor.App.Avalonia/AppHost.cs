@@ -366,6 +366,16 @@ internal static class AppHost
         var dispatcherAdapter = host.Services.GetRequiredService<AvaloniaDispatcherAdapter>();
         dispatcherAdapter.Bind(uiStore);
 
+        // CRITICAL: subscribe UiStore to EventBus so agent events
+        // (MessageUpdate, ToolStart, etc.) flow into the TEA store.
+        // Without this, the agent runs but the UI NEVER shows messages!
+        var eventBus = host.Services.GetRequiredService<IEventBus>();
+        eventBus.Subscribe(async (evt, ct) =>
+        {
+            uiStore.Dispatch(evt);
+            await Task.CompletedTask;
+        });
+
         // Initialize the agent with a fresh session so the user can start chatting
         // immediately. The SessionManager owns the active session and re-initializes
         // the agent whenever the user switches/branches. NOTE: when onboarding is
