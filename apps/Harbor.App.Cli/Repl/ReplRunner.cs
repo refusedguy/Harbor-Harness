@@ -42,7 +42,7 @@ internal sealed class ReplRunner
         var configResult = await configStore.LoadAsync().ConfigureAwait(false);
         var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
         _logger.LogInformation("Config loaded: provider={Provider}, model={Model}, agent={Agent}, onboarded={Onboarded}",
-            config.Provider, config.Model, config.Agent, config.Onboarded);
+            config.EffectiveProvider, config.EffectiveModel, config.Agent, config.Onboarded);
 
         if (!config.Onboarded)
         {
@@ -68,19 +68,19 @@ internal sealed class ReplRunner
         {
             _logger.LogDebug("Non-interactive renderer — showing header text");
             await renderer.WriteLineAsync("Harbor — modular AI coding agent").ConfigureAwait(false);
-            await renderer.WriteLineAsync($"Provider: {config.Provider} | Model: {config.Model} | Agent: {config.Agent}").ConfigureAwait(false);
+            await renderer.WriteLineAsync($"Provider: {config.EffectiveProvider} | Model: {config.EffectiveModel} | Agent: {config.Agent}").ConfigureAwait(false);
             await renderer.WriteLineAsync("Type '/help' for commands, '/exit' to quit.").ConfigureAwait(false);
             await renderer.WriteLineAsync(string.Empty).ConfigureAwait(false);
         }
 
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
                            ?? agentRegistry.GetAllAgents()[0];
-        string[] parts = config.Model.Split('/', 2);
+        string[] parts = config.EffectiveModel.Split('/', 2);
         _logger.LogInformation("Creating session: agent={Agent}, provider={Provider}, model={Model}",
-            defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.Model);
+            defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
         var sessionResult = await sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
-            parts.Length > 1 ? parts[1] : config.Model).ConfigureAwait(false);
+            parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
             _logger.LogError("Session creation failed: {Error}", sessionResult.Error);
@@ -123,10 +123,10 @@ internal sealed class ReplRunner
         var config = (await configStore.LoadAsync().ConfigureAwait(false)).Value;
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
                            ?? agentRegistry.GetAllAgents()[0];
-        string[] parts = config.Model.Split('/', 2);
+        string[] parts = config.EffectiveModel.Split('/', 2);
         var sessionResult = await sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
-            parts.Length > 1 ? parts[1] : config.Model).ConfigureAwait(false);
+            parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
             _logger.LogError("Session creation failed: {Error}", sessionResult.Error);

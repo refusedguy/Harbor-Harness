@@ -29,6 +29,60 @@ public sealed class HarborConfig
     /// <summary>API keys per provider (encrypted at rest via OS keychain in future).</summary>
     public Dictionary<string, string> ApiKeys { get; set; } = new();
 
+    // ── CommonConfig fallback fields ──────────────────────────────────────
+    // CommonConfig (used by desktop apps) writes these camelCase fields to the
+    // SAME ~/.harbor/config.json. HarborConfig reads them as fallback so a config
+    // written by the Avalonia wizard (which only sets defaultProvider/defaultModel)
+    // still works in the CLI.
+    //
+    // JsonPropertyName ensures camelCase serialization matches CommonConfig.
+    [JsonPropertyName("defaultProvider")]
+    public string? DefaultProvider { get; set; }
+
+    [JsonPropertyName("defaultModel")]
+    public string? DefaultModel { get; set; }
+
+    [JsonPropertyName("onboardingCompleted")]
+    public bool? OnboardingCompleted { get; set; }
+
+    [JsonPropertyName("storageBackend")]
+    public string? StorageBackend { get; set; }
+
+    [JsonPropertyName("logLevel")]
+    public string? LogLevelConfig { get; set; }
+
+    /// <summary>
+    ///     Effective provider — uses Provider if set, otherwise DefaultProvider,
+    ///     otherwise "kilocode" (built-in default).
+    /// </summary>
+    [JsonIgnore]
+    public string EffectiveProvider => !string.IsNullOrEmpty(Provider) && Provider != "kilocode"
+        ? Provider
+        : (!string.IsNullOrEmpty(DefaultProvider) ? DefaultProvider! : Provider);
+
+    /// <summary>
+    ///     Effective model — uses Model if set, otherwise DefaultModel with
+    ///     provider prefix, otherwise the built-in default.
+    /// </summary>
+    [JsonIgnore]
+    public string EffectiveModel
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(Model) && Model != "anthropic/claude-3.5-sonnet")
+                return Model;
+            if (!string.IsNullOrEmpty(DefaultModel))
+            {
+                var provider = EffectiveProvider;
+                var prefix = provider + "/";
+                return DefaultModel!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    ? DefaultModel!
+                    : prefix + DefaultModel!;
+            }
+            return Model;
+        }
+    }
+
     /// <summary>Custom provider configs (path to JSON or inline).</summary>
     public Dictionary<string, ProviderConfigEntry> Providers { get; set; } = new();
 

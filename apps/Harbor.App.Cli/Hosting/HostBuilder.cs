@@ -456,7 +456,7 @@ internal static class HostBuilder
         string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrEmpty(envModel))
         {
-            config.Model = envModel;
+            config.Model = envModel; config.DefaultModel = envModel;
             string[] parts = envModel.Split('/', 2);
             config.Provider = parts[0];
         }
@@ -466,7 +466,7 @@ internal static class HostBuilder
     {
         var registry = new AgentRegistry();
         var ab = new AgentRegistryBuilder(registry);
-        string[] parts = config.Model.Split('/', 2);
+        string[] parts = config.EffectiveModel.Split('/', 2);
         string providerId = parts[0];
         string modelId = parts.Length > 1 ? parts[1] : config.Model;
         ab.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
