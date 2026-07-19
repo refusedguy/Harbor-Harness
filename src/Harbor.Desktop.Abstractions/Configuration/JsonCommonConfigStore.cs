@@ -134,12 +134,48 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
                 Directory.CreateDirectory(dir);
             }
 
-            string json = JsonSerializer.Serialize(config, JsonOptions);
+            // MERGE with existing JSON to preserve fields from other config systems
+            // (e.g. HarborConfig's "provider", "model", "tui", "onboarded", "providers",
+            // "enabledPlugins", "disabledTools", "maxSteps", "costLimit", "compaction").
+            // Without this, saving CommonConfig wipes those fields and breaks the CLI.
+            string existingJson = "{}";
+            if (File.Exists(path))
+            {
+                existingJson = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
+            }
+
+            // Parse existing JSON, update CommonConfig fields, preserve everything else.
+            using var existingDoc = JsonDocument.Parse(string.IsNullOrEmpty(existingJson) ? "{}" : existingJson);
+            using var memStream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(memStream, new JsonWriterOptions { Indented = true }))
+            {
+                writer.WriteStartObject();
+                
+                // Write CommonConfig fields
+                // JsonProperty.WriteTo writes BOTH name AND value — don't call WritePropertyName first!
+                var commonJson = JsonSerializer.SerializeToUtf8Bytes(config, JsonOptions);
+                using var commonDoc = JsonDocument.Parse(commonJson);
+                foreach (var prop in commonDoc.RootElement.EnumerateObject())
+                {
+                    prop.WriteTo(writer);
+                }
+                
+                // Write existing fields that CommonConfig doesn't have
+                foreach (var prop in existingDoc.RootElement.EnumerateObject())
+                {
+                    if (commonDoc.RootElement.TryGetProperty(prop.Name, out _))
+                        continue;
+                    prop.WriteTo(writer);
+                }
+                
+                writer.WriteEndObject();
+            }
+            
+            string mergedJson = System.Text.Encoding.UTF8.GetString(memStream.ToArray());
             string tempPath = path + ".tmp";
 
-            // Write to temp file first, then atomically move into place. This
-            // ensures a crash mid-write leaves the previous file intact.
-            await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
+            // Write to temp file first, then atomically move into place.
+            await File.WriteAllTextAsync(tempPath, mergedJson, ct).ConfigureAwait(false);
             if (File.Exists(path))
             {
                 File.Delete(path);
