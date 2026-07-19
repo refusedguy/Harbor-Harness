@@ -56,7 +56,7 @@ public class App : Application
     ///         Orca E2E test can opt in without spinning up a second process.
     ///     </para>
     /// </remarks>
-    public static string ShellMode { get; set; } = "orca";
+    public static string ShellMode { get; set; } = "classic";
 
     /// <summary>
     ///     Convenience flag: <c>true</c> when <see cref="ShellMode"/> is
@@ -210,6 +210,25 @@ public class App : Application
             DataContext = windowDataContext,
         };
         desktop.MainWindow = mainWindow;
+
+        // CRITICAL: initialize the session + load existing sessions.
+        // Without this, the agent has no session and PromptAsync fails silently.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var sessionManager = Services.GetRequiredService<SessionManager>();
+                await sessionManager.EnsureDefaultSessionAsync().ConfigureAwait(false);
+
+                // Load existing sessions into the sidebar.
+                var sessionsVm = mainViewModel.Sessions;
+                sessionsVm.RefreshCommand.Execute(null);
+            }
+            catch (Exception ex)
+            {
+                Services.GetService<ILogger<App>>()?.LogError(ex, "Session initialization failed");
+            }
+        });
     }
 
     /// <summary>

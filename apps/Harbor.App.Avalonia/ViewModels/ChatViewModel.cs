@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Avalonia.Threading;
@@ -38,6 +39,7 @@ public sealed partial class ChatViewModel : ObservableObject
 {
     private readonly UiStore _store;
     private readonly TuiEffectHost _effects;
+    private readonly SessionManager? _sessionManager;
     private readonly AvaloniaDispatcherAdapter _dispatcher;
     private readonly ILogger<ChatViewModel> _logger;
     private readonly ToastService _toasts;
@@ -51,12 +53,14 @@ public sealed partial class ChatViewModel : ObservableObject
     public ChatViewModel(
         UiStore store,
         TuiEffectHost effects,
+        SessionManager? sessionManager,
         AvaloniaDispatcherAdapter dispatcher,
         ILogger<ChatViewModel> logger,
         ToastService toasts)
     {
         _store = store;
         _effects = effects;
+        _sessionManager = sessionManager;
         _dispatcher = dispatcher;
         _logger = logger;
         _toasts = toasts;
@@ -147,6 +151,14 @@ public sealed partial class ChatViewModel : ObservableObject
             IsStreaming = state.IsStreaming;
             IsThinking = state.IsAgentRunning && !state.IsStreaming;
             IsAgentRunning = state.IsAgentRunning;
+
+            // Update session status based on agent state.
+            if (_sessionManager?.Active is { } active)
+            {
+                _sessionManager.SetStatus(active.Id,
+                    state.IsAgentRunning ? SessionStatus.Working :
+                    IsAgentRunning ? SessionStatus.Working : SessionStatus.Idle);
+            }
             StatusMessage = state.IsAgentRunning
                 ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
                 : string.Empty;

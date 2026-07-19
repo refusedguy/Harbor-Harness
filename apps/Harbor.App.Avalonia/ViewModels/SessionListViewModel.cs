@@ -64,7 +64,12 @@ public sealed partial class SessionListViewModel : ObservableObject
                 Sessions.Clear();
                 foreach (var s in filtered)
                 {
-                    Sessions.Add(new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount));
+                    var item = new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount, s.Directory);
+                    item.Status = _sessionManager.GetStatus(s.Id);
+                    var (branch, dirty) = _sessionManager.GetGitInfo(s.Id);
+                    item.GitBranch = branch;
+                    item.GitIsDirty = dirty;
+                    Sessions.Add(item);
                 }
                 if (_sessionManager.Active is { } active)
                 {
@@ -85,7 +90,7 @@ public sealed partial class SessionListViewModel : ObservableObject
     {
         try
         {
-            var session = await _sessionManager.NewSessionAsync().ConfigureAwait(false);
+            var session = await _sessionManager.NewSessionAsync(workingDirectory: Environment.CurrentDirectory).ConfigureAwait(false);
             if (session is null)
             {
                 _toasts.Show("Failed to create session — check that a provider + model are configured.", ToastKind.Error);
@@ -200,22 +205,3 @@ public sealed partial class SessionListViewModel : ObservableObject
     }
 }
 
-/// <summary>One sidebar session row.</summary>
-public sealed record SessionItemViewModel(
-    string Id,
-    string Title,
-    string Agent,
-    string Model,
-    string ProviderId,
-    DateTimeOffset UpdatedAt,
-    int MessageCount)
-{
-    /// <summary>Relative time-ago label.</summary>
-    public string RelativeTime => UpdatedAt switch
-    {
-        var t when (DateTimeOffset.UtcNow - t).TotalMinutes < 1 => "just now",
-        var t when (DateTimeOffset.UtcNow - t).TotalHours < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalMinutes}m ago",
-        var t when (DateTimeOffset.UtcNow - t).TotalDays < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalHours}h ago",
-        var t => t.ToString("MMM d")
-    };
-}

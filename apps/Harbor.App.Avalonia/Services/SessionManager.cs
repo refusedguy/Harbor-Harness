@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.State;
+using System.Collections.Immutable;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -23,8 +24,44 @@ public sealed class SessionManager
     private readonly UiStore _store;
     private readonly ILogger<SessionManager> _logger;
 
+    /// <summary>Per-session status tracking.</summary>
+    private readonly Dictionary<string, SessionStatus> _sessionStatuses = new();
+
+    /// <summary>Per-session saved chat state (for switching without losing context).</summary>
+    private readonly Dictionary<string, ImmutableArray<ChatLine>> _savedLines = new();
+
+    /// <summary>Per-session git info.</summary>
+    private readonly Dictionary<string, (string? Branch, bool IsDirty)> _gitInfo = new();
+
     /// <summary>The active session, or null if none.</summary>
     public Session? Active { get; private set; }
+
+    /// <summary>Get the status of a session.</summary>
+    public SessionStatus GetStatus(string sessionId) =>
+        _sessionStatuses.TryGetValue(sessionId, out var s) ? s : SessionStatus.Idle;
+
+    /// <summary>Set the status of a session.</summary>
+    public void SetStatus(string sessionId, SessionStatus status)
+    {
+        _sessionStatuses[sessionId] = status;
+    }
+
+    /// <summary>Get git info for a session's working directory.</summary>
+    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId)
+    {
+        if (_gitInfo.TryGetValue(sessionId, out var info))
+            return info;
+        return (null, false);
+    }
+
+    /// <summary>Refresh git info for a session.</summary>
+    public void RefreshGitInfo(string sessionId, string directory)
+    {
+        var gitService = _services.GetService<GitService>();
+        if (gitService is null) return;
+        var info = gitService.GetGitStatus(directory);
+        _gitInfo[sessionId] = info;
+    }
 
     /// <summary>Construct a <see cref="SessionManager"/>.</summary>
     public SessionManager(
@@ -81,8 +118,10 @@ public sealed class SessionManager
         _agent.Initialize(session, agentDef);
         _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
         Active = session;
-        _logger.LogInformation("Default session created: {Id} ({Title}) provider={Provider} model={Model}",
-            session.Id, session.Title, agentDef.ProviderId, agentDef.Model);
+        RefreshGitInfo(session.Id, session.Directory);
+        SetStatus(session.Id, SessionStatus.Idle);
+        _logger.LogInformation("Default session created: {Id} ({Title}) dir={Dir} provider={Provider} model={Model}",
+            session.Id, session.Title, session.Directory, agentDef.ProviderId, agentDef.Model);
     }
 
     /// <summary>
@@ -165,8 +204,9 @@ public sealed class SessionManager
     /// <param name="agentName">Optional agent name override. Defaults to "code".</param>
     /// <param name="providerId">Optional provider id override.</param>
     /// <param name="modelId">Optional model id override.</param>
+    /// <param name="workingDirectory">Optional working directory for the session.</param>
     /// <returns>The new session, or null on failure.</returns>
-    public async Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null)
+    public async Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
     {
         var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
@@ -207,6 +247,13 @@ public sealed class SessionManager
         }
 
         var session = sessionResult.Value;
+
+        // Save current chat state before switching (so agent output isn't lost).
+        if (Active is not null)
+        {
+            _savedLines[Active.Id] = _store.State.Lines;
+        }
+
         var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
             ?? agents.GetAllAgents().First();
@@ -214,20 +261,31 @@ public sealed class SessionManager
         _agent.Initialize(session, agentDef);
         _store.Reset();
         _store.BindSession(session.Model, session.ProviderId, session.Agent);
-        Active = session;
 
-        // Replay history into the UI store so the user sees the prior conversation.
-        var messages = await _sessionStore.GetMessagesAsync(sessionId).ConfigureAwait(false);
-        if (messages.IsSuccess)
+        // Restore saved chat state for this session (if any), otherwise replay from store.
+        if (_savedLines.TryGetValue(session.Id, out var savedLines) && savedLines.Length > 0)
         {
-            foreach (var msg in messages.Value)
+            _store.Transition(s => s with { Lines = savedLines });
+        }
+        else
+        {
+            // Replay history from the session store.
+            var messages = await _sessionStore.GetMessagesAsync(sessionId).ConfigureAwait(false);
+            if (messages.IsSuccess)
             {
-                var (role, text) = MessageToChatLine(msg);
-                _store.Transition(s => s.AddLine(role, text));
+                foreach (var msg in messages.Value)
+                {
+                    var (role, text) = MessageToChatLine(msg);
+                    _store.Transition(s => s.AddLine(role, text));
+                }
             }
         }
 
-        _logger.LogInformation("Opened session {Id}, replayed {Count} messages", session.Id, messages.IsSuccess ? messages.Value.Count : 0);
+        // Refresh git info for this session's working directory.
+        RefreshGitInfo(session.Id, session.Directory);
+
+        Active = session;
+        _logger.LogInformation("Opened session {Id}, dir={Dir}", session.Id, session.Directory);
         return true;
     }
 
