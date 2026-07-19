@@ -97,11 +97,17 @@ public sealed partial class SessionListViewModel : ObservableObject
                 return;
             }
             await RefreshAsync().ConfigureAwait(false);
-            var newItem = Sessions.FirstOrDefault(x => x.Id == session.Id);
-            if (newItem is not null)
+            // Must run on UI thread — Sessions is ObservableCollection modified by RefreshAsync.
+            // Accessing it from a background thread (after ConfigureAwait(false)) throws
+            // "Collection was modified" because the UI thread may be mid-update.
+            Dispatcher.UIThread.Post(() =>
             {
-                ActiveSession = newItem;
-            }
+                var newItem = Sessions.FirstOrDefault(x => x.Id == session.Id);
+                if (newItem is not null)
+                {
+                    ActiveSession = newItem;
+                }
+            });
             _toasts.Show($"New session: {session.Title}", ToastKind.Success);
         }
         catch (Exception ex)
@@ -124,7 +130,10 @@ public sealed partial class SessionListViewModel : ObservableObject
                 return;
             }
             await RefreshAsync().ConfigureAwait(false);
-            ActiveSession = Sessions.FirstOrDefault(x => x.Id == branch.Id);
+            Dispatcher.UIThread.Post(() =>
+            {
+                ActiveSession = Sessions.FirstOrDefault(x => x.Id == branch.Id);
+            });
             _toasts.Show($"Branched → {branch.Title}", ToastKind.Success);
         }
         catch (Exception ex)

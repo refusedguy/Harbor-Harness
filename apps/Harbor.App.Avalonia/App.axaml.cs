@@ -56,7 +56,7 @@ public class App : Application
     ///         Orca E2E test can opt in without spinning up a second process.
     ///     </para>
     /// </remarks>
-    public static string ShellMode { get; set; } = "orca";
+    public static string ShellMode { get; set; } = "classic";
 
     /// <summary>
     ///     Convenience flag: <c>true</c> when <see cref="ShellMode"/> is
@@ -177,7 +177,7 @@ public class App : Application
                     // RebindFromCommonConfigAsync will create a new session if none exists
                     // (using the fresh CommonConfig from disk with the wizard's selections).
                     await sessionManager.RebindFromCommonConfigAsync();
-
+                    
                     // Refresh the session list so the sidebar shows existing sessions.
                     var mainVm = Services.GetRequiredService<MainViewModel>();
                     mainVm.Sessions.RefreshCommand.Execute(null);
