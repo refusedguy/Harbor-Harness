@@ -186,6 +186,11 @@ internal static class AppHost
             Path.Combine(harborDir, "cache", "providers"),
             bootstrapLoggerFactory.CreateLogger<DynamicModelCatalog>());
 
+        // Register the auth resolver as a singleton so view-models
+        // (ProviderModelPickerViewModel, SettingsViewModel) can resolve
+        // IAuthResolver through DI — same path the agent uses at request time.
+        builder.Services.AddSingleton<IAuthResolver>(authResolver);
+
         // ── Composite: CommonConfig + AvaloniaConfig ──
         builder.Services.AddSingleton<CompositeConfig<AvaloniaConfig>>(sp =>
             new CompositeConfig<AvaloniaConfig>(
@@ -337,10 +342,15 @@ internal static class AppHost
         builder.Services.AddSingleton<SessionListViewModel>();
         builder.Services.AddSingleton<CommandPaletteViewModel>();
         builder.Services.AddTransient<ProviderBrowserViewModel>();
+        builder.Services.AddTransient<ProviderModelPickerViewModel>();
         builder.Services.AddTransient<SettingsViewModel>();
         builder.Services.AddTransient<CodeEditorViewModel>();
         builder.Services.AddTransient<DiffViewModel>();
-        builder.Services.AddTransient<TokenUsageViewModel>();
+        // Singleton: MainViewModel holds the instance and pushes RecordUsage
+        // calls on every UiStore transition. SessionManager resolves the
+        // same instance to call Clear() on session switch so the chart
+        // reflects only the active session's tokens (Task S2 / Problem 3).
+        builder.Services.AddSingleton<TokenUsageViewModel>();
         // Onboarding VM is transient — created fresh each time the wizard runs
         // (first launch, or re-run from Settings). Holds per-run state (current
         // step, typed API key) that we explicitly want to discard on close.
