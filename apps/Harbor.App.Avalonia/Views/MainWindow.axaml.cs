@@ -68,6 +68,7 @@ public partial class MainWindow : Window
                 vm.IsCommandPaletteOpen = false;
                 vm.IsSettingsOpen = false;
                 vm.IsProviderBrowserOpen = false;
+                vm.IsModelPickerOpen = false;
             }
             else if (DataContext is OrcaShellViewModel orcaVm)
             {
@@ -135,6 +136,7 @@ public partial class MainWindow : Window
         {
             if (vm.IsCommandPaletteOpen) { vm.IsCommandPaletteOpen = false; e.Handled = true; }
             else if (vm.IsSettingsOpen) { vm.IsSettingsOpen = false; e.Handled = true; }
+            else if (vm.IsModelPickerOpen) { vm.IsModelPickerOpen = false; e.Handled = true; }
             else if (vm.IsProviderBrowserOpen) { vm.IsProviderBrowserOpen = false; e.Handled = true; }
             else if (vm.IsDiffOpen) { vm.IsDiffOpen = false; e.Handled = true; }
             else if (vm.IsTokenUsageOpen) { vm.IsTokenUsageOpen = false; e.Handled = true; }
@@ -248,4 +250,27 @@ public partial class MainWindow : Window
 
     /// <summary>Close button — triggers the standard Window.Close path.</summary>
     private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+
+    /// <summary>
+    ///     Close the provider/model picker flyout when the user clicks the
+    ///     dark scrim outside the picker card. Same pattern as the Settings
+    ///     modal: the inner Border has a non-null Background so its clicks
+    ///     don't bubble to the backdrop.
+    /// </summary>
+    private void PickerBackdrop_Click(object? sender, PointerPressedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, sender) && Vm is { } vm)
+        {
+            vm.IsModelPickerOpen = false;
+        }
+    }
+
+    /// <summary>Close button on the picker card header.</summary>
+    private void PickerClose_Click(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is { } vm)
+        {
+            vm.IsModelPickerOpen = false;
+        }
+    }
 }

@@ -169,7 +169,7 @@
                                         </StackPanel>
                                     </StackPanel>
                                     <TextBlock Grid.Column="1" Text="●" FontSize="8"
-                                               Foreground="{StaticResource MochaGreen}"
+                                               Foreground="{Binding StatusColor, Converter={x:Static views:BrushKeyConverter.Instance}}"
                                                VerticalAlignment="Center"/>
                                 </Grid>
                             </DataTemplate>
@@ -246,10 +246,16 @@
                            Margin="0,0,8,0" VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="4" Text="·" Foreground="{StaticResource TextMutedBrush}"
                            Margin="0,0,8,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="5" Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,0,0" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"/>
+                <!-- Model label — clickable to open the provider/model picker flyout.
+                     Wrapped in a Subtle Button so the user gets hover feedback
+                     and a click target without extra chrome. -->
+                <Button Grid.Column="5" Classes="Subtle" Padding="4,0" Margin="0"
+                        Command="{Binding OpenModelPickerCommand}"
+                        ToolTip.Tip="Click to pick a different model or provider">
+                    <TextBlock Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
+                               FontFamily="{StaticResource CodeFont}" FontSize="11"
+                               TextTrimming="CharacterEllipsis"/>
+                </Button>
 
                 <Border Grid.Column="6" Classes="StatusBarSeparator"/>
 
@@ -312,6 +318,32 @@
         <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
                                    DataContext="{Binding ProviderBrowser}"
                                    ZIndex="600"/>
+        <!-- Provider + model picker flyout — anchored bottom-left so it
+             appears near the status-bar model label that opened it. Hosts
+             the reusable ProviderModelPicker control. -->
+        <Border IsVisible="{Binding $parent[Window].DataContext.IsModelPickerOpen, FallbackValue=False}"
+                ZIndex="700"
+                Background="#80000000"
+                PointerPressed="PickerBackdrop_Click">
+            <Border Background="{StaticResource MochaBase}"
+                    CornerRadius="8" Padding="4"
+                    Width="560" MaxHeight="560"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="12,12,12,52"
+                    BoxShadow="0 8 24 0 #40000000">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,4,4,4">
+                        <TextBlock Grid.Column="0" Text="Pick a model" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{StaticResource MochaBlue}"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
+                                Click="PickerClose_Click" ToolTip.Tip="Close"/>
+                    </Grid>
+                    <ctrl:ProviderModelPicker Grid.Row="1"
+                                              DataContext="{Binding $parent[Window].DataContext.ProviderModelPicker}"/>
+                </Grid>
+            </Border>
+        </Border>
         <views:DiffView IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
                         DataContext="{Binding Diff}"
                         ZIndex="600"/>

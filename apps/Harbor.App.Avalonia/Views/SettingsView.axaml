@@ -1,5 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              x:Class="Harbor.App.Avalonia.Views.SettingsView">
 
     <!--
@@ -32,7 +34,7 @@
     <Border Background="#80000000" ZIndex="200"
             PointerPressed="Backdrop_Click">
         <Border Background="{StaticResource MochaBase}" CornerRadius="12"
-                Width="640" Height="560" Padding="20"
+                Width="760" Height="640" Padding="20"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 BoxShadow="0 16 40 0 #80000000">
             <Grid RowDefinitions="Auto,*,Auto">
@@ -125,6 +127,82 @@
                             <Button Classes="Subtle" Content="Re-run setup wizard"
                                     Command="{Binding RerunOnboardingCommand}"
                                     ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard."/>
+                        </StackPanel>
+
+                        <Separator Margin="0,4"/>
+
+                        <!-- ════════════ Provider Configuration (per-provider API keys + model browser) ════════════ -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Provider Configuration" Classes="Label"/>
+                            <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                       TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding ProviderConfigs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:ProviderConfigRowViewModel">
+                                        <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
+                                                Padding="10" Margin="0,3">
+                                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                                <!-- Provider name + auth badge -->
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding Id}" FontSize="10"
+                                                               FontFamily="{StaticResource CodeFont}"
+                                                               Foreground="{StaticResource TextMutedBrush}"/>
+                                                </StackPanel>
+                                                <Border Grid.Row="0" Grid.Column="1"
+                                                        Background="{StaticResource MochaSurface0}"
+                                                        CornerRadius="4" Padding="6,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="{Binding AuthIcon}" FontSize="12"
+                                                                   Foreground="{StaticResource MochaGreen}"/>
+                                                        <TextBlock Text="{Binding AuthText}" FontSize="10"
+                                                                   Foreground="{StaticResource TextMutedBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- API key input (hidden for no-key providers like Ollama) -->
+                                                <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                         Margin="0,6,0,0"
+                                                         IsVisible="{Binding RequiresApiKey}"
+                                                         Text="{Binding ApiKey, Mode=TwoWay}"
+                                                         PasswordChar="•"
+                                                         PlaceholderText="Paste API key…"
+                                                         Watermark="Paste API key…"/>
+
+                                                <!-- Action row -->
+                                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                                                    <Button Classes="Subtle" Content="Save key" Padding="10,4"
+                                                            Command="{Binding $parent[UserControl].SaveProviderKeyCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Classes="Subtle" Content="Test connection" Padding="10,4"
+                                                            Command="{Binding $parent[UserControl].TestProviderConnectionCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding !IsTesting}"/>
+                                                    <TextBlock Text="{Binding TestResult}" FontSize="11"
+                                                               Foreground="{StaticResource TextMutedBrush}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <Separator Margin="0,4"/>
+
+                        <!-- Model browser (embeds the picker control) -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Browse Models" Classes="Label"/>
+                            <TextBlock Text="Pick a model to make it the active session's model."
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                       TextWrapping="Wrap"/>
+                            <ctrl:ProviderModelPicker DataContext="{Binding Picker}"
+                                                      Height="380"/>
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
