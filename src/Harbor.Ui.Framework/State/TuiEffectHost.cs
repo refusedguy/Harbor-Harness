@@ -93,7 +93,21 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _store.Transition(s => s with { IsAgentRunning = true, Status = "running" });
         try
         {
-            await _agent.PromptAsync(text, _appCt).ConfigureAwait(false);
+            var result = await _agent.PromptAsync(text, _appCt).ConfigureAwait(false);
+            
+            // CRITICAL: check Result — if failure, set status to "error" and
+            // reset IsAgentRunning so the UI doesn't hang in "thinking" forever.
+            if (result.IsFailure)
+            {
+                _logger?.LogError("Agent failed: {Error}", result.Error);
+                _store.Transition(s => s with { 
+                    IsAgentRunning = false, 
+                    Status = "error",
+                    IsStreaming = false,
+                    Active = ActiveMessage.Empty 
+                });
+                _store.Transition(s => s.AddLine(ChatRole.Error, result.Error));
+            }
         }
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
@@ -108,7 +122,23 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         catch (Exception ex)
         {
             _logger?.LogError(ex, "PromptAsync failed");
-            _store.Transition(s => s with { Status = "error" });
+            _store.Transition(s => s with { 
+                IsAgentRunning = false, 
+                Status = "error",
+                IsStreaming = false,
+                Active = ActiveMessage.Empty 
+            });
+        }
+        finally
+        {
+            // Ensure IsAgentRunning is always reset — even on success path
+            // where the agent loop might not have published AgentEndEvent yet.
+            _store.Transition(s => s with { 
+                IsAgentRunning = false, 
+                IsStreaming = false,
+                Active = ActiveMessage.Empty,
+                Status = s.Status == "error" ? "error" : "idle"
+            });
         }
     }
 
