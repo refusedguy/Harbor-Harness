@@ -1,6 +1,23 @@
 using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
+
+/// <summary>
+///     Status of a session — tracks agent activity state.
+/// </summary>
+public enum SessionStatus {
+    /// <summary>No agent running, session is idle.</summary>
+    Idle,
+    /// <summary>Agent is actively working (LLM streaming or tool executing).</summary>
+    Working,
+    /// <summary>Agent completed its task successfully.</summary>
+    Done,
+    /// <summary>Agent encountered an error.</summary>
+    Error,
+    /// <summary>Agent was aborted by the user.</summary>
+    Aborted
+}
+
 /// <summary>
 ///     Represents a conversation session.
 /// </summary>
@@ -15,6 +32,9 @@ namespace Harbor.Abstractions.Models;
 /// <param name="UpdatedAt">UTC timestamp of the last activity in the session.</param>
 /// <param name="Metadata">Aggregated session stats (cost, tokens, etc.).</param>
 /// <param name="ParentSessionId">Optional parent session id (for branches/forks).</param>
+/// <param name="Status">Current agent activity status.</param>
+/// <param name="GitBranch">Git branch name for the session working directory (null if not a git repo).</param>
+/// <param name="GitIsDirty">Whether the git working tree has uncommitted changes.</param>
 [MemoryPackable]
 public sealed partial record Session(
     string Id,
@@ -27,7 +47,10 @@ public sealed partial record Session(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     SessionMetadata Metadata,
-    string? ParentSessionId = null)
+    string? ParentSessionId = null,
+    SessionStatus Status = SessionStatus.Idle,
+    string? GitBranch = null,
+    bool GitIsDirty = false)
 {
     /// <summary>
     ///     Factory for a new session: generates a fresh id, derives the project id from the
