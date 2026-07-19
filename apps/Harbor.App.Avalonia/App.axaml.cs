@@ -56,7 +56,7 @@ public class App : Application
     ///         Orca E2E test can opt in without spinning up a second process.
     ///     </para>
     /// </remarks>
-    public static string ShellMode { get; set; } = "classic";
+    public static string ShellMode { get; set; } = "orca";
 
     /// <summary>
     ///     Convenience flag: <c>true</c> when <see cref="ShellMode"/> is
@@ -173,7 +173,14 @@ public class App : Application
                 var sessionManager = Services.GetRequiredService<SessionManager>();
                 try
                 {
+                    // After wizard: rebind to the new config AND refresh session list.
+                    // RebindFromCommonConfigAsync will create a new session if none exists
+                    // (using the fresh CommonConfig from disk with the wizard's selections).
                     await sessionManager.RebindFromCommonConfigAsync();
+
+                    // Refresh the session list so the sidebar shows existing sessions.
+                    var mainVm = Services.GetRequiredService<MainViewModel>();
+                    mainVm.Sessions.RefreshCommand.Execute(null);
                 }
                 catch (Exception ex)
                 {
@@ -211,8 +218,10 @@ public class App : Application
         };
         desktop.MainWindow = mainWindow;
 
-        // CRITICAL: initialize the session + load existing sessions.
-        // Without this, the agent has no session and PromptAsync fails silently.
+        // Initialize session + load existing sessions.
+        // For first run (onboarding), session is created AFTER wizard completes
+        // (in ShowOnboardingThenMain) so it uses the wizard's provider/model.
+        // For subsequent runs, session is created here with config from disk.
         _ = Task.Run(async () =>
         {
             try

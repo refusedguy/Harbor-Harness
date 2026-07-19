@@ -212,9 +212,14 @@ public sealed class SessionManager
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
             ?? agents.GetAllAgents().First();
 
-        string provider = providerId ?? agentDef.ProviderId;
-        string model = modelId ?? agentDef.Model;
+        // Use config provider/model as default (not the agent definition defaults).
+        var (configProvider, configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        string provider = providerId ?? configProvider ?? agentDef.ProviderId;
+        string model = modelId ?? configModel ?? agentDef.Model;
         string directory = Environment.CurrentDirectory;
+
+        // Override the agent definition with the resolved provider/model.
+        agentDef = agentDef.WithModel(model, provider);
 
         var result = await _sessionStore.CreateAsync(directory, agentName ?? agentDef.Name.Value, provider, model).ConfigureAwait(false);
         if (result.IsFailure)

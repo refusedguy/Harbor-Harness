@@ -97,7 +97,11 @@ public sealed partial class SessionListViewModel : ObservableObject
                 return;
             }
             await RefreshAsync().ConfigureAwait(false);
-            ActiveSession = Sessions.FirstOrDefault(x => x.Id == session.Id);
+            var newItem = Sessions.FirstOrDefault(x => x.Id == session.Id);
+            if (newItem is not null)
+            {
+                ActiveSession = newItem;
+            }
             _toasts.Show($"New session: {session.Title}", ToastKind.Success);
         }
         catch (Exception ex)

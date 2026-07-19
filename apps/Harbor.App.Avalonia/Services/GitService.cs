@@ -60,7 +60,11 @@ public sealed class GitService
 
         using var process = Process.Start(psi);
         if (process is null) return null;
-        process.WaitForExit(TimeSpan.FromSeconds(3));
+        if (!process.WaitForExit(TimeSpan.FromSeconds(3)))
+        {
+            try { process.Kill(); } catch { /* process already exited */ }
+            return null;
+        }
         if (process.ExitCode != 0) return null;
         return process.StandardOutput.ReadToEnd();
     }
