@@ -98,54 +98,67 @@
             </StackPanel>
         </Border>
 
-        <!-- ════════════ Streaming / thinking indicators ════════════ -->
-        <!-- Agent-running banner — visible whenever the agent loop is active,
-             with a status message ("Agent is running…" or "Streaming response…"). -->
-        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
-                Padding="14,10" Margin="12,4,12,4"
-                BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
-                IsVisible="{Binding IsAgentRunning}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
-                <TextBlock Text="{Binding StatusMessage}"
-                           Foreground="{StaticResource MochaBlue}" FontWeight="SemiBold"
-                           FontFamily="{StaticResource CodeFont}" FontSize="12"
-                           VerticalAlignment="Center"/>
-                <TextBlock Text="●●●" Foreground="{StaticResource MochaBlue}" FontSize="10"
-                           VerticalAlignment="Center" Opacity="0.7"
-                           Classes="BlinkingCursor"/>
-            </StackPanel>
-        </Border>
+        <!-- ════════════ Streaming / thinking indicators ════════════
+             All three indicators live in a StackPanel so they don't overlap.
+             Only one is visible at a time:
+             - IsAgentRunning (not streaming): "Agent is running…" with blinking dots
+             - IsStreaming: streaming text with typewriter cursor (wraps properly)
+             - IsThinking: "thinking…" with emoji
+        -->
+        <StackPanel Grid.Row="1" Spacing="4">
+            <!-- Agent-running banner -->
+            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                    Padding="14,10" Margin="12,4,12,4"
+                    BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
+                    IsVisible="{Binding IsAgentRunning}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource MochaBlue}" FontWeight="SemiBold"
+                               FontFamily="{StaticResource CodeFont}" FontSize="12"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="●●●" Foreground="{StaticResource MochaBlue}" FontSize="10"
+                               VerticalAlignment="Center" Opacity="0.7"
+                               Classes="BlinkingCursor"/>
+                </StackPanel>
+            </Border>
 
-        <!-- Streaming buffer with typewriter cursor (killer feature #1). -->
-        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
-                Padding="14,8" Margin="12,4,12,4"
-                BorderBrush="{StaticResource MochaPeach}" BorderThickness="2,0,0,0"
-                IsVisible="{Binding IsStreaming}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
-                <TextBlock Text="streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           VerticalAlignment="Center"/>
-                <ctrl:TypewriterStreamingText
-                    Text="{Binding StreamingBuffer}"
-                    IsStreaming="{Binding IsStreaming}"
-                    VerticalAlignment="Center"/>
-            </StackPanel>
-        </Border>
+            <!-- Streaming buffer — VERTICAL layout, wraps properly, no overflow -->
+            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                    Padding="14,10" Margin="12,4,12,4"
+                    BorderBrush="{StaticResource MochaPeach}" BorderThickness="2,0,0,0"
+                    IsVisible="{Binding IsStreaming}">
+                <StackPanel Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="8" Height="8" Classes="StreamingDot" VerticalAlignment="Center"/>
+                        <TextBlock Text="streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <!-- Streaming text: wraps, bounded width, no overflow -->
+                    <TextBlock Text="{Binding StreamingBuffer}"
+                               TextWrapping="Wrap"
+                               FontFamily="{StaticResource UiFont}"
+                               FontSize="14"
+                               LineHeight="20"
+                               Foreground="{DynamicResource MochaText}"
+                               MaxWidth="800"/>
+                </StackPanel>
+            </Border>
 
-        <!-- Thinking indicator -->
-        <Border Grid.Row="1" Background="{StaticResource MochaSurface0}" CornerRadius="8"
-                Padding="14,8" Margin="12,4,12,4"
-                BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
-                IsVisible="{Binding IsThinking}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14"/>
-                <TextBlock Text="thinking…" Foreground="{StaticResource MochaBlue}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           VerticalAlignment="Center"/>
-            </StackPanel>
-        </Border>
+            <!-- Thinking indicator -->
+            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+                    Padding="14,8" Margin="12,4,12,4"
+                    BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
+                    IsVisible="{Binding IsThinking}">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14"/>
+                    <TextBlock Text="thinking…" Foreground="{StaticResource MochaBlue}"
+                               FontFamily="{StaticResource CodeFont}" FontSize="11"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <!-- ════════════ Input area (ORCA-style) ════════════
              IsVisible binds to #Root.ShowInputArea so the Orca shell can hide
