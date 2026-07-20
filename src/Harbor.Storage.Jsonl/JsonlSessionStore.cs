@@ -234,7 +234,7 @@ public sealed class JsonlSessionStore : ISessionStore
                     message.ParentId,
                     message.Role,
                     message.CreatedAt,
-                    SerializeMessagePayload(message));
+                    JsonlMessageCodec.SerializeMessagePayload(message));
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonOptions) + "\n");
             }
@@ -361,7 +361,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
                 if (type == "message")
                 {
-                    var msgResult = DeserializeMessage(sessionId, doc.RootElement);
+                    var msgResult = JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
                     if (msgResult.IsSuccess)
                         messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
                     else
@@ -496,166 +496,6 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
-    private static object SerializeMessagePayload(AgentMessage message)
-    {
-        return message switch
-        {
-            UserMessage u => new { content = u.Content, agent = u.Agent, model = u.Model },
-            AssistantMessage a => new
-            {
-                parts = a.Parts.Select(SerializePart).ToArray(),
-                stopReason = a.StopReason.ToString().ToLowerInvariant(),
-                usage = a.Usage,
-                model = a.Model,
-                isSummary = a.IsSummary,
-                summaryFirstKeptId = a.SummaryFirstKeptId
-            },
-            ToolResultMessage tr => new { results = tr.Results },
-            _ => new { }
-        };
-    }
-
-    private static object SerializePart(ContentPart part) => part switch
-    {
-        TextPart t => new { type = "text", text = t.Text },
-        ThinkingPart th => new { type = "thinking", text = th.Text },
-        ToolCallPart tc => new { type = "tool_call", id = tc.Id, toolName = tc.ToolName, args = tc.Args },
-        FilePart f => new { type = "file", path = f.Path, mimeType = f.MimeType, sizeBytes = f.SizeBytes },
-        _ => new { type = "unknown" }
-    };
-
-    private static Result<AgentMessage> DeserializeMessage(string sessionId, JsonElement element)
-    {
-        // §ROP-001 (RESOLVED): returns Result<AgentMessage> instead of `null` so
-        // the caller can surface a diagnostic message rather than silently dropping
-        // the line. Each branch returns Result.Failure with a specific message
-        // (missing field, unknown role, etc.) instead of `null`.
-        // §OOP-003 (RESOLVED): `sessionId` is now a parameter (previously a
-        // placeholder `""`), so the reconstructed AgentMessage is always in a valid
-        // state — no escape hatch where the caller is expected to backfill it.
-        string? id;
-        try
-        {
-            id = element.GetProperty("id").GetString();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"missing 'id': {ex.Message}");
-        }
-        if (string.IsNullOrEmpty(id))
-            return Result.Failure<AgentMessage>("'id' is null or empty");
-
-        DateTimeOffset createdAt;
-        try
-        {
-            createdAt = element.GetProperty("createdAt").GetDateTimeOffset();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"message {id}: missing/invalid 'createdAt': {ex.Message}");
-        }
-
-        string? parentId = element.TryGetProperty("parentId", out var p) ? p.GetString() : null;
-        string? role = element.TryGetProperty("role", out var r) ? r.GetString() : null;
-        if (string.IsNullOrEmpty(role))
-            return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
-
-        if (!element.TryGetProperty("payload", out var payload))
-            return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
-
-        if (role == "user")
-        {
-            string? content = payload.TryGetProperty("content", out var c) ? c.GetString() : null;
-            string? agent = payload.TryGetProperty("agent", out var a) ? a.GetString() : null;
-            string? model = payload.TryGetProperty("model", out var m) ? m.GetString() : null;
-            if (content is null || agent is null || model is null)
-                return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
-
-            return Result.Success<AgentMessage>(new UserMessage(
-                id!, sessionId, createdAt, content!, agent!, model!, parentId));
-        }
-
-        if (role == "assistant")
-        {
-            if (!payload.TryGetProperty("parts", out var partsEl) || partsEl.ValueKind != JsonValueKind.Array)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'parts'");
-
-            var parts = new List<ContentPart>();
-            foreach (var partEl in partsEl.EnumerateArray())
-            {
-                var part = DeserializePart(partEl);
-                if (part is not null) parts.Add(part);
-            }
-
-            if (!payload.TryGetProperty("stopReason", out var srEl) || srEl.ValueKind != JsonValueKind.String)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'stopReason'");
-            StopReason stopReason;
-            try
-            {
-                stopReason = Enum.Parse<StopReason>(srEl.GetString()!, true);
-            }
-            catch (Exception ex)
-            {
-                return Result.Failure<AgentMessage>($"assistant message {id}: invalid stopReason: {ex.Message}");
-            }
-
-            var usage = payload.TryGetProperty("usage", out var u)
-                ? u.Deserialize<Usage>(JsonOptions) ?? new Usage(0, 0)
-                : new Usage(0, 0);
-            string? model = payload.TryGetProperty("model", out var m) ? m.GetString() : null;
-            if (model is null)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'model'");
-
-            bool isSummary = payload.TryGetProperty("isSummary", out var s) && s.GetBoolean();
-            string? summaryFirstKeptId = payload.TryGetProperty("summaryFirstKeptId", out var sf) ? sf.GetString() : null;
-
-            return Result.Success<AgentMessage>(new AssistantMessage(
-                id!, sessionId, createdAt, parts, stopReason, usage, model!, parentId, isSummary, summaryFirstKeptId));
-        }
-
-        if (role == "tool_result")
-        {
-            if (!payload.TryGetProperty("results", out var resultsEl) || resultsEl.ValueKind != JsonValueKind.Array)
-                return Result.Failure<AgentMessage>($"tool_result message {id}: missing 'results'");
-
-            var results = new List<ToolResultEntry>();
-            foreach (var rEl in resultsEl.EnumerateArray())
-            {
-                string? tcId = rEl.TryGetProperty("toolCallId", out var tci) ? tci.GetString() : null;
-                string? tn = rEl.TryGetProperty("toolName", out var tnEl) ? tnEl.GetString() : null;
-                string? output = rEl.TryGetProperty("output", out var o) ? o.GetString() : null;
-                bool isError = rEl.TryGetProperty("isError", out var ie) && ie.GetBoolean();
-                if (tcId is null || tn is null || output is null)
-                    return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
-
-                results.Add(new ToolResultEntry(tcId!, tn!, output!, isError));
-            }
-
-            return Result.Success<AgentMessage>(new ToolResultMessage(
-                id!, sessionId, createdAt, results, parentId));
-        }
-
-        return Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'");
-    }
-
-    private static ContentPart? DeserializePart(JsonElement element)
-    {
-        string? type = element.GetProperty("type").GetString();
-        return type switch
-        {
-            "text" => new TextPart(element.GetProperty("text").GetString()!),
-            "thinking" => new ThinkingPart(element.GetProperty("text").GetString()!),
-            "tool_call" => new ToolCallPart(
-                element.GetProperty("id").GetString()!,
-                element.GetProperty("toolName").GetString()!,
-                element.GetProperty("args").Deserialize<JsonElement>()),
-            "file" => new FilePart(
-                element.GetProperty("path").GetString()!,
-                element.GetProperty("mimeType").GetString()!,
-                element.GetProperty("sizeBytes").GetInt64()),
-            _ => null
-        };
-    }
 }
 
 /// <summary>
