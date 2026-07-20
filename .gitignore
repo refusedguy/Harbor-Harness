@@ -113,3 +113,4 @@ api/
 .avalonia-build-tasks/
 *.wpftmp.csproj
 build/_build/Configuration/
+BenchmarkDotNet.Artifacts/
