@@ -1,6 +1,6 @@
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Ui.Framework.Services;
 
 namespace Harbor.App.Avalonia.ViewModels.Shell;
 
@@ -28,14 +28,16 @@ namespace Harbor.App.Avalonia.ViewModels.Shell;
 public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
 {
     private readonly MainViewModel _main;
+    private readonly IDispatcherAdapter _dispatcher;
     private bool _disposed;
 
     /// <summary>Construct the Orca shell VM wrapping <paramref name="main"/>.</summary>
-    public OrcaShellViewModel(MainViewModel main)
+    public OrcaShellViewModel(MainViewModel main, IDispatcherAdapter dispatcher)
     {
         _main = main;
+        _dispatcher = dispatcher;
         ShellState = new AvaloniaShellState();
-        Sessions = new LeftRailViewModel(main.Sessions);
+        Sessions = new LeftRailViewModel(main.Sessions, _dispatcher);
         Chat = main.Chat;
         CodeEditor = main.CodeEditor;
 
@@ -121,7 +123,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
         if (string.Equals(e.PropertyName, nameof(MainViewModel.ModelLabel), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(MainViewModel.ActiveView), StringComparison.Ordinal))
         {
-            Dispatcher.UIThread.Post(UpdateActiveHeader);
+            _dispatcher.Post(UpdateActiveHeader);
         }
     }
 
@@ -129,7 +131,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
     {
         if (string.Equals(e.PropertyName, nameof(LeftRailViewModel.ActiveSession), StringComparison.Ordinal))
         {
-            Dispatcher.UIThread.Post(UpdateActiveHeader);
+            _dispatcher.Post(UpdateActiveHeader);
         }
     }
 
@@ -140,7 +142,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
             // Forward the Chat/Code toggle to the underlying MainViewModel so
             // the ChatView/CodeEditorView IsVisible bindings (which point at
             // IsChatMode/IsCodeMode on this VM) flip in sync.
-            Dispatcher.UIThread.Post(() =>
+            _dispatcher.Post(() =>
             {
                 var mode = ShellState.ActiveMode;
                 bool isCode = string.Equals(mode, "Code", StringComparison.OrdinalIgnoreCase);

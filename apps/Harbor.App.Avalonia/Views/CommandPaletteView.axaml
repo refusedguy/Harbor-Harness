@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
              x:Class="Harbor.App.Avalonia.Views.CommandPaletteView"
              Background="#60000000"
              PointerPressed="Backdrop_Click">
@@ -43,7 +44,7 @@
                      MaxHeight="380"
                      KeyDown="ResultsList_KeyDown">
                 <ListBox.ItemTemplate>
-                    <DataTemplate DataType="vm:CommandResultViewModel">
+                    <DataTemplate DataType="vma:CommandResultViewModel">
                         <Grid ColumnDefinitions="24,*,Auto" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding Icon}"
                                        HorizontalAlignment="Center" FontFamily="{StaticResource CodeFont}"/>

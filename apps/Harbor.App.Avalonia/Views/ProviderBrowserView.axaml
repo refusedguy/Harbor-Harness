@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
              x:Class="Harbor.App.Avalonia.Views.ProviderBrowserView">
 
     <Border Background="#80000000" ZIndex="200"
@@ -29,7 +30,7 @@
                                      SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
                                      SelectionChanged="Provider_SelectionChanged">
                                 <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="vm:ProviderRowViewModel">
+                                    <DataTemplate DataType="vma:ProviderRowViewModel">
                                         <StackPanel Margin="2,4" Spacing="2">
                                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
                                                        TextTrimming="CharacterEllipsis"/>
@@ -71,7 +72,7 @@
                             <ScrollViewer Grid.Row="2">
                                 <ItemsControl ItemsSource="{Binding Models}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="vm:ModelRowViewModel">
+                                        <DataTemplate DataType="vma:ModelRowViewModel">
                                             <Border Background="{StaticResource MochaMantle}" CornerRadius="6" Padding="10" Margin="0,2">
                                                 <StackPanel Spacing="2">
                                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>

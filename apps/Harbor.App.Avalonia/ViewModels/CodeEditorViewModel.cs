@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels;
@@ -17,13 +17,19 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private readonly AvaloniaFilePicker _picker;
     private readonly ILogger<CodeEditorViewModel> _logger;
     private readonly ToastService _toasts;
+    private readonly IDispatcherAdapter _dispatcher;
 
     /// <summary>Construct the code editor view-model.</summary>
-    public CodeEditorViewModel(AvaloniaFilePicker picker, ILogger<CodeEditorViewModel> logger, ToastService toasts)
+    public CodeEditorViewModel(
+        AvaloniaFilePicker picker,
+        ILogger<CodeEditorViewModel> logger,
+        ToastService toasts,
+        IDispatcherAdapter dispatcher)
     {
         _picker = picker;
         _logger = logger;
         _toasts = toasts;
+        _dispatcher = dispatcher;
     }
 
     /// <summary>Open editor tabs.</summary>
@@ -58,7 +64,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
             var content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
             var name = Path.GetFileName(path);
             var ext = Path.GetExtension(path).TrimStart('.');
-            Dispatcher.UIThread.Post(() =>
+            _dispatcher.Post(() =>
             {
                 var tab = new EditorTabViewModel(path, name, ext, content);
                 Tabs.Add(tab);

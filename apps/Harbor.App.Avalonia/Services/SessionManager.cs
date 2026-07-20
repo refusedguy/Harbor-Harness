@@ -1,203 +1,209 @@
-using Avalonia.Threading;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.App.Avalonia.ViewModels;
-using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-using System.Collections.Immutable;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.Services;
 
 /// <summary>
-///     Owns the active session and binds it to the <see cref="IAgent"/>. The
-///     <see cref="SessionListViewModel"/> drives this — New / Open / Branch / Delete
-///     operations flow through here so the agent + UiStore stay in sync.
+///     Facade that owns the active session and delegates creation, switching,
+///     git-tracking, and status-tracking to dedicated services. The sidebar
+///     (<see cref="SessionListViewModel"/>) drives this — New / Open / Branch /
+///     Delete operations flow through here so the agent + UiStore stay in sync.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>Per-session UiStore (concurrent agents):</b> each open session
+///         has its own <see cref="SessionContext"/> / <see cref="UiStore"/>
+///         held in <see cref="_contexts"/>. When the user switches sessions,
+///         the agent in the previous session is <b>not</b> aborted — its
+///         events keep flowing into the OLD session's UiStore (routed by
+///         <c>AppHost</c>'s EventBus subscriber using
+///         <see cref="AgentStartEvent.SessionId"/>). The UI rebinds to the
+///         NEW session's UiStore via <see cref="ChatViewModel.RebindToStore"/>.
+///         This is the user-visible fix for
+///         <c>"я хочу чтобы агенты не останавливались а я мог их в разных
+///         сессиях останавливать работающими"</c>.
+///     </para>
+///     <para>
+///         <b>Decomposition:</b>
+///         <list type="bullet">
+///             <item><see cref="SessionFactory"/> — creates sessions.</item>
+///             <item><see cref="SessionSwitcher"/> — bind agent + replay history into the per-session UiStore.</item>
+///             <item><see cref="SessionGitTracker"/> — per-session git status cache.</item>
+///             <item><see cref="SessionStatusTracker"/> — per-session status + event sink.</item>
+///         </list>
+///         Each subordinate service is DI-registered so it can be mocked in
+///         tests; this facade is just orchestration.
+///     </para>
+/// </remarks>
 public sealed class SessionManager
 {
     private readonly IServiceProvider _services;
     private readonly IAgent _agent;
     private readonly ISessionStore _sessionStore;
     private readonly UiStore _store;
+    private readonly SessionFactory _factory;
+    private readonly SessionSwitcher _switcher;
+    private readonly SessionGitTracker _gitTracker;
+    private readonly IChatViewBinder _chatViewBinder;
+    private readonly SessionStatusTracker _statusTracker;
     private readonly ILogger<SessionManager> _logger;
 
-    /// <summary>Per-session status tracking.</summary>
-    private readonly Dictionary<string, SessionStatus> _sessionStatuses = new();
-
-    /// <summary>Per-session saved chat state (for switching without losing context).</summary>
-    private readonly Dictionary<string, ImmutableArray<ChatLine>> _savedLines = new();
-
-    /// <summary>Per-session git info.</summary>
-    private readonly Dictionary<string, (string? Branch, bool IsDirty)> _gitInfo = new();
+    /// <summary>
+    ///     Per-session contexts — one <see cref="SessionContext"/> per open
+    ///     session, each with its own <see cref="UiStore"/>. Keyed by session
+    ///     id. Used by <c>AppHost</c>'s EventBus subscriber to route agent
+    ///     events to the correct store so a background agent in session A
+    ///     doesn't leak messages into session B's chat transcript.
+    /// </summary>
+    private readonly Dictionary<string, SessionContext> _contexts = new();
 
     /// <summary>
-    ///     Raised whenever <see cref="SetStatus"/> changes a session's
-    ///     status. Subscribers (e.g. <see cref="SessionListViewModel"/>)
-    ///     use this to push live updates to the sidebar rows so the status
-    ///     dot colour tracks the agent state in real time (idle → working →
-    ///     done) instead of being frozen at the last <c>RefreshAsync</c>.
+    ///     Raised whenever a session's status changes. Forwards from
+    ///     <see cref="SessionStatusTracker.StatusChanged"/> so subscribers
+    ///     don't need to know about the tracker decomposition.
     /// </summary>
-    public event Action<string, SessionStatus>? StatusChanged;
+    public event Action<string, SessionStatus>? StatusChanged
+    {
+        add => _statusTracker.StatusChanged += value;
+        remove => _statusTracker.StatusChanged -= value;
+    }
 
     /// <summary>
-    ///     Raised whenever <see cref="NotifyMessageCount"/> pushes a fresh
-    ///     message count for a session. Subscribers (e.g.
-    ///     <see cref="SessionListViewModel"/>) update the corresponding
-    ///     sidebar row's <c>MessageCount</c> in place so the count tracks
-    ///     new messages without a full <c>RefreshAsync</c> round-trip
-    ///     (Task S2 / Problem 2: “stale message count after send”).
+    ///     Raised whenever a session's message count is pushed. Forwards from
+    ///     <see cref="SessionStatusTracker.MessageCountChanged"/>.
     /// </summary>
-    public event Action<string, int>? MessageCountChanged;
+    public event Action<string, int>? MessageCountChanged
+    {
+        add => _statusTracker.MessageCountChanged += value;
+        remove => _statusTracker.MessageCountChanged -= value;
+    }
 
     /// <summary>The active session, or null if none.</summary>
-    public Session? Active { get; private set; }
+    public Session? Active => ActiveContext?.Session;
+
+    /// <summary>
+    ///     The active <see cref="SessionContext"/> (holds the active session
+    ///     + its UiStore + status + git info), or null if none. The ChatViewModel
+    ///     is bound to <see cref="SessionContext.Store"/> of this context.
+    /// </summary>
+    public SessionContext? ActiveContext { get; private set; }
+
+    /// <summary>
+    ///     Look up a <see cref="SessionContext"/> by session id. Returns null
+    ///     if no context has been created for this session (e.g. the session
+    ///     exists in the store but has never been opened in this app run).
+    ///     Used by <c>AppHost</c>'s EventBus subscriber to route agent events
+    ///     to the correct per-session UiStore.
+    /// </summary>
+    /// <param name="sessionId">The session id to look up.</param>
+    /// <returns>The <see cref="SessionContext"/>, or null.</returns>
+    public SessionContext? GetContext(string sessionId) =>
+        _contexts.TryGetValue(sessionId, out var ctx) ? ctx : null;
 
     /// <summary>Get the status of a session.</summary>
-    public SessionStatus GetStatus(string sessionId) =>
-        _sessionStatuses.TryGetValue(sessionId, out var s) ? s : SessionStatus.Idle;
+    public SessionStatus GetStatus(string sessionId) => _statusTracker.Get(sessionId);
 
-    /// <summary>
-    ///     Set the status of a session and notify subscribers via
-    ///     <see cref="StatusChanged"/> so the sidebar can update the row's
-    ///     status dot without a full <c>RefreshAsync</c> round-trip.
-    /// </summary>
-    public void SetStatus(string sessionId, SessionStatus status)
-    {
-        if (_sessionStatuses.TryGetValue(sessionId, out var current) && current == status) return;
-        _sessionStatuses[sessionId] = status;
-        StatusChanged?.Invoke(sessionId, status);
-    }
+    /// <summary>Set the status of a session (forwards to <see cref="SessionStatusTracker"/>).</summary>
+    public void SetStatus(string sessionId, SessionStatus status) =>
+        _statusTracker.Set(sessionId, status);
 
-    /// <summary>
-    ///     Push a fresh message count for a session. Subscribers (e.g.
-    ///     <see cref="SessionListViewModel"/>) update the sidebar row's
-    ///     <c>MessageCount</c> in place so the count tracks new messages
-    ///     without a full <c>RefreshAsync</c> round-trip (Task S2 /
-    ///     Problem 2).
-    /// </summary>
+    /// <summary>Push a fresh message count for a session (forwards to <see cref="SessionStatusTracker"/>).</summary>
     /// <param name="sessionId">The session id.</param>
     /// <param name="count">The new message count.</param>
-    public void NotifyMessageCount(string sessionId, int count)
-    {
-        MessageCountChanged?.Invoke(sessionId, count);
-    }
+    public void NotifyMessageCount(string sessionId, int count) =>
+        _statusTracker.NotifyMessageCount(sessionId, count);
 
-    /// <summary>Get git info for a session's working directory.</summary>
-    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId)
-    {
-        if (_gitInfo.TryGetValue(sessionId, out var info))
-            return info;
-        return (null, false);
-    }
+    /// <summary>Get git info for a session's working directory (forwards to <see cref="SessionGitTracker"/>).</summary>
+    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId) =>
+        _gitTracker.Get(sessionId);
 
-    /// <summary>Refresh git info for a session.</summary>
-    public void RefreshGitInfo(string sessionId, string directory)
-    {
-        var gitService = _services.GetService<GitService>();
-        if (gitService is null) return;
-        var info = gitService.GetGitStatus(directory);
-        _gitInfo[sessionId] = info;
-    }
+    /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker"/>).</summary>
+    public void RefreshGitInfo(string sessionId, string directory) =>
+        _gitTracker.Refresh(sessionId, directory, _services.GetService<GitService>());
 
-    /// <summary>Construct a <see cref="SessionManager"/>.</summary>
+    /// <summary>Construct a <see cref="SessionManager"/> facade.</summary>
     public SessionManager(
         IServiceProvider services,
         IAgent agent,
         ISessionStore sessionStore,
         UiStore store,
+        SessionFactory factory,
+        SessionSwitcher switcher,
+        SessionGitTracker gitTracker,
+        SessionStatusTracker statusTracker,
+        IChatViewBinder chatViewBinder,
         ILogger<SessionManager> logger)
     {
         _services = services;
         _agent = agent;
         _sessionStore = sessionStore;
         _store = store;
+        _factory = factory;
+        _switcher = switcher;
+        _gitTracker = gitTracker;
+        _statusTracker = statusTracker;
+        _chatViewBinder = chatViewBinder;
         _logger = logger;
     }
 
     /// <summary>
     ///     Create a default session if none exists yet and bind it to the agent.
     ///     Called once at app startup. Reads the fresh <see cref="CommonConfig"/>
-    ///     from disk so the wizard's saved provider/model take effect even though
-    ///     the DI singleton <see cref="CommonConfig"/> was loaded before the wizard
-    ///     ran.
+    ///     from disk so the wizard's saved provider/model take effect.
     /// </summary>
     public async Task EnsureDefaultSessionAsync()
     {
-        if (Active is not null) return;
+        if (ActiveContext is not null) return;
 
-        // Pick the first registered agent + provider/model from the registries
-        // (these were eagerly constructed in AppHost.BuildAsync).
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault()
-            ?? throw new InvalidOperationException("No agents registered.");
+        var session = await _factory.CreateDefaultAsync().ConfigureAwait(false);
+        if (session is null) return;
 
-        // Override the agent definition with the fresh CommonConfig values.
-        // The agent registry was built from the startup CommonConfig snapshot
-        // (which is stale if the wizard just ran). Reloading here picks up the
-        // user's wizard selections (DefaultProvider / DefaultModel).
-        var (providerId, modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))
-        {
-            agentDef = agentDef.WithModel(modelId, providerId);
-        }
-
-        string directory = Environment.CurrentDirectory;
-        var createResult = await _sessionStore.CreateAsync(
-            directory, agentDef.Name.Value, agentDef.ProviderId, agentDef.Model).ConfigureAwait(false);
-        if (createResult.IsFailure)
-        {
-            _logger.LogError("Failed to create default session: {Error}", createResult.Error);
-            return;
-        }
-
-        var session = createResult.Value;
-        _agent.Initialize(session, agentDef);
-        _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
-        // Reset rendering for the default session.
-        var chatVm3 = _services.GetService<ChatViewModel>();
-        Dispatcher.UIThread.Post(() => chatVm3?.ResetRendering());
-        Active = session;
+        var ctx = GetOrCreateContext(session);
+        // Hydrate the per-session UiStore: bind agent + bind store +
+        // replay any persisted history. For a fresh default session this
+        // is a no-op replay (0 messages) but still sets model/provider/agent.
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return;
+        ctx.StoreWasHydrated = true;
+        ActiveContext = ctx;
         RefreshGitInfo(session.Id, session.Directory);
         SetStatus(session.Id, SessionStatus.Idle);
-        _logger.LogInformation("Default session created: {Id} ({Title}) dir={Dir} provider={Provider} model={Model}",
-            session.Id, session.Title, session.Directory, agentDef.ProviderId, agentDef.Model);
+
+        // Bind ChatViewModel to this session's UiStore. On the very first
+        // session this rebinds from the DI-singleton UiStore (which the
+        // dispatcher was bound to in AppHost.BuildAsync) to the per-session
+        // UiStore. For subsequent sessions it rebinds to the new per-session store.
+        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
     }
 
     /// <summary>
-    ///     Rebind the active session to the freshly-loaded <see cref="CommonConfig"/>
-    ///     values. Called by <c>App.axaml.cs</c> after the onboarding wizard saves
-    ///     a new config — the wizard runs AFTER <see cref="AppHost.BuildAsync"/>,
-    ///     so the agent registry + active session were initialized with the
-    ///     pre-wizard defaults. This method picks up the user's wizard selections
-    ///     (DefaultProvider / DefaultModel) without requiring an app restart.
+    ///     Rebind the active session to the freshly-loaded
+    ///     <see cref="CommonConfig"/> values. Called by <c>App.axaml.cs</c>
+    ///     after the onboarding wizard saves a new config.
     /// </summary>
-    /// <remarks>
-    ///     If no active session exists, delegates to <see cref="EnsureDefaultSessionAsync"/>.
-    ///     Otherwise, derives a new <see cref="AgentDefinition"/> from the "code"
-    ///     agent with the fresh provider/model, re-initializes the agent, and
-    ///     updates the in-memory session record + UiStore binding so the status
-    ///     bar reflects the change. The session store is NOT updated (it has no
-    ///     metadata-update API) — the stale persisted record is harmless and will
-    ///     be replaced the next time the user creates a session.
-    /// </remarks>
     public async Task RebindFromCommonConfigAsync()
     {
-        if (Active is null)
+        if (ActiveContext is null)
         {
             await EnsureDefaultSessionAsync().ConfigureAwait(false);
             return;
         }
+
+        // Abort any in-flight run before swapping the agent definition — a
+        // wizard-driven rebind mid-stream would otherwise leak the old
+        // provider's tokens into the new binding.
+        await AbortRunningAgentAsync().ConfigureAwait(false);
 
         var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
             ?? agents.GetAllAgents().FirstOrDefault()
             ?? throw new InvalidOperationException("No agents registered.");
 
-        var (providerId, modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        var (providerId, modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
         {
             _logger.LogInformation("RebindFromCommonConfig: no provider/model in config, keeping current agent");
@@ -205,44 +211,19 @@ public sealed class SessionManager
         }
 
         agentDef = agentDef.WithModel(modelId, providerId);
-        _agent.Initialize(Active, agentDef);
-        _store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
-        // Update the in-memory session record so the status bar shows the new
-        // provider/model. The persisted session record is NOT updated (ISessionStore
-        // has no metadata-update API) — the stale persisted copy is harmless.
-        Active = Active with { ProviderId = providerId, Model = modelId };
+        var session = ActiveContext.Session with { ProviderId = providerId, Model = modelId };
+        ActiveContext.Session = session;
+        _agent.Initialize(session, agentDef);
+        ActiveContext.Store.BindSession(agentDef.Model, agentDef.ProviderId, agentDef.Name.Value);
         _logger.LogInformation("Rebound session {Id} to provider={Provider} model={Model}",
-            Active.Id, providerId, modelId);
-    }
-
-    /// <summary>
-    ///     Load the fresh <see cref="CommonConfig"/> from disk and split the
-    ///     DefaultProvider/DefaultModel into a (providerId, modelId) pair.
-    ///     Returns (null, null) if the config can't be loaded.
-    /// </summary>
-    private async Task<(string? ProviderId, string? ModelId)> ResolveProviderModelFromConfigAsync()
-    {
-        var configStore = _services.GetService<ICommonConfigStore>();
-        if (configStore is null) return (null, null);
-
-        var result = await configStore.LoadAsync().ConfigureAwait(false);
-        if (!result.IsSuccess) return (null, null);
-
-        var cfg = result.Value;
-        string provider = cfg.DefaultProvider;
-        string model = cfg.DefaultModel;
-        // The model may already start with the provider prefix (e.g. the user
-        // typed "kilocode/tencent/hy3:free"). Strip it so we get the bare model id.
-        string prefix = provider + "/";
-        if (model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            model = model[prefix.Length..];
-        }
-        return (provider, model);
+            session.Id, providerId, modelId);
     }
 
     /// <summary>
     ///     Create a new session with the given agent/model and switch to it.
+    ///     The previously-active session's agent is <b>not</b> aborted —
+    ///     it continues running in the background and its events keep
+    ///     flowing into its own UiStore.
     /// </summary>
     /// <param name="agentName">Optional agent name override. Defaults to "code".</param>
     /// <param name="providerId">Optional provider id override.</param>
@@ -251,59 +232,44 @@ public sealed class SessionManager
     /// <returns>The new session, or null on failure.</returns>
     public async Task<Session?> NewSessionAsync(string? agentName = null, string? providerId = null, string? modelId = null, string? workingDirectory = null)
     {
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
-            ?? agents.GetAllAgents().First();
+        // NOTE: previously we called AbortRunningAgentAsync() here so the
+        // previous session's PromptAsync wouldn't leak events into the new
+        // session's chat. That fix is no longer needed because we now have
+        // per-session UiStores — the old session's events route to its OWN
+        // store via the EventBus subscriber's SessionId lookup. Aborting
+        // the agent would defeat the entire purpose of this task:
+        // "агенты не останавливались а я мог их в разных сессиях
+        // останавливать работающими".
 
-        // Use config provider/model as default (not the agent definition defaults).
-        var (configProvider, configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
-        string provider = providerId ?? configProvider ?? agentDef.ProviderId;
-        string model = modelId ?? configModel ?? agentDef.Model;
-        string directory = Environment.CurrentDirectory;
+        var session = await _factory.CreateNewAsync(agentName, providerId, modelId, workingDirectory).ConfigureAwait(false);
+        if (session is null) return null;
 
-        // Override the agent definition with the resolved provider/model.
-        agentDef = agentDef.WithModel(model, provider);
-
-        var result = await _sessionStore.CreateAsync(directory, agentName ?? agentDef.Name.Value, provider, model).ConfigureAwait(false);
-        if (result.IsFailure)
-        {
-            _logger.LogError("Create session failed: {Error}", result.Error);
-            return null;
-        }
-
-        var session = result.Value;
-        _agent.Initialize(session, agentDef);
-        _store.Reset();
-        _store.BindSession(model, provider, agentName ?? agentDef.Name.Value);
-        // Reset the ChatViewModel's rendering state so old messages are
-        // cleared and the new session's messages render fresh. Without this,
-        // ChatViewModel._renderedLineCount stays at its old value and
-        // OnStoreChanged skips the new session's lines (they're appended to
-        // UiStore via Transition but the renderer thinks they were already
-        // shown).
-        var newChatVm = _services.GetService<ChatViewModel>();
-        if (newChatVm is not null)
-        {
-            Dispatcher.UIThread.Post(() => newChatVm.ResetRendering());
-            _logger.LogInformation("NewSession: scheduled ChatViewModel.ResetRendering for new session {Id}", session.Id);
-        }
-        Active = session;
-        // Clear the token-usage chart so it reflects only the new session's
-        // usage (UiStore.Reset zeroes Cost, but the chart's bars + sparkline
-        // are session-scoped state and would otherwise leak the previous
-        // session's history into the new one — Task S2 / Problem 3).
+        var ctx = GetOrCreateContext(session);
+        // Bind agent + per-session store + replay history (none for a
+        // brand-new session).
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return null;
+        ctx.StoreWasHydrated = true;
+        // Save the previous session's rendered-line-count so switching back
+        // resumes rendering at the right offset (no duplicate lines).
+        SaveActiveRenderedLineCount();
+        ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        _logger.LogInformation("New session: {Id} ({Title})", session.Id, session.Title);
+        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
         return session;
     }
 
     /// <summary>
-    ///     Open (switch to) an existing session.
+    ///     Open (switch to) an existing session. The currently-active
+    ///     session's agent is <b>not</b> aborted — it keeps running in the
+    ///     background and its events keep flowing into its own UiStore.
+    ///     The ChatViewModel rebinds to the target session's UiStore.
     /// </summary>
     /// <param name="sessionId">The session id to switch to.</param>
     /// <returns>True on success, false on failure.</returns>
     public async Task<bool> OpenSessionAsync(string sessionId)
     {
+        // NOTE: no AbortRunningAgentAsync — see NewSessionAsync comment.
+
         var sessionResult = await _sessionStore.GetAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
         {
@@ -312,109 +278,46 @@ public sealed class SessionManager
         }
 
         var session = sessionResult.Value;
+        var ctx = GetOrCreateContext(session);
 
-        // Save current chat state before switching (so agent output isn't lost).
-        if (Active is not null)
+        // If this is a freshly-created context (first time the user opens
+        // this session in this app run), replay the persisted history into
+        // the per-session UiStore via the switcher. Otherwise the store
+        // already has the in-memory state from the previous visit.
+        if (!ctx.StoreWasHydrated)
         {
-            _savedLines[Active.Id] = _store.State.Lines;
-        }
-
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
-        var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
-            ?? agents.GetAllAgents().First();
-
-        _agent.Initialize(session, agentDef);
-        _store.Reset();
-        // Reset ChatViewModel rendering state so old messages are cleared
-        // and new session's messages are rendered fresh.
-        var chatVm = _services.GetService<ChatViewModel>();
-        Dispatcher.UIThread.Post(() => chatVm?.ResetRendering());
-        _store.BindSession(session.Model, session.ProviderId, session.Agent);
-
-        // Reset the ChatViewModel's rendering state so old messages are
-        // cleared and the new session's messages render fresh. Without this,
-        // ChatViewModel._renderedLineCount stays at its old value, the
-        // previous session's chat rows linger in Lines, and OnStoreChanged
-        // silently skips every replayed line below (it thinks they were
-        // already rendered). The user-visible symptom was: switching sessions
-        // had no effect — the chat still showed the old conversation.
-        var openChatVm = _services.GetService<ChatViewModel>();
-        if (openChatVm is not null)
-        {
-            Dispatcher.UIThread.Post(() => openChatVm.ResetRendering());
-            _logger.LogInformation("OpenSession: scheduled ChatViewModel.ResetRendering for new session {Id}", session.Id);
-        }
-
-        // Restore saved chat state for this session (if any), otherwise replay from store.
-        if (_savedLines.TryGetValue(session.Id, out var savedLines) && savedLines.Length > 0)
-        {
-            _store.Transition(s => s with { Lines = savedLines });
-        }
-        else
-        {
-            // Replay history from the session store.
-            var messages = await _sessionStore.GetMessagesAsync(sessionId).ConfigureAwait(false);
-            if (messages.IsSuccess)
-            {
-                foreach (var msg in messages.Value)
-                {
-                    var (role, text) = MessageToChatLine(msg);
-                    _store.Transition(s => s.AddLine(role, text));
-                }
-            }
+            if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return false;
+            ctx.StoreWasHydrated = true;
         }
 
         // Refresh git info for this session's working directory.
         RefreshGitInfo(session.Id, session.Directory);
 
-        Active = session;
-        // Clear the token-usage chart so it reflects only the newly-opened
-        // session's usage (the previous session's bars would otherwise
-        // linger — Task S2 / Problem 3).
+        SaveActiveRenderedLineCount();
+        ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        _logger.LogInformation("Opened session {Id}, dir={Dir}", session.Id, session.Directory);
+        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
         return true;
     }
 
     /// <summary>
-    ///     Branch the active session — create a new session with the same messages and metadata
-    ///     but a new id. The active session remains unchanged; the new session becomes active.
+    ///     Branch the active session — create a new session with the same
+    ///     messages and metadata but a new id, then switch to the branch.
     /// </summary>
     /// <returns>The branched session, or null on failure.</returns>
     public async Task<Session?> BranchActiveAsync()
     {
-        if (Active is null) return null;
-        var source = Active;
-
-        var branchResult = await _sessionStore.CreateAsync(
-            source.Directory, source.Agent, source.ProviderId, source.Model).ConfigureAwait(false);
-        if (branchResult.IsFailure)
-        {
-            _logger.LogError("Branch session {Id} failed: {Error}", source.Id, branchResult.Error);
-            return null;
-        }
-
-        var branch = branchResult.Value with { Title = source.Title + " (branch)" };
-        var messagesResult = await _sessionStore.GetMessagesAsync(source.Id).ConfigureAwait(false);
-        if (messagesResult.IsSuccess)
-        {
-            foreach (var msg in messagesResult.Value)
-            {
-                // Re-parent the message to the new session id and persist it.
-                var reborn = msg with { SessionId = branch.Id, Id = Guid.NewGuid().ToString("N") };
-                await _sessionStore.AppendMessageAsync(branch.Id, reborn).ConfigureAwait(false);
-            }
-        }
-
-        // Switch to the new branch.
+        if (ActiveContext is null) return null;
+        var branch = await _factory.CreateBranchAsync(ActiveContext.Session).ConfigureAwait(false);
+        if (branch is null) return null;
         await OpenSessionAsync(branch.Id).ConfigureAwait(false);
-        _logger.LogInformation("Branched session {Old} → {New}", source.Id, branch.Id);
         return branch;
     }
 
     /// <summary>
-    ///     Delete the given session. If it is the active session, switches to any remaining
-    ///     session (or creates a fresh default).
+    ///     Delete the given session. If it is the active session, switches to
+    ///     any remaining session (or creates a fresh default). Also removes
+    ///     the per-session <see cref="SessionContext"/> from <see cref="_contexts"/>.
     /// </summary>
     /// <param name="sessionId">The session id to delete.</param>
     /// <returns>True on success.</returns>
@@ -427,11 +330,12 @@ public sealed class SessionManager
             return false;
         }
 
+        _contexts.Remove(sessionId);
         _logger.LogInformation("Deleted session {Id}", sessionId);
 
-        if (Active?.Id == sessionId)
+        if (ActiveContext?.Session.Id == sessionId)
         {
-            Active = null;
+            ActiveContext = null;
             // Find any other session, or create a fresh one.
             var list = await _sessionStore.ListAsync().ConfigureAwait(false);
             if (list.IsSuccess && list.Value.Count > 0)
@@ -448,12 +352,8 @@ public sealed class SessionManager
 
     /// <summary>
     ///     Rename a session. <b>NOT YET SUPPORTED</b> — the underlying
-    ///     <see cref="ISessionStore"/> has no <c>UpdateSessionMetadataAsync</c>
-    ///     API (only <c>CreateAsync</c>/<c>UpdateStatsAsync</c>), so persisting
-    ///     a title change is not possible without a sidecar file. We log a
-    ///     warning and return <c>false</c> so the caller can surface an honest
-    ///     "coming in v0.8" toast. Tracked in the roadmap as session-metadata
-    ///     persistence.
+    ///     <see cref="ISessionStore"/> has no metadata-update API. Logs a
+    ///     warning and returns <c>false</c>.
     /// </summary>
     /// <param name="sessionId">The session id to rename.</param>
     /// <param name="newTitle">The new title.</param>
@@ -470,25 +370,123 @@ public sealed class SessionManager
     ///     Resolve the singleton <see cref="TokenUsageViewModel"/> from the
     ///     DI container and clear its bars + sparkline + baseline. Called
     ///     on every session switch (open + new) so the chart tracks only
-    ///     the active session's tokens, not the cumulative total across
-    ///     every session the user has ever opened (Task S2 / Problem 3).
+    ///     the active session's tokens.
     /// </summary>
     private void ClearTokenUsageForActiveSession()
     {
         _services.GetService<TokenUsageViewModel>()?.Clear();
     }
 
-    /// <summary>Convert an <see cref="AgentMessage"/> into a chat-line role + text for the UI store.</summary>
-    private static (Harbor.Ui.Framework.State.ChatRole role, string text) MessageToChatLine(AgentMessage msg)
+    /// <summary>
+    ///     Get-or-create the <see cref="SessionContext"/> for a session.
+    ///     On first sight of a session id, creates a fresh context with
+    ///     a fresh UiStore and caches it in <see cref="_contexts"/> so the
+    ///     EventBus subscriber can find it for event routing.
+    /// </summary>
+    /// <param name="session">The session to get-or-create a context for.</param>
+    /// <returns>The <see cref="SessionContext"/> (never null).</returns>
+    private SessionContext GetOrCreateContext(Session session)
     {
-        return msg switch
+        if (_contexts.TryGetValue(session.Id, out var existing)) return existing;
+        var ctx = new SessionContext(session);
+        _contexts[session.Id] = ctx;
+        return ctx;
+    }
+
+    /// <summary>
+    ///     Persist the ChatViewModel's <c>_renderedLineCount</c> into the
+    ///     currently-active <see cref="SessionContext.RenderedLineCount"/>
+    ///     so switching back to it later resumes rendering at the correct
+    ///     offset (otherwise the renderer would re-append every line in
+    ///     the transcript on each switch).
+    /// </summary>
+    private void SaveActiveRenderedLineCount()
+    {
+        if (ActiveContext is null) return;
+        ActiveContext.RenderedLineCount = _chatViewBinder.GetRenderedLineCount();
+    }
+
+    /// <summary>
+    ///     Rebind the singleton chat view-model to a different session's
+    ///     <see cref="UiStore"/>. Delegates to <see cref="IChatViewBinder"/>,
+    ///     which marshals the call onto the UI thread and resolves the
+    ///     platform-specific chat VM. No-op when no binder is registered
+    ///     (e.g. headless test mode).
+    /// </summary>
+    /// <param name="ctx">The target session context.</param>
+    /// <param name="savedRenderedLineCount">
+    ///     The <see cref="SessionContext.RenderedLineCount"/> snapshot to
+    ///     resume rendering at.
+    /// </param>
+    private void RebindChatViewModel(SessionContext ctx, int savedRenderedLineCount)
+    {
+        _chatViewBinder.Rebind(ctx.Store, savedRenderedLineCount);
+        _logger.LogInformation(
+            "RebindChatViewModel → session {Id} (renderedLineCount={Count})",
+            ctx.Session.Id, savedRenderedLineCount);
+    }
+
+    /// <summary>
+    ///     Abort any in-flight <see cref="IAgent.PromptAsync"/> call and wait
+    ///     (bounded) for the agent to return to idle. Currently used ONLY by
+    ///     <see cref="RebindFromCommonConfigAsync"/> (wizard-driven rebind)
+    ///     — NOT by session switching, because the user wants agents to keep
+    ///     running in the background when switching sessions.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The 3-second timeout is a hard cap: if the agent loop is wedged
+    ///         (e.g. a misbehaving provider that ignores cancellation), we
+    ///         force-continue rather than hang the UI thread. The orphaned
+    ///         <c>PromptAsync</c> task will still observe the cancelled token
+    ///         eventually and route to its
+    ///         <c>catch (OperationCanceledException)</c> branch.
+    ///     </para>
+    ///     <para>
+    ///         After the wait, <see cref="IAgentRunner.ResetAbortSource"/>
+    ///         recreates the underlying <c>CancellationTokenSource</c> so the
+    ///         new session's first prompt isn't dead-on-arrival — a single
+    ///         <c>CancellationTokenSource</c> can only transition to cancelled
+    ///         once, so every post-abort prompt would otherwise fail
+    ///         immediately with <c>OperationCanceledException</c>.
+    ///     </para>
+    /// </remarks>
+    private async Task AbortRunningAgentAsync()
+    {
+        if (_agent.State?.IsRunning != true)
         {
-            Harbor.Abstractions.Models.UserMessage u => (Harbor.Ui.Framework.State.ChatRole.User, u.Content),
-            Harbor.Abstractions.Models.AssistantMessage a => (Harbor.Ui.Framework.State.ChatRole.Assistant,
-                string.Join(string.Empty, a.Parts.OfType<Harbor.Abstractions.Models.TextPart>().Select(p => p.Text))),
-            Harbor.Abstractions.Models.ToolResultMessage t => (Harbor.Ui.Framework.State.ChatRole.ToolResult,
-                string.Join("\n", t.Results.Select(r => $"[{r.ToolName}] {r.Output}"))),
-            _ => (Harbor.Ui.Framework.State.ChatRole.System, msg.Role)
-        };
+            // Nothing in flight — still make sure the abort source is live
+            // (cheap no-op when it already is) so the next prompt works.
+            _agent.ResetAbortSource();
+            return;
+        }
+
+        _logger.LogInformation("Aborting in-flight agent before rebind (session={OldSession})",
+            _agent.State.SessionId);
+
+        _agent.AbortSource.Cancel();
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await _agent.WaitForIdleAsync(timeout.Token).ConfigureAwait(false);
+            _logger.LogInformation("Agent went idle after abort");
+        }
+        catch (OperationCanceledException ex)
+        {
+            // Timeout — the agent didn't observe cancellation within 3s.
+            // Force-continue; the orphaned task will finish on its own and
+            // the post-reset UiStore will discard any straggler events.
+            _logger.LogWarning(ex, "Agent did not go idle within 3s after abort — force-continuing");
+        }
+        catch (Exception ex)
+        {
+            // Defensive: don't let an unexpected exception block the switch.
+            _logger.LogError(ex, "Unexpected error waiting for agent idle after abort");
+        }
+
+        // Recreate the abort source so the new session's first prompt sees a
+        // live, un-cancelled CancellationToken.
+        _agent.ResetAbortSource();
     }
 }

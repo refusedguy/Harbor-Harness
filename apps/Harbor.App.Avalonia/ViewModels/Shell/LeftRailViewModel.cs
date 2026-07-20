@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Services;
 
 namespace Harbor.App.Avalonia.ViewModels.Shell;
 
@@ -30,12 +30,14 @@ namespace Harbor.App.Avalonia.ViewModels.Shell;
 public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
 {
     private readonly SessionListViewModel _inner;
+    private readonly IDispatcherAdapter _dispatcher;
     private bool _disposed;
 
     /// <summary>Construct the rail VM wrapping <paramref name="inner"/>.</summary>
-    public LeftRailViewModel(SessionListViewModel inner)
+    public LeftRailViewModel(SessionListViewModel inner, IDispatcherAdapter dispatcher)
     {
         _inner = inner;
+        _dispatcher = dispatcher;
         _inner.Sessions.CollectionChanged += OnInnerCollectionChanged;
         // Subscribe to live status + message-count updates so the dense
         // rows track the agent state in real time (Task S2 / Problem 1 + 2)
@@ -102,7 +104,7 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
     {
         // Marshal to UI thread — CollectionChanged fires on whatever thread
         // mutated the source collection (often a threadpool continuation).
-        Dispatcher.UIThread.Post(ReprojectAll);
+        _dispatcher.Post(ReprojectAll);
     }
 
     /// <summary>
@@ -176,7 +178,7 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
 
     private void OnItemStatusChanged(string sessionId, SessionStatus status)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             var row = FilteredSessions.FirstOrDefault(r => r.Id == sessionId);
             if (row is not null)
@@ -188,7 +190,7 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
 
     private void OnItemMessageCountChanged(string sessionId, int count)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             var row = FilteredSessions.FirstOrDefault(r => r.Id == sessionId);
             if (row is not null)

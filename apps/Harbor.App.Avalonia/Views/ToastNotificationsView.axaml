@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:srv="clr-namespace:Harbor.App.Avalonia.Services"
+             xmlns:srv="clr-namespace:Harbor.Ui.Framework.Services;assembly=Harbor.Ui.Framework"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView"
              Background="Transparent"

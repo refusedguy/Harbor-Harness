@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -17,13 +17,18 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<CommandPaletteViewModel> _logger;
+    private readonly IDispatcherAdapter _dispatcher;
     private readonly List<CommandResultViewModel> _allCommands;
 
     /// <summary>Construct the palette view-model.</summary>
-    public CommandPaletteViewModel(IServiceProvider services, ILogger<CommandPaletteViewModel> logger)
+    public CommandPaletteViewModel(
+        IServiceProvider services,
+        ILogger<CommandPaletteViewModel> logger,
+        IDispatcherAdapter dispatcher)
     {
         _services = services;
         _logger = logger;
+        _dispatcher = dispatcher;
         // Build the command list inside the constructor (instance methods are valid here).
         _allCommands = new List<CommandResultViewModel>
         {
@@ -71,7 +76,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
     /// <summary>Recompute results when the query changes.</summary>
     partial void OnQueryChanged(string value)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             Results.Clear();
             var q = (value ?? string.Empty).Trim().ToLowerInvariant();
@@ -156,18 +161,4 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         effects.Run(new TuiEffect.RunSlash(command));
         Main.IsCommandPaletteOpen = false;
     }
-}
-
-/// <summary>One command result row.</summary>
-public sealed record CommandResultViewModel(string Kind, string Label, string Hint, Action Action)
-{
-    /// <summary>Icon glyph based on kind.</summary>
-    public string Icon => Kind switch
-    {
-        "command" => "⚡",
-        "slash"   => "/",
-        "file"    => "📄",
-        "session" => "💬",
-        _         => "•"
-    };
 }

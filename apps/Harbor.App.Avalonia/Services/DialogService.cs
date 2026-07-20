@@ -212,34 +212,4 @@ public sealed class ToastService
     }
 }
 
-/// <summary>Kind of toast.</summary>
-public enum ToastKind
-{
-    /// <summary>Informational toast (blue).</summary>
-    Info,
 
-    /// <summary>Success toast (green).</summary>
-    Success,
-
-    /// <summary>Warning toast (peach).</summary>
-    Warning,
-
-    /// <summary>Error toast (red).</summary>
-    Error,
-}
-
-/// <summary>One toast notification. Immutable.</summary>
-public sealed record ToastNotification(Guid Id, string Message, ToastKind Kind, DateTimeOffset CreatedAt)
-{
-    /// <summary>
-    ///     Convenience constructor that auto-fills the <see cref="Id"/>
-    ///     (new GUID) and <see cref="CreatedAt"/> (now). Used by code that
-    ///     just wants to push a toast without tracking the metadata — the
-    ///     4-arg record constructor is still available for tests that want
-    ///     deterministic ids.
-    /// </summary>
-    /// <param name="message">Toast body text.</param>
-    /// <param name="kind">Toast kind (Info, Success, Warning, Error).</param>
-    public ToastNotification(string message, ToastKind kind)
-        : this(Guid.NewGuid(), message, kind, DateTimeOffset.UtcNow) { }
-}

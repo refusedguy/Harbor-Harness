@@ -59,12 +59,12 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Theme" Classes="Label"/>
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <ComboBox SelectedItem="{Binding Theme, Mode=TwoWay}" MinWidth="180">
+                                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180">
                                     <ComboBoxItem Content="dark"/>
                                     <ComboBoxItem Content="light"/>
                                     <ComboBoxItem Content="system"/>
                                 </ComboBox>
-                                <Button Classes="Subtle" Content="Preview" Command="{Binding ApplyThemeCommand}"
+                                <Button Classes="Subtle" Content="Preview" Command="{Binding ThemeSettings.ApplyThemeCommand}"
                                         ToolTip.Tip="Apply the theme immediately without saving."/>
                             </StackPanel>
                         </StackPanel>
@@ -139,7 +139,7 @@
                                        TextWrapping="Wrap"/>
                             <ItemsControl ItemsSource="{Binding ProviderConfigs}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="vm:ProviderConfigRowViewModel">
+                                    <DataTemplate DataType="vm:ProviderConfigViewModel">
                                         <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
                                                 Padding="10" Margin="0,3">
                                             <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
@@ -168,18 +168,15 @@
                                                          IsVisible="{Binding RequiresApiKey}"
                                                          Text="{Binding ApiKey, Mode=TwoWay}"
                                                          PasswordChar="•"
-                                                         PlaceholderText="Paste API key…"
-                                                         Watermark="Paste API key…"/>
+                                                         PlaceholderText="Paste API key…"/>
 
                                                 <!-- Action row -->
                                                 <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                             Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
                                                     <Button Classes="Subtle" Content="Save key" Padding="10,4"
-                                                            Command="{Binding $parent[UserControl].SaveProviderKeyCommand}"
-                                                            CommandParameter="{Binding}"/>
+                                                            Command="{Binding SaveKeyCommand}"/>
                                                     <Button Classes="Subtle" Content="Test connection" Padding="10,4"
-                                                            Command="{Binding $parent[UserControl].TestProviderConnectionCommand}"
-                                                            CommandParameter="{Binding}"
+                                                            Command="{Binding TestConnectionCommand}"
                                                             IsEnabled="{Binding !IsTesting}"/>
                                                     <TextBlock Text="{Binding TestResult}" FontSize="11"
                                                                Foreground="{StaticResource TextMutedBrush}"

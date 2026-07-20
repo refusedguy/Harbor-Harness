@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.Controls.ToolCallCardView">
 
     <!--
@@ -14,7 +15,16 @@
 
         The card slide-ins from the left via a RenderTransform
         transition defined in AppStyles.axaml (Border.ToolCallCard).
+
+        The VM exposes StatusBrushKey (string resource key) instead of a
+        concrete IBrush — this keeps ToolCallViewModel platform-agnostic
+        and reusable across WPF/MAUI/Blazor. BrushKeyConverter resolves
+        the key to the actual IBrush at bind time.
     -->
+
+    <UserControl.Resources>
+        <vw:BrushKeyConverter x:Key="BrushKey"/>
+    </UserControl.Resources>
 
     <Border Classes="ToolCallCard"
             Background="{StaticResource MochaSurface0}"
@@ -40,7 +50,7 @@
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis"/>
                 <Border Grid.Column="2"
-                        Background="{Binding StatusBackgroundBrush}"
+                        Background="{Binding StatusBrushKey, Converter={StaticResource BrushKey}}"
                         CornerRadius="3"
                         Padding="6,1"
                         VerticalAlignment="Center">
@@ -95,3 +105,4 @@
         </Grid>
     </Border>
 </UserControl>
+

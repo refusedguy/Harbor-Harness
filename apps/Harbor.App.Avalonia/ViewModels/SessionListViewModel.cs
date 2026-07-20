@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels;
@@ -18,18 +18,21 @@ public sealed partial class SessionListViewModel : ObservableObject
     private readonly SessionManager _sessionManager;
     private readonly ILogger<SessionListViewModel> _logger;
     private readonly ToastService _toasts;
+    private readonly IDispatcherAdapter _dispatcher;
 
     /// <summary>Construct the session list view-model.</summary>
     public SessionListViewModel(
         ISessionStore sessionStore,
         SessionManager sessionManager,
         ILogger<SessionListViewModel> logger,
-        ToastService toasts)
+        ToastService toasts,
+        IDispatcherAdapter dispatcher)
     {
         _sessionStore = sessionStore;
         _sessionManager = sessionManager;
         _logger = logger;
         _toasts = toasts;
+        _dispatcher = dispatcher;
 
         // Subscribe to live status + message-count changes from the
         // SessionManager so the sidebar rows update in real time without
@@ -62,7 +65,7 @@ public sealed partial class SessionListViewModel : ObservableObject
 
     private void OnSessionStatusChanged(string sessionId, SessionStatus status)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             var item = Sessions.FirstOrDefault(s => s.Id == sessionId);
             if (item is not null)
@@ -75,7 +78,7 @@ public sealed partial class SessionListViewModel : ObservableObject
 
     private void OnSessionMessageCountChanged(string sessionId, int count)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             var item = Sessions.FirstOrDefault(s => s.Id == sessionId);
             if (item is not null)
@@ -114,7 +117,7 @@ public sealed partial class SessionListViewModel : ObservableObject
                 ? result.Value
                 : result.Value.Where(s => s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
                     || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
-            Dispatcher.UIThread.Post(() =>
+            _dispatcher.Post(() =>
             {
                 Sessions.Clear();
                 foreach (var s in filtered)
@@ -155,7 +158,7 @@ public sealed partial class SessionListViewModel : ObservableObject
             // Must run on UI thread — Sessions is ObservableCollection modified by RefreshAsync.
             // Accessing it from a background thread (after ConfigureAwait(false)) throws
             // "Collection was modified" because the UI thread may be mid-update.
-            Dispatcher.UIThread.Post(() =>
+            _dispatcher.Post(() =>
             {
                 var newItem = Sessions.FirstOrDefault(x => x.Id == session.Id);
                 if (newItem is not null)
@@ -185,7 +188,7 @@ public sealed partial class SessionListViewModel : ObservableObject
                 return;
             }
             await RefreshAsync().ConfigureAwait(false);
-            Dispatcher.UIThread.Post(() =>
+            _dispatcher.Post(() =>
             {
                 ActiveSession = Sessions.FirstOrDefault(x => x.Id == branch.Id);
             });

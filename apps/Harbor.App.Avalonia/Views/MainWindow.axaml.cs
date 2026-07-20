@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.Configuration;
+using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views.Shell;
@@ -10,22 +11,21 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 
 /// <summary>
-///     Main window code-behind. Hosts the shell layout and the global keyboard
-///     shortcuts (Ctrl+P / Ctrl+Shift+P / Ctrl+B / Ctrl+Shift+T / Ctrl+O / Ctrl+S /
-///     Ctrl+L / Ctrl+Enter / Esc). Disposes the bound <see cref="MainViewModel"/>
-///     on close so the UiStore subscription + toast continuations are torn down
-///     cleanly — without this, the dispatcher subscription can keep the UI
-///     thread busy after the window is gone (the "window won't close" hang).
+///     Main window code-behind. Hosts the shell layout and forwards every
+///     global input event (title-bar drag, caption buttons, keyboard
+///     shortcuts) to dedicated services resolved from DI
+///     (<see cref="WindowChromeService"/> and
+///     <see cref="KeyboardShortcutService"/>). The code-behind itself only
+///     wires up services — no behaviour lives here. Disposes the bound
+///     <see cref="MainViewModel"/> on close so the UiStore subscription
+///     and toast continuations are torn down cleanly.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Experimental shell-mode switch (Task F2):</b> when
-///         <see cref="App.IsOrcaShell"/> is <c>true</c> (set via the
-///         <c>--shell orca</c> CLI arg or <c>HARBOR_SHELL=orca</c> env var),
-///         the classic Catppuccin-Mocha XAML body is replaced with an
-///         <see cref="OrcaShellView"/> whose <c>DataContext</c> is an
-///         <see cref="OrcaShellViewModel"/> wrapping the shared
-///         <see cref="MainViewModel"/>. Classic mode is unaffected.
+///         <see cref="App.IsOrcaShell"/> is <c>true</c> the classic
+///         Catppuccin-Mocha XAML body is replaced with an
+///         <see cref="OrcaShellView"/>; classic mode is unaffected.
 ///     </para>
 /// </remarks>
 public partial class MainWindow : Window
@@ -42,22 +42,14 @@ public partial class MainWindow : Window
         ApplyConfiguredGeometry();
 
         // ── Experimental Orca shell swap (Task F2) ──────────────────────────
-        // When HARBOR_SHELL=orca (or --shell orca), replace the classic
-        // Catppuccin-Mocha body with the OrcaShellView. The DataContext
-        // (OrcaShellViewModel wrapping MainViewModel) is set by App.ShowMain
-        // AFTER the constructor returns; the OrcaShellView inherits the
-        // window's DataContext via the standard Avalonia inheritance chain.
         if (App.IsOrcaShell)
         {
             Content = new OrcaShellView();
         }
 
         // Defensive: ensure Chat is the active view and NO modal is open when the
-        // shell first appears. Without this, a stale state from a previous launch
-        // (or a binding-evaluation race on startup) could leave the Code editor or
-        // one of the modal overlays (Diff / TokenUsage) visible on top of the chat.
-        // This fires after every binding has been applied, so it's the LAST word
-        // on the initial UI state.
+        // shell first appears. Fires after every binding has been applied so it's
+        // the LAST word on the initial UI state.
         Loaded += (_, _) =>
         {
             if (DataContext is MainViewModel vm)
@@ -79,9 +71,7 @@ public partial class MainWindow : Window
 
         // Dispose the MainViewModel when the window closes — this unsubscribes
         // the UiStore → dispatcher bridge and prevents background toast
-        // continuations from racing the window teardown. Coupled with
-        // App.OnShutdownRequested (which stops the IHost), this fixes the
-        // "window hangs and won't close" symptom the user reported.
+        // continuations from racing the window teardown.
         Closing += (_, _) =>
         {
             if (DataContext is IDisposable disposable)
@@ -90,6 +80,18 @@ public partial class MainWindow : Window
             }
         };
     }
+
+    /// <summary>Resolve <see cref="WindowChromeService"/> from DI (cached on first use).</summary>
+    private WindowChromeService? _chrome;
+
+    /// <summary>Resolve <see cref="KeyboardShortcutService"/> from DI (cached on first use).</summary>
+    private KeyboardShortcutService? _keyboard;
+
+    private WindowChromeService Chrome =>
+        _chrome ??= App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+
+    private KeyboardShortcutService Keyboard =>
+        _keyboard ??= App.Services?.GetService<KeyboardShortcutService>() ?? new KeyboardShortcutService();
 
     /// <summary>
     ///     Read <see cref="AvaloniaConfig.WindowWidth"/> / <see cref="AvaloniaConfig.WindowHeight"/>
@@ -121,87 +123,14 @@ public partial class MainWindow : Window
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        var vm = Vm;
-        if (vm is null)
+        if (Keyboard.HandleKeyDown(Vm, e))
         {
-            base.OnKeyDown(e);
-            return;
-        }
-
-        bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-
-        // Esc closes the topmost open modal.
-        if (e.Key == Key.Escape)
-        {
-            if (vm.IsCommandPaletteOpen) { vm.IsCommandPaletteOpen = false; e.Handled = true; }
-            else if (vm.IsSettingsOpen) { vm.IsSettingsOpen = false; e.Handled = true; }
-            else if (vm.IsModelPickerOpen) { vm.IsModelPickerOpen = false; e.Handled = true; }
-            else if (vm.IsProviderBrowserOpen) { vm.IsProviderBrowserOpen = false; e.Handled = true; }
-            else if (vm.IsDiffOpen) { vm.IsDiffOpen = false; e.Handled = true; }
-            else if (vm.IsTokenUsageOpen) { vm.IsTokenUsageOpen = false; e.Handled = true; }
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Ctrl+P / Ctrl+Shift+P → command palette.
-        if (ctrl && e.Key == Key.P)
-        {
-            vm.OpenCommandPaletteCommand.Execute(null);
             e.Handled = true;
-            base.OnKeyDown(e);
-            return;
         }
-
-        // Ctrl+B → toggle sidebar.
-        if (ctrl && e.Key == Key.B)
-        {
-            vm.ToggleSidebarCommand.Execute(null);
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Ctrl+Shift+T → toggle theme.
-        if (ctrl && shift && e.Key == Key.T)
-        {
-            vm.ToggleThemeCommand.Execute(null);
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Ctrl+O → open file.
-        if (ctrl && e.Key == Key.O)
-        {
-            _ = vm.CodeEditor.OpenFileCommand.ExecuteAsync(null);
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Ctrl+S → save file.
-        if (ctrl && e.Key == Key.S)
-        {
-            _ = vm.CodeEditor.SaveCommand.ExecuteAsync(null);
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        // Ctrl+L → clear chat.
-        if (ctrl && e.Key == Key.L)
-        {
-            vm.Chat.ClearCommand.Execute(null);
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
         base.OnKeyDown(e);
     }
 
-    private void Quit_Click(object? sender, RoutedEventArgs e) => Close();
+    private void Quit_Click(object? sender, RoutedEventArgs e) => Chrome.Close(this);
 
     private void ViewChat_Click(object? sender, RoutedEventArgs e) =>
         Vm?.SwitchViewCommand.Execute("chat");
@@ -211,51 +140,33 @@ public partial class MainWindow : Window
 
     // ── Custom Windows title bar handlers (ExtendClientAreaToDecorationsHint) ──
     //
-    // With ExtendClientAreaChromeHints=PreferNone, the native Windows caption
-    // buttons are gone. We draw our own in MainWindow.axaml (Button.WindowButton
-    // classes styled in Themes/AppStyles.axaml) and wire up the three behaviours
-    // here. This kills the "ugly Windows bar that ruins everything" symptom the
-    // user reported — the bar now matches the Catppuccin-Mocha theme instead of
-    // the default white Windows bar.
+    // The XAML draws its own caption buttons (Button.WindowButton styled in
+    // Themes/AppStyles.axaml) and forwards their click events here. Each
+    // handler is a one-liner that delegates to WindowChromeService so no
+    // behaviour lives in the code-behind.
 
     /// <summary>
-    ///     Begin a window drag when the user presses the mouse on the custom
-    ///     title bar. Buttons inside the bar swallow the event (Button eats
-    ///     PointerPressed) so caption clicks never start a drag.
+    ///     Title-bar drag / double-click maximize — delegates to
+    ///     <see cref="WindowChromeService.HandleTitleBarPointerPressed"/>.
     /// </summary>
-    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (e.ClickCount == 2)
-        {
-            // Double-click anywhere on the bar → toggle maximize, like Win32.
-            WindowState = WindowState == WindowState.Maximized
-                ? WindowState.Normal
-                : WindowState.Maximized;
-            e.Handled = true;
-            return;
-        }
+    private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e) =>
+        Chrome.HandleTitleBarPointerPressed(this, e);
 
-        BeginMoveDrag(e);
-    }
-
-    /// <summary>Minimize button — collapses to the taskbar.</summary>
+    /// <summary>Minimize button — delegates to <see cref="WindowChromeService.Minimize"/>.</summary>
     private void Minimize_Click(object? sender, RoutedEventArgs e) =>
-        WindowState = WindowState.Minimized;
+        Chrome.Minimize(this);
 
-    /// <summary>Maximize / restore button — toggles the maximized state.</summary>
+    /// <summary>Maximize / restore button — delegates to <see cref="WindowChromeService.MaximizeOrRestore"/>.</summary>
     private void Maximize_Click(object? sender, RoutedEventArgs e) =>
-        WindowState = WindowState == WindowState.Maximized
-            ? WindowState.Normal
-            : WindowState.Maximized;
+        Chrome.MaximizeOrRestore(this);
 
-    /// <summary>Close button — triggers the standard Window.Close path.</summary>
-    private void Close_Click(object? sender, RoutedEventArgs e) => Close();
+    /// <summary>Close button — delegates to <see cref="WindowChromeService.Close"/>.</summary>
+    private void Close_Click(object? sender, RoutedEventArgs e) =>
+        Chrome.Close(this);
 
     /// <summary>
     ///     Close the provider/model picker flyout when the user clicks the
-    ///     dark scrim outside the picker card. Same pattern as the Settings
-    ///     modal: the inner Border has a non-null Background so its clicks
-    ///     don't bubble to the backdrop.
+    ///     dark scrim outside the picker card.
     /// </summary>
     private void PickerBackdrop_Click(object? sender, PointerPressedEventArgs e)
     {

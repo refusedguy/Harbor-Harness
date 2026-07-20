@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         x:Class="Harbor.App.Avalonia.Views.OnboardingWindow"
         Title="Harbor — Welcome"
@@ -139,7 +140,7 @@
                 <ScrollViewer Height="340" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding Providers}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="vm:OnboardingProviderOption">
+                            <DataTemplate DataType="vma:OnboardingProviderOption">
                                 <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
                                         Padding="14,10" Margin="0,3"
                                         BorderBrush="{StaticResource BorderBrush}"

@@ -1,13 +1,15 @@
 using Harbor.Abstractions.Models;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.App.Avalonia.ViewModels;
 
@@ -18,31 +20,24 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Task R1 — Tool-call cards:</b> alongside the existing
-///         <see cref="Lines"/> transcript, this view-model now also
-///         projects <see cref="ChatRole.Tool"/> /
-///         <see cref="ChatRole.ToolResult"/> lines into
-///         <see cref="ToolCalls"/> — an observable collection of
-///         <see cref="ToolCallViewModel"/> cards. Each tool call is
-///         coalesced: the start event creates a card in
-///         <see cref="ToolCallStatus.Running"/> state; the matching
-///         result event completes it (Success/Error + duration).
-///     </para>
-///     <para>
-///         Coalescing is keyed on <c>ToolName + index</c> — the simplest
-///         stable key that works without a real correlation id from
-///         <c>AgentEvent</c>. A future refactor should thread a real
-///         <c>ToolCallId</c> through <c>UiState</c>.
+///         <b>Rendering pipeline:</b> the heavy lifting (append-only projection +
+///         tool-call coalescing) lives in <see cref="ChatMessageRenderer"/>, while
+///         the streaming-buffer state derivation lives in
+///         <see cref="ChatStreamingPresenter"/>. This view-model just wires the
+///         UiStore subscription to those services and exposes observable properties
+///         + commands for the view to bind against.
 ///     </para>
 /// </remarks>
 public sealed partial class ChatViewModel : ObservableObject
 {
-    private readonly UiStore _store;
+    private UiStore _store;
     private readonly TuiEffectHost _effects;
     private readonly SessionManager? _sessionManager;
     private readonly AvaloniaDispatcherAdapter _dispatcher;
     private readonly ILogger<ChatViewModel> _logger;
     private readonly ToastService _toasts;
+    private readonly ChatMessageRenderer _renderer;
+    private readonly ChatStreamingPresenter _presenter;
     private int _renderedLineCount;
     private readonly Dictionary<string, ToolCallViewModel> _toolCallById = new();
     private readonly Stopwatch _toolCallStopwatch = new();
@@ -56,7 +51,9 @@ public sealed partial class ChatViewModel : ObservableObject
         SessionManager? sessionManager,
         AvaloniaDispatcherAdapter dispatcher,
         ILogger<ChatViewModel> logger,
-        ToastService toasts)
+        ToastService toasts,
+        ChatMessageRenderer renderer,
+        ChatStreamingPresenter presenter)
     {
         _store = store;
         _effects = effects;
@@ -64,12 +61,13 @@ public sealed partial class ChatViewModel : ObservableObject
         _dispatcher = dispatcher;
         _logger = logger;
         _toasts = toasts;
+        _renderer = renderer;
+        _presenter = presenter;
 
         _onStoreChanged = (_, state) => OnStoreChanged(state);
         // NOTE: _dispatcher.Bind(_store) is intentionally NOT called here — the
         // composition root (AppHost.BuildAsync) binds the dispatcher to the UiStore
-        // exactly once, idempotently. Subscribing here would duplicate the binding
-        // (now prevented by the idempotent Bind, but we still centralise the call).
+        // exactly once, idempotently. Subscribing here would duplicate the binding.
         _dispatcher.OnUiThread += _onStoreChanged;
     }
 
@@ -129,184 +127,32 @@ public sealed partial class ChatViewModel : ObservableObject
 
     private void OnStoreChanged(UiState state)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
-            // Debug: log state changes to diagnose missing messages
             _logger.LogDebug("OnStoreChanged: lines={Lines}, rendered={Rendered}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
                 state.Lines.Length, _renderedLineCount, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
-            
-            // Append only new lines (idempotent under repeated notifications).
-            while (_renderedLineCount < state.Lines.Length)
-            {
-                var line = state.Lines[_renderedLineCount];
-                _logger.LogDebug("Adding line {Index}: role={Role}, textLen={TextLen}", _renderedLineCount, line.Role, line.Text?.Length ?? 0);
-                // Tool / ToolResult lines are projected into ToolCalls
-                // cards instead of (or in addition to) the transcript.
-                if (line.Role is ChatRole.Tool or ChatRole.ToolResult)
-                {
-                    ProjectToolLine(line, _renderedLineCount);
-                }
-                else
-                {
-                    Lines.Add(new ChatLineViewModel(line.Role, line.Text ?? string.Empty));
-                }
-                _renderedLineCount++;
-            }
 
-            IsStreaming = state.IsStreaming;
-            IsThinking = state.IsAgentRunning && !state.IsStreaming;
-            IsAgentRunning = state.IsAgentRunning;
+            // Delegate append-only line + tool-call card projection to ChatMessageRenderer.
+            _renderedLineCount = _renderer.Render(
+                state, Lines, ToolCalls, _toolCallById, _toolCallStopwatch, _renderedLineCount);
 
-            // Update session status based on agent state (Task S2 / Problem 1).
-            //   IsAgentRunning → Working (amber pulse)
-            //   !IsAgentRunning && state.Status == "error" → Error (red)
-            //   !IsAgentRunning && last line was assistant → Done (green)
-            //   otherwise → Idle (grey)
+            // Delegate streaming-buffer state derivation to ChatStreamingPresenter.
+            _presenter.Apply(
+                state,
+                setStreaming: v => IsStreaming = v,
+                setThinking: v => IsThinking = v,
+                setAgentRunning: v => IsAgentRunning = v,
+                setStatusMessage: v => StatusMessage = v,
+                setStreamingBuffer: v => StreamingBuffer = v);
+
+            // Push session status + message count to the sidebar via SessionManager.
             if (_sessionManager?.Active is { } activeSession)
             {
-                SessionStatus newStatus;
-                if (state.IsAgentRunning)
-                {
-                    newStatus = SessionStatus.Working;
-                }
-                else if (string.Equals(state.Status, "error", StringComparison.OrdinalIgnoreCase))
-                {
-                    newStatus = SessionStatus.Error;
-                }
-                else if (state.Lines.Length > 0
-                    && state.Lines[^1].Role == ChatRole.Assistant)
-                {
-                    newStatus = SessionStatus.Done;
-                }
-                else
-                {
-                    newStatus = SessionStatus.Idle;
-                }
-                _sessionManager.SetStatus(activeSession.Id, newStatus);
-
-                // Push the live message count so the sidebar row's "N msgs"
-                // label tracks new messages without a full RefreshAsync
-                // round-trip (Task S2 / Problem 2).
+                _sessionManager.SetStatus(activeSession.Id, _presenter.DeriveStatus(state));
                 _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
             }
-            StatusMessage = state.IsAgentRunning
-                ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
-                : string.Empty;
-            StreamingBuffer = state.Active.TextBuffer ?? string.Empty;
         });
     }
-
-    /// <summary>
-    ///     Project a <see cref="ChatRole.Tool"/> (start) or
-    ///     <see cref="ChatRole.ToolResult"/> (end) line into a
-    ///     <see cref="ToolCallViewModel"/> card. Coalesces start/end
-    ///     pairs by tool name + index.
-    /// </summary>
-    private void ProjectToolLine(ChatLine line, int lineIndex)
-    {
-        // Parse "tool_name: args" or "tool_name: result" — best-effort.
-        // The agent loop formats these; we tolerate any shape.
-        string text = line.Text ?? string.Empty;
-        string toolName = text;
-        string payload = string.Empty;
-        int colon = text.IndexOf(':');
-        if (colon > 0)
-        {
-            toolName = text[..colon].Trim();
-            payload = text[(colon + 1)..].Trim();
-        }
-
-        // Coalescing key — tool name + line index parity. Two adjacent
-        // Tool/ToolResult lines for the same tool name pair up.
-        string id = $"{toolName}-{lineIndex / 2}";
-
-        if (line.Role == ChatRole.Tool)
-        {
-            // Start event — create a running card.
-            if (!_toolCallById.TryGetValue(id, out var card))
-            {
-                card = new ToolCallViewModel
-                {
-                    Id = id,
-                    ToolName = toolName,
-                    IconText = IconForTool(toolName),
-                    Status = ToolCallStatus.Running,
-                    ArgsPreview = TruncateForPreview(payload),
-                    IsExpanded = false,
-                };
-                _toolCallById[id] = card;
-                ToolCalls.Add(card);
-                _toolCallStopwatch.Restart();
-            }
-        }
-        else // ChatRole.ToolResult
-        {
-            // End event — complete the matching card. Fall back to the
-            // most recent running card if the coalescing key missed.
-            ToolCallViewModel? card = null;
-            if (_toolCallById.TryGetValue(id, out card))
-            {
-                // Found by id — use it.
-            }
-            else
-            {
-                // Fall back: find the most-recently-added running card.
-                card = ToolCalls.LastOrDefault(c => c.Status == ToolCallStatus.Running);
-                if (card is not null)
-                {
-                    _toolCallById[id] = card;
-                }
-            }
-
-            if (card is not null)
-            {
-                bool isError = payload.StartsWith("error", StringComparison.OrdinalIgnoreCase)
-                    || payload.StartsWith("fail", StringComparison.OrdinalIgnoreCase);
-                card.Complete(
-                    status: isError ? ToolCallStatus.Error : ToolCallStatus.Success,
-                    resultPreview: TruncateForPreview(payload),
-                    duration: _toolCallStopwatch.Elapsed);
-            }
-            else
-            {
-                // No matching start — create a completed card standalone.
-                var standalone = new ToolCallViewModel
-                {
-                    Id = id,
-                    ToolName = toolName,
-                    IconText = IconForTool(toolName),
-                    Status = ToolCallStatus.Success,
-                    ResultPreview = TruncateForPreview(payload),
-                };
-                _toolCallById[id] = standalone;
-                ToolCalls.Add(standalone);
-            }
-        }
-    }
-
-    private static string TruncateForPreview(string text, int max = 800)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        return text.Length <= max ? text : text[..max] + "…";
-    }
-
-    private static string IconForTool(string toolName) => toolName.ToLowerInvariant() switch
-    {
-        "read" => "📖",
-        "write" => "✍️",
-        "edit" => "✏️",
-        "patch" => "🩹",
-        "bash" or "sh" => "🖥️",
-        "grep" or "ripgrep" => "🔍",
-        "glob" => "🌐",
-        "ls" => "📁",
-        "tree" => "🌲",
-        "webfetch" or "fetch" => "🌐",
-        "task" => "📋",
-        "notebook" => "📓",
-        "mcp" => "🔌",
-        _ => "🔧",
-    };
 
     /// <summary>Submit the current input text. Plain Enter (handled in view) triggers this.</summary>
     /// <remarks>
@@ -315,8 +161,7 @@ public sealed partial class ChatViewModel : ObservableObject
     ///     <see cref="OnInputTextChanged"/> partial (generated by
     ///     <c>[ObservableProperty]</c>) calls
     ///     <see cref="SendCommand.NotifyCanExecuteChanged"/> on every keystroke
-    ///     so the button reflects the current InputText immediately — without
-    ///     that, the button would stay disabled until focus moved off the box.
+    ///     so the button reflects the current InputText immediately.
     /// </remarks>
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
@@ -326,8 +171,7 @@ public sealed partial class ChatViewModel : ObservableObject
 
         _logger.LogInformation("Submitting prompt, length={Length}", text.Length);
         InputText = string.Empty;
-        // Force CanExecute re-evaluation now that InputText has been cleared —
-        // otherwise the Send button stays enabled until the next keystroke.
+        // Force CanExecute re-evaluation now that InputText has been cleared.
         SendCommand.NotifyCanExecuteChanged();
 
         string trimmed = text.Trim();
@@ -375,6 +219,7 @@ public sealed partial class ChatViewModel : ObservableObject
         _effects.Run(new TuiEffect.AbortAgent());
         _toasts.Show("Abort requested — agent will stop at the next safe boundary.", ToastKind.Warning);
     }
+
     /// <summary>Clear the chat transcript (Ctrl+L).</summary>
     [RelayCommand]
     private void Clear()
@@ -390,20 +235,10 @@ public sealed partial class ChatViewModel : ObservableObject
     ///     <see cref="UiStore"/> state.
     /// </summary>
     /// <remarks>
-    ///     <para>
-    ///         Without this call, <see cref="Lines"/> still holds the previous
-    ///         session's chat rows after <see cref="SessionManager.OpenSessionAsync"/>
-    ///         resets the UiStore. <see cref="_renderedLineCount"/> would also
-    ///         stay at its old value, so <see cref="OnStoreChanged"/> would
-    ///         skip the new session's replayed lines (thinking they were
-    ///         already rendered).
-    ///     </para>
-    ///     <para>
-    ///         Must run on the UI thread because <see cref="Lines"/> /
-    ///         <see cref="ToolCalls"/> are <see cref="ObservableCollection{T}"/>
-    ///         bound to the chat view. Callers in <see cref="SessionManager"/>
-    ///         wrap the call in <see cref="Dispatcher.UIThread.Post"/>.
-    ///     </para>
+    ///     Must run on the UI thread because <see cref="Lines"/> /
+    ///     <see cref="ToolCalls"/> are <see cref="ObservableCollection{T}"/>
+    ///     bound to the chat view. Callers in <see cref="SessionManager"/>
+    ///     wrap the call in <see cref="IDispatcherAdapter.Post"/>.
     /// </remarks>
     public void ResetRendering()
     {
@@ -420,14 +255,83 @@ public sealed partial class ChatViewModel : ObservableObject
         StatusMessage = string.Empty;
         StreamingBuffer = string.Empty;
     }
+
+    /// <summary>
+    ///     Current <c>_renderedLineCount</c> snapshot. Exposed so
+    ///     <see cref="SessionManager"/> can persist it into the
+    ///     <see cref="SessionContext.RenderedLineCount"/> field when
+    ///     switching AWAY from a session, so that switching back resumes
+    ///     rendering at the right offset (no duplicate lines appended).
+    /// </summary>
+    public int RenderedLineCount => _renderedLineCount;
+
+    /// <summary>
+    ///     Rebind this view-model to a different session's
+    ///     <see cref="UiStore"/>. Used when the user switches sessions:
+    ///     the old store keeps accumulating events for the (still-running)
+    ///     background agent, but the UI now renders the new session's store.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Sequence:</b>
+    ///         <list type="number">
+    ///             <item>Unbind the dispatcher from the old store.</item>
+    ///             <item>Clear local rendering state (Lines, ToolCalls,
+    ///             _renderedLineCount, streaming flags).</item>
+    ///             <item>Swap <c>_store</c> to <paramref name="newStore"/>.</item>
+    ///             <item>Bind the dispatcher to <paramref name="newStore"/>.</item>
+    ///             <item>Replay the new store's current state through
+    ///             <see cref="OnStoreChanged"/> so the chat rows render
+    ///             immediately (rather than waiting for the next event).</item>
+    ///         </list>
+    ///     </para>
+    ///     <para>
+    ///         Must be called on the UI thread — it mutates
+    ///         <see cref="Lines"/> / <see cref="ToolCalls"/> (ObservableCollection
+    ///         bound to the view) and the <paramref name="newStore"/> can be
+    ///         touched concurrently by the background agent's reducer.
+    ///     </para>
+    /// </remarks>
+    /// <param name="newStore">The UiStore of the session being switched to.</param>
+    /// <param name="savedRenderedLineCount">
+    ///     The <see cref="RenderedLineCount"/> snapshot saved when the
+    ///     session was previously switched away from (0 if first visit).
+    /// </param>
+    public void RebindToStore(UiStore newStore, int savedRenderedLineCount)
+    {
+        ArgumentNullException.ThrowIfNull(newStore);
+        if (ReferenceEquals(_store, newStore))
+        {
+            // Already bound to this store — just replay.
+            OnStoreChanged(newStore.State);
+            return;
+        }
+
+        // 1. Unsubscribe the dispatcher from the OLD store. Without this,
+        //    events from the old session's still-running agent would still
+        //    flow into OnStoreChanged and clobber the new session's chat
+        //    transcript — the exact user-visible bug this rebind fixes.
+        _dispatcher.Unbind(_store);
+
+        // 2. Clear local rendering state so old chat rows + tool-call cards
+        //    don't leak into the new session's view.
+        Lines.Clear();
+        ToolCalls.Clear();
+        _toolCallById.Clear();
+        _renderedLineCount = savedRenderedLineCount;
+        IsStreaming = false;
+        IsThinking = false;
+        IsAgentRunning = false;
+        StatusMessage = string.Empty;
+        StreamingBuffer = string.Empty;
+
+        // 3. Swap to the new store + bind the dispatcher.
+        _store = newStore;
+        _dispatcher.Bind(newStore);
+
+        // 4. Replay the new store's current state so the chat transcript
+        //    renders immediately rather than waiting for the next agent event.
+        OnStoreChanged(newStore.State);
+    }
 }
 
-/// <summary>One chat line projected for the UI. Role + text + brush key for binding.</summary>
-public sealed record ChatLineViewModel(ChatRole Role, string Text)
-{
-    /// <summary>The brush resource key (resolved by RoleBrushKey).</summary>
-    public string BrushKey => ChatViewModel.RoleBrushKey(Role);
-
-    /// <summary>The lowercase role label for the gutter.</summary>
-    public string RoleLabel => Role.ToString().ToLowerInvariant();
-}

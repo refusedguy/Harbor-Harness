@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Components.StatusBadge">
+
+    <!--
+        StatusBadge — reusable pill with a colored dot + label.
+
+        Bindable properties (set on the control itself):
+          - StatusText   (string)  — label to display ("running", "idle", etc.)
+          - BrushKey     (string)  — resource key for the dot fill
+          - ShowDot      (bool)    — toggle the leading ellipse (default true)
+
+        The label color comes from the surrounding container's Foreground;
+        only the dot recolors itself. This keeps the badge readable against
+        any background.
+
+        Usage:
+          <comp:StatusBadge StatusText="{Binding StatusText}"
+                            BrushKey="{Binding StatusBrushKey}"/>
+    -->
+
+    <UserControl.Resources>
+        <vw:BrushKeyConverter x:Key="BrushKey"/>
+    </UserControl.Resources>
+
+    <Border Background="{StaticResource MochaSurface0}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="9"
+            Padding="8,2"
+            HorizontalAlignment="Left">
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <Ellipse Width="8"
+                     Height="8"
+                     Fill="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     IsVisible="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            <TextBlock Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       FontSize="11"
+                       FontFamily="{StaticResource CodeFont}"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</UserControl>

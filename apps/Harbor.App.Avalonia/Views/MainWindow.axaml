@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
         xmlns:ui="clr-namespace:Harbor.App.Avalonia"
@@ -153,7 +154,7 @@
                              BorderThickness="0"
                              Margin="6,0,6,8">
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="vm:SessionItemViewModel">
+                            <DataTemplate DataType="vma:SessionItemViewModel">
                                 <Grid Margin="2,4" ColumnDefinitions="*,Auto">
                                     <StackPanel Grid.Column="0" Spacing="2">
                                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
@@ -229,7 +230,7 @@
              Each group is a StackPanel with horizontal children; groups separated
              by a 1px vertical hairline (Border.StatusBarSeparator). -->
         <Border Grid.Row="2" Classes="StatusBar">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
                 <!-- Group 1: status -->
                 <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
                          Margin="0,0,6,0"
@@ -275,20 +276,29 @@
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Recent output tokens per turn"/>
 
+                <!-- Message count (live — tracks new messages without a RefreshAsync
+                     round-trip. Task D2 / Problem 2: status bar message count was
+                     stale, only updated on full RefreshAsync cycles). -->
                 <Border Grid.Column="10" Classes="StatusBarSeparator"/>
+                <TextBlock Grid.Column="11"
+                           Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
+                           Foreground="{StaticResource MochaOverlay2}"
+                           FontFamily="{StaticResource CodeFont}" FontSize="11"
+                           Margin="0,0,0,0" VerticalAlignment="Center"/>
 
                 <!-- Group 4 (left of *): cost -->
-                <TextBlock Grid.Column="11" Text="{Binding CostUsd, StringFormat='${0:F4}'}"
+                <Border Grid.Column="12" Classes="StatusBarSeparator"/>
+                <TextBlock Grid.Column="13" Text="{Binding CostUsd, StringFormat='${0:F4}'}"
                            Foreground="{StaticResource MochaYellow}"
                            FontFamily="{StaticResource CodeFont}" FontSize="11"
                            Margin="0,0,0,0" VerticalAlignment="Center"/>
 
                 <!-- Spacer (*) — pushes session count to the right -->
-                <TextBlock Grid.Column="12" Text=""/>
+                <TextBlock Grid.Column="14" Text=""/>
 
                 <!-- Group 4 (right of *): sessions -->
-                <Border Grid.Column="13" Classes="StatusBarSeparator"/>
-                <TextBlock Grid.Column="14" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
+                <Border Grid.Column="15" Classes="StatusBarSeparator"/>
+                <TextBlock Grid.Column="16" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
                            Foreground="{StaticResource TextMutedBrush}"
                            FontFamily="{StaticResource CodeFont}" FontSize="11"
                            VerticalAlignment="Center"/>

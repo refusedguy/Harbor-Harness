@@ -27,6 +27,26 @@ public sealed class SessionContext
     /// <summary>Whether the git working tree has uncommitted changes.</summary>
     public bool GitIsDirty { get; set; }
 
+    /// <summary>
+    ///     ChatViewModel's <c>_renderedLineCount</c> snapshot for this session.
+    ///     Saved when switching away so that switching back resumes rendering
+    ///     from the same line offset — without this, the renderer would
+    ///     re-append every line in the transcript on each switch because the
+    ///     ChatViewModel's <c>_renderedLineCount</c> was reset to 0 by
+    ///     <c>ResetRendering</c>.
+    /// </summary>
+    public int RenderedLineCount { get; set; }
+
+    /// <summary>
+    ///     Whether the per-session <see cref="Store"/> has been hydrated with
+    ///     the persisted message history (or restored from a previous visit).
+    ///     False on first sight of the session — <see cref="SessionSwitcher.OpenAsync"/>
+    ///     replays the message history into the store and sets this to true.
+    ///     Subsequent switches to this session skip the replay because the
+    ///     in-memory store already has the state.
+    /// </summary>
+    public bool StoreWasHydrated { get; set; }
+
     public SessionContext(Session session)
     {
         Session = session;

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework;assembly=Harbor.Desktop.Abstractions"
              x:Class="Harbor.App.Avalonia.Views.TokenUsageView">
 
     <Border Background="#80000000" ZIndex="200"
@@ -46,7 +47,7 @@
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="vm:TokenUsageBarViewModel">
+                            <DataTemplate DataType="vm:TokenUsageViewModel">
                                 <Grid Width="24" Height="280" Margin="2,0">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>

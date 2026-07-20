@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -66,7 +66,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // its purpose and lingering would only confuse the user.
         ProviderModelPicker.ModelSelected += () =>
         {
-            Dispatcher.UIThread.Post(() => IsModelPickerOpen = false);
+            _dispatcher.Post(() => IsModelPickerOpen = false);
         };
 
         // Subscribe to UiStore transitions on the UI thread. NOTE: _dispatcher.Bind(store)
@@ -168,21 +168,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int _activeSessionCount = 1;
 
+    /// <summary>
+    ///     Live message count for the active chat (number of chat lines in
+    ///     the current <see cref="UiStore"/> state). Updated on every
+    ///     <see cref="OnStoreChanged"/> transition so the status bar's
+    ///     "N msgs" label tracks new messages immediately after the user
+    ///     sends a prompt (Task D2 / Problem 2: status bar message count
+    ///     was stale — only refreshed on full RefreshAsync cycles).
+    /// </summary>
+    [ObservableProperty]
+    private int _messageCount;
+
     [ObservableProperty]
     private bool _isRunning;
 
     /// <summary>Status bar color key based on <see cref="StatusText"/>.</summary>
-    public string StatusBrushKey => StatusText switch
-    {
-        "running" => "StatusRunningBrush",
-        "compacting" => "StatusCompactBrush",
-        "error" => "StatusErrorBrush",
-        _ => "StatusIdleBrush"
-    };
+    public string StatusBrushKey => StatusMappers.StatusToBrushKey(StatusText);
 
     private void OnStoreChanged(UiState state)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             StatusText = state.Status;
             ProviderLabel = string.IsNullOrEmpty(state.Provider) ? "—" : state.Provider;
@@ -197,6 +202,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // waiting for a RefreshAsync round-trip (Task S2 / Problem 2 —
             // the count was frozen at the initial value of 1 forever).
             ActiveSessionCount = Math.Max(1, Sessions.Sessions.Count);
+            // Push the live message count so the status bar's "N msgs"
+            // label updates immediately after the user sends a prompt
+            // (Task D2 / Problem 2: status bar message count was stale).
+            MessageCount = state.Lines.Length;
             OnPropertyChanged(nameof(StatusBrushKey));
 
             // Track token-usage history for the chart.
@@ -276,13 +285,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <param name="toast">Toast notification.</param>
     public void AddToast(ToastNotification toast)
     {
-        Dispatcher.UIThread.Post(() =>
+        _dispatcher.Post(() =>
         {
             Toasts.Add(toast);
             // Auto-dismiss after 4 seconds.
             _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>
             {
-                Dispatcher.UIThread.Post(() => Toasts.Remove(toast));
+                _dispatcher.Post(() => Toasts.Remove(toast));
             }, TaskScheduler.Default);
         });
     }
