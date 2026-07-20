@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Harbor.Desktop.Abstractions.Models;
-using Harbor.Desktop.Abstractions.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Desktop.DesignSystem.Themes;
 
