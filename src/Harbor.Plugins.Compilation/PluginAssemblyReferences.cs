@@ -93,6 +93,19 @@ public sealed class PluginAssemblyReferences
         EnsureReference(refs, seen, typeof(System.Threading.Tasks.Task).Assembly);
         EnsureReference(refs, seen, typeof(System.Threading.CancellationToken).Assembly);
 
+        // 2b. Harbor.Domain — holds the Harbor.Abstractions.Models.* types
+        //     (Session, ContentPart, ToolResult, etc.). They declare
+        //     `namespace Harbor.Abstractions.Models` but live in Harbor.Domain.dll,
+        //     NOT Harbor.Abstractions.dll. Without this explicit reference, plugin
+        //     sources with `using Harbor.Abstractions.Models;` fail with CS0234
+        //     "The type or namespace name 'Models' does not exist in the namespace
+        //     'Harbor.Abstractions'" — which was the user-visible failure that
+        //     broke all 3 CompilationLayer tests after the Domain/Abstractions
+        //     split landed. typeof() forces Harbor.Domain to load if it wasn't
+        //     already (it usually is, via the Abstractions reference, but the
+        //     AppDomain snapshot may have been taken before that).
+        EnsureReference(refs, seen, typeof(Harbor.Abstractions.Models.Session).Assembly);
+
         // 3. Scan the .NET runtime directory for System.Runtime / System.Collections /
         //    etc. — these contract assemblies are needed by the compiler to resolve
         //    type-forwarded BCL types (Version, Task, IReadOnlyList<>, …) even when

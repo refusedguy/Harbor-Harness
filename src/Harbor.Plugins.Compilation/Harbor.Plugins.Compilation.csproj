@@ -22,6 +22,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <!--
+      Harbor.Domain is needed explicitly so PluginAssemblyReferences can
+      call typeof(Harbor.Abstractions.Models.Session).Assembly at construction
+      time. Without this ProjectReference, the call would still work at runtime
+      (Harbor.Domain is loaded transitively via Harbor.Abstractions), but the
+      compiler needs a direct reference to allow the static type lookup in
+      RoslynPluginCompiler's host code.
+    -->
+    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -27,6 +27,14 @@ public sealed class CompilationLayerTests
 
         var result = await compiler.CompileAsync(script).ConfigureAwait(false);
 
+        // Surface the actual error message if compilation fails — the
+        // bare `IsTrue` assertion gives "Expected to be true but found
+        // False" with no context, which makes Roslyn reference drift
+        // impossible to diagnose from CI logs.
+        if (result.IsFailure)
+        {
+            await Assert.That(result.Error).IsEqualTo(string.Empty);
+        }
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Assembly).IsNotNull();
         await Assert.That(result.FromCache).IsFalse();
