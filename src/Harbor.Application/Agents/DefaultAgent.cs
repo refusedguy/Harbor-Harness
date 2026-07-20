@@ -14,9 +14,41 @@ public sealed class DefaultAgent : IAgent
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
     private readonly ILogger<DefaultAgent> _logger;
-    private readonly TaskCompletionSource<Result> _runCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ISessionStore _sessionStore;
     private readonly Channel<AgentMessage> _steeringQueue;
+
+    /// <summary>
+    ///     Per-run completion source. A fresh instance is swapped in at the
+    ///     start of every <see cref="PromptAsync" /> call (see
+    ///     <see cref="StartRunCompletion" />) and completed with the run's
+    ///     <see cref="Result" /> when the run finishes (success, cancel, or
+    ///     fault). <see cref="WaitForIdleAsync" /> awaits the snapshot captured
+    ///     at call time, so a session switch that aborts the in-flight run will
+    ///     see the abort's <c>Result.Failure</c> (set by the cancel branch) and
+    ///     return promptly instead of hanging forever.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Marked <c>volatile</c> so the read in <see cref="WaitForIdleAsync" />
+    ///         is an acquire load — without <c>volatile</c>, a thread could see
+    ///         a stale pre-swap TCS reference and await a task that is never
+    ///         completed (the original v0 bug: the readonly field was created
+    ///         once in the ctor and <c>SetResult</c> was never called, so
+    ///         <c>WaitForIdleAsync</c> hung indefinitely when the agent was
+    ///         running).
+    ///     </para>
+    /// </remarks>
+    private volatile TaskCompletionSource<Result> _runCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    ///     Backing field for <see cref="AbortSource" />. Replaced wholesale by
+    ///     <see cref="ResetAbortSource" /> — a single CTS can only be cancelled
+    ///     once, so after every abort we swap in a fresh one or the next
+    ///     <see cref="PromptAsync" /> would observe the cancelled token and
+    ///     fail immediately.
+    /// </summary>
+    private CancellationTokenSource _abortSource = new();
 
     /// <summary>
     ///     Construct a <see cref="DefaultAgent" /> wired to the supplied services.
@@ -92,9 +124,35 @@ public sealed class DefaultAgent : IAgent
     public AgentState State { get; private set; } = null!;
 
     /// <summary>
-    ///     Cancellation token source used to abort the current run.
+    ///     Cancellation token source used to abort the current run. Replaced
+    ///     wholesale by <see cref="ResetAbortSource" /> after each abort so the
+    ///     agent is ready for a new run.
     /// </summary>
-    public CancellationTokenSource AbortSource { get; } = new();
+    public CancellationTokenSource AbortSource => _abortSource;
+
+    /// <summary>
+    ///     Recreate <see cref="AbortSource" /> if (and only if) the current
+    ///     source has already been cancelled. No-op when the current source is
+    ///     still live, so calling this in the middle of a run is safe but does
+    ///     nothing. After this returns, <see cref="AbortSource" /> points at a
+    ///     fresh, un-cancelled <see cref="CancellationTokenSource" />.
+    /// </summary>
+    public void ResetAbortSource()
+    {
+        // Only swap if the current source is already cancelled — otherwise
+        // we'd blow away the cancellation token the in-flight PromptAsync is
+        // linked to. The session manager calls this AFTER abort + WaitForIdle,
+        // so the source is guaranteed cancelled by then; the guard still
+        // protects against accidental mid-run calls.
+        if (!_abortSource.IsCancellationRequested)
+        {
+            return;
+        }
+
+        var old = _abortSource;
+        _abortSource = new CancellationTokenSource();
+        old.Dispose();
+    }
 
     /// <summary>
     ///     Subscribe a listener to all agent events. The listener is invoked for every event
@@ -160,6 +218,12 @@ public sealed class DefaultAgent : IAgent
 
         await _sessionStore.AppendMessageAsync(State.SessionId, message, ct).ConfigureAwait(false);
 
+        // Swap in a fresh per-run completion source so WaitForIdleAsync callers
+        // awaiting the PREVIOUS source see THIS run's terminal result. The old
+        // source is completed with a cancelled sentinel to unblock any caller
+        // that raced between State.IsRunning flipping true and the swap.
+        var completion = StartRunCompletion();
+
         State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
 
         var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortSource.Token, ct);
@@ -175,23 +239,44 @@ public sealed class DefaultAgent : IAgent
                 LastActivityAt = DateTimeOffset.UtcNow
             };
 
+            completion.TrySetResult(result);
             return result;
         }
         catch (OperationCanceledException) when (linkedCts.Token.IsCancellationRequested)
         {
             State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-            return Result.Failure("Agent was cancelled.");
+            var cancelled = Result.Failure("Agent was cancelled.");
+            completion.TrySetResult(cancelled);
+            return cancelled;
         }
         catch (Exception ex)
         {
             State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
             _logger.LogError(ex, "Agent run failed");
-            return Result.Failure(ex.Message);
+            var failed = Result.Failure(ex.Message);
+            completion.TrySetException(ex);
+            return failed;
         }
         finally
         {
             linkedCts.Dispose();
         }
+    }
+
+    /// <summary>
+    ///     Atomically swap <see cref="_runCompletion" /> for a fresh
+    ///     <see cref="TaskCompletionSource{TResult}" /> and complete the previous
+    ///     one (if any) with a <c>Result.Failure("Agent was cancelled.")</c>
+    ///     sentinel so any <see cref="WaitForIdleAsync" /> caller awaiting it
+    ///     returns promptly.
+    /// </summary>
+    /// <returns>The new completion source for this run.</returns>
+    private TaskCompletionSource<Result> StartRunCompletion()
+    {
+        var fresh = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var previous = Interlocked.Exchange(ref _runCompletion, fresh);
+        previous?.TrySetResult(Result.Failure("Agent was cancelled."));
+        return fresh;
     }
 
     /// <summary>
@@ -212,11 +297,28 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A task that completes when the agent is idle.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         Captures <see cref="_runCompletion" /> into a local before
+    ///         returning the awaiting task. Without the local, the lambda
+    ///         closure would re-read the volatile field at await time and could
+    ///         pick up the NEXT run's source (if a new PromptAsync started
+    ///         between the State.IsRunning check and the await) — that would
+    ///         make this method return the wrong run's terminal result.
+    ///     </para>
+    /// </remarks>
     public Task WaitForIdleAsync(CancellationToken ct = default)
     {
-        return State?.IsRunning == true
-            ? Task.Run(async () => await _runCompletion.Task.ConfigureAwait(false), ct)
-            : Task.CompletedTask;
+        if (State?.IsRunning != true)
+        {
+            return Task.CompletedTask;
+        }
+
+        // Capture the current completion source — THIS is the run we want to
+        // wait on, even if a new PromptAsync swaps in a fresh one while we're
+        // parked on the await.
+        var completion = _runCompletion;
+        return Task.Run(async () => await completion.Task.ConfigureAwait(false), ct);
     }
 
     /// <summary>

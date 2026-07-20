@@ -1,0 +1,176 @@
+using System.Text.Json;
+using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Models;
+using Microsoft.Extensions.Logging;
+
+namespace Harbor.Core.Agents;
+
+/// <summary>
+///     Coalesces streaming LLM events (text deltas, thinking deltas,
+///     tool-call start/delta fragments) into buffer state that the
+///     <see cref="AgentLoop"/> can flush into a single
+///     <see cref="AssistantMessage"/> per turn. Extracted from
+///     <see cref="AgentLoop"/> (Task R32 god-object decomposition) so the
+///     loop can focus on orchestration while this class owns the
+///     buffer-management + flush semantics.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>Performance:</b> uses pooled <c>StringBuilder</c>s for the
+///         text + thinking buffers (sized 4 KB / 1 KB respectively) and a
+///         per-tool-call pooled <c>StringBuilder</c> for accumulating
+///         <c>args</c> JSON deltas. The previous per-delta
+///         <c>partial.AppendText(...)</c> approach was O(n²) in array
+///         allocations per text run.
+///     </para>
+///     <para>
+///         <b>Lifecycle:</b> one <see cref="StreamingCoalescer"/> per turn.
+///         The caller (<c>AgentLoop</c>) flushes pending buffers via
+///         <see cref="FlushText"/> / <see cref="FlushThinking"/> before
+///         transitioning between text/thinking/tool-call runs and before
+///         materializing tool calls. <see cref="Dispose"/> on a coalescer
+///         with pending buffers (e.g. on stream cancellation) is safe.
+///     </para>
+/// </remarks>
+internal sealed class StreamingCoalescer : IDisposable
+{
+    private readonly StringBuilderPool.PooledStringBuilder _textBuffer = StringBuilderPool.Rent(4096);
+    private readonly StringBuilderPool.PooledStringBuilder _thinkingBuffer = StringBuilderPool.Rent(1024);
+    private readonly Dictionary<string, (string Name, StringBuilderPool.PooledStringBuilder Args)> _pendingToolCalls = new(capacity: 4);
+    private bool _hasPendingText;
+    private bool _hasPendingThinking;
+    private bool _disposed;
+
+    public StreamingCoalescer()
+    {
+    }
+
+    /// <summary>True when there's accumulated text delta not yet flushed to the partial.</summary>
+    public bool HasPendingText => _hasPendingText;
+
+    /// <summary>True when there's accumulated thinking delta not yet flushed.</summary>
+    public bool HasPendingThinking => _hasPendingThinking;
+
+    /// <summary>Track a text delta — append to the text buffer.</summary>
+    public void AppendTextDelta(string delta)
+    {
+        _textBuffer.Builder.Append(delta);
+        _hasPendingText = true;
+    }
+
+    /// <summary>Track a thinking delta — append to the thinking buffer.</summary>
+    public void AppendThinkingDelta(string delta)
+    {
+        _thinkingBuffer.Builder.Append(delta);
+        _hasPendingThinking = true;
+    }
+
+    /// <summary>Begin accumulating args for a tool call.</summary>
+    public void StartToolCall(string id, string toolName)
+    {
+        _pendingToolCalls[id] = (toolName, StringBuilderPool.Rent());
+    }
+
+    /// <summary>Append a tool-call args delta.</summary>
+    public void AppendToolCallDelta(string id, string argsDelta)
+    {
+        if (_pendingToolCalls.TryGetValue(id, out var acc))
+        {
+            acc.Args.Builder.Append(argsDelta);
+            _pendingToolCalls[id] = acc;
+        }
+    }
+
+    /// <summary>
+    ///     Flush any pending text into the partial message and return the
+    ///     flushed text (empty if nothing pending). Clears the text buffer.
+    /// </summary>
+    public string FlushText()
+    {
+        if (!_hasPendingText) return string.Empty;
+        var text = _textBuffer.ToString();
+        _textBuffer.Builder.Clear();
+        _hasPendingText = false;
+        return text;
+    }
+
+    /// <summary>
+    ///     Flush any pending thinking into the partial message and return
+    ///     the flushed thinking text. Clears the thinking buffer.
+    /// </summary>
+    public string FlushThinking()
+    {
+        if (!_hasPendingThinking) return string.Empty;
+        var thinking = _thinkingBuffer.ToString();
+        _thinkingBuffer.Builder.Clear();
+        _hasPendingThinking = false;
+        return thinking;
+    }
+
+    /// <summary>
+    ///     Materialize all accumulated tool calls into <see cref="ToolCallPart"/>
+    ///     list. Parses each tool's args JSON, returning pooled StringBuilders
+    ///     to the pool. Interns tool names via <see cref="StringPool.Shared"/>.
+    /// </summary>
+    public List<ToolCallPart> MaterializeToolCalls()
+    {
+        var result = new List<ToolCallPart>(_pendingToolCalls.Count);
+        foreach ((string id, (string name, var args)) in _pendingToolCalls)
+        {
+            JsonElement parsedArgs;
+            try
+            {
+                string jsonText = args.Builder.Length == 0 ? "{}" : args.ToString();
+                using var doc = JsonDocument.Parse(jsonText);
+                parsedArgs = doc.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                using var fallback = JsonDocument.Parse("{}");
+                parsedArgs = fallback.RootElement.Clone();
+            }
+            finally
+            {
+                args.Dispose();
+            }
+
+            string internedName = name; // StringPool interning removed — was using CommunityToolkit.HighPerformance.StringPool
+            result.Add(new ToolCallPart(id, internedName, parsedArgs));
+        }
+        _pendingToolCalls.Clear();
+        return result;
+    }
+
+    /// <summary>
+    ///     Discard all pending tool calls (e.g. on stream error / cancellation).
+    ///     Returns each per-tool-call pooled StringBuilder to the pool.
+    /// </summary>
+    public void DiscardPendingToolCalls()
+    {
+        foreach (var (_, entry) in _pendingToolCalls)
+        {
+            entry.Args.Dispose();
+        }
+        _pendingToolCalls.Clear();
+    }
+
+    /// <summary>Reset all buffers for a new turn.</summary>
+    public void Reset()
+    {
+        _textBuffer.Builder.Clear();
+        _thinkingBuffer.Builder.Clear();
+        DiscardPendingToolCalls();
+        _hasPendingText = false;
+        _hasPendingThinking = false;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _textBuffer.Dispose();
+        _thinkingBuffer.Dispose();
+        DiscardPendingToolCalls();
+    }
+}

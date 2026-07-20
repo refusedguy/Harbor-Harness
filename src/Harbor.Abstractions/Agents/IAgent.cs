@@ -50,6 +50,28 @@ public interface IAgentRunner
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A task that completes when the agent is idle.</returns>
     Task WaitForIdleAsync(CancellationToken ct = default);
+
+    /// <summary>
+    ///     Recreate the internal <see cref="AbortSource" /> so the agent is ready
+    ///     for a fresh run after the previous token was cancelled. No-op if the
+    ///     current source has not been cancelled (calling this in the middle of a
+    ///     run would blow away the in-flight cancellation token, so the guard
+    ///     prevents footguns).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why this exists:</b> a single <c>CancellationTokenSource</c> can
+    ///         only transition to the cancelled state once. After an abort (user
+    ///         Stop button, session switch, etc.) the source stays cancelled and
+    ///         every subsequent <see cref="PromptAsync" /> call would immediately
+    ///         observe <c>IsCancellationRequested=true</c> and fail with
+    ///         <c>OperationCanceledException</c> — the user could never send
+    ///         another prompt. The session manager also uses this to reset the
+    ///         abort state before binding a new session so the new session's
+    ///         first prompt isn't dead on arrival.
+    ///     </para>
+    /// </remarks>
+    void ResetAbortSource();
 }
 
 /// <summary>
