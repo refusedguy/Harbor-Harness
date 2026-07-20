@@ -456,9 +456,9 @@ internal static class HostBuilder
         string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrEmpty(envModel))
         {
-            config.Model = envModel; config.DefaultModel = envModel;
-            string[] parts = envModel.Split('/', 2);
-            config.Provider = parts[0];
+            // Model setter parses "provider/model"; the provider component is
+            // derived from it via IdentityConfig.EffectiveProvider.
+            config.Model = envModel;
         }
     }
 
