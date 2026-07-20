@@ -170,7 +170,13 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _agent.AbortSource.Cancel();
         try
         {
-            await _agent.WaitForIdleAsync(_appCt).ConfigureAwait(false);
+            // Bound the wait so a misbehaving agent loop can't hang the UI
+            // forever — 5s is generous (the agent's only safe boundaries are
+            // between turns / during streaming awaits, both sub-second). The
+            // session manager uses a 3s bound on its own switches; here we
+            // give the user-initiated Stop a slightly longer fuse.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await _agent.WaitForIdleAsync(timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
@@ -181,6 +187,13 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         {
             _store.Transition(s => s.AddLine(ChatRole.Error, ex.Message));
         }
+
+        // Recreate the abort source so the next PromptAsync call observes a
+        // live, un-cancelled token. Without this, a single Stop click would
+        // permanently disable sending — every subsequent prompt would observe
+        // IsCancellationRequested=true and immediately throw
+        // OperationCanceledException.
+        _agent.ResetAbortSource();
 
         _store.Transition(s => s with { IsAgentRunning = false, Status = "idle" });
     }

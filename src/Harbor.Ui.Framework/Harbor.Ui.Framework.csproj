@@ -16,7 +16,7 @@
       ❌ NO Harbor.Core / Application / Registries / Scripting
       ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.*
       ❌ NO Spectre / Terminal.Gui / Terminal color / ANSI / widget types
-      ❌ NO CommunityToolkit.Mvvm      (only Terminal.Abstractions needs INPC VMs)
+      ✅ CommunityToolkit.Mvvm        (ViewModels use ObservableObject + [ObservableProperty])
 
     Split out of Harbor.Tui.Abstractions (Task A2, R6). The old
     `Harbor.Tui.Abstractions.State` namespace became `Harbor.Ui.Framework.State`,
@@ -32,6 +32,7 @@
     <PackageId>Harbor.Ui.Framework</PackageId>
     <Description>Harbor UI Framework — TEA state machine + dockable panel system, shared by terminal TUIs and desktop GUIs.</Description>
     <PackageTags>harbor;ui;framework;tea;elm;panels;mvu</PackageTags>
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -50,6 +51,8 @@
     <InternalsVisibleTo Include="Harbor.Tui.Termina"/>
     <InternalsVisibleTo Include="Harbor.Tui.TerminalGui"/>
     <InternalsVisibleTo Include="Harbor.Tui.RazorConsole"/>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
+    <InternalsVisibleTo Include="Harbor.E2E.App.Avalonia"/>
   </ItemGroup>
 
   <ItemGroup>
@@ -60,6 +63,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.Logging"/>
     <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    
   </ItemGroup>
 
 </Project>
