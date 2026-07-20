@@ -111,16 +111,16 @@ public class SystemPromptBuilderBenchmark
         for (int i = 0; i < count; i++)
         {
             tools[i] = new ToolDescriptor(
-                ToolName.Create($"tool-{i}"),
+                ToolName.Create($"tool_{i}"),
                 $"Tool {i}",
                 $"Tool number {i} for benchmarking the system prompt builder with a realistic-length description.",
                 JsonDocument.Parse("{}"),
                 ExecutionMode.Parallel,
-                $"Use tool-{i} when you need to perform action {i}.",
+                $"Use tool_{i} when you need to perform action {i}.",
                 new[]
                 {
-                    $"Always pass the 'path' argument to tool-{i}.",
-                    $"Tool-{i} returns plain text; do not parse it as JSON."
+                    $"Always pass the 'path' argument to tool_{i}.",
+                    $"tool_{i} returns plain text; do not parse it as JSON."
                 });
         }
         return tools;

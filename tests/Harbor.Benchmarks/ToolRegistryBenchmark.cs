@@ -35,7 +35,7 @@ public class ToolRegistryBenchmark
 
         for (int i = 0; i < ToolCount; i++)
         {
-            var tool = new StubTool($"tool-{i}", $"Tool {i}");
+            var tool = new StubTool($"tool_{i}", $"Tool {i}");
             _frozenRegistry.Register(tool);
             _unfrozenRegistry.Register(tool);
         }
