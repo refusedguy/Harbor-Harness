@@ -1,10 +1,15 @@
 # CLAUDE.md — Conventions for AI assistants working on Harbor
 
 > This file is read by Claude Code (and other AI agents) when working on this codebase. It encodes the project's conventions, patterns, and gotchas.
+>
+> **Project state (v0.4.0-alpha, R31):** build green (0/0), 240+ unit tests passing, 12 E2E tests passing, 3 pre-existing Avalonia 12 headless bugs + 8 IPC timing bugs (Linux). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card and [docs/ROADMAP.md](./docs/ROADMAP.md) for the full plan.
 
 ## Companion documents
 
 - **[AGENTS.md](./AGENTS.md)** — operational guide for AI agents (read this for **how to make changes**, common tasks, E2E testing, what NOT to do). Cross-references this file.
+- **[docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md)** — quick-reference card: build/test status, recent milestones, known broken, top 3 next steps.
+- **[docs/ROADMAP.md](./docs/ROADMAP.md)** — full roadmap with priorities, status, and tech-debt backlog.
+- **[docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md)** — reusable UI components (StatusBadge, ChatBubble, SessionRow) across Avalonia/Blazor/WPF.
 - **[docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md)** — canonical Clean / Hexagonal / Onion layering rules. The allowed/forbidden `<ProjectReference>` matrix is mechanically enforced by `tests/Harbor.Architecture.Tests`. **Read this before adding any `<ProjectReference>` to a `.csproj`.**
 - **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 41 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
 - **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of `Harbor.Tui.SpectreTui` for adding features from opencode/kilocode/pi-agent.

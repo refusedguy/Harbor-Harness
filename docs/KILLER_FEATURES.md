@@ -23,26 +23,26 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 
 | #  | Feature                                            | Impact | Effort | Source        | Status |
 |----|----------------------------------------------------|--------|--------|---------------|--------|
-| 1  | Animated streaming text with typewriter cursor     | 5      | S      | Orca, OpenAI  | ❌     |
-| 2  | Collapsible tool-call cards with status + duration | 5      | M      | Orca, Opencode | ❌     |
-| 3  | Command palette with recent items + fuzzy + kbd    | 5      | M      | Orca (cmdk)   | ⚠️     |
-| 4  | Token-usage sparkline in status bar (live)         | 4      | S      | Opencode, Kilo | ❌     |
-| 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ⚠️     |
-| 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ⚠️     |
-| 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌     |
-| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ❌     |
-| 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌     |
-| 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️     |
-| 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌     |
-| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ❌     |
-| 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ❌     |
-| 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌     |
-| 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌     |
-| 16 | Mobile-driver overlay (responsive phone preview)   | 3      | L      | Orca          | ❌     |
-| 17 | PR-comment sidebar cards with code context         | 4      | L      | Orca, Kilo    | ❌     |
-| 18 | Star-nag card (gentle GitHub star reminder)        | 2      | S      | Orca          | ❌     |
-| 19 | Floating terminal pane (detach + reattach)         | 4      | L      | Orca          | ❌     |
-| 20 | Per-workspace env memory (`.env` per worktree)      | 3      | M      | Orca          | ❌     |
+| 1  | Animated streaming text with typewriter cursor     | 5      | S      | Orca, OpenAI  | ✅ R28 |
+| 2  | Collapsible tool-call cards with status + duration | 5      | M      | Orca, Opencode | ✅ R28 |
+| 3  | Command palette with recent items + fuzzy + kbd    | 5      | M      | Orca (cmdk)   | ⚠️ partial (basic, no fuzzy) |
+| 4  | Token-usage sparkline in status bar (live)         | 4      | S      | Opencode, Kilo | ✅ R28 |
+| 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ⚠️ partial (line-level only) |
+| 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
+| 7  | Tab-strip with drag-reorder + close-gesture        | 4      | L      | Orca          | ❌ |
+| 8  | Worktree jump palette (Cmd-J / Ctrl+J)             | 5      | M      | Orca          | ❌ |
+| 9  | Agent pet mascot that reacts to agent state        | 4      | S      | Orca          | ❌ |
+| 10 | Markdown rich editor (TipTap) with code blocks     | 5      | L      | Orca          | ⚠️ partial (renderer, no editor) |
+| 11 | Image preview inline in chat                       | 4      | M      | Opencode, Kilo | ❌ |
+| 12 | Skill freshness pill (update available)            | 3      | S      | Orca          | ❌ |
+| 13 | Setup-guide progress ring + checklist              | 4      | M      | Orca          | ✅ R28 (onboarding wizard with stepper) |
+| 14 | Dictation / speech-to-text input                   | 3      | L      | Orca (sherpa) | ❌ |
+| 15 | Browser/markup overlay for screenshots             | 4      | L      | Orca          | ❌ |
+| 16 | Mobile-driver overlay (responsive phone preview)   | 3      | L      | Orca          | ❌ |
+| 17 | PR-comment sidebar cards with code context         | 4      | L      | Orca, Kilo    | ❌ |
+| 18 | Star-nag card (gentle GitHub star reminder)        | 2      | S      | Orca          | ❌ |
+| 19 | Floating terminal pane (detach + reattach)         | 4      | L      | Orca          | ❌ |
+| 20 | Per-workspace env memory (`.env` per worktree)      | 3      | M      | Orca          | ❌ |
 
 **Top 3 to implement now (P0):** #1 (typewriter), #2 (tool-call cards), #4 (sparkline) —
 they have the highest impact/effort ratio and ship in 1 sprint. Detailed

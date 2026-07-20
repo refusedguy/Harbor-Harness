@@ -27,31 +27,42 @@ dotnet build
 
 # Build a specific project
 dotnet build src/Harbor.Core
+dotnet build apps/Harbor.App.Avalonia
 
 # Build Release configuration
 dotnet build -c Release
 
 # Clean build artifacts
 dotnet clean
+
+# Disk-space-constrained sandbox / CI: clear bin/obj before a full build
+find . -type d \( -name bin -o -name obj \) -not -path '*/node_modules/*' -exec rm -rf {} +
 ```
 
 ## Test commands
 
 ```bash
-# Run all tests
+# Run all tests (note: .NET 10 + Microsoft.Testing.Platform requires `dotnet run` on test projects)
+dotnet build
 dotnet test
 
-# Run a specific test project
-dotnet test tests/Harbor.Core.Tests
+# Run a specific test project (preferred: use `dotnet run` because of MTP)
+dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build
+dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build
 
-# Run tests with detailed output
-dotnet test --logger "console;verbosity=detailed"
+# Run with detailed output
+dotnet run --project tests/Harbor.Core.Tests -c Release -- --detailed-stacktrace
 
-# Run a specific test
-dotnet test tests/Harbor.Abstractions.Tests --filter "FullyQualifiedName~IdentifiersTests"
+# Enforce layer-dep rules (architecture tests)
+dotnet test tests/Harbor.Architecture.Tests
 ```
 
-Tests use [TUnit](https://github.com/thomhurst/TUnit). Test files are in `tests/<Project>.Tests/`.
+Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Testing Platform v2.3.2. Test files are in `tests/<Project>.Tests/`.
+
+### Known test status
+
+- **3 pre-existing Avalonia 12 headless failures**: `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — fail with `Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Not Harbor bugs.
+- **8 IPC timing-test failures on Linux**: named-pipe disposal race in `Harbor.Ipc.Tests`. Pass on Windows.
 
 ## Running the CLI
 
