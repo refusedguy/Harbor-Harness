@@ -1,21 +1,24 @@
-@* StatusBar — bottom strip showing current status + token/cost counts.
-   Reads from UiStore. @*@
+@* StatusBar - bottom strip showing current status + token/cost counts.
+   Reads from UiStore and uses the platform-agnostic StatusMappers helpers
+   so the label / brush-key format stays identical across Blazor, Avalonia,
+   WPF, MAUI, and the TUI renderers. *@
 
 @using Harbor.Ui.Framework.State
+@using Harbor.Ui.Framework.Converters
 @inject UiStore Store
 @implements IDisposable
 
 <div class="statusbar">
     <div class="status-section">
-        <span class="@(Store.State.IsAgentRunning ? "status-running" : "")">
-            @(Store.State.IsAgentRunning ? "● running" : "● idle")
+        <span class="@("status-dot status-" + StatusMappers.StatusToBrushKey(Store.State.Status).ToLowerInvariant())">
+            @StatusMappers.StatusToBrushKey(Store.State.Status)
         </span>
         <span>@Store.State.Status</span>
     </div>
     <div class="status-section">
-        <span class="status-pill">in: @(Store.State.Cost.TokensIn.ToString("N0"))</span>
-        <span class="status-pill">out: @(Store.State.Cost.TokensOut.ToString("N0"))</span>
-        <span class="status-pill">$@(Store.State.Cost.CostUsd.ToString("F4"))</span>
+        <span class="status-pill">in: @StatusMappers.TokensToCompact(Store.State.Cost.TokensIn)</span>
+        <span class="status-pill">out: @StatusMappers.TokensToCompact(Store.State.Cost.TokensOut)</span>
+        <span class="status-pill">@StatusMappers.CostToUsd(Store.State.Cost.CostUsd)</span>
     </div>
 </div>
 
