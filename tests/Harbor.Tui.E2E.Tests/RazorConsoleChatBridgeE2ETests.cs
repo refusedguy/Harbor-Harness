@@ -178,6 +178,7 @@ public class RazorConsoleChatBridgeE2ETests
         public void Steer(AgentMessage message) { }
         public void FollowUp(AgentMessage message) { }
         public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public void ResetAbortSource() { }
         public void Dispose() { }
 
         private sealed class NoopDisposable : IDisposable

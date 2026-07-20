@@ -1,6 +1,5 @@
 using Harbor.Ipc.Protocol;
 using MessagePack;
-using TUnit.Assertions.AssertConditions.Throws;
 
 namespace Harbor.Ipc.Tests;
 

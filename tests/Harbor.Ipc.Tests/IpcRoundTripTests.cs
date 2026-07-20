@@ -3,7 +3,6 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TUnit.Assertions.AssertConditions.Throws;
 
 namespace Harbor.Ipc.Tests;
 

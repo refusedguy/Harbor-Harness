@@ -16,7 +16,7 @@ internal sealed class StubAgent : IAgent
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
 
-    public CancellationTokenSource AbortSource { get; } = new();
+    public CancellationTokenSource AbortSource { get; private set; } = new();
     public AgentState State { get; private set; } = null!;
     public string? LastPrompt { get; private set; }
     public string? LastSessionId { get; private set; }
@@ -41,6 +41,19 @@ internal sealed class StubAgent : IAgent
         => PromptAsync(message.Content, ct);
 
     public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
+    ///     Test stub for <see cref="IAgentRunner.ResetAbortSource" />. Swaps in a
+    ///     fresh <see cref="CancellationTokenSource" /> so post-abort prompts in
+    ///     tests behave like the real <c>DefaultAgent</c>.
+    /// </summary>
+    public void ResetAbortSource()
+    {
+        if (!AbortSource.IsCancellationRequested) return;
+        var old = AbortSource;
+        AbortSource = new CancellationTokenSource();
+        old.Dispose();
+    }
 
     public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener)
     {

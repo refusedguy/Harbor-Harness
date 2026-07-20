@@ -4,7 +4,6 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ipc.InProcess;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TUnit.Assertions.AssertConditions.Throws;
 using TUnit.Core;
 
 namespace Harbor.Ipc.Tests;

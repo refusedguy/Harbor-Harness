@@ -7,7 +7,11 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views.Controls;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
+using ToastNotification = Harbor.Ui.Framework.Services.ToastNotification;
+using ToastKind = Harbor.Ui.Framework.Services.ToastKind;
 
 namespace Harbor.App.Avalonia.Tests;
 
@@ -77,7 +81,7 @@ public class KillerFeatureTests
             IconText = "📖",
         };
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Running);
-        await Assert.That(vm.StatusPill).IsEqualTo("● running");
+        await Assert.That(vm.StatusPill).IsEqualTo("running");
         await Assert.That(vm.IsExpanded).IsFalse();
         await Assert.That(vm.DurationText).IsEqualTo(string.Empty);
     }
@@ -95,7 +99,7 @@ public class KillerFeatureTests
             resultPreview: "exit code 0",
             duration: TimeSpan.FromMilliseconds(234));
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Success);
-        await Assert.That(vm.StatusPill).IsEqualTo("✓ ok");
+        await Assert.That(vm.StatusPill).IsEqualTo("ok");
         await Assert.That(vm.DurationText).IsEqualTo("234ms");
         await Assert.That(vm.ResultPreview).IsEqualTo("exit code 0");
     }
@@ -109,7 +113,7 @@ public class KillerFeatureTests
             resultPreview: "permission denied",
             duration: TimeSpan.FromSeconds(1.5));
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Error);
-        await Assert.That(vm.StatusPill).IsEqualTo("✗ err");
+        await Assert.That(vm.StatusPill).IsEqualTo("err");
         await Assert.That(vm.DurationText).IsEqualTo("1.5s");
     }
 
@@ -132,14 +136,14 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_StatusBackgroundBrush_NotNull()
+    public async Task ToolCallViewModel_StatusBrushKey_NotEmpty()
     {
         var vm = new ToolCallViewModel { ToolName = "t" };
-        // Brush resolves from Application.Current.Resources when running
-        // inside the Avalonia app; in headless tests it falls back to
-        // Brushes.Gray (non-null).
-        var brush = vm.StatusBackgroundBrush;
-        await Assert.That(brush).IsNotNull();
+        // VM exposes a resource-key string instead of an IBrush so it can
+        // stay platform-agnostic (reusable by WPF/MAUI/Blazor). The
+        // concrete brush is resolved at bind time via BrushKeyConverter.
+        await Assert.That(vm.StatusBrushKey).IsNotNull();
+        await Assert.That(string.IsNullOrEmpty(vm.StatusBrushKey)).IsFalse();
     }
 
     // ── TypewriterStreamingText ──────────────────────────────────────

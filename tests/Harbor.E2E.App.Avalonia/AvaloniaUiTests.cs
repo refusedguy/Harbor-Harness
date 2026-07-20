@@ -499,7 +499,7 @@ public sealed class AvaloniaUiTests
             if (Driver.MainWindow.DataContext is MainViewModel vm)
             {
                 vm.IsSettingsOpen = true;
-                vm.Settings.Theme = "light";
+                vm.Settings.ThemeSettings.Theme = "light";
                 settingsVm = vm;
             }
         });
