@@ -17,14 +17,16 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 {
     Console.WriteLine("Harbor.App.Avalonia — standalone desktop GUI for the Harbor AI coding agent.");
     Console.WriteLine();
-    Console.WriteLine("Usage: dotnet run --project apps/Harbor.App.Avalonia [--shell classic|orca]");
+    Console.WriteLine("Usage: dotnet run --project apps/Harbor.App.Avalonia [--shell classic|orca] [--theme dark|light|system]");
     Console.WriteLine();
     Console.WriteLine("Options:");
     Console.WriteLine("  --shell classic|orca   Shell layout (default: classic).");
     Console.WriteLine("                         'orca' = experimental Orca-inspired Harbor shell.");
+    Console.WriteLine("  --theme dark|light|system  Theme (default: dark).");
     Console.WriteLine();
     Console.WriteLine("Environment variables:");
     Console.WriteLine("  HARBOR_SHELL     classic | orca (default: classic — same as --shell).");
+    Console.WriteLine("  HARBOR_THEME     dark | light | system (default: dark).");
     Console.WriteLine("  HARBOR_MODEL     provider/model (default: ollama/qwen2.5-coder:7b)");
     Console.WriteLine("  HARBOR_STORAGE   memory | jsonl (default: memory)");
     Console.WriteLine("  HARBOR_LOGLEVEL  Trace|Debug|Information|Warning|Error (default: Information)");
@@ -32,6 +34,7 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 }
 
 App.ShellMode = ResolveShellMode(args);
+App.ThemeMode = ResolveThemeMode(args);
 
 using var host = await AppHost.BuildAsync(args);
 
@@ -93,5 +96,46 @@ static string ResolveShellMode(string[] args)
     {
         Console.Error.WriteLine($"[HARBOR_SHELL] {message}");
         return "classic";
+    }
+}
+
+// Resolve the theme mode from CLI args + env var. Returns "dark", "light", or "system".
+// Unknown values fall back to "dark" (with a stderr warning).
+static string ResolveThemeMode(string[] args)
+{
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--theme", StringComparison.OrdinalIgnoreCase))
+        {
+            string value = args[i + 1].Trim().ToLowerInvariant();
+            return value switch
+            {
+                "dark" => "dark",
+                "light" => "light",
+                "system" => "system",
+                _ => LogThemeFallback($"unknown --theme value '{args[i + 1]}', falling back to dark")
+            };
+        }
+    }
+
+    string? themeEnv = Environment.GetEnvironmentVariable("HARBOR_THEME");
+    if (!string.IsNullOrWhiteSpace(themeEnv))
+    {
+        string value = themeEnv.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "dark" => "dark",
+            "light" => "light",
+            "system" => "system",
+            _ => LogThemeFallback($"unknown HARBOR_THEME value '{themeEnv}', falling back to dark")
+        };
+    }
+
+    return "dark";
+
+    static string LogThemeFallback(string message)
+    {
+        Console.Error.WriteLine($"[HARBOR_THEME] {message}");
+        return "dark";
     }
 }

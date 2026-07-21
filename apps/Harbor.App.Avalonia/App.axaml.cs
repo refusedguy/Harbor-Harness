@@ -63,6 +63,19 @@ public class App : Application
     /// </summary>
     public static bool IsOrcaShell => string.Equals(ShellMode, "orca", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    ///     Theme mode — <c>"dark"</c>, <c>"light"</c>, or <c>"system"</c>.
+    ///     Set by <c>Program.cs</c> from the <c>--theme</c> CLI arg OR the
+    ///     <c>HARBOR_THEME</c> env var, BEFORE the Avalonia lifetime starts.
+    /// </summary>
+    public static string ThemeMode { get; set; } = "dark";
+
+    /// <summary>
+    ///     Convenience flag: <c>true</c> when <see cref="ThemeMode" /> is
+    ///     <c>"dark"</c>.
+    /// </summary>
+    public static bool IsDarkTheme => string.Equals(ThemeMode, "dark", StringComparison.OrdinalIgnoreCase);
+
     /// <inheritdoc />
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -89,7 +102,7 @@ public class App : Application
             // (~/.harbor/avalonia.json) before the MainWindow is shown — this
             // avoids a visible flash of the default theme/size on launch.
             var config = Services.GetRequiredService<AvaloniaConfig>();
-            themeService.ApplyFromConfig(config);
+            themeService.ApplyFromConfig(config, App.ThemeMode);
 
             var commonConfig = Services.GetRequiredService<CommonConfig>();
 
