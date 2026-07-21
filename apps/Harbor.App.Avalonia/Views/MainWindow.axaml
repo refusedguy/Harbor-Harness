@@ -4,6 +4,7 @@
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
         x:Class="Harbor.App.Avalonia.Views.MainWindow"
+
         Title="Harbor — AI Coding Agent"
         Width="1280" Height="800"
         MinWidth="900" MinHeight="600"
