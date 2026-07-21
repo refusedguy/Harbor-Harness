@@ -13,9 +13,7 @@
 // Blazor-specific runtime preferences.
 
 using Harbor.Desktop.Abstractions.Configuration;
-
 namespace Harbor.App.Blazor.Configuration;
-
 /// <summary>
 ///     Per-app configuration for the Harbor Blazor Server desktop app. Stored
 ///     at <c>~/.harbor/blazor.json</c>. Non-overlapping with

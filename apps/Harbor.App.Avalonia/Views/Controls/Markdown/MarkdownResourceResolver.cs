@@ -1,8 +1,6 @@
 using Avalonia;
 using Avalonia.Media;
-
 namespace Harbor.App.Avalonia.Views.Controls.Markdown;
-
 /// <summary>
 ///     Resolves <c>IBrush</c> / <c>FontFamily</c> resources for the
 ///     Markdown renderer. Extracted from <c>MarkdownRenderer.axaml.cs</c>
@@ -23,12 +21,12 @@ namespace Harbor.App.Avalonia.Views.Controls.Markdown;
 internal static class MarkdownResourceResolver
 {
     /// <summary>
-    ///     Look up a brush resource by key. Returns <paramref name="fallback"/>
-    ///     when the key is missing or the resource isn't an <see cref="IBrush"/>.
+    ///     Look up a brush resource by key. Returns <paramref name="fallback" />
+    ///     when the key is missing or the resource isn't an <see cref="IBrush" />.
     /// </summary>
     public static IBrush TryFindBrush(string key, IBrush fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b)
+        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
         {
             return b;
         }
@@ -36,19 +34,19 @@ internal static class MarkdownResourceResolver
     }
 
     /// <summary>
-    ///     Look up a brush resource by key. Returns <see cref="Brushes.Gray"/>
+    ///     Look up a brush resource by key. Returns <see cref="Brushes.Gray" />
     ///     when missing — convenience overload for callers that don't have
     ///     a strong opinion about the fallback colour.
     /// </summary>
     public static IBrush TryFindStaticBrush(string key) => TryFindBrush(key, Brushes.Gray);
 
     /// <summary>
-    ///     Look up a font-family resource by key. Returns <paramref name="fallback"/>
-    ///     when the key is missing or the resource isn't a <see cref="FontFamily"/>.
+    ///     Look up a font-family resource by key. Returns <paramref name="fallback" />
+    ///     when the key is missing or the resource isn't a <see cref="FontFamily" />.
     /// </summary>
     public static FontFamily TryFindFont(string key, FontFamily fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is FontFamily f)
+        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is FontFamily f)
         {
             return f;
         }

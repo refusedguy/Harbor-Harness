@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `action` | string | Required. One of: set/get/add/clear/list. |
 | `key` | string | Required for set/get/add/clear. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"action":"set","key":"decision-1","value":"Use sqlite for sessions"}
+
 ```
 
         ## Dependencies

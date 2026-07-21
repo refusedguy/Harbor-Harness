@@ -3,13 +3,12 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Terminal.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Abstractions;
-
 /// <summary>
 ///     Sink that the Roslyn-based CS plugin loader calls into when a plugin contributes
 ///     tools, providers, agents, or TUI extensions. Implementations live in the host
@@ -20,8 +19,8 @@ namespace Harbor.Plugins.Abstractions;
 ///     <para>
 ///         This is intentionally distinct from <c>Harbor.Abstractions.Plugins.IPluginHost</c>
 ///         (which manages full plugin load/unload lifecycle). <c>IPluginLoadHost</c> is the
-///     narrower "registration sink" called by <see cref="CsPluginLoader" /> while it is
-///     wiring up a freshly-compiled plugin.
+///         narrower "registration sink" called by <see cref="CsPluginLoader" /> while it is
+///         wiring up a freshly-compiled plugin.
 ///     </para>
 ///     <para>
 ///         Implementations MUST be thread-safe: <see cref="RegisterTool" />,
@@ -38,32 +37,32 @@ public interface IPluginLoadHost
     ///     additional services here. Only effective when the loader runs BEFORE the host's
     ///     service provider is built.
     /// </summary>
-    IServiceCollection Services { get; }
+    public IServiceCollection Services { get; }
 
     /// <summary>
     ///     The host's <see cref="IConfiguration" />. Passed through to plugins via
     ///     <see cref="Harbor.Abstractions.Plugins.PluginContext.Configuration" />.
     /// </summary>
-    IConfiguration Configuration { get; }
+    public IConfiguration Configuration { get; }
 
     /// <summary>
     ///     The host's <see cref="ILoggerFactory" />. Used both for the loader's own
     ///     diagnostics and for <see cref="Harbor.Abstractions.Plugins.PluginContext.LoggerFactory" />.
     /// </summary>
-    ILoggerFactory LoggerFactory { get; }
+    public ILoggerFactory LoggerFactory { get; }
 
     /// <summary>
     ///     The host's <see cref="IEventBus" />. Passed through to plugins so they can
     ///     subscribe to <see cref="AgentEvent" />s.
     /// </summary>
-    IEventBus EventBus { get; }
+    public IEventBus EventBus { get; }
 
     /// <summary>
     ///     Register a tool instance contributed by a plugin.
     /// </summary>
     /// <param name="tool">The tool to register.</param>
     /// <returns>Success, or failure with an error message (e.g. name collision).</returns>
-    Result RegisterTool(ITool tool);
+    public Result RegisterTool(ITool tool);
 
     /// <summary>
     ///     Register an LLM provider contributed by a plugin. The factory is invoked lazily
@@ -72,14 +71,14 @@ public interface IPluginLoadHost
     /// <param name="providerId">The provider id to register under.</param>
     /// <param name="factory">Factory producing the <see cref="ILlmClient" />.</param>
     /// <returns>Success, or failure with an error message.</returns>
-    Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory);
+    public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory);
 
     /// <summary>
     ///     Register an agent contributed by a plugin.
     /// </summary>
     /// <param name="agent">The agent definition to register.</param>
     /// <returns>Success, or failure with an error message (e.g. name collision).</returns>
-    Result RegisterAgent(AgentDefinition agent);
+    public Result RegisterAgent(AgentDefinition agent);
 
     /// <summary>
     ///     Register a TUI plugin contributed by a CS plugin. The host defers actual view /
@@ -87,7 +86,7 @@ public interface IPluginLoadHost
     /// </summary>
     /// <param name="plugin">The TUI plugin to register.</param>
     /// <returns>Success, or failure with an error message.</returns>
-    Result RegisterTuiPlugin(ITuiPlugin plugin);
+    public Result RegisterTuiPlugin(ITuiPlugin plugin);
 
     /// <summary>
     ///     Register a dockable <see cref="IPanelProvider" /> contributed by an
@@ -96,5 +95,5 @@ public interface IPluginLoadHost
     /// </summary>
     /// <param name="panel">The panel provider to register.</param>
     /// <returns>Success, or failure with an error message (e.g. empty id, name collision).</returns>
-    Result RegisterPanelProvider(IPanelProvider panel);
+    public Result RegisterPanelProvider(IPanelProvider panel);
 }

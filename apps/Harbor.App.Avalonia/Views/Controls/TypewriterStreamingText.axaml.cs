@@ -2,18 +2,16 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-
 namespace Harbor.App.Avalonia.Views.Controls;
-
 /// <summary>
 ///     Streaming-text display with a blinking typewriter cursor (▋).
 ///     The cursor blinks at ~1.9 Hz (530 ms on/off) while
-///     <see cref="IsStreaming"/> is true and is hidden when idle.
+///     <see cref="IsStreaming" /> is true and is hidden when idle.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Perf note:</b> the cursor is driven by a
-///         <see cref="DispatcherTimer"/> at <c>DispatcherPriority.Normal</c>
+///         <see cref="DispatcherTimer" /> at <c>DispatcherPriority.Normal</c>
 ///         (not Input/Render) so it never blocks user input or layout.
 ///         The timer is started on <c>Loaded</c> and stopped on
 ///         <c>Unloaded</c> — no leaks when the chat view is unloaded.
@@ -31,7 +29,7 @@ public partial class TypewriterStreamingText : UserControl
 {
     /// <summary>Styled property for the streaming buffer text.</summary>
     public static readonly StyledProperty<string> TextProperty =
-        AvaloniaProperty.Register<TypewriterStreamingText, string>(nameof(Text), defaultValue: string.Empty);
+        AvaloniaProperty.Register<TypewriterStreamingText, string>(nameof(Text), string.Empty);
 
     /// <summary>Styled property for the streaming-active flag.</summary>
     public static readonly StyledProperty<bool> IsStreamingProperty =
@@ -44,16 +42,16 @@ public partial class TypewriterStreamingText : UserControl
     public TypewriterStreamingText()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        this.Loaded += OnLoaded;
+        this.Unloaded += OnUnloaded;
         UpdateCursorVisibility();
     }
 
     /// <summary>The streaming buffer text.</summary>
     public string Text
     {
-        get => GetValue(TextProperty);
-        set => SetValue(TextProperty, value);
+        get => this.GetValue(TextProperty);
+        set => this.SetValue(TextProperty, value);
     }
 
     /// <summary>
@@ -62,8 +60,8 @@ public partial class TypewriterStreamingText : UserControl
     /// </summary>
     public bool IsStreaming
     {
-        get => GetValue(IsStreamingProperty);
-        set => SetValue(IsStreamingProperty, value);
+        get => this.GetValue(IsStreamingProperty);
+        set => this.SetValue(IsStreamingProperty, value);
     }
 
     /// <inheritdoc />
@@ -92,7 +90,7 @@ public partial class TypewriterStreamingText : UserControl
         _cursorTimer = null;
     }
 
-    private void OnCursorTick(object? sender, System.EventArgs e)
+    private void OnCursorTick(object? sender, EventArgs e)
     {
         if (!IsStreaming)
         {

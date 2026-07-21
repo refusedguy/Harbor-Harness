@@ -1,5 +1,4 @@
 @page "/code"
-@using Harbor.App.Blazor.Components.Shared
 @inject HarborJsInterop Js
 
 <h1>Code Editor</h1>
@@ -35,12 +34,16 @@
         align-items: center;
         margin-bottom: var(--space-3);
     }
-    .editor-toolbar label { color: var(--text-dim); font-size: var(--font-size-sm); }
+
+    .editor-toolbar label {
+        color: var(--text-dim);
+        font-size: var(--font-size-sm);
+    }
 </style>
 
 @code {
-    private MonacoEditor? _editor;
-    private string _value = @"// Welcome to the Harbor code editor.
+private MonacoEditor? _editor;
+private string _value = @"// Welcome to the Harbor code editor.
 // This wraps the Monaco editor via JS interop.
 
 using System;
@@ -59,29 +62,29 @@ public static class Fibonacci
         }
     }
 }";
-    private string _language = "csharp";
+private string _language = "csharp";
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (firstRender && _editor is not null)
     {
-        if (firstRender && _editor is not null)
-        {
-            // Wait a tick to ensure Monaco has initialised.
-            await Task.Delay(100);
-            await _editor.SetLanguageAsync(_language);
-        }
+        // Wait a tick to ensure Monaco has initialised.
+        await Task.Delay(100);
+        await _editor.SetLanguageAsync(_language);
     }
+}
 
-    private async Task SaveAsync()
-    {
-        if (_editor is null) return;
-        string current = await _editor.GetValueAsync().ConfigureAwait(false);
-        _value = current;
-    }
+private async Task SaveAsync()
+{
+    if (_editor is null) return;
+    var current = await _editor.GetValueAsync().ConfigureAwait(false);
+    _value = current;
+}
 
-    private async Task CopyAsync()
-    {
-        if (_editor is null) return;
-        string current = await _editor.GetValueAsync().ConfigureAwait(false);
-        await Js.CopyToClipboardAsync(current).ConfigureAwait(false);
-    }
+private async Task CopyAsync()
+{
+    if (_editor is null) return;
+    var current = await _editor.GetValueAsync().ConfigureAwait(false);
+    await Js.CopyToClipboardAsync(current).ConfigureAwait(false);
+}
 }

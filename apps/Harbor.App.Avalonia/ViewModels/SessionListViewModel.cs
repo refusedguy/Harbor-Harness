@@ -4,21 +4,24 @@ using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
-using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Left-sidebar session list. Search, new, branch, delete, select.
 /// </summary>
 public sealed partial class SessionListViewModel : ObservableObject
 {
-    private readonly ISessionStore _sessionStore;
-    private readonly SessionManager _sessionManager;
-    private readonly ILogger<SessionListViewModel> _logger;
-    private readonly ToastService _toasts;
     private readonly IDispatcherAdapter _dispatcher;
+    private readonly ILogger<SessionListViewModel> _logger;
+    private readonly SessionManager _sessionManager;
+    private readonly ISessionStore _sessionStore;
+    private readonly ToastService _toasts;
+
+    [ObservableProperty]
+    private SessionItemViewModel? _activeSession;
+
+    [ObservableProperty]
+    private string _searchText = string.Empty;
 
     /// <summary>Construct the session list view-model.</summary>
     public SessionListViewModel(
@@ -46,11 +49,17 @@ public sealed partial class SessionListViewModel : ObservableObject
         _sessionManager.MessageCountChanged += OnSessionMessageCountChanged;
     }
 
+    /// <summary>All sessions visible in the sidebar.</summary>
+    public ObservableCollection<SessionItemViewModel> Sessions { get; } = new();
+
+    /// <summary>Selected sessions (multi-select with Ctrl+click).</summary>
+    public ObservableCollection<SessionItemViewModel> Selected { get; } = new();
+
     /// <summary>
-    ///     Pushed by <see cref="LeftRailViewModel"/> (and any other
+    ///     Pushed by <see cref="LeftRailViewModel" /> (and any other
     ///     consumer) when it needs to know about live status updates
-    ///     beyond the inner <see cref="Sessions"/> collection. Fires
-    ///     after the matching <see cref="SessionItemViewModel.Status"/>
+    ///     beyond the inner <see cref="Sessions" /> collection. Fires
+    ///     after the matching <see cref="SessionItemViewModel.Status" />
     ///     has already been updated in place, so subscribers can either
     ///     read the new value from the item or use the payload directly.
     /// </summary>
@@ -58,7 +67,7 @@ public sealed partial class SessionListViewModel : ObservableObject
 
     /// <summary>
     ///     Raised when a session's live message count changes (new message
-    ///     appended). Subscribers (e.g. <see cref="Shell.LeftRailViewModel"/>)
+    ///     appended). Subscribers (e.g. <see cref="Shell.LeftRailViewModel" />)
     ///     update the corresponding row's count in place.
     /// </summary>
     public event Action<string, int>? ItemMessageCountChanged;
@@ -89,18 +98,6 @@ public sealed partial class SessionListViewModel : ObservableObject
         });
     }
 
-    /// <summary>All sessions visible in the sidebar.</summary>
-    public ObservableCollection<SessionItemViewModel> Sessions { get; } = new();
-
-    /// <summary>Selected sessions (multi-select with Ctrl+click).</summary>
-    public ObservableCollection<SessionItemViewModel> Selected { get; } = new();
-
-    [ObservableProperty]
-    private string _searchText = string.Empty;
-
-    [ObservableProperty]
-    private SessionItemViewModel? _activeSession;
-
     /// <summary>Reload the session list from the store.</summary>
     [RelayCommand]
     private async Task RefreshAsync()
@@ -116,7 +113,7 @@ public sealed partial class SessionListViewModel : ObservableObject
             var filtered = string.IsNullOrWhiteSpace(SearchText)
                 ? result.Value
                 : result.Value.Where(s => s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                    || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
+                                          || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
             _dispatcher.Post(() =>
             {
                 Sessions.Clear();
@@ -124,7 +121,7 @@ public sealed partial class SessionListViewModel : ObservableObject
                 {
                     var item = new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount, s.Directory);
                     item.Status = _sessionManager.GetStatus(s.Id);
-                    var (branch, dirty) = _sessionManager.GetGitInfo(s.Id);
+                    (string? branch, bool dirty) = _sessionManager.GetGitInfo(s.Id);
                     item.GitBranch = branch;
                     item.GitIsDirty = dirty;
                     Sessions.Add(item);
@@ -209,7 +206,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         if (item is null) return;
         try
         {
-            var ok = await _sessionManager.OpenSessionAsync(item.Id).ConfigureAwait(false);
+            bool ok = await _sessionManager.OpenSessionAsync(item.Id).ConfigureAwait(false);
             if (!ok)
             {
                 _toasts.Show($"Could not open session '{item.Title}'.", ToastKind.Error);
@@ -232,7 +229,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         if (item is null) return;
         try
         {
-            var ok = await _sessionManager.DeleteSessionAsync(item.Id).ConfigureAwait(false);
+            bool ok = await _sessionManager.DeleteSessionAsync(item.Id).ConfigureAwait(false);
             if (!ok)
             {
                 _toasts.Show($"Could not delete session '{item.Title}'.", ToastKind.Error);
@@ -260,7 +257,7 @@ public sealed partial class SessionListViewModel : ObservableObject
         if (item is null) return;
         try
         {
-            var ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
+            bool ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
             if (!ok)
             {
                 _toasts.Show("Rename not yet supported — coming in v0.8.", ToastKind.Warning);
@@ -275,4 +272,3 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
     }
 }
-

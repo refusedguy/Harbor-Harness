@@ -1,13 +1,9 @@
 using Harbor.App.Avalonia.Views.Components;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
-
 /// <summary>
 ///     Unit tests for the reusable React-style components extracted in
-///     Task R28: <see cref="StatusBadge"/>, <see cref="ChatBubble"/>,
-///     <see cref="SessionRow"/>. These verify that the bindable
+///     Task R28: <see cref="StatusBadge" />, <see cref="ChatBubble" />,
+///     <see cref="SessionRow" />. These verify that the bindable
 ///     properties default correctly and that setters actually update the
 ///     underlying styled-property values (so {Binding} from AXAML will
 ///     re-render).

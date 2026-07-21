@@ -6,3 +6,4 @@
 // by every leaf tool's .cs file (each declares `namespace Harbor.Tools.Builtin;`)
 // so existing consumers using `using Harbor.Tools.Builtin;` keep compiling
 // without code changes.
+

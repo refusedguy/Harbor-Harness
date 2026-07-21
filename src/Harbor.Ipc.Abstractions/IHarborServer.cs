@@ -1,5 +1,4 @@
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Host-side Harbor server interface. Implemented by
 ///     <c>HarborIpcServer</c> (MessagePack RPC over pipe) and — for in-process
@@ -24,12 +23,18 @@ namespace Harbor.Ipc;
 /// </remarks>
 public interface IHarborServer : IAsyncDisposable
 {
+
+    /// <summary>True when the server is bound and accepting connections.</summary>
+    public bool IsRunning { get; }
+
+    /// <summary>The transport endpoint (pipe name on Windows, socket path on Unix).</summary>
+    public string Endpoint { get; }
     /// <summary>
     ///     Bind the transport and begin accepting client connections.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task that completes when the server is ready to accept connections.</returns>
-    Task StartAsync(CancellationToken ct = default);
+    public Task StartAsync(CancellationToken ct = default);
 
     /// <summary>
     ///     Stop accepting new connections, drain in-flight requests, and close
@@ -37,11 +42,5 @@ public interface IHarborServer : IAsyncDisposable
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task that completes when the server has fully shut down.</returns>
-    Task StopAsync(CancellationToken ct = default);
-
-    /// <summary>True when the server is bound and accepting connections.</summary>
-    bool IsRunning { get; }
-
-    /// <summary>The transport endpoint (pipe name on Windows, socket path on Unix).</summary>
-    string Endpoint { get; }
+    public Task StopAsync(CancellationToken ct = default);
 }

@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Threading;
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -27,10 +25,10 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 2, iterationCount: 3)]
 public class CompactionServiceBenchmark
 {
-    private CompactionService _service = null!;
     private IReadOnlyList<AgentMessage> _messages = null!;
     private ModelInfo _model = null!;
     private IProviderRegistry _registry = null!;
+    private CompactionService _service = null!;
 
     /// <summary>
     ///     Number of messages in the synthetic session history. Scales the
@@ -96,7 +94,7 @@ public class CompactionServiceBenchmark
     {
         var list = new List<AgentMessage>(count);
         var now = DateTimeOffset.UtcNow;
-        var sessionId = "session-1";
+        string sessionId = "session-1";
         var emptyArgs = JsonDocument.Parse("{}").RootElement.Clone();
 
         for (int i = 0; i < count; i++)
@@ -193,7 +191,7 @@ internal sealed class StubSummarizingLlmClient : ILlmClient
 
     public async IAsyncEnumerable<LlmEvent> StreamAsync(
         LlmRequest request,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield return new TextDeltaEvent("0", "Compacted summary of the conversation so far.");
         await Task.Yield();

@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `pattern` | string | Required. Glob pattern. |
 | `path` | string | Optional. Root directory. Defaults to cwd. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"pattern":"**/*.cs","path":"src"}
+
 ```
 
         ## Dependencies

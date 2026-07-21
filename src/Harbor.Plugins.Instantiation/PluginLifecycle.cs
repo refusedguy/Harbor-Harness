@@ -1,25 +1,24 @@
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Plugins;
+using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Instantiation;
-
 /// <summary>
 ///     Lifecycle helpers for live <see cref="IPlugin" /> instances. The registration
-/// layer delegates here for <see cref="IPlugin.Initialize" /> + shutdown orchestration
-/// so that lifecycle is independent of <c>Register*</c> dispatch.
+///     layer delegates here for <see cref="IPlugin.Initialize" /> + shutdown orchestration
+///     so that lifecycle is independent of <c>Register*</c> dispatch.
 /// </summary>
 public static class PluginLifecycle
 {
     /// <summary>
     ///     The current Harbor version reported to plugins via
-    /// <see cref="PluginContext.HarborVersion" />. Bumped with each Harbor release.
+    ///     <see cref="PluginContext.HarborVersion" />. Bumped with each Harbor release.
     /// </summary>
     public static readonly Version CurrentHarborVersion = new(0, 4, 0);
 
     /// <summary>
     ///     Build a <see cref="PluginContext" /> for the supplied plugin, deriving
-    /// <see cref="PluginContext.PluginDirectory" /> and
-    /// <see cref="PluginContext.DataDirectory" /> from the host's plugin root and the
-    /// plugin's <see cref="IPlugin.Name" />.
+    ///     <see cref="PluginContext.PluginDirectory" /> and
+    ///     <see cref="PluginContext.DataDirectory" /> from the host's plugin root and the
+    ///     plugin's <see cref="IPlugin.Name" />.
     /// </summary>
     /// <param name="host">The host registration sink (supplies services, config, etc.).</param>
     /// <param name="plugin">The plugin to build a context for.</param>
@@ -37,8 +36,8 @@ public static class PluginLifecycle
         if (plugin is null)
             throw new ArgumentNullException(nameof(plugin));
 
-        string pluginDir = System.IO.Path.GetDirectoryName(sourcePath) ?? string.Empty;
-        string dataDir = System.IO.Path.Combine(pluginRoot, "data", plugin.Name);
+        string pluginDir = Path.GetDirectoryName(sourcePath) ?? string.Empty;
+        string dataDir = Path.Combine(pluginRoot, "data", plugin.Name);
 
         return new PluginContext
         {
@@ -54,8 +53,8 @@ public static class PluginLifecycle
 
     /// <summary>
     ///     Call <see cref="IPlugin.Initialize" /> on the supplied plugin. Returns
-    /// <see cref="Result.Success" /> on success, or failure with the thrown exception's
-    /// message. The caller is responsible for logging the failure.
+    ///     <see cref="Result.Success" /> on success, or failure with the thrown exception's
+    ///     message. The caller is responsible for logging the failure.
     /// </summary>
     public static Result Initialize(IPlugin plugin, PluginContext context)
     {

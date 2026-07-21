@@ -1,14 +1,13 @@
-using Harbor.Plugins.Abstractions;
 using System.Reflection;
+using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Compilation;
-
 /// <summary>
 ///     <see cref="IPluginCompiler" /> decorator that caches compiled assemblies on disk
-/// under <c>{cacheDir}/{sha256}.dll</c>. On a cache hit, the assembly is loaded via
-/// <see cref="Assembly.LoadFrom(string)" /> and Roslyn is skipped entirely. On a cache
-/// miss, the inner compiler is invoked and the resulting bytes (if compilation succeeds)
-/// are persisted.
+///     under <c>{cacheDir}/{sha256}.dll</c>. On a cache hit, the assembly is loaded via
+///     <see cref="Assembly.LoadFrom(string)" /> and Roslyn is skipped entirely. On a cache
+///     miss, the inner compiler is invoked and the resulting bytes (if compilation succeeds)
+///     are persisted.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -24,8 +23,8 @@ namespace Harbor.Plugins.Compilation;
 /// </remarks>
 public sealed class CachingCompiler : IPluginCompiler
 {
-    private readonly IPluginCompiler _inner;
     private readonly string _cacheDir;
+    private readonly IPluginCompiler _inner;
     private readonly ILogger<CachingCompiler> _logger;
 
     /// <summary>
@@ -50,7 +49,7 @@ public sealed class CachingCompiler : IPluginCompiler
         if (script is null)
             throw new ArgumentNullException(nameof(script));
 
-        string cachePath = System.IO.Path.Combine(_cacheDir, script.Hash + ".dll");
+        string cachePath = Path.Combine(_cacheDir, script.Hash + ".dll");
 
         if (File.Exists(cachePath))
         {
@@ -65,7 +64,7 @@ public sealed class CachingCompiler : IPluginCompiler
 #pragma warning restore S3885
                 _logger.LogDebug("Cache hit for {Path} ({Hash})", script.Path, script.Hash);
                 return CompilationResult.Cached(new CompiledPluginAssembly(
-                    cachedAsm, script.Hash, script.Path, AssemblyBytes: null, FromCache: true));
+                    cachedAsm, script.Hash, script.Path, null, true));
             }
             catch (Exception ex)
             {
@@ -101,6 +100,8 @@ public sealed class CachingCompiler : IPluginCompiler
     private static void TryDelete(string path)
     {
         try { File.Delete(path); }
-        catch (IOException) { /* ignore — best-effort */ }
+        catch (IOException)
+        { /* ignore — best-effort */
+        }
     }
 }

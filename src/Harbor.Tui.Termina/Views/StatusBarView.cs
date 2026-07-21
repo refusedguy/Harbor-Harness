@@ -1,11 +1,10 @@
 using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.Termina.Handlers;
 using Harbor.Tui.Termina.Rendering;
+using Harbor.Ui.Framework.State;
 using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;
-
 /// <summary>
 ///     Status bar projection: <c>provider/model/agent · tokens↑↓ · $cost · status · scroll%</c>.
 ///     Mirrors SpectreTui's footer semantics; reads only from <see cref="UiState" />

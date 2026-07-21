@@ -1,5 +1,4 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     Strip ANSI escape sequences from terminal output so the TUI driver's
 ///     rolling screen buffer can be searched with plain <c>string.Contains</c>.
@@ -19,7 +18,7 @@ namespace Harbor.E2E.Framework;
 internal static class AnsiStripper
 {
     /// <summary>
-    ///     Remove ANSI escape sequences from <paramref name="raw"/> and return
+    ///     Remove ANSI escape sequences from <paramref name="raw" /> and return
     ///     the visible text. Newlines (\r\n, \r, \n) are preserved as \n.
     /// </summary>
     public static string Strip(string raw)

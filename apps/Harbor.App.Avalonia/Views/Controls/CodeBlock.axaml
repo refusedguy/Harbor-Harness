@@ -31,14 +31,14 @@
                            Foreground="{StaticResource MochaBlue}"
                            FontFamily="{StaticResource CodeFont}"
                            FontSize="11"
-                           FontWeight="SemiBold"/>
+                           FontWeight="SemiBold" />
                 <Button Grid.Column="1"
                         Classes="CodeCopyButton"
                         Content="Copy"
                         Click="CopyButton_Click"
                         Padding="8,2"
                         FontSize="11"
-                        VerticalAlignment="Center"/>
+                        VerticalAlignment="Center" />
             </Grid>
 
             <!-- Code body — TextBlock hosts the syntax-highlighted Inlines -->
@@ -46,7 +46,7 @@
                        FontFamily="{StaticResource CodeFont}"
                        FontSize="13"
                        TextWrapping="NoWrap"
-                       Foreground="{StaticResource MochaText}"/>
+                       Foreground="{StaticResource MochaText}" />
         </StackPanel>
     </Border>
 </UserControl>

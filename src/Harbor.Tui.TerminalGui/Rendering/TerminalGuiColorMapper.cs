@@ -1,9 +1,7 @@
 using Harbor.Ui.Framework.State;
-using Terminal.Gui;
 using TerminalColor = Terminal.Gui.Drawing.Color;
 
 namespace Harbor.Tui.TerminalGui.Rendering;
-
 /// <summary>
 ///     Maps a <see cref="ChatRole" /> to a Terminal.Gui v2
 ///     <see cref="TerminalColor" /> + label, matching the SpectreTui palette

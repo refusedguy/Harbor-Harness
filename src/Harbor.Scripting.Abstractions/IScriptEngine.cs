@@ -5,7 +5,6 @@
 //   Given (code, options, globals), it evaluates the code and returns a Result.
 //   Implementations may run in-process (Jint) or as a subprocess (SharpTS).
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     Abstraction over a script engine for Harbor plugins.
 /// </summary>
@@ -45,7 +44,7 @@ public interface IScriptEngine
     /// <param name="options">Engine resource limits (timeout, memory, cancellation).</param>
     /// <param name="globals">Bridge globals exposed as the <c>Harbor</c> object.</param>
     /// <returns>Success, or failure with a descriptive error message.</returns>
-    Result Evaluate(string code, ScriptEngineOptions options, ScriptGlobals globals);
+    public Result Evaluate(string code, ScriptEngineOptions options, ScriptGlobals globals);
 
     /// <summary>
     ///     Evaluate the supplied code and convert the resulting value to
@@ -56,5 +55,5 @@ public interface IScriptEngine
     /// <param name="options">Engine resource limits.</param>
     /// <param name="globals">Bridge globals.</param>
     /// <returns>Success with the converted value, or failure with a descriptive error message.</returns>
-    Result<T> Evaluate<T>(string code, ScriptEngineOptions options, ScriptGlobals globals);
+    public Result<T> Evaluate<T>(string code, ScriptEngineOptions options, ScriptGlobals globals);
 }

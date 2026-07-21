@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -8,9 +9,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.InProcess;
-
 /// <summary>
 ///     Default <see cref="IHarborClient" /> implementation. Calls
 ///     <see cref="IAgent" />, <see cref="ISessionStore" />,
@@ -42,13 +41,13 @@ public sealed class InProcessHarborClient : IHarborClient
     private readonly IAgent _agent;
     private readonly IAgentRegistry _agents;
     private readonly IEventBus _eventBus;
+    private readonly CancellationTokenSource _eventBusCts = new();
+    private readonly IDisposable _eventBusSubscription;
+    private readonly Channel<HarborEvent> _eventChannel;
     private readonly ILogger<InProcessHarborClient> _logger;
     private readonly IProviderRegistry _providers;
     private readonly ISessionStore _sessionStore;
     private readonly IToolRegistry _tools;
-    private readonly Channel<HarborEvent> _eventChannel;
-    private readonly IDisposable _eventBusSubscription;
-    private readonly CancellationTokenSource _eventBusCts = new();
     private int _currentTurn;
     private int _disposed;
 
@@ -130,44 +129,26 @@ public sealed class InProcessHarborClient : IHarborClient
     }
 
     /// <inheritdoc />
-    public async Task<Result> SendPromptAsync(string prompt, CancellationToken ct = default)
-    {
-        return await _agent.PromptAsync(prompt, ct).ConfigureAwait(false);
-    }
+    public async Task<Result> SendPromptAsync(string prompt, CancellationToken ct = default) => await _agent.PromptAsync(prompt, ct).ConfigureAwait(false);
 
     // ── Sessions ───────────────────────────────────────────────────────────
 
     /// <inheritdoc />
     public async Task<Result<Session>> CreateSessionAsync(
-        string dir, string agent, string provider, string model, CancellationToken ct = default)
-    {
-        return await _sessionStore.CreateAsync(dir, agent, provider, model, ct).ConfigureAwait(false);
-    }
+        string dir, string agent, string provider, string model, CancellationToken ct = default) => await _sessionStore.CreateAsync(dir, agent, provider, model, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(CancellationToken ct = default)
-    {
-        return await _sessionStore.ListAsync(null, ct).ConfigureAwait(false);
-    }
+    public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(CancellationToken ct = default) => await _sessionStore.ListAsync(null, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<Result<Session>> GetSessionAsync(string sessionId, CancellationToken ct = default)
-    {
-        return await _sessionStore.GetAsync(sessionId, ct).ConfigureAwait(false);
-    }
+    public async Task<Result<Session>> GetSessionAsync(string sessionId, CancellationToken ct = default) => await _sessionStore.GetAsync(sessionId, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<Result> DeleteSessionAsync(string sessionId, CancellationToken ct = default)
-    {
-        return await _sessionStore.DeleteAsync(sessionId, ct).ConfigureAwait(false);
-    }
+    public async Task<Result> DeleteSessionAsync(string sessionId, CancellationToken ct = default) => await _sessionStore.DeleteAsync(sessionId, ct).ConfigureAwait(false);
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(
-        string sessionId, CancellationToken ct = default)
-    {
-        return await _sessionStore.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-    }
+        string sessionId, CancellationToken ct = default) => await _sessionStore.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
 
     // ── Providers ──────────────────────────────────────────────────────────
 
@@ -211,7 +192,7 @@ public sealed class InProcessHarborClient : IHarborClient
 
     /// <inheritdoc />
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _eventBusCts.Token);
         await foreach (var evt in _eventChannel.Reader.ReadAllAsync(linked.Token).ConfigureAwait(false))
@@ -236,7 +217,7 @@ public sealed class InProcessHarborClient : IHarborClient
 
     private async ValueTask OnEventBusEventAsync(AgentEvent evt, CancellationToken ct)
     {
-        HarborEvent? projected = ProjectEvent(evt);
+        var projected = ProjectEvent(evt);
         if (projected is null) return;
         await _eventChannel.Writer.WriteAsync(projected, ct).ConfigureAwait(false);
     }

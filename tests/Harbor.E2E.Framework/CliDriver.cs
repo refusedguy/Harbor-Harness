@@ -1,5 +1,4 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     <see cref="IE2eDriver" /> implementation for one-shot CLI commands.
 ///     Wraps <see cref="System.Diagnostics.Process" /> with redirected stdin /
@@ -9,14 +8,18 @@ namespace Harbor.E2E.Framework;
 ///     <para>
 ///         <b>Use cases:</b>
 ///         <list type="bullet">
-///             <item><c>harbor --version</c></item>
-///             <item><c>harbor providers</c></item>
+///             <item>
+///                 <c>harbor --version</c>
+///             </item>
+///             <item>
+///                 <c>harbor providers</c>
+///             </item>
 ///             <item><c>harbor ask "..."</c> (returns one completion then exits)</item>
 ///         </list>
 ///     </para>
 ///     <para>
-///         <b>Not for:</b> the interactive REPL (use <see cref="TuiDriver"/> with
-///         <c>HARBOR_TUI=plain</c>) or any TUI renderer (use <see cref="TuiDriver"/>).
+///         <b>Not for:</b> the interactive REPL (use <see cref="TuiDriver" /> with
+///         <c>HARBOR_TUI=plain</c>) or any TUI renderer (use <see cref="TuiDriver" />).
 ///     </para>
 ///     <para>
 ///         <b>Build assumption:</b> the target project is built before the test
@@ -30,11 +33,11 @@ public sealed class CliDriver : IE2eDriver
 {
     private readonly string _projectPath;
     private Process? _process;
-    private StringBuilder _stdout = new();
     private StringBuilder _stderr = new();
-    private StreamReader? _stdoutReader;
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
+    private StringBuilder _stdout = new();
+    private StreamReader? _stdoutReader;
 
     /// <summary>
     ///     Create a driver targeting the Harbor app at <paramref name="projectRelativePath" />
@@ -47,19 +50,6 @@ public sealed class CliDriver : IE2eDriver
 
     /// <inheritdoc />
     public bool IsRunning => _process is { HasExited: false };
-
-    /// <summary>
-    ///     Captured stderr from the wrapped process. Available after
-    ///     <see cref="StartAsync"/>; safe to read after <see cref="WaitForExitAsync"/>.
-    ///     Test code uses this for diagnostics when a CLI command returns a
-    ///     non-zero exit code (the console logger is silenced at Warning level
-    ///     so Info/Debug messages don't pollute stdout assertions).
-    /// </summary>
-    public Task<string> ReadStderrAsync(CancellationToken ct = default)
-    {
-        lock (_stderr)
-            return Task.FromResult(_stderr.ToString());
-    }
 
     /// <inheritdoc />
     public Task StartAsync(string[] args, IDictionary<string, string>? env = null, CancellationToken ct = default)
@@ -95,7 +85,7 @@ public sealed class CliDriver : IE2eDriver
             // Tell the child .NET process to use UTF-8 on stdout/stderr so
             // non-ASCII characters (emoji in the welcome banner, etc.) survive.
             StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
         psi.ArgumentList.Add("exec");
         psi.ArgumentList.Add(assemblyPath);
@@ -128,7 +118,9 @@ public sealed class CliDriver : IE2eDriver
             while ((n = await _stdoutReader.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
             {
                 lock (_stdout)
+                {
                     _stdout.Append(buf, 0, n);
+                }
             }
         }, ct);
         _ = Task.Run(async () =>
@@ -138,7 +130,9 @@ public sealed class CliDriver : IE2eDriver
             while ((n = await _stderrReader.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
             {
                 lock (_stderr)
+                {
                     _stderr.Append(buf, 0, n);
+                }
             }
         }, ct);
 
@@ -168,13 +162,15 @@ public sealed class CliDriver : IE2eDriver
     public Task<string> ReadScreenAsync(CancellationToken ct = default)
     {
         lock (_stdout)
+        {
             return Task.FromResult(_stdout.ToString());
+        }
     }
 
     /// <inheritdoc />
     public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
     {
-        TimeSpan deadline = TimeSpan.FromSeconds(10);
+        var deadline = TimeSpan.FromSeconds(10);
         if (timeout is { } t) deadline = t;
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < deadline)
@@ -193,15 +189,21 @@ public sealed class CliDriver : IE2eDriver
     {
         if (_process is null)
             throw new InvalidOperationException("CliDriver not started.");
-        TimeSpan deadline = TimeSpan.FromSeconds(30);
+        var deadline = TimeSpan.FromSeconds(30);
         if (timeout is { } t) deadline = t;
 
         // Close stdin so the REPL (if any) sees EOF and exits.
-        try { _stdinWriter?.Close(); } catch { /* ignore */ }
+        try { _stdinWriter?.Close(); }
+        catch
+        { /* ignore */
+        }
 
         if (!_process.WaitForExit((int)deadline.TotalMilliseconds))
         {
-            try { _process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            try { _process.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
             return -1;
         }
         // Give the async stdout/stderr drainers a chance to flush.
@@ -214,8 +216,14 @@ public sealed class CliDriver : IE2eDriver
     {
         if (_process is { HasExited: false } p)
         {
-            try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
-            try { p.WaitForExit(2000); } catch { /* ignore */ }
+            try { p.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { p.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
         }
         return Task.CompletedTask;
     }
@@ -228,5 +236,20 @@ public sealed class CliDriver : IE2eDriver
         _stderrReader?.Dispose();
         _process?.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Captured stderr from the wrapped process. Available after
+    ///     <see cref="StartAsync" />; safe to read after <see cref="WaitForExitAsync" />.
+    ///     Test code uses this for diagnostics when a CLI command returns a
+    ///     non-zero exit code (the console logger is silenced at Warning level
+    ///     so Info/Debug messages don't pollute stdout assertions).
+    /// </summary>
+    public Task<string> ReadStderrAsync(CancellationToken ct = default)
+    {
+        lock (_stderr)
+        {
+            return Task.FromResult(_stderr.ToString());
+        }
     }
 }

@@ -19,23 +19,23 @@ Heavier. Terminal.Gui v2.4 is ~2 MB of IL and pulls in `System.Memory`, `NStack`
 
 ## Hotkey table
 
-| Key | Action |
-|-----|--------|
-| `Enter` | Submit prompt |
-| `Shift+Enter` | Newline (multi-line input) |
-| `Esc` | Abort running prompt / quit if idle |
-| `Ctrl+C` | Abort running prompt |
-| `Ctrl+L` | Clear transcript |
-| `F2` | Toggle focus (Input ↔ Chat) |
-| `↑` / `↓` | Scroll one line |
-| `PgUp` / `PgDn` | Scroll one viewport |
-| `Home` / `End` | Jump to top / bottom |
-| `Alt+↑` / `Alt+↓` | Navigate input history |
-| `Tab` | Autocomplete slash command |
-| `Ctrl+P` | Command palette |
-| `Alt+1..9` | Toggle Nth registered panel |
-| `Ctrl+Tab` | Cycle panel focus |
-| `?` | Toggle help panel |
+| Key               | Action                              |
+|-------------------|-------------------------------------|
+| `Enter`           | Submit prompt                       |
+| `Shift+Enter`     | Newline (multi-line input)          |
+| `Esc`             | Abort running prompt / quit if idle |
+| `Ctrl+C`          | Abort running prompt                |
+| `Ctrl+L`          | Clear transcript                    |
+| `F2`              | Toggle focus (Input ↔ Chat)         |
+| `↑` / `↓`         | Scroll one line                     |
+| `PgUp` / `PgDn`   | Scroll one viewport                 |
+| `Home` / `End`    | Jump to top / bottom                |
+| `Alt+↑` / `Alt+↓` | Navigate input history              |
+| `Tab`             | Autocomplete slash command          |
+| `Ctrl+P`          | Command palette                     |
+| `Alt+1..9`        | Toggle Nth registered panel         |
+| `Ctrl+Tab`        | Cycle panel focus                   |
+| `?`               | Toggle help panel                   |
 
 ## How to run
 

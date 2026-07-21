@@ -34,13 +34,13 @@
                             <Style.Animations>
                                 <Animation Duration="0:0:1" IterationCount="INFINITE">
                                     <KeyFrame Cue="0%">
-                                        <Setter Property="Opacity" Value="1"/>
+                                        <Setter Property="Opacity" Value="1" />
                                     </KeyFrame>
                                     <KeyFrame Cue="50%">
-                                        <Setter Property="Opacity" Value="0.3"/>
+                                        <Setter Property="Opacity" Value="0.3" />
                                     </KeyFrame>
                                     <KeyFrame Cue="100%">
-                                        <Setter Property="Opacity" Value="1"/>
+                                        <Setter Property="Opacity" Value="1" />
                                     </KeyFrame>
                                 </Animation>
                             </Style.Animations>
@@ -49,7 +49,7 @@
                 </Ellipse>
                 <TextBlock Text="{Binding StatusMessage}" FontSize="11"
                            Foreground="{DynamicResource TextSecondaryBrush}"
-                           VerticalAlignment="Center"/>
+                           VerticalAlignment="Center" />
             </StackPanel>
 
             <!-- Input row -->
@@ -67,7 +67,7 @@
                          CornerRadius="6"
                          Foreground="{DynamicResource TextPrimaryBrush}"
                          Padding="10,8"
-                         KeyDown="InputBox_KeyDown"/>
+                         KeyDown="InputBox_KeyDown" />
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="4"
@@ -77,12 +77,12 @@
                             Command="{Binding SendCommand}"
                             IsVisible="{Binding !IsAgentRunning}"
                             Padding="16,8"
-                            CornerRadius="6"/>
+                            CornerRadius="6" />
                     <Button Content="Stop" Classes="Danger"
                             Command="{Binding StopCommand}"
                             IsVisible="{Binding IsAgentRunning}"
                             Padding="16,8"
-                            CornerRadius="6"/>
+                            CornerRadius="6" />
                 </StackPanel>
             </Grid>
 
@@ -91,7 +91,7 @@
                        Text="Enter send · Shift+Enter newline"
                        FontSize="10"
                        Foreground="{DynamicResource TextTertiaryBrush}"
-                       Margin="0,4,0,0"/>
+                       Margin="0,4,0,0" />
         </Grid>
     </Border>
 </UserControl>

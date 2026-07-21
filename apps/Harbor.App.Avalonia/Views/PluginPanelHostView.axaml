@@ -9,6 +9,6 @@
     -->
     <Border Background="{StaticResource MochaCrust}" Padding="8">
         <TextBlock Text="Plugin panels (v0.5)" Foreground="{StaticResource MochaOverlay2}"
-                   FontFamily="{StaticResource CodeFont}" FontSize="11"/>
+                   FontFamily="{StaticResource CodeFont}" FontSize="11" />
     </Border>
 </UserControl>

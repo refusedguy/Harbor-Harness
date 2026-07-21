@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.Services;
-
 /// <summary>
 ///     Modal dialog primitives — confirm, prompt, alert. Platform apps
 ///     implement this with their own native dialog primitives (Avalonia
@@ -10,7 +9,7 @@ public interface IDialogService
 {
     /// <summary>Show a confirmation dialog with OK / Cancel buttons.</summary>
     /// <returns>True if the user clicked OK; false otherwise.</returns>
-    Task<bool> ConfirmAsync(
+    public Task<bool> ConfirmAsync(
         string title,
         string message,
         string okLabel = "OK",
@@ -19,14 +18,14 @@ public interface IDialogService
 
     /// <summary>Show a single-line prompt and return the user's text.</summary>
     /// <returns>The entered text, or null if the user cancelled.</returns>
-    Task<string?> PromptAsync(
+    public Task<string?> PromptAsync(
         string title,
         string message,
         string defaultValue = "",
         CancellationToken cancellationToken = default);
 
     /// <summary>Show an informational alert with a single OK button.</summary>
-    Task AlertAsync(
+    public Task AlertAsync(
         string title,
         string message,
         string okLabel = "OK",

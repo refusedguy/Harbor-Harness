@@ -473,12 +473,12 @@ dotnet_diagnostic.REL0002.severity = suggestion # Use overload
 # ============================================================================
 
 # --- DI lifetime (high-signal: error) ---
-dotnet_diagnostic.DI003.severity = error   # Captive dependency
-dotnet_diagnostic.DI015.severity = error   # Unresolvable dependency
-dotnet_diagnostic.DI017.severity = error   # Circular dependency
-dotnet_diagnostic.DI019.severity = error   # Scoped service resolved from root provider
+dotnet_diagnostic.DI003.severity = error # Captive dependency
+dotnet_diagnostic.DI015.severity = error # Unresolvable dependency
+dotnet_diagnostic.DI017.severity = error # Circular dependency
+dotnet_diagnostic.DI019.severity = error # Scoped service resolved from root provider
 # DI013 is already Error by default; restate for visibility.
-dotnet_diagnostic.DI013.severity = error   # Implementation type mismatch
+dotnet_diagnostic.DI013.severity = error # Implementation type mismatch
 
 # --- DI lifetime (warning — keep default) ---
 dotnet_diagnostic.DI001.severity = warning

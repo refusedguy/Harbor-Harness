@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.Abstractions.DesignSystem;
-
 /// <summary>
 ///     Cross-platform RGB color value. Each platform app converts this to its
 ///     own native color type (Avalonia <c>Avalonia.Media.Color</c>,
@@ -42,10 +41,10 @@ public readonly record struct RgbColor(byte R, byte G, byte B)
                 (byte)(FromHex(span[1]) * 17),
                 (byte)(FromHex(span[2]) * 17)),
             6 => new RgbColor(
-                (byte)((FromHex(span[0]) << 4) | FromHex(span[1])),
-                (byte)((FromHex(span[2]) << 4) | FromHex(span[3])),
-                (byte)((FromHex(span[4]) << 4) | FromHex(span[5]))),
-            _ => throw new FormatException($"Hex color must be #RGB or #RRGGBB; got '{hex}'."),
+                (byte)(FromHex(span[0]) << 4 | FromHex(span[1])),
+                (byte)(FromHex(span[2]) << 4 | FromHex(span[3])),
+                (byte)(FromHex(span[4]) << 4 | FromHex(span[5]))),
+            _ => throw new FormatException($"Hex color must be #RGB or #RRGGBB; got '{hex}'.")
         };
     }
 
@@ -54,13 +53,13 @@ public readonly record struct RgbColor(byte R, byte G, byte B)
         >= '0' and <= '9' => c - '0',
         >= 'a' and <= 'f' => c - 'a' + 10,
         >= 'A' and <= 'F' => c - 'A' + 10,
-        _ => throw new FormatException($"Invalid hex digit '{c}'."),
+        _ => throw new FormatException($"Invalid hex digit '{c}'.")
     };
 
-    /// <summary>Implicitly convert a hex string to an <see cref="RgbColor"/>.</summary>
+    /// <summary>Implicitly convert a hex string to an <see cref="RgbColor" />.</summary>
     public static implicit operator RgbColor(string hex) => Parse(hex);
 
-    /// <summary>Implicitly convert an (int, int, int) tuple (e.g. <c>(0x1E, 0x1E, 0x2E)</c>) to an <see cref="RgbColor"/>.</summary>
+    /// <summary>Implicitly convert an (int, int, int) tuple (e.g. <c>(0x1E, 0x1E, 0x2E)</c>) to an <see cref="RgbColor" />.</summary>
     public static implicit operator RgbColor((int R, int G, int B) rgb)
         => new((byte)rgb.R, (byte)rgb.G, (byte)rgb.B);
 }

@@ -22,10 +22,7 @@
 // stay on each app's own AppConfigBase-derived record so the user can have a
 // different TUI renderer in the CLI vs. a different window size in Avalonia.
 
-using System.Collections.Immutable;
-
 namespace Harbor.Desktop.Abstractions.Configuration;
-
 /// <summary>
 ///     Shared configuration that is common to every Harbor app (CLI, Avalonia,
 ///     WPF, MAUI, Blazor). Persisted as a single JSON file at
@@ -43,14 +40,14 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 ///     <para>
 ///         <b>Immutability:</b> <c>sealed record</c> with <c>init</c>-only
 ///         setters. Mutation is performed by <c>with</c> expressions inside
-///         <see cref="ICommonConfigStore.UpdateAsync"/> — the store always
+///         <see cref="ICommonConfigStore.UpdateAsync" /> — the store always
 ///         persists a fresh snapshot.
 ///     </para>
 ///     <para>
-///         <b>Persistence:</b> handled by <see cref="ICommonConfigStore"/> /
-///         <see cref="JsonCommonConfigStore"/>. Same atomic-write + thread-safe
-///         pattern as <see cref="JsonAppConfigStore{T}"/> (temp file + rename,
-///         guarded by a <see cref="SemaphoreSlim"/>).
+///         <b>Persistence:</b> handled by <see cref="ICommonConfigStore" /> /
+///         <see cref="JsonCommonConfigStore" />. Same atomic-write + thread-safe
+///         pattern as <see cref="JsonAppConfigStore{T}" /> (temp file + rename,
+///         guarded by a <see cref="SemaphoreSlim" />).
 ///     </para>
 /// </remarks>
 public sealed record CommonConfig
@@ -139,7 +136,7 @@ public sealed record CommonConfig
     ///     Log verbosity for the Microsoft.Extensions.Logging pipeline. One of
     ///     <c>"trace"</c>, <c>"debug"</c>, <c>"info"</c>, <c>"warning"</c>,
     ///     <c>"error"</c>. Defaults to <c>"info"</c>. Apps map this to a
-    ///     <see cref="Microsoft.Extensions.Logging.LogLevel"/> at startup.
+    ///     <see cref="Microsoft.Extensions.Logging.LogLevel" /> at startup.
     /// </summary>
     public string LogLevel { get; init; } = "info";
 

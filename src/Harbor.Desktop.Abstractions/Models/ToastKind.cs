@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.Abstractions.Models;
-
 /// <summary>
 ///     Visual severity for a toast notification. Each kind maps to a fixed
 ///     accent color from <c>Harbor.Desktop.DesignSystem</c>:
@@ -17,5 +16,5 @@ public enum ToastKind
     Warning,
 
     /// <summary>Error toast (Red).</summary>
-    Error,
+    Error
 }

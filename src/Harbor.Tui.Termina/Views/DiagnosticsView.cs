@@ -1,10 +1,7 @@
-using Microsoft.Extensions.Logging;
 using Harbor.Ui.Framework.Diagnostics;
-using Harbor.Tui.Termina;
+using Microsoft.Extensions.Logging;
 using Termina.Terminal;
-
 namespace Harbor.Tui.Termina.Views;
-
 /// <summary>
 ///     Projects the shared <see cref="IDiagnosticsPanel" /> ring buffer into a
 ///     sequence of Termina <see cref="ChatLine" />s for inline display inside

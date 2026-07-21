@@ -16,16 +16,16 @@ Infrastructure — concrete `ITool` implementations. References `Harbor.Abstract
 
 ### Tools
 
-| Tool     | Class                | Description                                                             |
-|----------|----------------------|-------------------------------------------------------------------------|
-| `read`   | `ReadFileTool`       | Read a file's contents (with line numbers, optional offset/limit).     |
-| `write`  | `WriteFileTool`      | Write/overwrite a file (creates parent dirs).                          |
-| `edit`   | `EditFileTool`       | String-replace within a file (atomic, with old/new preview).           |
-| `bash`   | `BashTool`           | Run a shell command (with timeout, working dir, env vars).             |
-| `glob`   | `GlobTool`           | Find files matching a glob pattern (uses `FileSystemGlobbing`).        |
-| `grep`   | `GrepTool`           | Search file contents (regex, file-type filter, multiline mode).        |
-| `ls`     | `ListFilesTool`      | List directory contents (with file sizes, dates, ignored entries).     |
-| `task`   | `TaskTool`           | Delegate to a sub-agent (`code`, `plan`, or `explore`).                |
+| Tool    | Class           | Description                                                        |
+|---------|-----------------|--------------------------------------------------------------------|
+| `read`  | `ReadFileTool`  | Read a file's contents (with line numbers, optional offset/limit). |
+| `write` | `WriteFileTool` | Write/overwrite a file (creates parent dirs).                      |
+| `edit`  | `EditFileTool`  | String-replace within a file (atomic, with old/new preview).       |
+| `bash`  | `BashTool`      | Run a shell command (with timeout, working dir, env vars).         |
+| `glob`  | `GlobTool`      | Find files matching a glob pattern (uses `FileSystemGlobbing`).    |
+| `grep`  | `GrepTool`      | Search file contents (regex, file-type filter, multiline mode).    |
+| `ls`    | `ListFilesTool` | List directory contents (with file sizes, dates, ignored entries). |
+| `task`  | `TaskTool`      | Delegate to a sub-agent (`code`, `plan`, or `explore`).            |
 
 Each tool class implements `ITool`:
 

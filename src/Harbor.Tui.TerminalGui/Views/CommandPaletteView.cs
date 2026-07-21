@@ -1,8 +1,6 @@
 using System.Text;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Ctrl+P command palette: fuzzy-search over slash commands + registered
 ///     panels + recent sessions. Pure projection — selection state lives in
@@ -18,7 +16,7 @@ public sealed class CommandPaletteView
         sb.Append("│ ").Append(query).Append("▍\n");
 
         int shown = 0;
-        foreach (var cmd in ChatCommands.Slash)
+        foreach (string cmd in ChatCommands.Slash)
         {
             if (!string.IsNullOrEmpty(query) && !cmd.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -26,7 +24,7 @@ public sealed class CommandPaletteView
             if (++shown >= 8) break;
         }
 
-        foreach (var p in panels)
+        foreach (string p in panels)
         {
             if (!string.IsNullOrEmpty(query) && !p.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -34,7 +32,7 @@ public sealed class CommandPaletteView
             if (++shown >= 12) break;
         }
 
-        foreach (var sess in sessions)
+        foreach (string sess in sessions)
         {
             if (!string.IsNullOrEmpty(query) && !sess.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;

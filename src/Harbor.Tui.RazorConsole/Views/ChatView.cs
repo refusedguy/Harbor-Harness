@@ -1,10 +1,9 @@
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.RazorConsole.Handlers;
 using Harbor.Tui.RazorConsole.Rendering;
+using Harbor.Ui.Framework.State;
 using UiChatLine = Harbor.Ui.Framework.State.ChatLine;
 
 namespace Harbor.Tui.RazorConsole.Views;
-
 /// <summary>
 ///     Projects an immutable <see cref="UiState" /> snapshot into a list of
 ///     Spectre markup strings for RazorConsole. Each <see cref="UiChatLine" />
@@ -23,7 +22,7 @@ public sealed class ChatView
         {
             if (line.Role is not ChatRole.ToolResult)
                 outp.Add(RazorMarkdownRenderer.RenderHeader(line.Role));
-            foreach (var body in RazorMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
+            foreach (string body in RazorMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
                 outp.Add(body);
             outp.Add(" ");
         }
@@ -33,13 +32,13 @@ public sealed class ChatView
             if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
             {
                 outp.Add(RazorMarkdownRenderer.RenderHeader(ChatRole.Thinking));
-                foreach (var b in RazorMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
+                foreach (string b in RazorMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
                     outp.Add(b);
             }
             if (!string.IsNullOrEmpty(s.Active.TextBuffer))
             {
                 outp.Add(RazorMarkdownRenderer.RenderHeader(ChatRole.Assistant));
-                foreach (var b in RazorMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
+                foreach (string b in RazorMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
                     outp.Add(b);
             }
         }

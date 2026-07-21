@@ -1,10 +1,6 @@
 using Harbor.Abstractions.Agents;
-using Harbor.Core.Agents;
-using Harbor.Core.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
-
 namespace Harbor.App.Avalonia.Hosting;
-
 /// <summary>
 ///     Agent registration — registers the default <c>code</c> /
 ///     <c>plan</c> / <c>explore</c> agents using the CommonConfig default
@@ -16,12 +12,12 @@ namespace Harbor.App.Avalonia.Hosting;
 internal static class AgentRegistration
 {
     /// <summary>
-    ///     Build the <see cref="AgentRegistry"/> eagerly with the three
+    ///     Build the <see cref="AgentRegistry" /> eagerly with the three
     ///     default agents (code / plan / explore) all pointing at the
     ///     resolved default provider + model.
     /// </summary>
-    /// <param name="commonConfig">The loaded <see cref="CommonConfig"/>.</param>
-    /// <returns>The constructed <see cref="AgentRegistry"/> (not frozen — caller may add more).</returns>
+    /// <param name="commonConfig">The loaded <see cref="CommonConfig" />.</param>
+    /// <returns>The constructed <see cref="AgentRegistry" /> (not frozen — caller may add more).</returns>
     public static AgentRegistry Build(CommonConfig commonConfig)
     {
         var agentRegistry = new AgentRegistry();
@@ -44,7 +40,7 @@ internal static class AgentRegistration
     ///     in that case we use it as-is. Otherwise we prepend the provider:
     ///     "kilocode" + "/" + "tencent/hy3:free" → "kilocode/tencent/hy3:free".
     /// </summary>
-    /// <param name="commonConfig">The loaded <see cref="CommonConfig"/>.</param>
+    /// <param name="commonConfig">The loaded <see cref="CommonConfig" />.</param>
     /// <returns>The resolved "provider/model" string.</returns>
     public static string ResolveDefaultModel(CommonConfig commonConfig)
     {

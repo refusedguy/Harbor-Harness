@@ -2,7 +2,6 @@
 //
 // Layering rule (see ScriptGlobals.cs): depends only on Harbor.Abstractions.
 namespace Harbor.Scripting.Bridge;
-
 /// <summary>
 ///     Fluent extension methods for constructing <see cref="ScriptGlobals" />.
 /// </summary>

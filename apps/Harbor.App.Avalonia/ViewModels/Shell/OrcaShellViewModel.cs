@@ -1,25 +1,23 @@
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Ui.Framework.Services;
-
 namespace Harbor.App.Avalonia.ViewModels.Shell;
-
 /// <summary>
 ///     Root view-model for the experimental Orca shell.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Wraps the shared <see cref="MainViewModel"/> (so chat, code editor,
+///         Wraps the shared <see cref="MainViewModel" /> (so chat, code editor,
 ///         session list, command palette etc. all keep working) and adds the
-///         Orca-specific projections: the <see cref="Sessions"/> rail VM, the
-///         local <see cref="ShellState"/>, and the
-///         <see cref="ActiveSessionTitle"/> / <see cref="ActiveModel"/> /
-///         <see cref="ActiveWorkdir"/> derived properties shown in the
+///         Orca-specific projections: the <see cref="Sessions" /> rail VM, the
+///         local <see cref="ShellState" />, and the
+///         <see cref="ActiveSessionTitle" /> / <see cref="ActiveModel" /> /
+///         <see cref="ActiveWorkdir" /> derived properties shown in the
 ///         session header bar.
 ///     </para>
 ///     <para>
 ///         <b>TEA boundary:</b> the only state added on top of
-///         <see cref="MainViewModel"/> is <see cref="ShellState"/> (layout
+///         <see cref="MainViewModel" /> is <see cref="ShellState" /> (layout
 ///         chrome — rail width, right panel, mode) and the projected rail VM.
 ///         All chat/session/agent state still flows through the shared
 ///         <c>UiStore</c> + <c>TuiEffectHost</c>.
@@ -27,14 +25,33 @@ namespace Harbor.App.Avalonia.ViewModels.Shell;
 /// </remarks>
 public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
 {
-    private readonly MainViewModel _main;
     private readonly IDispatcherAdapter _dispatcher;
+
+    /// <summary>Model label shown in the session header bar.</summary>
+    [ObservableProperty]
+    private string _activeModel = "—";
+
+    /// <summary>Title shown in the session header bar.</summary>
+    [ObservableProperty]
+    private string _activeSessionTitle = "New session";
+
+    /// <summary>Workdir label shown in the session header bar.</summary>
+    [ObservableProperty]
+    private string _activeWorkdir = string.Empty;
     private bool _disposed;
 
-    /// <summary>Construct the Orca shell VM wrapping <paramref name="main"/>.</summary>
+    /// <summary>True when the chat tab is the active main mode.</summary>
+    [ObservableProperty]
+    private bool _isChatMode = true;
+
+    /// <summary>True when the code editor tab is the active main mode.</summary>
+    [ObservableProperty]
+    private bool _isCodeMode;
+
+    /// <summary>Construct the Orca shell VM wrapping <paramref name="main" />.</summary>
     public OrcaShellViewModel(MainViewModel main, IDispatcherAdapter dispatcher)
     {
-        _main = main;
+        Main = main;
         _dispatcher = dispatcher;
         ShellState = new AvaloniaShellState();
         Sessions = new LeftRailViewModel(main.Sessions, _dispatcher);
@@ -72,38 +89,29 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
     public CodeEditorViewModel CodeEditor { get; }
 
     /// <summary>
-    ///     The wrapped <see cref="MainViewModel"/>. Exposed so the Orca
+    ///     The wrapped <see cref="MainViewModel" />. Exposed so the Orca
     ///     <c>StatusBarView</c> + modal overlays can bind to the same status /
     ///     command-palette / settings VMs the classic shell uses.
     /// </summary>
-    public MainViewModel Main => _main;
+    public MainViewModel Main
+    {
+        get;
+    }
 
-    /// <summary>Title shown in the session header bar.</summary>
-    [ObservableProperty]
-    private string _activeSessionTitle = "New session";
-
-    /// <summary>Model label shown in the session header bar.</summary>
-    [ObservableProperty]
-    private string _activeModel = "—";
-
-    /// <summary>Workdir label shown in the session header bar.</summary>
-    [ObservableProperty]
-    private string _activeWorkdir = string.Empty;
-
-    /// <summary>True when the chat tab is the active main mode.</summary>
-    [ObservableProperty]
-    private bool _isChatMode = true;
-
-    /// <summary>True when the code editor tab is the active main mode.</summary>
-    [ObservableProperty]
-    private bool _isCodeMode;
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Main.PropertyChanged -= OnMainPropertyChanged;
+        Sessions.PropertyChanged -= OnSessionsPropertyChanged;
+        ShellState.PropertyChanged -= OnShellStateChanged;
+        Sessions.Dispose();
+    }
 
     /// <summary>Toggle sidebar visibility (Ctrl+B) — delegates to MainViewModel.</summary>
     [RelayCommand]
-    private void ToggleSidebar()
-    {
-        ShellState.LeftRailCollapsed = !ShellState.LeftRailCollapsed;
-    }
+    private void ToggleSidebar() => ShellState.LeftRailCollapsed = !ShellState.LeftRailCollapsed;
 
     /// <summary>Switch the main mode (Chat | Code).</summary>
     /// <param name="mode">Mode name.</param>
@@ -115,10 +123,10 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
         IsCodeMode = string.Equals(mode, "Code", StringComparison.OrdinalIgnoreCase);
         // Forward to the underlying MainViewModel so the ChatView/CodeEditorView
         // visibility (which still binds to MainViewModel.ActiveView) stays in sync.
-        _main.SwitchViewCommand.Execute(IsCodeMode ? "code" : "chat");
+        Main.SwitchViewCommand.Execute(IsCodeMode ? "code" : "chat");
     }
 
-    private void OnMainPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(MainViewModel.ModelLabel), StringComparison.Ordinal)
             || string.Equals(e.PropertyName, nameof(MainViewModel.ActiveView), StringComparison.Ordinal))
@@ -127,7 +135,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnSessionsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnSessionsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(LeftRailViewModel.ActiveSession), StringComparison.Ordinal))
         {
@@ -135,7 +143,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnShellStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnShellStateChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(AvaloniaShellState.ActiveMode), StringComparison.Ordinal))
         {
@@ -144,43 +152,32 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
             // IsChatMode/IsCodeMode on this VM) flip in sync.
             _dispatcher.Post(() =>
             {
-                var mode = ShellState.ActiveMode;
+                string mode = ShellState.ActiveMode;
                 bool isCode = string.Equals(mode, "Code", StringComparison.OrdinalIgnoreCase);
                 IsChatMode = !isCode;
                 IsCodeMode = isCode;
-                _main.SwitchViewCommand.Execute(isCode ? "code" : "chat");
+                Main.SwitchViewCommand.Execute(isCode ? "code" : "chat");
             });
         }
     }
 
     /// <summary>
-    ///     Refresh <see cref="ActiveSessionTitle"/>, <see cref="ActiveModel"/>,
-    ///     <see cref="ActiveWorkdir"/> from the currently active session + the
+    ///     Refresh <see cref="ActiveSessionTitle" />, <see cref="ActiveModel" />,
+    ///     <see cref="ActiveWorkdir" /> from the currently active session + the
     ///     MainViewModel's model label.
     /// </summary>
     public void UpdateActiveHeader()
     {
         var activeRow = Sessions.ActiveSession;
         ActiveSessionTitle = activeRow?.Title ?? "New session";
-        ActiveModel = !string.IsNullOrEmpty(_main.ModelLabel) ? _main.ModelLabel
-            : (activeRow?.ModelName ?? "—");
+        ActiveModel = !string.IsNullOrEmpty(Main.ModelLabel) ? Main.ModelLabel
+            : activeRow?.ModelName ?? "—";
         ActiveWorkdir = activeRow?.Workdir ?? string.Empty;
 
         // Keep IsChatMode/IsCodeMode in sync with MainViewModel.ActiveView.
-        bool isCode = string.Equals(_main.ActiveView, "code", StringComparison.OrdinalIgnoreCase);
+        bool isCode = string.Equals(Main.ActiveView, "code", StringComparison.OrdinalIgnoreCase);
         IsChatMode = !isCode;
         IsCodeMode = isCode;
         ShellState.ActiveMode = isCode ? "Code" : "Chat";
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _main.PropertyChanged -= OnMainPropertyChanged;
-        Sessions.PropertyChanged -= OnSessionsPropertyChanged;
-        ShellState.PropertyChanged -= OnShellStateChanged;
-        Sessions.Dispose();
     }
 }

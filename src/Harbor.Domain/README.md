@@ -5,14 +5,14 @@
 
 ## What's inside
 
-| Folder | Contents |
-| --- | --- |
-| `Models/Session.cs` | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `ModelInfo`, `StopReason`, `ReasoningEffort`, `ToolChoice`, `CacheStrategy`, `JsonStringConverter<T>` base |
-| `Models/Messages.cs` | `AgentMessage` (abstract), `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `ContentPart` (abstract), `TextPart`, `ThinkingPart`, `ToolCallPart`, `FilePart`, `ToolResult`, `ToolResultEntry`, `FileAttachment` — MemoryPack `[MemoryPackable]` tagged-union hierarchy |
-| `Models/MemoryPackFormatters.cs` | `JsonElementMemoryPackFormatter` — custom MemoryPack formatter for `System.Text.Json.JsonElement` (round-trips JSON as length-prefixed UTF-16 string) |
-| `Models/Identifiers/Identifiers.cs` | `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` — strongly-typed `ValueObject` wrappers + `IdentifierValidation` (regex-free char validators for hot paths) |
-| `Events/AgentEvent.cs` | `AgentEvent` (abstract) + 13 derived event types (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`/`MessageUpdateEvent`/`MessageEndEvent`, `ToolExecutionStart/Update/EndEvent`, `TurnEndEvent`, `AgentEndEvent`, `AgentErrorEvent`, `CompactionStarted/CompletedEvent`, `SessionStatsEvent`) and the `LlmEvent` polymorphic stream hierarchy (`TextStart/Delta/EndEvent`, `ThinkingStart/Delta/EndEvent`, `ToolCallStart/Delta/EndEvent`, `StepStart/FinishEvent`, `FinishEvent`, `ErrorEvent`) |
-| `Permissions/PermissionRuleset.cs` | `PermissionRuleset` (Specification pattern), `PermissionRule`, `PermissionAction` enum, `PermissionRequest`, `PermissionResponse`, `IPermissionService` interface — domain logic for Allow/Ask/Deny evaluation with process-wide regex cache |
+| Folder                              | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|-------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Models/Session.cs`                 | `Session`, `SessionMetadata`, `Usage`, `Pricing`, `ModelInfo`, `StopReason`, `ReasoningEffort`, `ToolChoice`, `CacheStrategy`, `JsonStringConverter<T>` base                                                                                                                                                                                                                                                                                                                                             |
+| `Models/Messages.cs`                | `AgentMessage` (abstract), `UserMessage`, `AssistantMessage`, `ToolResultMessage`, `ContentPart` (abstract), `TextPart`, `ThinkingPart`, `ToolCallPart`, `FilePart`, `ToolResult`, `ToolResultEntry`, `FileAttachment` — MemoryPack `[MemoryPackable]` tagged-union hierarchy                                                                                                                                                                                                                            |
+| `Models/MemoryPackFormatters.cs`    | `JsonElementMemoryPackFormatter` — custom MemoryPack formatter for `System.Text.Json.JsonElement` (round-trips JSON as length-prefixed UTF-16 string)                                                                                                                                                                                                                                                                                                                                                    |
+| `Models/Identifiers/Identifiers.cs` | `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` — strongly-typed `ValueObject` wrappers + `IdentifierValidation` (regex-free char validators for hot paths)                                                                                                                                                                                                                                                                                                    |
+| `Events/AgentEvent.cs`              | `AgentEvent` (abstract) + 13 derived event types (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`/`MessageUpdateEvent`/`MessageEndEvent`, `ToolExecutionStart/Update/EndEvent`, `TurnEndEvent`, `AgentEndEvent`, `AgentErrorEvent`, `CompactionStarted/CompletedEvent`, `SessionStatsEvent`) and the `LlmEvent` polymorphic stream hierarchy (`TextStart/Delta/EndEvent`, `ThinkingStart/Delta/EndEvent`, `ToolCallStart/Delta/EndEvent`, `StepStart/FinishEvent`, `FinishEvent`, `ErrorEvent`) |
+| `Permissions/PermissionRuleset.cs`  | `PermissionRuleset` (Specification pattern), `PermissionRule`, `PermissionAction` enum, `PermissionRequest`, `PermissionResponse`, `IPermissionService` interface — domain logic for Allow/Ask/Deny evaluation with process-wide regex cache                                                                                                                                                                                                                                                             |
 
 ## Layer
 
@@ -22,10 +22,10 @@
 
 Only NuGet packages:
 
-| Package | Why |
-| --- | --- |
-| `CSharpFunctionalExtensions` | `ValueObject` base class for `SessionId` / `MessageId` / `ToolCallId` / `ProviderId` / `ModelRef` / `ToolName` / `AgentName` |
-| `MemoryPack` | `[MemoryPackable]` source generator for tagged-union serialization of `Session`, `AgentMessage`, `ContentPart`, `Usage`, `Pricing`, `ModelInfo`, `ToolResult`, `ToolResultEntry`, `FileAttachment` |
+| Package                      | Why                                                                                                                                                                                                |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CSharpFunctionalExtensions` | `ValueObject` base class for `SessionId` / `MessageId` / `ToolCallId` / `ProviderId` / `ModelRef` / `ToolName` / `AgentName`                                                                       |
+| `MemoryPack`                 | `[MemoryPackable]` source generator for tagged-union serialization of `Session`, `AgentMessage`, `ContentPart`, `Usage`, `Pricing`, `ModelInfo`, `ToolResult`, `ToolResultEntry`, `FileAttachment` |
 
 **Zero Harbor project references.** This is the architectural invariant enforced by `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs::Domain_HasZeroHarborProjectReferences`.
 
@@ -33,14 +33,14 @@ Only NuGet packages:
 
 All files in `Harbor.Domain` keep their original `Harbor.Abstractions.*` namespace declarations:
 
-| File | Namespace |
-| --- | --- |
-| `Models/Session.cs` | `Harbor.Abstractions.Models` |
-| `Models/Messages.cs` | `Harbor.Abstractions.Models` |
-| `Models/MemoryPackFormatters.cs` | `Harbor.Abstractions.Models` |
+| File                                | Namespace                                |
+|-------------------------------------|------------------------------------------|
+| `Models/Session.cs`                 | `Harbor.Abstractions.Models`             |
+| `Models/Messages.cs`                | `Harbor.Abstractions.Models`             |
+| `Models/MemoryPackFormatters.cs`    | `Harbor.Abstractions.Models`             |
 | `Models/Identifiers/Identifiers.cs` | `Harbor.Abstractions.Models.Identifiers` |
-| `Events/AgentEvent.cs` | `Harbor.Abstractions.Events` |
-| `Permissions/PermissionRuleset.cs` | `Harbor.Abstractions.Permissions` |
+| `Events/AgentEvent.cs`              | `Harbor.Abstractions.Events`             |
+| `Permissions/PermissionRuleset.cs`  | `Harbor.Abstractions.Permissions`        |
 
 This means **zero consumer code changes** — every project that does `using Harbor.Abstractions.Models;` keeps compiling and resolves to the types in `Harbor.Domain.dll` via the transitive project reference chain `Harbor.Abstractions → Harbor.Domain`.
 

@@ -1,9 +1,8 @@
 using System.Reflection;
 namespace Harbor.Plugins.Abstractions;
-
 /// <summary>
 ///     A successfully-compiled plugin assembly, plus the metadata needed by downstream
-/// layers (instantiation, caching, logging).
+///     layers (instantiation, caching, logging).
 /// </summary>
 /// <param name="Assembly">The loaded <see cref="Assembly" />.</param>
 /// <param name="SourceHash">

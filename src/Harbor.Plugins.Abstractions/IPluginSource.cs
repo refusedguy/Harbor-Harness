@@ -1,5 +1,4 @@
 namespace Harbor.Plugins.Abstractions;
-
 /// <summary>
 ///     Async-stream source of <see cref="PluginScript" /> wrappers. Each implementation
 ///     represents a different storage backend for CS-source plugins (filesystem,
@@ -7,8 +6,12 @@ namespace Harbor.Plugins.Abstractions;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The source layer is the only layer in the plugin runtime that knows <b>where
-///         plugin scripts come from</b>. Everything downstream (compilation,
+///         The source layer is the only layer in the plugin runtime that knows
+///         <b>
+///             where
+///             plugin scripts come from
+///         </b>
+///         . Everything downstream (compilation,
 ///         instantiation, registration) operates on already-materialized
 ///         <see cref="PluginScript" /> values and is storage-agnostic.
 ///     </para>
@@ -27,5 +30,5 @@ public interface IPluginSource
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>An async enumerable of <see cref="PluginScript" /> values.</returns>
-    IAsyncEnumerable<PluginScript> GetScriptsAsync(CancellationToken ct = default);
+    public IAsyncEnumerable<PluginScript> GetScriptsAsync(CancellationToken ct = default);
 }

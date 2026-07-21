@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Diagnostics;
-
 /// <summary>
 ///     In-memory sink for log entries that should be surfaced inside an interactive
 ///     TUI as a diagnostics panel (F12). Backed by a fixed-capacity ring buffer so
@@ -38,17 +36,17 @@ public interface IDiagnosticsPanel
     /// <param name="level">The log level (Trace, Debug, Info, Warning, Error, Critical).</param>
     /// <param name="category">Logger category name (typically the calling type's full name).</param>
     /// <param name="message">Formatted log message (already exception-free).</param>
-    void Log(LogLevel level, string category, string message);
+    public void Log(LogLevel level, string category, string message);
 
     /// <summary>
     ///     Return up to <paramref name="max" /> most-recent entries, oldest-first.
     /// </summary>
     /// <param name="max">Maximum entries to return. Defaults to 100.</param>
     /// <returns>A defensive copy of the recent entries; never <see langword="null" />.</returns>
-    IReadOnlyList<DiagnosticEntry> GetRecent(int max = 100);
+    public IReadOnlyList<DiagnosticEntry> GetRecent(int max = 100);
 
     /// <summary>
     ///     Drop all buffered entries. Called when the user clears the panel.
     /// </summary>
-    void Clear();
+    public void Clear();
 }

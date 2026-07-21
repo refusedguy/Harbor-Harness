@@ -1,4 +1,3 @@
-using System.Globalization;
 namespace Harbor.Terminal.Abstractions.Rendering;
 /// <summary>
 ///     Block-level GFM pipe-table detection + parsing. No layout, no color,
@@ -68,9 +67,9 @@ public static class GfmTableParser
         if (!IsRow(line))
             return false;
         var cells = SplitRow(line!);
-        foreach (var raw in cells)
+        foreach (string raw in cells)
         {
-            var t = raw.Trim();
+            string t = raw.Trim();
             if (t.Length == 0)
                 return false;
             int s = t[0] == ':' ? 1 : 0;
@@ -80,8 +79,10 @@ public static class GfmTableParser
             if (s > e)
                 return false;
             for (int k = s; k <= e; k++)
+            {
                 if (t[k] != '-')
                     return false;
+            }
         }
         return true;
     }
@@ -90,7 +91,7 @@ public static class GfmTableParser
     {
         line = line.Trim();
         line = line[1..^1]; // drop outer pipes
-        var parts = line.Split('|');
+        string[] parts = line.Split('|');
         for (int k = 0; k < parts.Length; k++)
             parts[k] = parts[k].Trim();
         return parts;
@@ -102,7 +103,7 @@ public static class GfmTableParser
         var result = new GfmAlign[cells.Count];
         for (int i = 0; i < cells.Count; i++)
         {
-            var t = cells[i].Trim();
+            string t = cells[i].Trim();
             bool left = t.Length > 0 && t[0] == ':';
             bool right = t.Length > 1 && t[^1] == ':';
             result[i] = (left, right) switch
@@ -129,7 +130,7 @@ public static class GfmTableParser
     {
         if (row.Count == cols)
             return row;
-        var outp = new string[cols];
+        string[] outp = new string[cols];
         for (int c = 0; c < cols; c++)
             outp[c] = c < row.Count ? row[c] : string.Empty;
         return outp;

@@ -1,7 +1,5 @@
 using Avalonia.Controls;
-
 namespace Harbor.App.Avalonia.Views.Shell;
-
 /// <summary>
 ///     Orca segmented status bar — code-behind.
 /// </summary>

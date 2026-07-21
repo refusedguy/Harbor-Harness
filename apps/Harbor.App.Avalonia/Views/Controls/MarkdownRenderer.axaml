@@ -17,5 +17,5 @@
         and the renderer rebuilds incrementally.
     -->
 
-    <StackPanel x:Name="RootPanel" Orientation="Vertical" Spacing="6"/>
+    <StackPanel x:Name="RootPanel" Orientation="Vertical" Spacing="6" />
 </UserControl>

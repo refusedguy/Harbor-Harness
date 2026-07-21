@@ -1,33 +1,28 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Harbor.App.Avalonia;
-using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using TUnit.Core.Enums;
-
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
 // so we alias the production App class to 'HarborApp' (not 'App' — that
 // collides with the Harbor.E2E.App namespace).
-using HarborApp = global::Harbor.App.Avalonia.App;
+using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia;
-
 /// <summary>
 ///     Real headless Avalonia E2E tests with SCREENSHOT capture.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Each test boots the actual <see cref="Harbor.App.Avalonia.App"/> +
-///         <see cref="MainWindow"/> + full production DI host inside an
+///         Each test boots the actual <see cref="Harbor.App.Avalonia.App" /> +
+///         <see cref="MainWindow" /> + full production DI host inside an
 ///         <c>Avalonia.Headless</c> off-screen renderer, drives the UI like a
 ///         user (type / click / hover-equivalent), then captures a PNG of the
 ///         rendered window. The PNGs are written to
@@ -45,7 +40,7 @@ namespace Harbor.E2E.App.Avalonia;
 ///     <para>
 ///         <b>Concurrency:</b> tagged <c>[NotInParallel]</c> because the driver
 ///         mutates <c>$HOME</c> (process-wide env var) and shares the
-///         process-wide Avalonia <see cref="Application"/> singleton.
+///         process-wide Avalonia <see cref="Application" /> singleton.
 ///     </para>
 /// </remarks>
 [NotInParallel]
@@ -65,14 +60,18 @@ public sealed class AvaloniaUiTests
     /// <summary>Per-class temp HOME so each test run starts with an empty <c>~/.harbor</c>.</summary>
     private static readonly string TempHome = Path.Combine(
         Path.GetTempPath(),
-        "harbor-avalonia-e2e-" + Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture));
+        "harbor-avalonia-e2e-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture));
 
     private static HeadlessAvaloniaDriver? _driver;
+
+    /// <summary>Get the per-class driver, throwing clearly if setup didn't run.</summary>
+    private static HeadlessAvaloniaDriver Driver
+        => _driver ?? throw new InvalidOperationException("SetupTestAsync did not run.");
 
     /// <summary>
     ///     Per-test setup. Initializes the shared driver on first run; subsequent
     ///     tests reuse the same driver (it's a process-wide singleton backed by
-    ///     Avalonia's <see cref="Application.Current"/> which can only be set
+    ///     Avalonia's <see cref="Application.Current" /> which can only be set
     ///     once per AppDomain).
     /// </summary>
     /// <remarks>
@@ -81,9 +80,9 @@ public sealed class AvaloniaUiTests
     ///     class — subsequent tests see <c>null</c> in the static field if
     ///     anything disposes it. Per-test setup with idempotent init avoids the
     ///     issue entirely: the first test pays the init cost, every later test
-    ///     hits the early-return path inside <see cref="HeadlessAvaloniaDriver.InitializeAsync"/>.
+    ///     hits the early-return path inside <see cref="HeadlessAvaloniaDriver.InitializeAsync" />.
     /// </remarks>
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupTestAsync()
     {
         // Wipe + recreate the screenshot dir on the very first test so reviewers
@@ -92,40 +91,36 @@ public sealed class AvaloniaUiTests
         {
             if (Directory.Exists(ScreenshotDir))
             {
-                Directory.Delete(ScreenshotDir, recursive: true);
+                Directory.Delete(ScreenshotDir, true);
             }
             Directory.CreateDirectory(ScreenshotDir);
 
             // Fresh HOME with ~/.harbor/config.json marking onboarding done.
             if (Directory.Exists(TempHome))
             {
-                Directory.Delete(TempHome, recursive: true);
+                Directory.Delete(TempHome, true);
             }
             Directory.CreateDirectory(TempHome);
-            var harborDir = Path.Combine(TempHome, ".harbor");
+            string harborDir = Path.Combine(TempHome, ".harbor");
             Directory.CreateDirectory(harborDir);
             await File.WriteAllTextAsync(
-                Path.Combine(harborDir, "config.json"),
-                JsonSerializer.Serialize(new
-                {
-                    configVersion = "1",
-                    onboardingCompleted = true,
-                    storageBackend = "memory",
-                    logLevel = "warning",
-                    defaultProvider = "ollama",
-                    defaultModel = "qwen2.5-coder:7b",
-                    defaultAgent = "code",
-                }, new JsonSerializerOptions { WriteIndented = true }))
+                    Path.Combine(harborDir, "config.json"),
+                    JsonSerializer.Serialize(new
+                    {
+                        configVersion = "1",
+                        onboardingCompleted = true,
+                        storageBackend = "memory",
+                        logLevel = "warning",
+                        defaultProvider = "ollama",
+                        defaultModel = "qwen2.5-coder:7b",
+                        defaultAgent = "code"
+                    }, new JsonSerializerOptions { WriteIndented = true }))
                 .ConfigureAwait(false);
 
             _driver = new HeadlessAvaloniaDriver(ScreenshotDir, TempHome);
             await _driver.InitializeAsync().ConfigureAwait(false);
         }
     }
-
-    /// <summary>Get the per-class driver, throwing clearly if setup didn't run.</summary>
-    private static HeadlessAvaloniaDriver Driver
-        => _driver ?? throw new InvalidOperationException("SetupTestAsync did not run.");
 
     /// <summary>
     ///     The app boots without crashing, the main window is non-null, and the
@@ -145,7 +140,7 @@ public sealed class AvaloniaUiTests
         // input hidden behind the diff/code viewer).
         var input = Driver.FindControlByName<TextBox>("InputBox");
         await Assert.That(input).IsNotNull();
-        var inputVisible = Driver.OnUIThread(() => input!.IsVisible);
+        bool inputVisible = Driver.OnUIThread(() => input!.IsVisible);
         await Assert.That(inputVisible).IsTrue();
 
         // The empty-state placeholder "Start a conversation" must be visible
@@ -155,9 +150,9 @@ public sealed class AvaloniaUiTests
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
-        var screenshot = await Driver.ScreenshotAsync("01-chat-default").ConfigureAwait(false);
+        string screenshot = await Driver.ScreenshotAsync("01-chat-default").ConfigureAwait(false);
         await Assert.That(File.Exists(screenshot)).IsTrue();
-        var size = new FileInfo(screenshot).Length;
+        long size = new FileInfo(screenshot).Length;
         await Assert.That(size).IsGreaterThan(5_000);
         await Assert.That(Driver.MainWindow).IsNotNull();
     }
@@ -182,7 +177,7 @@ public sealed class AvaloniaUiTests
         await Driver.TypeAsync(input!, "Hello world — typing into the chat!").ConfigureAwait(false);
 
         // Read back on the UI thread — TextBox.Text is dispatcher-affine.
-        var typedText = Driver.OnUIThread(() => input!.Text);
+        string? typedText = Driver.OnUIThread(() => input!.Text);
         await Assert.That(typedText).IsEqualTo("Hello world — typing into the chat!");
 
         await Driver.ScreenshotAsync("02-input-typed").ConfigureAwait(false);
@@ -208,7 +203,7 @@ public sealed class AvaloniaUiTests
         // the command's CanExecute state.
         var sendEmpty = Driver.FindButtonByText("Send ▶");
         await Assert.That(sendEmpty).IsNotNull();
-        var enabledEmpty = Driver.OnUIThread(() => sendEmpty!.IsEffectivelyEnabled);
+        bool enabledEmpty = Driver.OnUIThread(() => sendEmpty!.IsEffectivelyEnabled);
         await Assert.That(enabledEmpty).IsFalse();
 
         // Type something — Send should now be enabled.
@@ -216,7 +211,7 @@ public sealed class AvaloniaUiTests
         await Driver.TypeAsync(input!, "test message for send button").ConfigureAwait(false);
 
         var send = Driver.FindButtonByText("Send ▶");
-        var isEnabled = Driver.OnUIThread(() => send!.IsEffectivelyEnabled);
+        bool isEnabled = Driver.OnUIThread(() => send!.IsEffectivelyEnabled);
         await Assert.That(isEnabled).IsTrue();
 
         await Driver.ScreenshotAsync("03-send-enabled").ConfigureAwait(false);
@@ -248,7 +243,7 @@ public sealed class AvaloniaUiTests
         await Assert.That(sawMessage).IsTrue();
 
         // After send, the input is cleared.
-        var inputText = Driver.OnUIThread(() => input!.Text);
+        string? inputText = Driver.OnUIThread(() => input!.Text);
         await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
 
         // BUGFIX: WaitForTextAsync's AppendText walks the visual tree and
@@ -292,7 +287,7 @@ public sealed class AvaloniaUiTests
         await Assert.That(sawCodePlaceholder).IsTrue();
 
         // ActiveView must be "code" on the view-model.
-        var activeView = Driver.OnUIThread(() =>
+        string? activeView = Driver.OnUIThread(() =>
             (Driver.MainWindow.DataContext as MainViewModel)?.ActiveView);
         await Assert.That(activeView).IsEqualTo("code");
 
@@ -342,7 +337,7 @@ public sealed class AvaloniaUiTests
     ///     header. We construct the window directly (rather than relaunching
     ///     the app with onboardingCompleted=false) because Avalonia only allows
     ///     one Application per process — instead we instantiate
-    ///     <see cref="OnboardingWindow"/> + <see cref="OnboardingViewModel"/>
+    ///     <see cref="OnboardingWindow" /> + <see cref="OnboardingViewModel" />
     ///     from the existing DI container, render it, screenshot, close.
     ///     Captures <c>07-onboarding.png</c>.
     /// </summary>
@@ -360,7 +355,7 @@ public sealed class AvaloniaUiTests
         // operation below touches AvaloniaObject properties that require
         // dispatcher affinity. The dedicated UI thread's MainLoop pumps the
         // queued InvokeAsync job and unblocks the test thread.
-        var onboardingWindow = Dispatcher.UIThread.InvokeAsync<OnboardingWindow>(() =>
+        var onboardingWindow = Dispatcher.UIThread.InvokeAsync(() =>
         {
             var w = new OnboardingWindow();
             w.Bind(onboardingVm);
@@ -378,14 +373,14 @@ public sealed class AvaloniaUiTests
             // CaptureRenderedFrame accesses the window's render target which
             // is dispatcher-affine. Save to PNG inline so the bitmap doesn't
             // cross thread boundaries.
-            var path = Path.Combine(ScreenshotDir, "07-onboarding.png");
-            var sawBrand = Dispatcher.UIThread.InvokeAsync<bool>(() =>
+            string path = Path.Combine(ScreenshotDir, "07-onboarding.png");
+            bool sawBrand = Dispatcher.UIThread.InvokeAsync(() =>
             {
                 // Force a fresh render of the onboarding window — without this
                 // the headless render timer hasn't ticked and CaptureRenderedFrame
                 // returns a stale (or empty) bitmap.
                 onboardingWindow.UpdateLayout();
-                AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
 
                 var bitmap = onboardingWindow.CaptureRenderedFrame();
                 if (bitmap is null)
@@ -398,7 +393,7 @@ public sealed class AvaloniaUiTests
                 }
 
                 // Walk the visual tree on the UI thread to find the brand text.
-                var sb = new System.Text.StringBuilder();
+                var sb = new StringBuilder();
                 AppendText(onboardingWindow, sb);
                 return sb.ToString().Contains("Harbor", StringComparison.Ordinal);
             }).GetAwaiter().GetResult();
@@ -416,7 +411,7 @@ public sealed class AvaloniaUiTests
     }
 
     /// <summary>Walks the visual tree appending TextBlock/TextBox/ContentControl text.</summary>
-    private static void AppendText(Visual visual, System.Text.StringBuilder sb)
+    private static void AppendText(Visual visual, StringBuilder sb)
     {
         switch (visual)
         {
@@ -509,17 +504,17 @@ public sealed class AvaloniaUiTests
             // SaveAsync is async — must await on UI thread.
             // Dispatcher.UIThread.InvokeAsync<T> returns DispatcherOperation<T>
             // which supports GetAwaiter().GetResult().
-            global::Avalonia.Threading.Dispatcher.UIThread
+            Dispatcher.UIThread
                 .InvokeAsync(() => settingsVm.Settings.SaveCommand.ExecuteAsync(null))
-                .GetAwaiter().GetResult();  // Wait for dispatch
+                .GetAwaiter().GetResult(); // Wait for dispatch
             // The inner Task (SaveAsync) might still be running — wait a bit.
             await Task.Delay(500).ConfigureAwait(false);
         }
         await Task.Delay(400).ConfigureAwait(false);
 
         // Verify ~/.harbor/config.json (CommonConfig) contains "light".
-        var configPath = Path.Combine(TempHome, ".harbor", "config.json");
-        var configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
+        string configPath = Path.Combine(TempHome, ".harbor", "config.json");
+        string configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
         await Assert.That(configText).Contains("light");
 
         // Close the dialog so the next test starts clean.

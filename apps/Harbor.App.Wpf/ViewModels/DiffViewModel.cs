@@ -2,15 +2,25 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Side-by-side diff view model. Renders a list of hunks; each hunk has
 ///     left (before) and right (after) lines.
 /// </summary>
 public sealed partial class DiffViewModel : ObservableObject
 {
+
+    /// <summary>Number of added lines.</summary>
+    [ObservableProperty] private int _addedLines;
+
+    /// <summary>File path being diffed.</summary>
+    [ObservableProperty] private string _filePath = "(no file)";
+
+    /// <summary>Number of removed lines.</summary>
+    [ObservableProperty] private int _removedLines;
+
+    /// <summary>Status summary.</summary>
+    [ObservableProperty] private string _status = "No changes";
     /// <summary>Construct a <see cref="DiffViewModel" />.</summary>
     public DiffViewModel()
     {
@@ -30,18 +40,6 @@ public sealed partial class DiffViewModel : ObservableObject
                 new DiffLineViewModel("}", DiffLineKind.Context)
             }));
     }
-
-    /// <summary>File path being diffed.</summary>
-    [ObservableProperty] private string _filePath = "(no file)";
-
-    /// <summary>Status summary.</summary>
-    [ObservableProperty] private string _status = "No changes";
-
-    /// <summary>Number of added lines.</summary>
-    [ObservableProperty] private int _addedLines;
-
-    /// <summary>Number of removed lines.</summary>
-    [ObservableProperty] private int _removedLines;
 
     /// <summary>Diff hunks to render.</summary>
     public ObservableCollection<DiffHunkViewModel> Hunks { get; }
@@ -65,17 +63,11 @@ public sealed partial class DiffViewModel : ObservableObject
 
     /// <summary>Accept all changes.</summary>
     [RelayCommand]
-    private void AcceptAll()
-    {
-        Status = "Applied";
-    }
+    private void AcceptAll() => Status = "Applied";
 
     /// <summary>Reject all changes.</summary>
     [RelayCommand]
-    private void RejectAll()
-    {
-        Status = "Rejected";
-    }
+    private void RejectAll() => Status = "Rejected";
 }
 
 /// <summary>
@@ -95,17 +87,17 @@ public sealed record DiffLineViewModel(string Text, DiffLineKind Kind)
     /// <summary>Background brush for the line based on its kind.</summary>
     public Brush LineBackground => Kind switch
     {
-        DiffLineKind.Added => new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x40, 0xA6, 0xE3, 0xA1)),
-        DiffLineKind.Removed => new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x40, 0xF3, 0x8B, 0xA8)),
-        _ => System.Windows.Media.Brushes.Transparent
+        DiffLineKind.Added => new SolidColorBrush(Color.FromArgb(0x40, 0xA6, 0xE3, 0xA1)),
+        DiffLineKind.Removed => new SolidColorBrush(Color.FromArgb(0x40, 0xF3, 0x8B, 0xA8)),
+        _ => Brushes.Transparent
     };
 
     /// <summary>Foreground brush for the line based on its kind.</summary>
     public Brush LineForeground => Kind switch
     {
-        DiffLineKind.Added => new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xA6, 0xE3, 0xA1)),
-        DiffLineKind.Removed => new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF3, 0x8B, 0xA8)),
-        _ => new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC0, 0xC0, 0xC0))
+        DiffLineKind.Added => new SolidColorBrush(Color.FromRgb(0xA6, 0xE3, 0xA1)),
+        DiffLineKind.Removed => new SolidColorBrush(Color.FromRgb(0xF3, 0x8B, 0xA8)),
+        _ => new SolidColorBrush(Color.FromRgb(0xC0, 0xC0, 0xC0))
     };
 }
 

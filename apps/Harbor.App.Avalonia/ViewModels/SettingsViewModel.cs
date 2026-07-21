@@ -9,23 +9,21 @@ using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Settings dialog view-model. Reads the persisted CommonConfig
 ///     (~/.harbor/config.json) and AvaloniaConfig (~/.harbor/avalonia.json)
 ///     on construction, lets the user edit a curated set of fields, and
 ///     atomically writes both back on Save. Theme handling is delegated
-///     to <see cref="ThemeSettingsViewModel"/>; per-provider config rows
-///     are <see cref="ProviderConfigViewModel"/> instances that own their
+///     to <see cref="ThemeSettingsViewModel" />; per-provider config rows
+///     are <see cref="ProviderConfigViewModel" /> instances that own their
 ///     own Save / Test commands.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Persistence:</b> Save calls
-///         <see cref="ICommonConfigStore.SaveAsync(CommonConfig, CancellationToken)"/>
-///         and <see cref="IAppConfigStore{T}.SaveAsync(T, CancellationToken)"/>,
+///         <see cref="ICommonConfigStore.SaveAsync(CommonConfig, CancellationToken)" />
+///         and <see cref="IAppConfigStore{T}.SaveAsync(T, CancellationToken)" />,
 ///         both of which write atomically (temp file + rename) under a
 ///         SemaphoreSlim. No env-var mutation — the previous implementation
 ///         only set process env vars, which silently disappeared on restart.
@@ -38,16 +36,34 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private readonly ThemeService _themeService;
+    private readonly IAppConfigStore<AvaloniaConfig> _appStore;
+    private readonly IAuthResolver _authResolver;
+    private readonly ICommonConfigStore _commonStore;
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly ToastService _toasts;
-    private readonly ICommonConfigStore _commonStore;
-    private readonly IAppConfigStore<AvaloniaConfig> _appStore;
     private readonly IProviderRegistry _providers;
-    private readonly IAuthResolver _authResolver;
-    private CommonConfig _common;
+    private readonly ThemeService _themeService;
+    private readonly ToastService _toasts;
     private AvaloniaConfig _app;
+    private CommonConfig _common;
+
+    [ObservableProperty]
+    private string _defaultModel = string.Empty;
+
+    [ObservableProperty]
+    private string _defaultProvider = "ollama";
+
+    [ObservableProperty]
+    private string _fontFamily = "Inter";
+
+    [ObservableProperty]
+    private string _logLevel = "info";
+
+    [ObservableProperty]
+    private string _ollamaHost = string.Empty;
+
+    [ObservableProperty]
+    private string _storageBackend = "jsonl";
 
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
     public SettingsViewModel(
@@ -77,7 +93,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         ThemeSettings = new ThemeSettingsViewModel(theme)
         {
-            Theme = string.IsNullOrEmpty(_common.Theme) ? "system" : _common.Theme,
+            Theme = string.IsNullOrEmpty(_common.Theme) ? "system" : _common.Theme
         };
         DefaultProvider = string.IsNullOrEmpty(_common.DefaultProvider) ? "ollama" : _common.DefaultProvider;
         DefaultModel = _common.DefaultModel ?? string.Empty;
@@ -110,7 +126,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ProviderModelPickerViewModel? Picker { get; set; }
 
     /// <summary>
-    ///     Populate <see cref="ProviderConfigs"/> from the registry, attaching
+    ///     Populate <see cref="ProviderConfigs" /> from the registry, attaching
     ///     the persisted API key (if any) and the resolved auth status.
     /// </summary>
     private void LoadProviderConfigs()
@@ -118,11 +134,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         ProviderConfigs.Clear();
         foreach (var pid in _providers.GetRegisteredProviderIds())
         {
-            var id = pid.Value;
+            string id = pid.Value;
             var preset = ProviderPresets.Find(id);
             string displayName = preset?.DisplayName ?? id;
             bool requiresKey = preset?.RequiresApiKey ?? true;
-            _common.ApiKeys.TryGetValue(id, out var savedKey);
+            _common.ApiKeys.TryGetValue(id, out string? savedKey);
             string apiKey = savedKey ?? string.Empty;
 
             // Resolve auth status (env var fallback is included by the resolver).
@@ -142,24 +158,6 @@ public sealed partial class SettingsViewModel : ObservableObject
                 _loggerFactory.CreateLogger<ProviderConfigViewModel>()));
         }
     }
-
-    [ObservableProperty]
-    private string _defaultProvider = "ollama";
-
-    [ObservableProperty]
-    private string _defaultModel = string.Empty;
-
-    [ObservableProperty]
-    private string _fontFamily = "Inter";
-
-    [ObservableProperty]
-    private string _storageBackend = "jsonl";
-
-    [ObservableProperty]
-    private string _logLevel = "info";
-
-    [ObservableProperty]
-    private string _ollamaHost = string.Empty;
 
     /// <summary>
     ///     Save settings: persist CommonConfig + AvaloniaConfig to disk, apply
@@ -189,7 +187,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             // with nothing if the user cleared a row.
             ApiKeys = ProviderConfigs
                 .Where(r => !string.IsNullOrWhiteSpace(r.ApiKey))
-                .ToImmutableDictionary(r => r.Id, r => r.ApiKey, StringComparer.Ordinal),
+                .ToImmutableDictionary(r => r.Id, r => r.ApiKey, StringComparer.Ordinal)
         };
         _app = _app with { FontFamily = FontFamily, Theme = ThemeSettings.Theme };
 
@@ -208,7 +206,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         else
         {
-            var error = commonResult.IsFailure ? commonResult.Error : appResult.Error;
+            string? error = commonResult.IsFailure ? commonResult.Error : appResult.Error;
             _logger.LogError("Settings save failed: {Error}", error);
             _toasts.Show($"Could not save settings: {error}", ToastKind.Error);
         }
@@ -228,7 +226,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>
     ///     Re-run the first-launch onboarding wizard. Sets
-    ///     <see cref="CommonConfig.OnboardingCompleted"/> back to <c>false</c>
+    ///     <see cref="CommonConfig.OnboardingCompleted" /> back to <c>false</c>
     ///     and persists it, then asks the user to restart.
     /// </summary>
     [RelayCommand]
@@ -236,7 +234,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var result = await _commonStore.UpdateAsync(cfg => cfg with
         {
-            OnboardingCompleted = false,
+            OnboardingCompleted = false
         }).ConfigureAwait(true);
 
         if (result.IsSuccess)

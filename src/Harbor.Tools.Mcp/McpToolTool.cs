@@ -1,7 +1,5 @@
-using System.Text;
-using Harbor.Abstractions.Tools;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
@@ -103,11 +101,11 @@ public sealed class McpToolTool : ITool
     {
         string server = args.GetProperty("server").GetString()!;
         string method = args.GetProperty("method").GetString()!;
-        JsonElement methodArgs = args.TryGetProperty("args", out var a) && a.ValueKind == JsonValueKind.Object
+        var methodArgs = args.TryGetProperty("args", out var a) && a.ValueKind == JsonValueKind.Object
             ? a
             : default;
 
-        IMcpRegistry? registry = _registry;
+        var registry = _registry;
         if (registry is null && context.Services is not null)
         {
             registry = context.Services.GetService<IMcpRegistry>();
@@ -133,7 +131,7 @@ public sealed class McpToolTool : ITool
                 new { server, method });
         }
 
-        var payload = result.Value;
+        string? payload = result.Value;
         return ToolResult.Success(
             $"MCP {server}.{method} →\n{payload}",
             new { server, method, chars = payload.Length });

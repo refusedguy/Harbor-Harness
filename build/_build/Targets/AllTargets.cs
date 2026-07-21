@@ -1,8 +1,7 @@
 using Harbor.Build.Components;
-using Harbor.Build.Configuration;
-
+using Nuke.Common.IO;
+using Nuke.Common.ProjectModel;
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Composition helpers — convenience overloads that bundle multiple
 ///     targets into a single invocation. Used by the <c>All</c> target on
@@ -16,7 +15,7 @@ public static class AllTargets
     /// </summary>
     public static void CleanBuild(
         ArtifactPathResolver resolver,
-        Nuke.Common.ProjectModel.Solution solution,
+        Solution solution,
         BuildSettings settings)
     {
         CleanTarget.Execute(resolver);
@@ -26,10 +25,10 @@ public static class AllTargets
 
     /// <summary>
     ///     Runs <c>Compile → Test → ArchitectureTests</c>. Assumes a clean
-    ///     build has already happened (use <see cref="CleanBuild"/> first).
+    ///     build has already happened (use <see cref="CleanBuild" /> first).
     /// </summary>
     public static void CompileAndTest(
-        Nuke.Common.ProjectModel.Solution solution,
+        Solution solution,
         ArtifactPathResolver resolver,
         BuildSettings settings)
     {
@@ -41,7 +40,7 @@ public static class AllTargets
     /// <summary>
     ///     Runs <c>Publish → Archive</c> for the given app + variant + flags.
     /// </summary>
-    public static Nuke.Common.IO.AbsolutePath? PublishAndArchive(
+    public static AbsolutePath? PublishAndArchive(
         ArtifactPathResolver resolver,
         PublishVariantBuilder variantBuilder,
         ArchiveBuilder archiveBuilder,

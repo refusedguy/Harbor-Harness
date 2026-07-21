@@ -13,9 +13,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Core.Agents;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Benchmarks;
-
 /// <summary>
 ///     Benchmarks the per-turn fixed overhead of <see cref="AgentLoop" /> — the orchestration
 ///     cost of one agent-loop iteration (LLM call → optional tool calls → tool execution → next
@@ -56,7 +54,7 @@ public class AgentLoopBenchmark
             model.Id,
             providerId.Value,
             PermissionRuleset.Default,
-            MaxSteps: 1);
+            1);
 
         var eventBus = new BenchEventBus();
         var tokenEstimator = new BenchTokenEstimator();
@@ -129,15 +127,17 @@ public class AgentLoopBenchmark
 internal sealed class BenchTextLlmClient : ILlmClient
 {
     private readonly ModelInfo _model;
-    private readonly ProviderId _providerId;
 
     public BenchTextLlmClient(ProviderId providerId, ModelInfo model)
     {
-        _providerId = providerId;
+        ProviderId = providerId;
         _model = model;
     }
 
-    public ProviderId ProviderId => _providerId;
+    public ProviderId ProviderId
+    {
+        get;
+    }
 
     public IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default)
         => StreamText(cancellationToken);
@@ -161,15 +161,17 @@ internal sealed class BenchTextLlmClient : ILlmClient
 internal sealed class BenchToolLlmClient : ILlmClient
 {
     private readonly ModelInfo _model;
-    private readonly ProviderId _providerId;
 
     public BenchToolLlmClient(ProviderId providerId, ModelInfo model)
     {
-        _providerId = providerId;
+        ProviderId = providerId;
         _model = model;
     }
 
-    public ProviderId ProviderId => _providerId;
+    public ProviderId ProviderId
+    {
+        get;
+    }
 
     public IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default)
         => StreamTool(cancellationToken);
@@ -217,8 +219,8 @@ internal sealed class BenchProviderRegistry : IProviderRegistry
 /// </summary>
 internal sealed class BenchToolRegistry : IToolRegistry
 {
-    private readonly ITool _tool = new BenchTool();
     private readonly ToolDescriptor _descriptor;
+    private readonly ITool _tool = new BenchTool();
 
     public BenchToolRegistry()
     {
@@ -350,17 +352,19 @@ internal sealed class BenchPermissionService : IPermissionService
 /// </summary>
 internal sealed class BenchSessionContext : ISessionContext
 {
-    private readonly Session _session;
     private readonly List<AgentMessage> _messages;
 
     public BenchSessionContext(Session session, List<AgentMessage> messages)
     {
-        _session = session;
+        Session = session;
         _messages = messages;
         SteeringQueue = Channel.CreateUnbounded<AgentMessage>();
     }
 
-    public Session Session => _session;
+    public Session Session
+    {
+        get;
+    }
     public IReadOnlyList<AgentMessage> Messages => _messages;
     public Channel<AgentMessage> SteeringQueue { get; }
 

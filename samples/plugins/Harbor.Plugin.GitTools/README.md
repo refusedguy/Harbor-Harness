@@ -11,7 +11,6 @@ Sample plugin — implements `IPlugin` (+ `IToolPlugin`) from `Harbor.Abstractio
 - `Harbor.Abstractions` (Domain — for `IPlugin` / `IToolPlugin`)
 - `Harbor.Core` (for tool dispatch integration)
 
-
 ## Public API
 
 - `GitToolsPlugin` — implements `IToolPlugin`

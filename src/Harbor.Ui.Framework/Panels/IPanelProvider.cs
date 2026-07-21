@@ -1,6 +1,5 @@
 using Harbor.Ui.Framework.State;
 namespace Harbor.Ui.Framework.Panels;
-
 /// <summary>
 ///     Provider contract for one dockable panel. Implementations live either in the
 ///     SpectreTUI host assembly (builtins) or in plugin assemblies. The host queries
@@ -33,20 +32,20 @@ namespace Harbor.Ui.Framework.Panels;
 public interface IPanelProvider
 {
     /// <summary>Stable, lowercase panel id (e.g. <c>"todo-list"</c>).</summary>
-    string Id { get; }
+    public string Id { get; }
 
     /// <summary>Human-readable title shown in the panel's tab/border.</summary>
-    string Title { get; }
+    public string Title { get; }
 
     /// <summary>Where the panel docks by default when first shown.</summary>
-    TuiPanelPlacement DefaultPlacement { get; }
+    public TuiPanelPlacement DefaultPlacement { get; }
 
     /// <summary>
     ///     Default size: rows for <see cref="TuiPanelPlacement.Top" /> /
     ///     <see cref="TuiPanelPlacement.Bottom" />, columns for
     ///     <see cref="TuiPanelPlacement.Left" /> / <see cref="TuiPanelPlacement.Right" />.
     /// </summary>
-    int DefaultSize { get; }
+    public int DefaultSize { get; }
 
     /// <summary>
     ///     Build a renderer-native widget for the current frame. Called only when the
@@ -58,7 +57,7 @@ public interface IPanelProvider
     ///     A renderer-native widget (e.g. <c>Spectre.Tui.IWidget</c> for SpectreTUI).
     ///     Return <see langword="null" /> to render an empty placeholder.
     /// </returns>
-    object? Build(PanelContext ctx);
+    public object? Build(PanelContext ctx);
 
     /// <summary>
     ///     Handle a key press while this panel owns focus. Use
@@ -71,5 +70,5 @@ public interface IPanelProvider
     ///     <see langword="true" /> if the key was consumed (host skips default handling);
     ///     <see langword="false" /> to fall through to the host's default key map.
     /// </returns>
-    bool OnKey(UiKey key, PanelContext ctx);
+    public bool OnKey(UiKey key, PanelContext ctx);
 }

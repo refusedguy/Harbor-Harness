@@ -1,6 +1,5 @@
 // Hosting layer — a loaded script instance with evaluation metadata. See ScriptHost.cs.
 namespace Harbor.Scripting.Hosting;
-
 /// <summary>
 ///     Represents a script that was loaded into the host: its source entry,
 ///     the compiled form (post-compiler), and the evaluation outcome.

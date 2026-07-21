@@ -16,16 +16,16 @@
         KeyDown="Window_KeyDown">
     <Window.Resources>
         <DataTemplate DataType="{x:Type vm:ChatViewModel}">
-            <views:ChatView/>
+            <views:ChatView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:CodeEditorViewModel}">
-            <views:CodeEditorView/>
+            <views:CodeEditorView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:DiffViewModel}">
-            <views:DiffView/>
+            <views:DiffView />
         </DataTemplate>
         <DataTemplate DataType="{x:Type vm:TokenUsageViewModel}">
-            <views:TokenUsageView/>
+            <views:TokenUsageView />
         </DataTemplate>
     </Window.Resources>
 
@@ -33,28 +33,33 @@
         <!-- Toast layer (top-right, overlay) -->
         <views:ToastNotificationsView DockPanel.Dock="Top" DataContext="{Binding Toasts}"
                                       VerticalAlignment="Top" HorizontalAlignment="Right"
-                                      Panel.ZIndex="100" IsHitTestVisible="False"/>
+                                      Panel.ZIndex="100" IsHitTestVisible="False" />
 
         <!-- Top toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource App.Surface}" Padding="10,6">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="⚓" FontSize="18" Foreground="{DynamicResource App.Accent}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="Harbor" FontWeight="Bold" Foreground="{DynamicResource App.Text}" VerticalAlignment="Center"/>
-                    <TextBlock Text=" · " Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding Provider}" Foreground="{DynamicResource App.Info}" VerticalAlignment="Center"/>
-                    <TextBlock Text=" / " Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding Model}" Foreground="{DynamicResource App.Success}" VerticalAlignment="Center"/>
+                    <TextBlock Text="⚓" FontSize="18" Foreground="{DynamicResource App.Accent}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="Harbor" FontWeight="Bold" Foreground="{DynamicResource App.Text}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text=" · " Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Provider}" Foreground="{DynamicResource App.Info}"
+                               VerticalAlignment="Center" />
+                    <TextBlock Text=" / " Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Model}" Foreground="{DynamicResource App.Success}"
+                               VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
-                    <Button Content="Providers" Margin="0,0,6,0" Padding="10,4" Command="{Binding BrowseProvidersCommand}"/>
-                    <Button Content="Settings" Margin="0,0,6,0" Padding="10,4" Command="{Binding OpenSettingsCommand}"/>
-                    <Button Content="Theme" Padding="10,4" Command="{Binding ToggleThemeCommand}"/>
+                    <Button Content="Providers" Margin="0,0,6,0" Padding="10,4"
+                            Command="{Binding BrowseProvidersCommand}" />
+                    <Button Content="Settings" Margin="0,0,6,0" Padding="10,4" Command="{Binding OpenSettingsCommand}" />
+                    <Button Content="Theme" Padding="10,4" Command="{Binding ToggleThemeCommand}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -63,31 +68,35 @@
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource App.Surface}" Padding="10,4">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="{Binding TokenCount}" Foreground="{DynamicResource App.Info}" Margin="0,0,16,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2" Text="{Binding CostText}" Foreground="{DynamicResource App.Success}" Margin="0,0,16,0" VerticalAlignment="Center"/>
-                <Ellipse Grid.Column="3" Width="8" Height="8" Fill="{DynamicResource App.Success}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource App.TextMuted}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding TokenCount}" Foreground="{DynamicResource App.Info}"
+                           Margin="0,0,16,0" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2" Text="{Binding CostText}" Foreground="{DynamicResource App.Success}"
+                           Margin="0,0,16,0" VerticalAlignment="Center" />
+                <Ellipse Grid.Column="3" Width="8" Height="8" Fill="{DynamicResource App.Success}"
+                         VerticalAlignment="Center" />
             </Grid>
         </Border>
 
         <!-- Main content: sidebar + dockable panel area -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar: sessions -->
-            <views:SessionListView Grid.Column="0" DataContext="{Binding Sessions}"/>
+            <views:SessionListView Grid.Column="0" DataContext="{Binding Sessions}" />
 
             <GridSplitter Grid.Column="1" Width="3" HorizontalAlignment="Stretch"
-                          Background="{DynamicResource App.Border}"/>
+                          Background="{DynamicResource App.Border}" />
 
             <!-- Dockable panel area (AvalonDock) -->
             <avalonDock:DockingManager Grid.Column="2"
@@ -96,12 +105,12 @@
                                        ActiveContent="{Binding ActivePanel, Mode=TwoWay}">
                 <avalonDock:DockingManager.DocumentHeaderTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding Title}"/>
+                        <TextBlock Text="{Binding Title}" />
                     </DataTemplate>
                 </avalonDock:DockingManager.DocumentHeaderTemplate>
                 <avalonDock:DockingManager.LayoutItemTemplate>
                     <DataTemplate>
-                        <ContentPresenter Content="{Binding Content}"/>
+                        <ContentPresenter Content="{Binding Content}" />
                     </DataTemplate>
                 </avalonDock:DockingManager.LayoutItemTemplate>
             </avalonDock:DockingManager>

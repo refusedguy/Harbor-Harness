@@ -1,9 +1,6 @@
 using Harbor.Build.Components;
-using Harbor.Build.Configuration;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Architecture-test target — runs only the
 ///     <c>Harbor.Architecture.Tests</c> project. Used to validate layer

@@ -1,9 +1,7 @@
 using Harbor.Abstractions.Tools;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Hosting;
-
 /// <summary>
 ///     Builtin-tool registration — a subset of the 10 builtin tools
 ///     (no MCP, no WebFetch to avoid HTTP policy decisions; the user can
@@ -12,12 +10,12 @@ namespace Harbor.App.Avalonia.Hosting;
 internal static class ToolRegistration
 {
     /// <summary>
-    ///     Build the <see cref="ToolRegistry"/> eagerly with every builtin
+    ///     Build the <see cref="ToolRegistry" /> eagerly with every builtin
     ///     tool registered. The returned registry is registered as a
     ///     singleton by the caller.
     /// </summary>
     /// <param name="loggerFactory">Bootstrap logger factory (used to construct per-tool loggers).</param>
-    /// <returns>The constructed + frozen <see cref="ToolRegistry"/>.</returns>
+    /// <returns>The constructed + frozen <see cref="ToolRegistry" />.</returns>
     public static ToolRegistry Build(ILoggerFactory loggerFactory)
     {
         var toolRegistry = new ToolRegistry();

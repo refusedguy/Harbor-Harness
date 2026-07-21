@@ -6,9 +6,7 @@
     Blazor-flavoured.
 *@
 
-@using Harbor.Ui.Framework.Converters
-
-<div class="status-badge @($"dot-{BrushKey.ToLowerInvariant()}")" >
+<div class="status-badge @($"dot-{BrushKey.ToLowerInvariant()}")">
     @if (ShowDot)
     {
         <span class="status-badge-dot @($"brush-{BrushKey.ToLowerInvariant()}")"></span>
@@ -17,9 +15,9 @@
 </div>
 
 @code {
-    /// <summary>Label text shown inside the badge.</summary>
-    [Parameter]
-    public string StatusText { get; set; } = string.Empty;
+/// <summary>Label text shown inside the badge.</summary>
+[Parameter]
+public string StatusText { get; set; } = string.Empty;
 
     /// <summary>
     ///     Resource key for the dot fill. Mirrors the Avalonia control —
@@ -27,9 +25,9 @@
     ///     can stay in sync with the AXAML resource dictionary.
     /// </summary>
     [Parameter]
-    public string BrushKey { get; set; } = "StatusIdleBrush";
+public string BrushKey { get; set; } = "StatusIdleBrush";
 
-    /// <summary>Toggle the leading dot.</summary>
-    [Parameter]
-    public bool ShowDot { get; set; } = true;
+/// <summary>Toggle the leading dot.</summary>
+[Parameter]
+public bool ShowDot { get; set; } = true;
 }

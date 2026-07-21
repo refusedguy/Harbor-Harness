@@ -1,9 +1,7 @@
 using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.TerminalGui.Handlers;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Status bar projection: <c>provider/model/agent · tokens↑↓ · $cost · status · scroll%</c>.
 ///     Reads only from <see cref="UiState" /> — no local mutable counters.

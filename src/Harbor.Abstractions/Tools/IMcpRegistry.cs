@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Models;
 namespace Harbor.Abstractions.Tools;
 /// <summary>
 ///     Registry of Model Context Protocol (MCP) servers reachable from the agent runtime.
@@ -23,20 +22,20 @@ public interface IMcpRegistry
     /// <param name="name">Stable lowercase server name (e.g. <c>filesystem</c>).</param>
     /// <param name="stdioCommand">Shell command that launches the server in stdio mode.</param>
     /// <returns>Success, or failure with an error message.</returns>
-    Result Register(string name, string stdioCommand);
+    public Result Register(string name, string stdioCommand);
 
     /// <summary>
     ///     Unregister an MCP server by name.
     /// </summary>
     /// <param name="name">The server name.</param>
     /// <returns>Success, or failure if the server is not registered.</returns>
-    Result Unregister(string name);
+    public Result Unregister(string name);
 
     /// <summary>
     ///     Returns the list of registered server names.
     /// </summary>
     /// <returns>A read-only list of server names.</returns>
-    IReadOnlyList<string> GetServerNames();
+    public IReadOnlyList<string> GetServerNames();
 
     /// <summary>
     ///     Invoke a method on a registered MCP server and return the JSON response.
@@ -49,7 +48,7 @@ public interface IMcpRegistry
     ///     Success with the response payload serialized to a JSON string, or failure with an
     ///     error message (e.g. <c>"MCP server 'X' is not registered"</c>).
     /// </returns>
-    Task<Result<string>> InvokeAsync(
+    public Task<Result<string>> InvokeAsync(
         string server,
         string method,
         JsonElement args,

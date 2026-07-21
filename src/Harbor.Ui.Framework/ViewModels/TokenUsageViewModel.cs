@@ -1,12 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.ViewModels;
-
 /// <summary>
 ///     Token-usage chart view-model. Records a snapshot per turn (input/output tokens
 ///     + cost) and exposes them as bar-chart rows for the <c>TokenUsageView</c>.
@@ -15,10 +12,10 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///     <para>
 ///         <b>Task R1 — Sparkline:</b> in addition to the existing
 ///         per-turn bar chart, this view-model now exposes
-///         <see cref="RecentOutputTokens"/> — a list of the last 30
+///         <see cref="RecentOutputTokens" /> — a list of the last 30
 ///         turns' output-token counts, suitable for binding to the
 ///         <c>Sparkline</c> control in the status bar. Updates live as
-///         <see cref="RecordUsage"/> adds new bars.
+///         <see cref="RecordUsage" /> adds new bars.
 ///     </para>
 /// </remarks>
 public sealed partial class TokenUsageViewModel : ObservableObject
@@ -26,6 +23,15 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     private readonly ILogger<TokenUsageViewModel> _logger;
     private long _lastTokensIn;
     private long _lastTokensOut;
+
+    [ObservableProperty]
+    private decimal _totalCostUsd;
+
+    [ObservableProperty]
+    private long _totalTokensIn;
+
+    [ObservableProperty]
+    private long _totalTokensOut;
     private int _turnIndex;
 
     /// <summary>Construct the chart view-model.</summary>
@@ -43,19 +49,10 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<double> RecentOutputTokens { get; } = new();
 
-    [ObservableProperty]
-    private long _totalTokensIn;
-
-    [ObservableProperty]
-    private long _totalTokensOut;
-
-    [ObservableProperty]
-    private decimal _totalCostUsd;
-
     /// <summary>Sample the current UiState and append a new bar when tokens changed.</summary>
     /// <param name="state">Current UI snapshot.</param>
     /// <remarks>
-    ///     This method is called from <see cref="MainViewModel.OnStoreChanged"/>,
+    ///     This method is called from <see cref="MainViewModel.OnStoreChanged" />,
     ///     which itself runs inside a <c>Dispatcher.UIThread.Post</c> — so we
     ///     are already on the UI thread when this is invoked. No inner
     ///     marshaling needed (and trying to Post again would break headless
@@ -78,11 +75,17 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 
         Bars.Add(new TokenUsageBarViewModel(_turnIndex, deltaIn, deltaOut, state.Cost.CostUsd));
         // Cap the chart to last 50 turns.
-        while (Bars.Count > 50) Bars.RemoveAt(0);
+        while (Bars.Count > 50)
+        {
+            Bars.RemoveAt(0);
+        }
 
         // Sparkline series — cap at 30 for compact status-bar display.
         RecentOutputTokens.Add(deltaOut);
-        while (RecentOutputTokens.Count > 30) RecentOutputTokens.RemoveAt(0);
+        while (RecentOutputTokens.Count > 30)
+        {
+            RecentOutputTokens.RemoveAt(0);
+        }
 
         TotalTokensIn = state.Cost.TokensIn;
         TotalTokensOut = state.Cost.TokensOut;
@@ -102,11 +105,11 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     /// <remarks>
     ///     <para>
     ///         <b>Task S3 — per-session reset:</b> this is the canonical
-    ///         reset entry point. <see cref="Clear"/> (the
+    ///         reset entry point. <see cref="Clear" /> (the
     ///         <c>[RelayCommand]</c> wrapper that backs the
     ///         <c>ClearCommand</c> binding in <c>TokenUsageView.axaml</c>)
     ///         delegates here so the UI button and the
-    ///         <see cref="SessionManager"/> switch-path share a single
+    ///         <see cref="SessionManager" /> switch-path share a single
     ///         source of truth.
     ///     </para>
     /// </remarks>
@@ -123,11 +126,11 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     }
 
     /// <summary>
-    ///     <c>[RelayCommand]</c> wrapper around <see cref="Reset"/> so the
+    ///     <c>[RelayCommand]</c> wrapper around <see cref="Reset" /> so the
     ///     <c>Clear</c> button in <c>TokenUsageView.axaml</c> can bind to
-    ///     <c>ClearCommand</c>. Delegates to <see cref="Reset"/> — the
+    ///     <c>ClearCommand</c>. Delegates to <see cref="Reset" /> — the
     ///     canonical entry point used by both the UI and the
-    ///     <see cref="SessionManager"/> session-switch path.
+    ///     <see cref="SessionManager" /> session-switch path.
     /// </summary>
     [RelayCommand]
     public void Clear() => Reset();

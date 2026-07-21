@@ -1,10 +1,7 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.RazorConsole.Rendering;
-
 /// <summary>
 ///     Renders markdown into Spectre markup strings for RazorConsole. Mirrors
 ///     the SpectreTui ChatMarkdown behaviour (headings, bold, italic, inline
@@ -26,7 +23,7 @@ public static class RazorMarkdownRenderer
     {
         bool md = RazorColorMapper.SupportsMarkdown(role);
         string markup = RazorColorMapper.ToMarkup(role);
-        var lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
+        string[] lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
         var outp = new List<string>(lines.Length + 4);
 
         int i = 0;
@@ -36,7 +33,7 @@ public static class RazorMarkdownRenderer
             {
                 if (GfmTableParser.TryParse(lines, i, out var table, out int next))
                 {
-                    foreach (var row in GfmTableFormatter.Format(table, maxWidth))
+                    foreach (string row in GfmTableFormatter.Format(table, maxWidth))
                         outp.Add($"[grey]{Escape(row)}[/]");
                     i = next;
                     continue;
@@ -64,7 +61,7 @@ public static class RazorMarkdownRenderer
         if (heading.Success)
             return heading.Groups[2].Value;
 
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         if (trimmed is "---" or "***" or "___")
             return new string('─', 12);
 

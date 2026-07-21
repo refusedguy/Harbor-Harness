@@ -1,11 +1,6 @@
-using System.Text.Json;
-using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Models;
-
 namespace Harbor.Storage.Jsonl;
-
 /// <summary>
-///     Stateless JSON codec for <see cref="AgentMessage"/> / <see cref="ContentPart"/>
+///     Stateless JSON codec for <see cref="AgentMessage" /> / <see cref="ContentPart" />
 ///     serialization to/from the JSONL wire format. Extracted from
 ///     <c>JsonlSessionStore</c> (Task R31 god-object decomposition) so the
 ///     store can focus on file I/O + caching, while this class owns the
@@ -26,7 +21,7 @@ namespace Harbor.Storage.Jsonl;
 ///     <para>
 ///         <b>Why Result-returning?</b> the original <c>null</c>-returning
 ///         deserializer silently dropped malformed lines (§ROP-001 audit).
-///         Now each branch returns <see cref="Result{T}"/> with a specific
+///         Now each branch returns <see cref="Result{T}" /> with a specific
 ///         error message so the caller can log + skip without losing
 ///         diagnostic information.
 ///     </para>
@@ -40,7 +35,7 @@ internal static class JsonlMessageCodec
     public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    ///     Project an <see cref="AgentMessage"/> into the role-specific
+    ///     Project an <see cref="AgentMessage" /> into the role-specific
     ///     payload shape that gets serialized as the <c>payload</c> field
     ///     of the JSONL line.
     /// </summary>
@@ -64,7 +59,7 @@ internal static class JsonlMessageCodec
     }
 
     /// <summary>
-    ///     Project a single <see cref="ContentPart"/> into its JSON shape.
+    ///     Project a single <see cref="ContentPart" /> into its JSON shape.
     /// </summary>
     public static object SerializePart(ContentPart part) => part switch
     {
@@ -76,8 +71,8 @@ internal static class JsonlMessageCodec
     };
 
     /// <summary>
-    ///     Parse a single JSONL line back into an <see cref="AgentMessage"/>.
-    ///     Returns <see cref="Result{T}"/> so the caller can surface a
+    ///     Parse a single JSONL line back into an <see cref="AgentMessage" />.
+    ///     Returns <see cref="Result{T}" /> so the caller can surface a
     ///     diagnostic message rather than silently dropping the line.
     /// </summary>
     /// <param name="sessionId">The session id to embed in the reconstructed message.</param>
@@ -190,7 +185,7 @@ internal static class JsonlMessageCodec
     }
 
     /// <summary>
-    ///     Parse a single <see cref="ContentPart"/> from its JSON shape.
+    ///     Parse a single <see cref="ContentPart" /> from its JSON shape.
     ///     Returns null for unknown <c>type</c> values (forward-compat
     ///     with future part types).
     /// </summary>

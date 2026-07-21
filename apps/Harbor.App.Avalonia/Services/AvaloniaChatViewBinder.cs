@@ -3,19 +3,17 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
-///     Avalonia implementation of <see cref="IChatViewBinder"/>. Bridges
+///     Avalonia implementation of <see cref="IChatViewBinder" />. Bridges
 ///     the framework-layer <c>SessionManager</c> to the Avalonia-specific
-///     <see cref="ChatViewModel"/> + <see cref="Dispatcher.UIThread"/>.
+///     <see cref="ChatViewModel" /> + <see cref="Dispatcher.UIThread" />.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Registered as a singleton in <c>ServiceRegistration</c>. The
 ///         framework-layer <c>SessionManager</c> resolves this via DI
-///         and calls <see cref="Rebind"/> on every session switch.
+///         and calls <see cref="Rebind" /> on every session switch.
 ///     </para>
 ///     <para>
 ///         <b>Why this lives in Avalonia:</b> the framework layer cannot
@@ -35,14 +33,14 @@ public sealed class AvaloniaChatViewBinder : IChatViewBinder
         _services = services;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public int GetRenderedLineCount()
     {
         var chatVm = _services.GetService<ChatViewModel>();
         return chatVm?.RenderedLineCount ?? 0;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Rebind(UiStore store, int savedRenderedLineCount)
     {
         var chatVm = _services.GetService<ChatViewModel>();

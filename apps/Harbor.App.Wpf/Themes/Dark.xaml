@@ -33,57 +33,57 @@
     <Color x:Key="Mocha.Flamingo">#F2CDCD</Color>
     <Color x:Key="Mocha.Rosewater">#F5E0DC</Color>
 
-    <SolidColorBrush x:Key="Dark.BaseBrush" Color="{StaticResource Mocha.Base}"/>
-    <SolidColorBrush x:Key="Dark.MantleBrush" Color="{StaticResource Mocha.Mantle}"/>
-    <SolidColorBrush x:Key="Dark.CrustBrush" Color="{StaticResource Mocha.Crust}"/>
-    <SolidColorBrush x:Key="Dark.Surface0Brush" Color="{StaticResource Mocha.Surface0}"/>
-    <SolidColorBrush x:Key="Dark.Surface1Brush" Color="{StaticResource Mocha.Surface1}"/>
-    <SolidColorBrush x:Key="Dark.Surface2Brush" Color="{StaticResource Mocha.Surface2}"/>
-    <SolidColorBrush x:Key="Dark.Overlay0Brush" Color="{StaticResource Mocha.Overlay0}"/>
-    <SolidColorBrush x:Key="Dark.Overlay1Brush" Color="{StaticResource Mocha.Overlay1}"/>
-    <SolidColorBrush x:Key="Dark.Overlay2Brush" Color="{StaticResource Mocha.Overlay2}"/>
-    <SolidColorBrush x:Key="Dark.TextBrush" Color="{StaticResource Mocha.Text}"/>
-    <SolidColorBrush x:Key="Dark.Subtext0Brush" Color="{StaticResource Mocha.Subtext0}"/>
-    <SolidColorBrush x:Key="Dark.Subtext1Brush" Color="{StaticResource Mocha.Subtext1}"/>
-    <SolidColorBrush x:Key="Dark.BlueBrush" Color="{StaticResource Mocha.Blue}"/>
-    <SolidColorBrush x:Key="Dark.LavenderBrush" Color="{StaticResource Mocha.Lavender}"/>
-    <SolidColorBrush x:Key="Dark.GreenBrush" Color="{StaticResource Mocha.Green}"/>
-    <SolidColorBrush x:Key="Dark.YellowBrush" Color="{StaticResource Mocha.Yellow}"/>
-    <SolidColorBrush x:Key="Dark.PeachBrush" Color="{StaticResource Mocha.Peach}"/>
-    <SolidColorBrush x:Key="Dark.RedBrush" Color="{StaticResource Mocha.Red}"/>
-    <SolidColorBrush x:Key="Dark.MauveBrush" Color="{StaticResource Mocha.Mauve}"/>
+    <SolidColorBrush x:Key="Dark.BaseBrush" Color="{StaticResource Mocha.Base}" />
+    <SolidColorBrush x:Key="Dark.MantleBrush" Color="{StaticResource Mocha.Mantle}" />
+    <SolidColorBrush x:Key="Dark.CrustBrush" Color="{StaticResource Mocha.Crust}" />
+    <SolidColorBrush x:Key="Dark.Surface0Brush" Color="{StaticResource Mocha.Surface0}" />
+    <SolidColorBrush x:Key="Dark.Surface1Brush" Color="{StaticResource Mocha.Surface1}" />
+    <SolidColorBrush x:Key="Dark.Surface2Brush" Color="{StaticResource Mocha.Surface2}" />
+    <SolidColorBrush x:Key="Dark.Overlay0Brush" Color="{StaticResource Mocha.Overlay0}" />
+    <SolidColorBrush x:Key="Dark.Overlay1Brush" Color="{StaticResource Mocha.Overlay1}" />
+    <SolidColorBrush x:Key="Dark.Overlay2Brush" Color="{StaticResource Mocha.Overlay2}" />
+    <SolidColorBrush x:Key="Dark.TextBrush" Color="{StaticResource Mocha.Text}" />
+    <SolidColorBrush x:Key="Dark.Subtext0Brush" Color="{StaticResource Mocha.Subtext0}" />
+    <SolidColorBrush x:Key="Dark.Subtext1Brush" Color="{StaticResource Mocha.Subtext1}" />
+    <SolidColorBrush x:Key="Dark.BlueBrush" Color="{StaticResource Mocha.Blue}" />
+    <SolidColorBrush x:Key="Dark.LavenderBrush" Color="{StaticResource Mocha.Lavender}" />
+    <SolidColorBrush x:Key="Dark.GreenBrush" Color="{StaticResource Mocha.Green}" />
+    <SolidColorBrush x:Key="Dark.YellowBrush" Color="{StaticResource Mocha.Yellow}" />
+    <SolidColorBrush x:Key="Dark.PeachBrush" Color="{StaticResource Mocha.Peach}" />
+    <SolidColorBrush x:Key="Dark.RedBrush" Color="{StaticResource Mocha.Red}" />
+    <SolidColorBrush x:Key="Dark.MauveBrush" Color="{StaticResource Mocha.Mauve}" />
 
     <!-- Semantic aliases — the active theme binds to these and ThemeService
          swaps the underlying dictionary. -->
-    <SolidColorBrush x:Key="App.Background" Color="{StaticResource Mocha.Base}"/>
-    <SolidColorBrush x:Key="App.Surface" Color="{StaticResource Mocha.Mantle}"/>
-    <SolidColorBrush x:Key="App.SurfaceAlt" Color="{StaticResource Mocha.Surface0}"/>
-    <SolidColorBrush x:Key="App.Border" Color="{StaticResource Mocha.Surface1}"/>
-    <SolidColorBrush x:Key="App.Text" Color="{StaticResource Mocha.Text}"/>
-    <SolidColorBrush x:Key="App.TextMuted" Color="{StaticResource Mocha.Overlay0}"/>
-    <SolidColorBrush x:Key="App.Accent" Color="{StaticResource Mocha.Mauve}"/>
-    <SolidColorBrush x:Key="App.AccentSecondary" Color="{StaticResource Mocha.Blue}"/>
-    <SolidColorBrush x:Key="App.Success" Color="{StaticResource Mocha.Green}"/>
-    <SolidColorBrush x:Key="App.Warning" Color="{StaticResource Mocha.Yellow}"/>
-    <SolidColorBrush x:Key="App.Error" Color="{StaticResource Mocha.Red}"/>
-    <SolidColorBrush x:Key="App.Info" Color="{StaticResource Mocha.Sky}"/>
+    <SolidColorBrush x:Key="App.Background" Color="{StaticResource Mocha.Base}" />
+    <SolidColorBrush x:Key="App.Surface" Color="{StaticResource Mocha.Mantle}" />
+    <SolidColorBrush x:Key="App.SurfaceAlt" Color="{StaticResource Mocha.Surface0}" />
+    <SolidColorBrush x:Key="App.Border" Color="{StaticResource Mocha.Surface1}" />
+    <SolidColorBrush x:Key="App.Text" Color="{StaticResource Mocha.Text}" />
+    <SolidColorBrush x:Key="App.TextMuted" Color="{StaticResource Mocha.Overlay0}" />
+    <SolidColorBrush x:Key="App.Accent" Color="{StaticResource Mocha.Mauve}" />
+    <SolidColorBrush x:Key="App.AccentSecondary" Color="{StaticResource Mocha.Blue}" />
+    <SolidColorBrush x:Key="App.Success" Color="{StaticResource Mocha.Green}" />
+    <SolidColorBrush x:Key="App.Warning" Color="{StaticResource Mocha.Yellow}" />
+    <SolidColorBrush x:Key="App.Error" Color="{StaticResource Mocha.Red}" />
+    <SolidColorBrush x:Key="App.Info" Color="{StaticResource Mocha.Sky}" />
 
     <!-- Role brushes for chat roles -->
-    <SolidColorBrush x:Key="Role.User" Color="{StaticResource Mocha.Sky}"/>
-    <SolidColorBrush x:Key="Role.Assistant" Color="{StaticResource Mocha.Text}"/>
-    <SolidColorBrush x:Key="Role.Thinking" Color="{StaticResource Mocha.Overlay0}"/>
-    <SolidColorBrush x:Key="Role.Tool" Color="{StaticResource Mocha.Blue}"/>
-    <SolidColorBrush x:Key="Role.ToolResult" Color="{StaticResource Mocha.Green}"/>
-    <SolidColorBrush x:Key="Role.Error" Color="{StaticResource Mocha.Red}"/>
+    <SolidColorBrush x:Key="Role.User" Color="{StaticResource Mocha.Sky}" />
+    <SolidColorBrush x:Key="Role.Assistant" Color="{StaticResource Mocha.Text}" />
+    <SolidColorBrush x:Key="Role.Thinking" Color="{StaticResource Mocha.Overlay0}" />
+    <SolidColorBrush x:Key="Role.Tool" Color="{StaticResource Mocha.Blue}" />
+    <SolidColorBrush x:Key="Role.ToolResult" Color="{StaticResource Mocha.Green}" />
+    <SolidColorBrush x:Key="Role.Error" Color="{StaticResource Mocha.Red}" />
 
     <!-- Code syntax highlighting (Mocha) -->
-    <SolidColorBrush x:Key="Syntax.Keyword" Color="{StaticResource Mocha.Mauve}"/>
-    <SolidColorBrush x:Key="Syntax.String" Color="{StaticResource Mocha.Green}"/>
-    <SolidColorBrush x:Key="Syntax.Number" Color="{StaticResource Mocha.Peach}"/>
-    <SolidColorBrush x:Key="Syntax.Comment" Color="{StaticResource Mocha.Overlay0}"/>
-    <SolidColorBrush x:Key="Syntax.Class" Color="{StaticResource Mocha.Yellow}"/>
-    <SolidColorBrush x:Key="Syntax.Method" Color="{StaticResource Mocha.Blue}"/>
-    <SolidColorBrush x:Key="Syntax.Background" Color="{StaticResource Mocha.Mantle}"/>
-    <SolidColorBrush x:Key="Syntax.Foreground" Color="{StaticResource Mocha.Text}"/>
+    <SolidColorBrush x:Key="Syntax.Keyword" Color="{StaticResource Mocha.Mauve}" />
+    <SolidColorBrush x:Key="Syntax.String" Color="{StaticResource Mocha.Green}" />
+    <SolidColorBrush x:Key="Syntax.Number" Color="{StaticResource Mocha.Peach}" />
+    <SolidColorBrush x:Key="Syntax.Comment" Color="{StaticResource Mocha.Overlay0}" />
+    <SolidColorBrush x:Key="Syntax.Class" Color="{StaticResource Mocha.Yellow}" />
+    <SolidColorBrush x:Key="Syntax.Method" Color="{StaticResource Mocha.Blue}" />
+    <SolidColorBrush x:Key="Syntax.Background" Color="{StaticResource Mocha.Mantle}" />
+    <SolidColorBrush x:Key="Syntax.Foreground" Color="{StaticResource Mocha.Text}" />
 
 </ResourceDictionary>

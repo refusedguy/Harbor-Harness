@@ -1,7 +1,5 @@
 using System.Windows;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     Provider browser modal — pick a provider + model.
 /// </summary>
@@ -15,7 +13,7 @@ public partial class ProviderBrowserView : Window
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
-        DialogResult = true;
-        Close();
+        this.DialogResult = true;
+        this.Close();
     }
 }

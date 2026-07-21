@@ -1,6 +1,5 @@
 // Compilation layer — pass-through compiler. See IScriptCompiler.cs for layering rules.
 namespace Harbor.Scripting.Compilation;
-
 /// <summary>
 ///     <see cref="IScriptCompiler" /> that returns the source unchanged.
 /// </summary>

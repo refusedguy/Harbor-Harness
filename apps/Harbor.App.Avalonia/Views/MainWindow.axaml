@@ -1,10 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
-             xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+        xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
-        xmlns:ui="clr-namespace:Harbor.App.Avalonia"
         x:Class="Harbor.App.Avalonia.Views.MainWindow"
         Title="Harbor — AI Coding Agent"
         Width="1280" Height="800"
@@ -17,8 +15,8 @@
         WindowDecorations="Full">
 
     <Window.Resources>
-        <views:BrushKeyConverter x:Key="BrushKeyConv"/>
-        <views:EqualityConverter x:Key="EqualityConv"/>
+        <views:BrushKeyConverter x:Key="BrushKeyConv" />
+        <views:EqualityConverter x:Key="EqualityConv" />
     </Window.Resources>
 
     <!--
@@ -44,268 +42,273 @@
     -->
     <Grid>
 
-    <DockPanel LastChildFill="True">
+        <DockPanel LastChildFill="True">
 
-        <!-- ════════════ Custom Windows title bar (drawn in client area) ════════════
+            <!-- ════════════ Custom Windows title bar (drawn in client area) ════════════
              The whole bar is also the drag region (PointerPressed → BeginDragMove)
              so the user can move the window by grabbing anywhere in the bar
              except on the caption buttons. -->
-        <Border x:Name="TitleBar"
-                DockPanel.Dock="Top"
-                Height="36"
-                Background="{StaticResource MochaCrust}"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="0,0,0,1"
-                PointerPressed="TitleBar_PointerPressed">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- Brand -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="14,0,0,0"
-                            VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Text="⚓" FontSize="16" VerticalAlignment="Center"
-                               Foreground="{StaticResource MochaBlue}"/>
-                    <TextBlock Text="Harbor" FontSize="13" FontWeight="SemiBold"
-                               VerticalAlignment="Center"
-                               Foreground="{StaticResource TextBrush}"/>
-                    <TextBlock Text="— AI Coding Agent" FontSize="12"
-                               VerticalAlignment="Center"
-                               Foreground="{StaticResource TextMutedBrush}"/>
-                </StackPanel>
+            <Border x:Name="TitleBar"
+                    DockPanel.Dock="Top"
+                    Height="36"
+                    Background="{StaticResource MochaCrust}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    PointerPressed="TitleBar_PointerPressed">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <!-- Brand -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="14,0,0,0"
+                                VerticalAlignment="Center" Spacing="8">
+                        <TextBlock Text="⚓" FontSize="16" VerticalAlignment="Center"
+                                   Foreground="{StaticResource MochaBlue}" />
+                        <TextBlock Text="Harbor" FontSize="13" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextBrush}" />
+                        <TextBlock Text="— AI Coding Agent" FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource TextMutedBrush}" />
+                    </StackPanel>
 
-                <!-- Window caption buttons: minimize / maximize / close.
+                    <!-- Window caption buttons: minimize / maximize / close.
                      Button.WindowButton styles (with red :pointerover for the
                      close button) live in Themes/AppStyles.axaml. -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Stretch">
-                    <Button Classes="WindowButton" Click="Minimize_Click"
-                            ToolTip.Tip="Minimize"
-                            Content="&#xE949;"/>
-                    <Button Classes="WindowButton" Click="Maximize_Click"
-                            ToolTip.Tip="Maximize / Restore"
-                            Content="&#xE922;"/>
-                    <Button Classes="WindowButton WindowButtonClose" Click="Close_Click"
-                            ToolTip.Tip="Close"
-                            Content="&#xE8BB;"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-    <Grid RowDefinitions="Auto,*,Auto">
-
-        <!-- ════════════ Top menu bar ════════════ -->
-        <Menu Grid.Row="0" Background="{StaticResource MochaCrust}" Padding="6,2">
-            <MenuItem Header="File">
-                <MenuItem Header="Open file…     Ctrl+O"   Command="{Binding CodeEditor.OpenFileCommand}"/>
-                <MenuItem Header="Save            Ctrl+S"   Command="{Binding CodeEditor.SaveCommand}"/>
-                <MenuItem Header="Save as…                  "  Command="{Binding CodeEditor.SaveAsCommand}"/>
-                <Separator/>
-                <MenuItem Header="New session"             Command="{Binding Sessions.NewSessionCommand}"/>
-                <MenuItem Header="Branch active"           Command="{Binding Sessions.BranchCommand}"/>
-                <Separator/>
-                <MenuItem Header="Quit"                    Click="Quit_Click"/>
-            </MenuItem>
-            <MenuItem Header="Edit">
-                <MenuItem Header="Clear chat       Ctrl+L"  Command="{Binding Chat.ClearCommand}"/>
-                <MenuItem Header="Stop agent              " Command="{Binding Chat.StopCommand}"/>
-            </MenuItem>
-            <MenuItem Header="View">
-                <MenuItem Header="Chat"                    Click="ViewChat_Click"/>
-                <MenuItem Header="Code editor"             Click="ViewCode_Click"/>
-                <MenuItem Header="Diff"                    Command="{Binding OpenDiffCommand}"/>
-                <MenuItem Header="Token usage"             Command="{Binding OpenTokenUsageCommand}"/>
-                <MenuItem Header="Provider browser"        Command="{Binding OpenProviderBrowserCommand}"/>
-                <Separator/>
-                <MenuItem Header="Toggle sidebar  Ctrl+B"  Command="{Binding ToggleSidebarCommand}"/>
-                <MenuItem Header="Toggle theme    Ctrl+Shift+T" Command="{Binding ToggleThemeCommand}"/>
-            </MenuItem>
-            <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}"/>
-            <MenuItem Header="Help">
-                <MenuItem Header="Command palette  Ctrl+P" Command="{Binding OpenCommandPaletteCommand}"/>
-            </MenuItem>
-        </Menu>
-
-        <!-- ════════════ Main 3-pane layout ════════════ -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
-
-            <!-- ─── Left sidebar: session list ─── -->
-            <Border Grid.Column="0" Classes="Sidebar"
-                    Width="280"
-                    IsVisible="{Binding IsSidebarVisible}">
-                <Grid RowDefinitions="Auto,Auto,*">
-                    <!-- Brand + new session -->
-                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,12,8,4">
-                        <TextBlock Grid.Column="0" Text="⚓ Harbor" FontSize="16" FontWeight="Bold"
-                                   Foreground="{StaticResource MochaBlue}"/>
-                        <Button Grid.Column="1" Classes="Subtle" Content="+" Padding="8,4"
-                                Command="{Binding Sessions.NewSessionCommand}"
-                                ToolTip.Tip="New session"/>
-                    </Grid>
-
-                    <!-- Search -->
-                    <TextBox Grid.Row="1" Margin="10,4,10,8"
-                             PlaceholderText="Search sessions…"
-                             Text="{Binding Sessions.SearchText}"/>
-
-                    <!-- Session list -->
-                    <ListBox Grid.Row="2"
-                             ItemsSource="{Binding Sessions.Sessions}"
-                             SelectedItem="{Binding Sessions.ActiveSession, Mode=TwoWay}"
-                             Background="Transparent"
-                             BorderThickness="0"
-                             Margin="6,0,6,8">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="vma:SessionItemViewModel">
-                                <Grid Margin="2,4" ColumnDefinitions="*,Auto">
-                                    <StackPanel Grid.Column="0" Spacing="2">
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Agent}" FontSize="11"
-                                                   Foreground="{StaticResource TextSubtleBrush}"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding RelativeTime}" FontSize="10"
-                                                       Foreground="{StaticResource MochaOverlay2}"/>
-                                            <TextBlock Text="{Binding MessageCount, StringFormat='{}{0} msgs'}" FontSize="10"
-                                                       Foreground="{StaticResource MochaOverlay2}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="●" FontSize="8"
-                                               Foreground="{Binding StatusColor, Converter={x:Static views:BrushKeyConverter.Instance}}"
-                                               VerticalAlignment="Center"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                        <ListBox.Styles>
-                            <Style Selector="ListBoxItem /template/ ContentPresenter">
-                                <Setter Property="Padding" Value="10,4"/>
-                            </Style>
-                        </ListBox.Styles>
-                    </ListBox>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Stretch">
+                        <Button Classes="WindowButton" Click="Minimize_Click"
+                                ToolTip.Tip="Minimize"
+                                Content="&#xE949;" />
+                        <Button Classes="WindowButton" Click="Maximize_Click"
+                                ToolTip.Tip="Maximize / Restore"
+                                Content="&#xE922;" />
+                        <Button Classes="WindowButton WindowButtonClose" Click="Close_Click"
+                                ToolTip.Tip="Close"
+                                Content="&#xE8BB;" />
+                    </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- ─── Center: chat / code editor ─── -->
-            <Grid Grid.Column="1" RowDefinitions="Auto,*">
-                <!-- Tab strip — RadioButtons with EqualityConverter so the
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <!-- ════════════ Top menu bar ════════════ -->
+                <Menu Grid.Row="0" Background="{StaticResource MochaCrust}" Padding="6,2">
+                    <MenuItem Header="File">
+                        <MenuItem Header="Open file…     Ctrl+O" Command="{Binding CodeEditor.OpenFileCommand}" />
+                        <MenuItem Header="Save            Ctrl+S" Command="{Binding CodeEditor.SaveCommand}" />
+                        <MenuItem Header="Save as…                  " Command="{Binding CodeEditor.SaveAsCommand}" />
+                        <Separator />
+                        <MenuItem Header="New session" Command="{Binding Sessions.NewSessionCommand}" />
+                        <MenuItem Header="Branch active" Command="{Binding Sessions.BranchCommand}" />
+                        <Separator />
+                        <MenuItem Header="Quit" Click="Quit_Click" />
+                    </MenuItem>
+                    <MenuItem Header="Edit">
+                        <MenuItem Header="Clear chat       Ctrl+L" Command="{Binding Chat.ClearCommand}" />
+                        <MenuItem Header="Stop agent              " Command="{Binding Chat.StopCommand}" />
+                    </MenuItem>
+                    <MenuItem Header="View">
+                        <MenuItem Header="Chat" Click="ViewChat_Click" />
+                        <MenuItem Header="Code editor" Click="ViewCode_Click" />
+                        <MenuItem Header="Diff" Command="{Binding OpenDiffCommand}" />
+                        <MenuItem Header="Token usage" Command="{Binding OpenTokenUsageCommand}" />
+                        <MenuItem Header="Provider browser" Command="{Binding OpenProviderBrowserCommand}" />
+                        <Separator />
+                        <MenuItem Header="Toggle sidebar  Ctrl+B" Command="{Binding ToggleSidebarCommand}" />
+                        <MenuItem Header="Toggle theme    Ctrl+Shift+T" Command="{Binding ToggleThemeCommand}" />
+                    </MenuItem>
+                    <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}" />
+                    <MenuItem Header="Help">
+                        <MenuItem Header="Command palette  Ctrl+P" Command="{Binding OpenCommandPaletteCommand}" />
+                    </MenuItem>
+                </Menu>
+
+                <!-- ════════════ Main 3-pane layout ════════════ -->
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+
+                    <!-- ─── Left sidebar: session list ─── -->
+                    <Border Grid.Column="0" Classes="Sidebar"
+                            Width="280"
+                            IsVisible="{Binding IsSidebarVisible}">
+                        <Grid RowDefinitions="Auto,Auto,*">
+                            <!-- Brand + new session -->
+                            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,12,8,4">
+                                <TextBlock Grid.Column="0" Text="⚓ Harbor" FontSize="16" FontWeight="Bold"
+                                           Foreground="{StaticResource MochaBlue}" />
+                                <Button Grid.Column="1" Classes="Subtle" Content="+" Padding="8,4"
+                                        Command="{Binding Sessions.NewSessionCommand}"
+                                        ToolTip.Tip="New session" />
+                            </Grid>
+
+                            <!-- Search -->
+                            <TextBox Grid.Row="1" Margin="10,4,10,8"
+                                     PlaceholderText="Search sessions…"
+                                     Text="{Binding Sessions.SearchText}" />
+
+                            <!-- Session list -->
+                            <ListBox Grid.Row="2"
+                                     ItemsSource="{Binding Sessions.Sessions}"
+                                     SelectedItem="{Binding Sessions.ActiveSession, Mode=TwoWay}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Margin="6,0,6,8">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="vma:SessionItemViewModel">
+                                        <Grid Margin="2,4" ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Agent}" FontSize="11"
+                                                           Foreground="{StaticResource TextSubtleBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding RelativeTime}" FontSize="10"
+                                                               Foreground="{StaticResource MochaOverlay2}" />
+                                                    <TextBlock Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
+                                                               FontSize="10"
+                                                               Foreground="{StaticResource MochaOverlay2}" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="●" FontSize="8"
+                                                       Foreground="{Binding StatusColor, Converter={x:Static views:BrushKeyConverter.Instance}}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                                <ListBox.Styles>
+                                    <Style Selector="ListBoxItem /template/ ContentPresenter">
+                                        <Setter Property="Padding" Value="10,4" />
+                                    </Style>
+                                </ListBox.Styles>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- ─── Center: chat / code editor ─── -->
+                    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                        <!-- Tab strip — RadioButtons with EqualityConverter so the
                      active tab is visually highlighted (Button.Subtle had no
                      notion of "selected" state, so the user couldn't tell
                      which view was active). The EqualityConverter's ConvertBack
                      pushes the ConverterParameter back to ActiveView when a
                      radio button is checked. -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{StaticResource MochaMantle}" Spacing="2" Margin="6,4" x:Name="TabStrip">
-                    <RadioButton Classes="TabButton" Content="💬 Chat" GroupName="MainView"
-                                 IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}"/>
-                    <RadioButton Classes="TabButton" Content="📝 Code" GroupName="MainView"
-                                 IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}"/>
-                </StackPanel>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{StaticResource MochaMantle}"
+                                    Spacing="2" Margin="6,4" x:Name="TabStrip">
+                            <RadioButton Classes="TabButton" Content="💬 Chat" GroupName="MainView"
+                                         IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}" />
+                            <RadioButton Classes="TabButton" Content="📝 Code" GroupName="MainView"
+                                         IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}" />
+                        </StackPanel>
 
-                <Grid Grid.Row="1">
-                    <!-- NOTE: IsVisible binds to $parent[Window].DataContext.ActiveView (the
+                        <Grid Grid.Row="1">
+                            <!-- NOTE: IsVisible binds to $parent[Window].DataContext.ActiveView (the
                          MainViewModel) rather than the local DataContext (ChatViewModel /
                          CodeEditorViewModel). Without this, the IsVisible binding would
                          re-evaluate against the local DataContext once it's assigned and
                          fail to find ActiveView, falling back to FallbackValue and never
                          reflecting the actual ActiveView value. -->
-                    <views:ChatView IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat, FallbackValue=True}"
-                                    DataContext="{Binding Chat}"/>
-                    <views:CodeEditorView IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code, FallbackValue=False}"
-                                          DataContext="{Binding CodeEditor}"/>
+                            <views:ChatView
+                                IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat, FallbackValue=True}"
+                                DataContext="{Binding Chat}" />
+                            <views:CodeEditorView
+                                IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code, FallbackValue=False}"
+                                DataContext="{Binding CodeEditor}" />
+                        </Grid>
+                    </Grid>
+
+                    <!-- ─── Right dock: plugin panels (currently inactive placeholder) ─── -->
+                    <Border Grid.Column="2" Classes="Sidebar"
+                            Width="0"
+                            Background="{StaticResource MochaCrust}"
+                            IsVisible="False">
+                        <TextBlock Text="Plugin panels" Margin="12" />
+                    </Border>
                 </Grid>
-            </Grid>
 
-            <!-- ─── Right dock: plugin panels (currently inactive placeholder) ─── -->
-            <Border Grid.Column="2" Classes="Sidebar"
-                    Width="0"
-                    Background="{StaticResource MochaCrust}"
-                    IsVisible="False">
-                <TextBlock Text="Plugin panels" Margin="12"/>
-            </Border>
-        </Grid>
-
-        <!-- ════════════ Status bar — grouped with separators (ORCA pattern) ════════════
+                <!-- ════════════ Status bar — grouped with separators (ORCA pattern) ════════════
              Group 1: status dot + label
              Group 2: agent · model
              Group 3: tokens in ↓ out ↑ · sparkline
              Group 4: cost · sessions
              Each group is a StackPanel with horizontal children; groups separated
              by a 1px vertical hairline (Border.StatusBarSeparator). -->
-        <Border Grid.Row="2" Classes="StatusBar">
-            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
-                <!-- Group 1: status -->
-                <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
-                         Margin="0,0,6,0"
-                         Fill="{Binding StatusBrushKey, Converter={StaticResource BrushKeyConv}}"/>
-                <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,0"
-                           VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12"/>
+                <Border Grid.Row="2" Classes="StatusBar">
+                    <Grid
+                        ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto">
+                        <!-- Group 1: status -->
+                        <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center"
+                                 Margin="0,0,6,0"
+                                 Fill="{Binding StatusBrushKey, Converter={StaticResource BrushKeyConv}}" />
+                        <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="0,0,0,0"
+                                   VerticalAlignment="Center" FontWeight="SemiBold" FontSize="12" />
 
-                <Border Grid.Column="2" Classes="StatusBarSeparator"/>
+                        <Border Grid.Column="2" Classes="StatusBarSeparator" />
 
-                <!-- Group 2: agent + model -->
-                <TextBlock Grid.Column="3" Text="{Binding AgentLabel}"
-                           Foreground="{StaticResource MochaBlue}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,8,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="4" Text="·" Foreground="{StaticResource TextMutedBrush}"
-                           Margin="0,0,8,0" VerticalAlignment="Center"/>
-                <!-- Model label — clickable to open the provider/model picker flyout.
+                        <!-- Group 2: agent + model -->
+                        <TextBlock Grid.Column="3" Text="{Binding AgentLabel}"
+                                   Foreground="{StaticResource MochaBlue}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="4" Text="·" Foreground="{StaticResource TextMutedBrush}"
+                                   Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <!-- Model label — clickable to open the provider/model picker flyout.
                      Wrapped in a Subtle Button so the user gets hover feedback
                      and a click target without extra chrome. -->
-                <Button Grid.Column="5" Classes="Subtle" Padding="4,0" Margin="0"
-                        Command="{Binding OpenModelPickerCommand}"
-                        ToolTip.Tip="Click to pick a different model or provider">
-                    <TextBlock Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
-                               FontFamily="{StaticResource CodeFont}" FontSize="11"
-                               TextTrimming="CharacterEllipsis"/>
-                </Button>
+                        <Button Grid.Column="5" Classes="Subtle" Padding="4,0" Margin="0"
+                                Command="{Binding OpenModelPickerCommand}"
+                                ToolTip.Tip="Click to pick a different model or provider">
+                            <TextBlock Text="{Binding ModelLabel}" Foreground="{StaticResource MochaGreen}"
+                                       FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                       TextTrimming="CharacterEllipsis" />
+                        </Button>
 
-                <Border Grid.Column="6" Classes="StatusBarSeparator"/>
+                        <Border Grid.Column="6" Classes="StatusBarSeparator" />
 
-                <!-- Group 3: tokens in/out + sparkline -->
-                <TextBlock Grid.Column="7" Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
-                           Foreground="{StaticResource MochaSky}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="8" Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
-                           Foreground="{StaticResource MochaPeach}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <ctrl:Sparkline Grid.Column="9"
-                                Values="{Binding TokenUsage.RecentOutputTokens}"
-                                Width="80" Height="14"
-                                Margin="0,0,0,0"
-                                VerticalAlignment="Center"
-                                ToolTip.Tip="Recent output tokens per turn"/>
+                        <!-- Group 3: tokens in/out + sparkline -->
+                        <TextBlock Grid.Column="7" Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
+                                   Foreground="{StaticResource MochaSky}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="8" Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
+                                   Foreground="{StaticResource MochaPeach}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <ctrl:Sparkline Grid.Column="9"
+                                        Values="{Binding TokenUsage.RecentOutputTokens}"
+                                        Width="80" Height="14"
+                                        Margin="0,0,0,0"
+                                        VerticalAlignment="Center"
+                                        ToolTip.Tip="Recent output tokens per turn" />
 
-                <!-- Message count (live — tracks new messages without a RefreshAsync
+                        <!-- Message count (live — tracks new messages without a RefreshAsync
                      round-trip. Task D2 / Problem 2: status bar message count was
                      stale, only updated on full RefreshAsync cycles). -->
-                <Border Grid.Column="10" Classes="StatusBarSeparator"/>
-                <TextBlock Grid.Column="11"
-                           Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
-                           Foreground="{StaticResource MochaOverlay2}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,0,0" VerticalAlignment="Center"/>
+                        <Border Grid.Column="10" Classes="StatusBarSeparator" />
+                        <TextBlock Grid.Column="11"
+                                   Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
+                                   Foreground="{StaticResource MochaOverlay2}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   Margin="0,0,0,0" VerticalAlignment="Center" />
 
-                <!-- Group 4 (left of *): cost -->
-                <Border Grid.Column="12" Classes="StatusBarSeparator"/>
-                <TextBlock Grid.Column="13" Text="{Binding CostUsd, StringFormat='${0:F4}'}"
-                           Foreground="{StaticResource MochaYellow}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           Margin="0,0,0,0" VerticalAlignment="Center"/>
+                        <!-- Group 4 (left of *): cost -->
+                        <Border Grid.Column="12" Classes="StatusBarSeparator" />
+                        <TextBlock Grid.Column="13" Text="{Binding CostUsd, StringFormat='${0:F4}'}"
+                                   Foreground="{StaticResource MochaYellow}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   Margin="0,0,0,0" VerticalAlignment="Center" />
 
-                <!-- Spacer (*) — pushes session count to the right -->
-                <TextBlock Grid.Column="14" Text=""/>
+                        <!-- Spacer (*) — pushes session count to the right -->
+                        <TextBlock Grid.Column="14" Text="" />
 
-                <!-- Group 4 (right of *): sessions -->
-                <Border Grid.Column="15" Classes="StatusBarSeparator"/>
-                <TextBlock Grid.Column="16" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
-                           Foreground="{StaticResource TextMutedBrush}"
-                           FontFamily="{StaticResource CodeFont}" FontSize="11"
-                           VerticalAlignment="Center"/>
+                        <!-- Group 4 (right of *): sessions -->
+                        <Border Grid.Column="15" Classes="StatusBarSeparator" />
+                        <TextBlock Grid.Column="16" Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
             </Grid>
-        </Border>
-    </Grid>
-    </DockPanel>
+        </DockPanel>
 
         <!-- ════════════ Modal overlays — FLOATING SIBLINGS of the main DockPanel ════════════
              These sit in the root <Grid> (no row defs) so they fill the entire
@@ -319,15 +322,17 @@
              the visual tree. FallbackValue=False keeps the overlay hidden
              until the binding resolves (e.g. during the very first frame
              before the Window's DataContext is set). -->
-        <views:CommandPaletteView IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
-                                  DataContext="{Binding CommandPalette}"
-                                  ZIndex="800"/>
+        <views:CommandPaletteView
+            IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
+            DataContext="{Binding CommandPalette}"
+            ZIndex="800" />
         <views:SettingsView IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
                             DataContext="{Binding Settings}"
-                            ZIndex="600"/>
-        <views:ProviderBrowserView IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
-                                   DataContext="{Binding ProviderBrowser}"
-                                   ZIndex="600"/>
+                            ZIndex="600" />
+        <views:ProviderBrowserView
+            IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
+            DataContext="{Binding ProviderBrowser}"
+            ZIndex="600" />
         <!-- Provider + model picker flyout — anchored bottom-left so it
              appears near the status-bar model label that opened it. Hosts
              the reusable ProviderModelPicker control. -->
@@ -345,21 +350,21 @@
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="8,4,4,4">
                         <TextBlock Grid.Column="0" Text="Pick a model" FontSize="14" FontWeight="SemiBold"
                                    Foreground="{StaticResource MochaBlue}"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center" />
                         <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
-                                Click="PickerClose_Click" ToolTip.Tip="Close"/>
+                                Click="PickerClose_Click" ToolTip.Tip="Close" />
                     </Grid>
                     <ctrl:ProviderModelPicker Grid.Row="1"
-                                              DataContext="{Binding $parent[Window].DataContext.ProviderModelPicker}"/>
+                                              DataContext="{Binding $parent[Window].DataContext.ProviderModelPicker}" />
                 </Grid>
             </Border>
         </Border>
         <views:DiffView IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
                         DataContext="{Binding Diff}"
-                        ZIndex="600"/>
+                        ZIndex="600" />
         <views:TokenUsageView IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
                               DataContext="{Binding TokenUsage}"
-                              ZIndex="600"/>
+                              ZIndex="600" />
 
         <!-- Toast container — always-on-top floating overlay.
              ZIndex=1000 puts it above every other overlay including the
@@ -373,6 +378,6 @@
                                       HorizontalAlignment="Right"
                                       VerticalAlignment="Bottom"
                                       Margin="0,0,16,80"
-                                      IsHitTestVisible="True"/>
+                                      IsHitTestVisible="True" />
     </Grid>
 </Window>

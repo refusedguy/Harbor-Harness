@@ -1,16 +1,11 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
-using Harbor.Plugins.Instantiation;
-using Harbor.Plugins.Registration;
-using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Hosting;
-
 /// <summary>
 ///     Fluent builder for <see cref="PluginHost" />. Wires up the four layers
-/// (storage / compilation / instantiation / registration) with sensible defaults and
-/// lets the caller swap any layer.
+///     (storage / compilation / instantiation / registration) with sensible defaults and
+///     lets the caller swap any layer.
 /// </summary>
 /// <remarks>
 ///     <example>
@@ -32,11 +27,11 @@ namespace Harbor.Plugins.Hosting;
 /// </remarks>
 public sealed class PluginHostBuilder
 {
-    private IPluginSource? _source;
+    private readonly PluginHostOptions _options = new();
     private IPluginCompiler? _compiler;
     private IPluginInstantiator? _instantiator;
     private IPluginRegistrar? _registrar;
-    private readonly PluginHostOptions _options = new();
+    private IPluginSource? _source;
 
     /// <summary>Set the storage layer.</summary>
     public PluginHostBuilder WithSource(IPluginSource source)

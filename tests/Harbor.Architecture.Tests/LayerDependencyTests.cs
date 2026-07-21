@@ -1,32 +1,33 @@
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.State;
-using Harbor.Core.Agents;        // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
-using Harbor.Core.Tools;        // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
+using Harbor.Core.Agents;
+using Harbor.Core.Tools;
 using Harbor.Plugins.Hosting;
-using Harbor.Scripting.Abstractions;
-using Harbor.Scripting.Bridge;
-using Harbor.Providers.OpenAiCompatible;
+using Harbor.Plugins.Runtime;
 using Harbor.Providers.Anthropic;
-using Harbor.Providers.OpenAI;
 using Harbor.Providers.Ollama;
+using Harbor.Providers.OpenAI;
+using Harbor.Providers.OpenAiCompatible;
+using Harbor.Scripting.Abstractions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
+using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Spectre;
 using Harbor.Tui.Spectre.Fullscreen;
-using Harbor.Tui.TerminalGui;
 using Harbor.Tui.Termina;
-using Harbor.Tui.RazorConsole;
+using Harbor.Tui.TerminalGui;
+using Harbor.Ui.Framework.State;
+using FacadeMarker = Harbor.Core.FacadeMarker;
+// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
+// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
 // Use a using-alias to disambiguate the two SpectreTuiRenderer types
 // (Harbor.Tui.Spectre.SpectreTuiRenderer vs Harbor.Tui.SpectreTui.SpectreTuiRenderer).
 using SpectreTuiProjectRenderer = Harbor.Tui.SpectreTui.SpectreTuiRenderer;
 
 namespace Harbor.Architecture.Tests;
-
 /// <summary>
 ///     Layer-dependency tests — mechanically enforce the layering invariants
 ///     declared in <c>docs/ARCHITECTURE_LAYERS.md</c> §2 (the canonical
@@ -70,7 +71,7 @@ public class LayerDependencyTests
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     // The set of Harbor assemblies that Infrastructure projects must NOT reference.
@@ -83,7 +84,7 @@ public class LayerDependencyTests
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Scripting",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     /// <summary>
@@ -105,7 +106,7 @@ public class LayerDependencyTests
     public async Task TuiAbstractions_ReferencesOnlyAbstractions()
     {
         var asm = typeof(UiStore).Assembly;
-        var forbidden = NonDomainHarborAssemblies
+        string[] forbidden = NonDomainHarborAssemblies
             .Where(n => n != "Harbor.Abstractions")
             .ToArray();
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
@@ -151,7 +152,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -196,7 +197,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -217,9 +218,9 @@ public class LayerDependencyTests
         // the Harbor.Core assembly by name to avoid coupling this test to the
         // type's new home.
         var asm = ArchitectureTestHelpers.LoadHarborAssemblies()["Harbor.Core"]
-            ?? throw new InvalidOperationException(
-                "Harbor.Core assembly was not loaded into the AppDomain; " +
-                "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
+                  ?? throw new InvalidOperationException(
+                      "Harbor.Core assembly was not loaded into the AppDomain; " +
+                      "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
         string[] forbidden =
         [
             "Harbor.Terminal.Abstractions",
@@ -245,7 +246,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -276,7 +277,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -306,7 +307,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -333,7 +334,7 @@ public class LayerDependencyTests
                     "Harbor.Storage.Jsonl",
                     "Harbor.Storage.Memory",
                     "Harbor.Storage.Sqlite",
-                    "Harbor.Tools.Builtin",
+                    "Harbor.Tools.Builtin"
                 })
                 .Where(n => n != asm.GetName().Name)
                 .ToArray());
@@ -361,7 +362,7 @@ public class LayerDependencyTests
                     "Harbor.Storage.Jsonl",
                     "Harbor.Storage.Memory",
                     "Harbor.Storage.Sqlite",
-                    "Harbor.Tools.Builtin",
+                    "Harbor.Tools.Builtin"
                 })
                 .Where(n => n != asm.GetName().Name)
                 .ToArray());
@@ -388,7 +389,7 @@ public class LayerDependencyTests
                     "Harbor.Providers.Ollama",
                     "Harbor.Storage.Jsonl",
                     "Harbor.Storage.Memory",
-                    "Harbor.Storage.Sqlite",
+                    "Harbor.Storage.Sqlite"
                 })
                 .ToArray());
         await Assert.That(violations).IsEmpty();
@@ -418,7 +419,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli",
+            "Harbor.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -439,16 +440,16 @@ public class LayerDependencyTests
         // typeof() probe in the per-assembly tests above; without this nudge
         // they may not yet be loaded when this sanity check runs.)
         _ = typeof(ScriptGlobals).Assembly.GetName().Name;
-        _ = typeof(Harbor.Plugins.Runtime.CompiledPlugin).Assembly.GetName().Name;
+        _ = typeof(CompiledPlugin).Assembly.GetName().Name;
         // Harbor.Core is now an empty facade (no types of its own — it forwards
         // to Harbor.Application + Harbor.Registries). Touch its FacadeMarker
         // type explicitly so the assembly is loaded into the AppDomain and
         // shows up in the inventory below.
-        _ = typeof(Harbor.Core.FacadeMarker).Assembly.GetName().Name;
+        _ = typeof(FacadeMarker).Assembly.GetName().Name;
         // Harbor.Tools.Builtin is similarly an empty facade after the S2 split —
         // it forwards to the 14 Harbor.Tools.<Name> leaf projects. Touch its
         // FacadeMarker so it shows up in the inventory below.
-        _ = typeof(Harbor.Tools.Builtin.FacadeMarker).Assembly.GetName().Name;
+        _ = typeof(Tools.Builtin.FacadeMarker).Assembly.GetName().Name;
 
         var loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
         // Update this list when adding a new Harbor project. The test exists to
@@ -484,7 +485,7 @@ public class LayerDependencyTests
             "Harbor.Tui.SpectreTui",
             "Harbor.Tui.TerminalGui",
             "Harbor.Tui.Termina",
-            "Harbor.Tui.RazorConsole",
+            "Harbor.Tui.RazorConsole"
         ];
         var missing = expected.Where(n => !loaded.ContainsKey(n)).ToList();
         await Assert.That(missing).IsEmpty();
@@ -508,7 +509,7 @@ public class LayerDependencyTests
     }
 
     /// <summary>TUI renderer assemblies to test, sourced as method data for TUnit.</summary>
-    public static IEnumerable<System.Reflection.Assembly> TuiRendererAssemblies()
+    public static IEnumerable<Assembly> TuiRendererAssemblies()
     {
         yield return typeof(AnsiTuiRenderer).Assembly;
         yield return typeof(PlainTuiRenderer).Assembly;

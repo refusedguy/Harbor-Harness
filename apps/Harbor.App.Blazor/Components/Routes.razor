@@ -2,9 +2,6 @@
    _Layout via the @layout directive (or by being inside Routes via the
    DefaultLayout parameter on RouteView). @*@
 
-@using Harbor.App.Blazor.Components
-@using Microsoft.AspNetCore.Components.Routing
-
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(_Layout)"/>

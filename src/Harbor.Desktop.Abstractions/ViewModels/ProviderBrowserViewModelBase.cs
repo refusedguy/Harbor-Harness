@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.Abstractions.ViewModels;
-
 /// <summary>
 ///     Base for the provider-browser view-model. Lists configured providers,
 ///     allows searching/filtering, and exposes the currently selected
@@ -7,21 +6,21 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public abstract partial class ProviderBrowserViewModelBase : ViewModelBase
 {
-    /// <summary>Construct a <see cref="ProviderBrowserViewModelBase"/>.</summary>
-    protected ProviderBrowserViewModelBase(ILogger logger) : base(logger)
-    {
-    }
 
-    /// <summary>Visible providers, projected for the view layer.</summary>
-    public ObservableCollection<ProviderListItem> Providers { get; } = new();
-
-    /// <summary>Search filter applied to <see cref="Providers"/>.</summary>
+    /// <summary>Search filter applied to <see cref="Providers" />.</summary>
     [ObservableProperty]
     private string _searchText = string.Empty;
 
     /// <summary>Currently selected provider id, or null.</summary>
     [ObservableProperty]
     private string? _selectedProviderId;
+    /// <summary>Construct a <see cref="ProviderBrowserViewModelBase" />.</summary>
+    protected ProviderBrowserViewModelBase(ILogger logger) : base(logger)
+    {
+    }
+
+    /// <summary>Visible providers, projected for the view layer.</summary>
+    public ObservableCollection<ProviderListItem> Providers { get; } = new();
 
     /// <summary>Refresh the provider list from <c>IProviderRegistry</c>. Implemented by the platform VM.</summary>
     protected abstract Task RefreshAsync(CancellationToken cancellationToken);

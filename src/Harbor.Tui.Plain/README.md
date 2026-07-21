@@ -11,7 +11,6 @@ Presentation — TUI renderer. References `Harbor.Abstractions` (Domain) + `Harb
 - `Harbor.Abstractions` (Domain)
 - `Harbor.Tui.Abstractions` (Presentation contracts: `ITuiRenderer`, `UiState`, `UiEvent`)
 
-
 ## Public API
 
 - `PlainTuiRenderer` — implements `ITuiRenderer` from Harbor.Tui.Abstractions

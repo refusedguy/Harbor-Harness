@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `url` | string | Required. HTTP(S) URL. |
 | `maxChars` | integer | Optional. Default 50 000, hard cap 500 000. |
@@ -19,7 +20,9 @@
         ## Example usage
 
         ```json
+
 {"url":"https://example.com/docs","maxChars":20000}
+
 ```
 
         ## Dependencies

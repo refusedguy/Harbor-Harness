@@ -5,7 +5,6 @@
 //   (registries + logger). It knows nothing about engines, storage, or
 //   compilation. Engines consume this type to wire their script-side bridge.
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     The .NET-side representation of the <c>Harbor</c> global object that
 ///     scripts see at runtime.

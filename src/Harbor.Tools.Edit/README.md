@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Target file path. |
 | `oldString` | string | Required. Text to find. |
@@ -21,7 +22,9 @@
         ## Example usage
 
         ```json
+
 {"path":"Config.cs","oldString":"v1","newString":"v2"}
+
 ```
 
         ## Dependencies

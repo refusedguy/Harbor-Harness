@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Broadcasts <see cref="HarborEvent" />s to all connected client streams.
 /// </summary>
@@ -30,13 +29,13 @@ namespace Harbor.Ipc.Protocol;
 /// </remarks>
 public sealed class EventBroadcaster : IAsyncDisposable
 {
-    private readonly IEventBus _eventBus;
-    private readonly ILogger<EventBroadcaster> _logger;
     private readonly List<ClientRegistration> _clients = new();
     private readonly Lock _clientsLock = new();
-    private IDisposable? _eventBusSubscription;
+    private readonly IEventBus _eventBus;
+    private readonly ILogger<EventBroadcaster> _logger;
     private int _currentTurn;
     private int _disposed;
+    private IDisposable? _eventBusSubscription;
 
     /// <summary>
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
@@ -48,11 +47,22 @@ public sealed class EventBroadcaster : IAsyncDisposable
         _logger = logger;
     }
 
-    /// <summary>Subscribe to the event bus and begin broadcasting.</summary>
-    public void Start()
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
     {
-        _eventBusSubscription = _eventBus.Subscribe(OnEventAsync);
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _eventBusSubscription?.Dispose();
+        // Note: we don't dispose the client streams here — the per-client
+        // RPC loop in MessagePackRpcServer owns them and disposes them on
+        // disconnect. We only drop our references.
+        lock (_clientsLock)
+        {
+            _clients.Clear();
+        }
     }
+
+    /// <summary>Subscribe to the event bus and begin broadcasting.</summary>
+    public void Start() => _eventBusSubscription = _eventBus.Subscribe(OnEventAsync);
 
     /// <summary>
     ///     Register a client stream to receive future events. The
@@ -98,26 +108,12 @@ public sealed class EventBroadcaster : IAsyncDisposable
         }
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _eventBusSubscription?.Dispose();
-        // Note: we don't dispose the client streams here — the per-client
-        // RPC loop in MessagePackRpcServer owns them and disposes them on
-        // disconnect. We only drop our references.
-        lock (_clientsLock)
-        {
-            _clients.Clear();
-        }
-    }
-
     private async ValueTask OnEventAsync(AgentEvent evt, CancellationToken ct)
     {
-        HarborEvent? projected = ProjectEvent(evt);
+        var projected = ProjectEvent(evt);
         if (projected is null) return;
 
-        HarborEventData data = HarborEventMapping.ToData(projected);
+        var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
         var envelope = new EventEnvelope { EventBytes = eventBytes };
 
@@ -240,16 +236,16 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// </summary>
     private sealed class ClientRegistration
     {
-        /// <summary>The client's reply stream.</summary>
-        public Stream Stream { get; }
-
-        /// <summary>Per-client write lock shared with the RPC server's per-client loop.</summary>
-        public SemaphoreSlim WriteLock { get; }
 
         public ClientRegistration(Stream stream, SemaphoreSlim writeLock)
         {
             Stream = stream;
             WriteLock = writeLock;
         }
+        /// <summary>The client's reply stream.</summary>
+        public Stream Stream { get; }
+
+        /// <summary>Per-client write lock shared with the RPC server's per-client loop.</summary>
+        public SemaphoreSlim WriteLock { get; }
     }
 }

@@ -1,9 +1,4 @@
-#if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Abstractions;
-#endif
-#if HARBOR_WITH_PLUGINS
-using Harbor.Plugins.Abstractions;
-#endif
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
@@ -15,17 +10,23 @@ using Harbor.Cli.Logging;
 using Harbor.Cli.Repl;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
+using Harbor.Ipc;
+using Harbor.Terminal.Abstractions;
+using Harbor.Ui.Framework.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 #if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Bridge;
+using Harbor.Scripting.Abstractions;
+#endif
+#if HARBOR_WITH_PLUGINS
+#endif
+#if HARBOR_WITH_SCRIPTING
 using Harbor.Scripting.Compilation;
 using Harbor.Scripting.Engines;
 using Harbor.Scripting.Hosting;
 using Harbor.Scripting.Storage;
 #endif
-using Harbor.Terminal.Abstractions;
-using Harbor.Ui.Framework.Diagnostics;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 namespace Harbor.Cli;
 /// <summary>
 ///     Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
@@ -39,7 +40,7 @@ public static class Program
         // Extract --script <path> (or --script=<path>) from args before dispatch.
         // The script is run after the host is built but before the REPL/ask loop
         // starts — so script-registered tools are available to the agent.
-        string? scriptPath = ExtractScriptArg(args, out var remainingArgs);
+        string? scriptPath = ExtractScriptArg(args, out string[] remainingArgs);
         args = remainingArgs;
 
         // Console level: Debug under debugger, Information by default. User can
@@ -64,8 +65,8 @@ public static class Program
         // One-shot commands (`harbor ask`, `harbor providers`, …) and
         // non-interactive TUIs (plain, ansi) keep the console logger so the
         // user sees output inline.
-        bool interactiveTui = Hosting.TuiMode.WillEnterInteractiveTui(args);
-        var diagnosticsPanel = interactiveTui ? Hosting.DiagnosticsSink.Initialize() : null;
+        bool interactiveTui = TuiMode.WillEnterInteractiveTui(args);
+        var diagnosticsPanel = interactiveTui ? DiagnosticsSink.Initialize() : null;
 
         var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -86,18 +87,17 @@ public static class Program
                     o.TimestampFormat = "HH:mm:ss.fff ";
                     o.IncludeScopes = false;
                 });
-                builder.AddFilter<Microsoft.Extensions.Logging.Console.ConsoleLoggerProvider>(
-                    (category, level) =>
+                builder.AddFilter<ConsoleLoggerProvider>((category, level) =>
+                {
+                    if (category is not null && consoleLevel > LogLevel.Debug &&
+                        (category.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||
+                         category.StartsWith("Microsoft.Extensions.Hosting", StringComparison.Ordinal) ||
+                         category.StartsWith("Microsoft.Hosting", StringComparison.Ordinal)))
                     {
-                        if (category is not null && consoleLevel > LogLevel.Debug &&
-                            (category.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) ||
-                             category.StartsWith("Microsoft.Extensions.Hosting", StringComparison.Ordinal) ||
-                             category.StartsWith("Microsoft.Hosting", StringComparison.Ordinal)))
-                        {
-                            return level >= LogLevel.Warning;
-                        }
-                        return level >= consoleLevel;
-                    });
+                        return level >= LogLevel.Warning;
+                    }
+                    return level >= consoleLevel;
+                });
             }
             // File provider filters itself by its own _fileLevel; set the
             // pipeline floor to Debug so the file actually receives Debug events.
@@ -199,7 +199,7 @@ public static class Program
         string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
-            var server = services.GetService<Harbor.Ipc.IHarborServer>();
+            var server = services.GetService<IHarborServer>();
             if (server is not null)
             {
                 _logger.LogInformation("Starting IPC server at {Endpoint}", server.Endpoint);
@@ -208,7 +208,7 @@ public static class Program
         }
         else if (string.Equals(mode, "ipc-client", StringComparison.OrdinalIgnoreCase))
         {
-            var client = services.GetService<Harbor.Ipc.IHarborClient>();
+            var client = services.GetService<IHarborClient>();
             if (client is not null)
             {
                 _logger.LogInformation("Connecting IPC client");
@@ -225,7 +225,7 @@ public static class Program
         string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
-            var server = services.GetService<Harbor.Ipc.IHarborServer>();
+            var server = services.GetService<IHarborServer>();
             if (server is not null)
             {
                 _logger.LogInformation("Stopping IPC server");
@@ -234,7 +234,7 @@ public static class Program
         }
         else if (string.Equals(mode, "ipc-client", StringComparison.OrdinalIgnoreCase))
         {
-            var client = services.GetService<Harbor.Ipc.IHarborClient>();
+            var client = services.GetService<IHarborClient>();
             if (client is not null)
             {
                 _logger.LogInformation("Disconnecting IPC client");
@@ -249,11 +249,11 @@ public static class Program
     ///     <see cref="IToolRegistry" />, making them available to the agent.
     /// </summary>
     /// <returns>Success, or failure with an error message. Never throws for expected script failures.</returns>
-    private static async Task<CSharpFunctionalExtensions.Result> RunStartupScriptAsync(IServiceProvider services, string? scriptPath)
+    private static async Task<Result> RunStartupScriptAsync(IServiceProvider services, string? scriptPath)
     {
         if (string.IsNullOrEmpty(scriptPath))
         {
-            return CSharpFunctionalExtensions.Result.Success();
+            return Result.Success();
         }
 #if !HARBOR_WITH_SCRIPTING
         // No-scripting build excludes the entire Harbor.Scripting.* stack —
@@ -302,13 +302,13 @@ public static class Program
         }
         catch (Exception ex)
         {
-            return CSharpFunctionalExtensions.Result.Failure($"Failed to read script '{fullPath}': {ex.Message}");
+            return Result.Failure($"Failed to read script '{fullPath}': {ex.Message}");
         }
 
         var result = await host.EvaluateAsync(fullPath, source, globals).ConfigureAwait(false);
         return result.IsSuccess
-            ? CSharpFunctionalExtensions.Result.Success()
-            : CSharpFunctionalExtensions.Result.Failure(result.Error ?? "Script evaluation failed.");
+            ? Result.Success()
+            : Result.Failure(result.Error ?? "Script evaluation failed.");
 #endif
     }
 

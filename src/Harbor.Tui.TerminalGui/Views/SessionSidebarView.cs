@@ -1,9 +1,7 @@
 using System.Text;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Session sidebar listing registered panels + a search filter and
 ///     new/branch/delete affordances. Mirrors SpectreTui's shape.
@@ -24,14 +22,14 @@ public sealed class SessionSidebarView
         }
 
         int slot = 1;
-        foreach (var id in providers.Select(p => p.Id))
+        foreach (string id in providers.Select(p => p.Id))
         {
             if (filter is not null && !id.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var state = s.PanelStates.TryGetValue(id, out var st) ? st : TuiPanelState.Hidden;
             bool focused = s.FocusedPanelId == id;
-            var glyph = state == TuiPanelState.Hidden ? " " : focused ? "▸" : "·";
+            string glyph = state == TuiPanelState.Hidden ? " " : focused ? "▸" : "·";
             sb.Append($"  Alt+{slot} {glyph} {id}\n");
             slot++;
         }

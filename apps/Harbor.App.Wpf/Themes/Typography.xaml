@@ -18,35 +18,35 @@
 
     <!-- Reusable text styles -->
     <Style x:Key="App.Text.Body" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Sans}"/>
-        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Body}"/>
-        <Setter Property="Foreground" Value="{DynamicResource App.Text}"/>
-        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Sans}" />
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.Text}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <Style x:Key="App.Text.Caption" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
-        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Caption}"/>
-        <Setter Property="Foreground" Value="{DynamicResource App.TextMuted}"/>
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.TextMuted}" />
     </Style>
 
     <Style x:Key="App.Text.Heading" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
-        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Heading}"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Heading}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <Style x:Key="App.Text.Title" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
-        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Title}"/>
-        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Title}" />
+        <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
     <!-- Code block style (used by markdown renderer) -->
     <Style x:Key="App.Text.Code" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Mono}"/>
-        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Small}"/>
-        <Setter Property="Foreground" Value="{DynamicResource App.Text}"/>
-        <Setter Property="Background" Value="{DynamicResource App.SurfaceAlt}"/>
-        <Setter Property="Padding" Value="8,4"/>
-        <Setter Property="TextWrapping" Value="NoWrap"/>
+        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Mono}" />
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.Text}" />
+        <Setter Property="Background" Value="{DynamicResource App.SurfaceAlt}" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
     </Style>
 
 </ResourceDictionary>

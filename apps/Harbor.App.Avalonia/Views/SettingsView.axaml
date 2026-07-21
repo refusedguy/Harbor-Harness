@@ -43,12 +43,12 @@
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
                     <StackPanel Grid.Column="0" Spacing="2">
                         <TextBlock Text="Settings" FontSize="18" FontWeight="Bold"
-                                   Foreground="{StaticResource MochaBlue}"/>
+                                   Foreground="{StaticResource MochaBlue}" />
                         <TextBlock Text="Persists to ~/.harbor/config.json + ~/.harbor/avalonia.json"
-                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
                     </StackPanel>
                     <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
-                            Click="Close_Click" ToolTip.Tip="Close (Esc)"/>
+                            Click="Close_Click" ToolTip.Tip="Close (Esc)" />
                 </Grid>
 
                 <!-- Scrollable settings -->
@@ -57,86 +57,87 @@
 
                         <!-- Theme -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Theme" Classes="Label"/>
+                            <TextBlock Text="Theme" Classes="Label" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180">
-                                    <ComboBoxItem Content="dark"/>
-                                    <ComboBoxItem Content="light"/>
-                                    <ComboBoxItem Content="system"/>
+                                    <ComboBoxItem Content="dark" />
+                                    <ComboBoxItem Content="light" />
+                                    <ComboBoxItem Content="system" />
                                 </ComboBox>
-                                <Button Classes="Subtle" Content="Preview" Command="{Binding ThemeSettings.ApplyThemeCommand}"
-                                        ToolTip.Tip="Apply the theme immediately without saving."/>
+                                <Button Classes="Subtle" Content="Preview"
+                                        Command="{Binding ThemeSettings.ApplyThemeCommand}"
+                                        ToolTip.Tip="Apply the theme immediately without saving." />
                             </StackPanel>
                         </StackPanel>
 
-                        <Separator Margin="0,2"/>
+                        <Separator Margin="0,2" />
 
                         <!-- Default provider -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Default provider" Classes="Label"/>
+                            <TextBlock Text="Default provider" Classes="Label" />
                             <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
-                                     PlaceholderText="ollama, openai, anthropic, …"/>
+                                     PlaceholderText="ollama, openai, anthropic, …" />
                         </StackPanel>
 
                         <!-- Default model -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Default model" Classes="Label"/>
+                            <TextBlock Text="Default model" Classes="Label" />
                             <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
-                                     PlaceholderText="qwen2.5-coder:7b, gpt-4o, claude-sonnet-4, …"/>
+                                     PlaceholderText="qwen2.5-coder:7b, gpt-4o, claude-sonnet-4, …" />
                         </StackPanel>
 
                         <!-- Font family -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Font family" Classes="Label"/>
-                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter"/>
+                            <TextBlock Text="Font family" Classes="Label" />
+                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter" />
                         </StackPanel>
 
                         <!-- Storage backend -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Storage backend" Classes="Label"/>
+                            <TextBlock Text="Storage backend" Classes="Label" />
                             <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180">
-                                <ComboBoxItem Content="memory"/>
-                                <ComboBoxItem Content="jsonl"/>
-                                <ComboBoxItem Content="sqlite"/>
+                                <ComboBoxItem Content="memory" />
+                                <ComboBoxItem Content="jsonl" />
+                                <ComboBoxItem Content="sqlite" />
                             </ComboBox>
                         </StackPanel>
 
                         <!-- Log level -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Log level" Classes="Label"/>
+                            <TextBlock Text="Log level" Classes="Label" />
                             <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180">
-                                <ComboBoxItem Content="trace"/>
-                                <ComboBoxItem Content="debug"/>
-                                <ComboBoxItem Content="info"/>
-                                <ComboBoxItem Content="warning"/>
-                                <ComboBoxItem Content="error"/>
+                                <ComboBoxItem Content="trace" />
+                                <ComboBoxItem Content="debug" />
+                                <ComboBoxItem Content="info" />
+                                <ComboBoxItem Content="warning" />
+                                <ComboBoxItem Content="error" />
                             </ComboBox>
                         </StackPanel>
 
                         <!-- Ollama host -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Ollama host" Classes="Label"/>
-                            <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434"/>
+                            <TextBlock Text="Ollama host" Classes="Label" />
+                            <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434" />
                         </StackPanel>
 
-                        <Separator Margin="0,2"/>
+                        <Separator Margin="0,2" />
 
                         <!-- Onboarding -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Onboarding" Classes="Label"/>
+                            <TextBlock Text="Onboarding" Classes="Label" />
                             <Button Classes="Subtle" Content="Re-run setup wizard"
                                     Command="{Binding RerunOnboardingCommand}"
-                                    ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard."/>
+                                    ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard." />
                         </StackPanel>
 
-                        <Separator Margin="0,4"/>
+                        <Separator Margin="0,4" />
 
                         <!-- ════════════ Provider Configuration (per-provider API keys + model browser) ════════════ -->
                         <StackPanel Spacing="6">
-                            <TextBlock Text="Provider Configuration" Classes="Label"/>
+                            <TextBlock Text="Provider Configuration" Classes="Label" />
                             <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
                                        FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                                       TextWrapping="Wrap"/>
+                                       TextWrapping="Wrap" />
                             <ItemsControl ItemsSource="{Binding ProviderConfigs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:ProviderConfigViewModel">
@@ -144,21 +145,22 @@
                                                 Padding="10" Margin="0,3">
                                             <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
                                                 <!-- Provider name + auth badge -->
-                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal"
+                                                            Spacing="8">
                                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis"/>
+                                                               TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Id}" FontSize="10"
                                                                FontFamily="{StaticResource CodeFont}"
-                                                               Foreground="{StaticResource TextMutedBrush}"/>
+                                                               Foreground="{StaticResource TextMutedBrush}" />
                                                 </StackPanel>
                                                 <Border Grid.Row="0" Grid.Column="1"
                                                         Background="{StaticResource MochaSurface0}"
                                                         CornerRadius="4" Padding="6,2">
                                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                                         <TextBlock Text="{Binding AuthIcon}" FontSize="12"
-                                                                   Foreground="{StaticResource MochaGreen}"/>
+                                                                   Foreground="{StaticResource MochaGreen}" />
                                                         <TextBlock Text="{Binding AuthText}" FontSize="10"
-                                                                   Foreground="{StaticResource TextMutedBrush}"/>
+                                                                   Foreground="{StaticResource TextMutedBrush}" />
                                                     </StackPanel>
                                                 </Border>
 
@@ -168,20 +170,20 @@
                                                          IsVisible="{Binding RequiresApiKey}"
                                                          Text="{Binding ApiKey, Mode=TwoWay}"
                                                          PasswordChar="•"
-                                                         PlaceholderText="Paste API key…"/>
+                                                         PlaceholderText="Paste API key…" />
 
                                                 <!-- Action row -->
                                                 <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
                                                             Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
                                                     <Button Classes="Subtle" Content="Save key" Padding="10,4"
-                                                            Command="{Binding SaveKeyCommand}"/>
+                                                            Command="{Binding SaveKeyCommand}" />
                                                     <Button Classes="Subtle" Content="Test connection" Padding="10,4"
                                                             Command="{Binding TestConnectionCommand}"
-                                                            IsEnabled="{Binding !IsTesting}"/>
+                                                            IsEnabled="{Binding !IsTesting}" />
                                                     <TextBlock Text="{Binding TestResult}" FontSize="11"
                                                                Foreground="{StaticResource TextMutedBrush}"
                                                                VerticalAlignment="Center"
-                                                               TextTrimming="CharacterEllipsis"/>
+                                                               TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
@@ -190,16 +192,16 @@
                             </ItemsControl>
                         </StackPanel>
 
-                        <Separator Margin="0,4"/>
+                        <Separator Margin="0,4" />
 
                         <!-- Model browser (embeds the picker control) -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="Browse Models" Classes="Label"/>
+                            <TextBlock Text="Browse Models" Classes="Label" />
                             <TextBlock Text="Pick a model to make it the active session's model."
                                        FontSize="11" Foreground="{StaticResource TextMutedBrush}"
-                                       TextWrapping="Wrap"/>
+                                       TextWrapping="Wrap" />
                             <ctrl:ProviderModelPicker DataContext="{Binding Picker}"
-                                                      Height="380"/>
+                                                      Height="380" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -207,8 +209,8 @@
                 <!-- Footer -->
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                             Spacing="8" Margin="0,12,0,0">
-                    <Button Classes="Subtle" Content="Cancel" Command="{Binding CancelCommand}" Click="Close_Click"/>
-                    <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click"/>
+                    <Button Classes="Subtle" Content="Cancel" Command="{Binding CancelCommand}" Click="Close_Click" />
+                    <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click" />
                 </StackPanel>
             </Grid>
         </Border>

@@ -1,6 +1,5 @@
 // Engines layer — engine resource limits. See IScriptEngine.cs for layering rules.
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     Resource limits and execution context for a single
 ///     <see cref="IScriptEngine.Evaluate" /> call.

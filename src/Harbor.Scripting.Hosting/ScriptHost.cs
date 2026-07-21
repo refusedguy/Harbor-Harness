@@ -1,6 +1,5 @@
 // Hosting layer — the public facade. See ScriptHostOptions.cs for layering rules.
 namespace Harbor.Scripting.Hosting;
-
 /// <summary>
 ///     The script host: composes an <see cref="IScriptEngine" />,
 ///     <see cref="IScriptStore" />, and <see cref="IScriptCompiler" /> into a
@@ -27,11 +26,11 @@ namespace Harbor.Scripting.Hosting;
 /// </remarks>
 public sealed class ScriptHost
 {
-    private readonly IScriptEngine _engine;
-    private readonly IScriptStore _store;
     private readonly IScriptCompiler _compiler;
+    private readonly IScriptEngine _engine;
     private readonly ILogger<ScriptHost> _logger;
     private readonly ScriptHostOptions _options;
+    private readonly IScriptStore _store;
 
     /// <summary>
     ///     Construct a script host.
@@ -60,7 +59,10 @@ public sealed class ScriptHost
     /// </summary>
     /// <param name="globals">Bridge globals (registries + logger) passed to each evaluation.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Success if all scripts loaded; failure with the first error otherwise. Per-script results are in <see cref="ScriptHostLoadResult.Instances" />.</returns>
+    /// <returns>
+    ///     Success if all scripts loaded; failure with the first error otherwise. Per-script results are in
+    ///     <see cref="ScriptHostLoadResult.Instances" />.
+    /// </returns>
     public async Task<Result<ScriptHostLoadResult>> LoadAllAsync(ScriptGlobals globals, CancellationToken cancellationToken = default)
     {
         var list = await _store.ListAsync(cancellationToken).ConfigureAwait(false);
@@ -115,11 +117,11 @@ public sealed class ScriptHost
     public async Task<Result<ScriptInstance>> EvaluateAsync(string sourceName, string source, ScriptGlobals globals, CancellationToken cancellationToken = default)
     {
         var entry = new ScriptEntry(
-            Name: Path.GetFileNameWithoutExtension(sourceName),
-            Path: sourceName,
-            Content: source,
-            Hash: HashContent(source),
-            LastModified: null);
+            Path.GetFileNameWithoutExtension(sourceName),
+            sourceName,
+            source,
+            HashContent(source),
+            null);
         return await LoadOneAsync(entry, globals, cancellationToken).ConfigureAwait(false);
     }
 
@@ -154,8 +156,8 @@ public sealed class ScriptHost
 
     private static string HashContent(string content)
     {
-        var bytes = Encoding.UTF8.GetBytes(content);
-        var hash = SHA256.HashData(bytes);
+        byte[] bytes = Encoding.UTF8.GetBytes(content);
+        byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
     }
 }

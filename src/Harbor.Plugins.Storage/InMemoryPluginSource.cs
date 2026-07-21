@@ -1,12 +1,11 @@
-using Harbor.Plugins.Abstractions;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Storage;
-
 /// <summary>
 ///     <see cref="IPluginSource" /> backed by an in-memory collection of
-/// <see cref="PluginScript" /> values. Intended primarily for tests and for embedding
-/// plugins authored in code rather than on disk.
+///     <see cref="PluginScript" /> values. Intended primarily for tests and for embedding
+///     plugins authored in code rather than on disk.
 /// </summary>
 /// <remarks>
 ///     Thread-safe: scripts can be added before or during enumeration. The source
@@ -33,6 +32,19 @@ public sealed class InMemoryPluginSource : IPluginSource
             _scripts.Enqueue(s);
     }
 
+    /// <inheritdoc />
+    public async IAsyncEnumerable<PluginScript> GetScriptsAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        // Snapshot the queue to avoid yielding while another thread mutates.
+        var snapshot = _scripts.ToArray();
+        foreach (var script in snapshot)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return await Task.FromResult(script).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     ///     Add a script to the source. The script's <see cref="PluginScript.Path" /> is
     ///     used as a synthetic identity; nothing is read from disk.
@@ -53,17 +65,4 @@ public sealed class InMemoryPluginSource : IPluginSource
     /// <param name="source">Raw CS source text.</param>
     public void Add(string path, string source)
         => Add(new PluginScript(path, source));
-
-    /// <inheritdoc />
-    public async IAsyncEnumerable<PluginScript> GetScriptsAsync(
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        // Snapshot the queue to avoid yielding while another thread mutates.
-        var snapshot = _scripts.ToArray();
-        foreach (var script in snapshot)
-        {
-            ct.ThrowIfCancellationRequested();
-            yield return await Task.FromResult(script).ConfigureAwait(false);
-        }
-    }
 }

@@ -1,5 +1,4 @@
 namespace Harbor.Core.Configuration;
-
 /// <summary>
 ///     Default provider presets — no JSON authoring required for the user.
 ///     These are the "always available" defaults; user just picks one during onboarding.

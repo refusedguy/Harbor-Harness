@@ -1,7 +1,5 @@
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.TerminalGui.Handlers;
-
 /// <summary>
 ///     Pure scroll math over <see cref="UiState" />. Mirrors SpectreTui's
 ///     semantics: scroll is rows-from-bottom (0 = live tail), grows toward

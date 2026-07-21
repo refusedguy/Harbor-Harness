@@ -1,18 +1,17 @@
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Logging;
-
 /// <summary>
-///     File logger provider that writes every log entry (from <see cref="LogLevel.Trace"/>
+///     File logger provider that writes every log entry (from <see cref="LogLevel.Trace" />
 ///     upward by default) to a per-run, timestamped file under
 ///     <c>~/.harbor/logs/</c>. Each process gets its own file
 ///     (<c>harbor-{appPrefix}-{yyyy-MM-dd_HH-mm-ss}.log</c>) opened in
-///     <see cref="FileMode.Append"/> — concurrent runs never overwrite each other
+///     <see cref="FileMode.Append" /> — concurrent runs never overwrite each other
 ///     and a crash never wipes prior history.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Why a per-run file:</b> the previous implementation opened
-///         <c>harbor_{date}.log</c> with <see cref="FileMode.OpenOrCreate"/> at
+///         <c>harbor_{date}.log</c> with <see cref="FileMode.OpenOrCreate" /> at
 ///         position 0. The first write of every new run overwrote the previous
 ///         run's header, and if the new run was shorter the file ended with
 ///         stale bytes from the previous run — the "log overwrites itself" bug.
@@ -21,22 +20,19 @@ namespace Harbor.Cli.Logging;
 ///         <b>Thread safety:</b> every write is serialized through
 ///         <c>_writeLock</c>. The provider is safe to register on multiple
 ///         logger factories (Program.cs + HostBuilder) — the underlying
-///         <see cref="StreamWriter"/> is shared and disposed exactly once via an
+///         <see cref="StreamWriter" /> is shared and disposed exactly once via an
 ///         <c>Interlocked.Exchange</c> guard on <c>_disposed</c>.
 ///     </para>
 ///     <para>
 ///         <b>File level vs console level:</b> the file always captures down
-///         to <see cref="LogLevel.Debug"/> (overridable via the
+///         to <see cref="LogLevel.Debug" /> (overridable via the
 ///         <c>fileLevel</c> ctor parameter) so a post-mortem has the full
-///         picture even when the console is set to <see cref="LogLevel.Information"/>.
+///         picture even when the console is set to <see cref="LogLevel.Information" />.
 ///     </para>
 /// </remarks>
 [ProviderAlias("File")]
 public sealed class FileLoggerProvider : ILoggerProvider
 {
-    private readonly string _appPrefix;
-    private readonly string _logDir;
-    private readonly LogLevel _fileLevel;
     private readonly object _writeLock = new();
     private readonly StreamWriter _writer;
     private int _disposed;
@@ -46,12 +42,12 @@ public sealed class FileLoggerProvider : ILoggerProvider
     /// </summary>
     /// <param name="appPrefix">Short prefix embedded in the filename (e.g. "cli", "avalonia").</param>
     /// <param name="logDir">Absolute directory path. Created if missing.</param>
-    /// <param name="fileLevel">Minimum level captured to the file. Defaults to <see cref="LogLevel.Debug"/>.</param>
+    /// <param name="fileLevel">Minimum level captured to the file. Defaults to <see cref="LogLevel.Debug" />.</param>
     public FileLoggerProvider(string appPrefix, string logDir, LogLevel fileLevel = LogLevel.Debug)
     {
-        _appPrefix = appPrefix;
-        _logDir = logDir;
-        _fileLevel = fileLevel;
+        AppPrefix = appPrefix;
+        LogDirectory = logDir;
+        FileLevel = fileLevel;
         Directory.CreateDirectory(logDir);
 
         // Per-run filename: harbor-cli-2026-07-18_15-30-45.log
@@ -69,8 +65,8 @@ public sealed class FileLoggerProvider : ILoggerProvider
             FileMode.Append,
             FileAccess.Write,
             FileShare.Read,
-            bufferSize: 4096,
-            useAsync: false);
+            4096,
+            false);
         _writer = new StreamWriter(stream)
         {
             AutoFlush = true
@@ -88,20 +84,29 @@ public sealed class FileLoggerProvider : ILoggerProvider
     /// <summary>
     ///     Directory containing all Harbor log files.
     /// </summary>
-    public string LogDirectory => _logDir;
+    public string LogDirectory
+    {
+        get;
+    }
 
     /// <summary>
     ///     App prefix used in the filename (e.g. "cli").
     /// </summary>
-    public string AppPrefix => _appPrefix;
+    public string AppPrefix
+    {
+        get;
+    }
 
     /// <summary>
     ///     Minimum level captured to the file. Independent of the console level.
     /// </summary>
-    public LogLevel FileLevel => _fileLevel;
+    public LogLevel FileLevel
+    {
+        get;
+    }
 
     /// <summary>
-    ///     Returns a logger for <paramref name="categoryName"/>. The same
+    ///     Returns a logger for <paramref name="categoryName" />. The same
     ///     underlying writer is shared across all categories — every log line
     ///     from every category lands in the same file in arrival order.
     /// </summary>
@@ -134,7 +139,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
     internal void Write(LogLevel level, string category, string message, Exception? exception)
     {
-        if (level < _fileLevel)
+        if (level < FileLevel)
             return;
         // 4-char level mnemonic: TRAC, DBUG, INFO, WARN, ERRO, CRIT, NONE
         string levelTag = level switch
@@ -175,13 +180,13 @@ public sealed class FileLoggerProvider : ILoggerProvider
         lock (_writeLock)
         {
             _writer.WriteLine($"=== Harbor log started {DateTimeOffset.UtcNow:O} ===");
-            _writer.WriteLine($"=== App prefix: {_appPrefix} ===");
+            _writer.WriteLine($"=== App prefix: {AppPrefix} ===");
             _writer.WriteLine($"=== Process ID: {Environment.ProcessId} ===");
             _writer.WriteLine($"=== .NET runtime: {Environment.Version} ===");
             _writer.WriteLine($"=== OS: {Environment.OSVersion} ===");
             _writer.WriteLine($"=== Machine: {Environment.MachineName} ===");
             _writer.WriteLine($"=== Working dir: {Environment.CurrentDirectory} ===");
-            _writer.WriteLine($"=== File level: >= {_fileLevel} ===");
+            _writer.WriteLine($"=== File level: >= {FileLevel} ===");
             _writer.WriteLine($"=== Args: {argsLine} ===");
             _writer.WriteLine();
         }
@@ -200,7 +205,7 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
 
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= _provider._fileLevel;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= _provider.FileLevel;
 
         public void Log<TState>(
             LogLevel logLevel,

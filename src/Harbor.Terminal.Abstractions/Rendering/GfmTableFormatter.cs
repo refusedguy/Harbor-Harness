@@ -6,7 +6,6 @@ namespace Harbor.Terminal.Abstractions.Rendering;
 ///     <c>TextLine</c> / color / Spectre types. Renderers map each string into
 ///     their own widget model. Each produced row is one display row in a
 ///     virtualized transcript (no extra widget, no row-model break).
-///
 ///     Geometry contract: every row (rule and data) has the SAME visible width.
 ///     A column is drawn as <c>┃ space cell space ┃</c> — i.e. each cell consumes
 ///     <c>width + 2</c> display columns (padding). Horizontal rules use the same
@@ -36,7 +35,7 @@ public static class GfmTableFormatter
     public static IReadOnlyList<string> Format(GfmTable table, int maxWidth = 0)
     {
         int cols = table.Headers.Count;
-        var widths = new int[cols];
+        int[] widths = new int[cols];
         for (int c = 0; c < cols; c++)
         {
             int w = CellWidth(table.Headers[c]);
@@ -48,7 +47,7 @@ public static class GfmTableFormatter
         if (maxWidth > 4)
         {
             // Full visible width of one row including borders + padding.
-            int decor = (cols + 1) + 2 * cols;
+            int decor = cols + 1 + 2 * cols;
             int used = widths.Sum() + decor;
             if (used > maxWidth)
                 ShrinkToFit(widths, maxWidth - decor);
@@ -65,8 +64,10 @@ public static class GfmTableFormatter
         // Never emit a row wider than the panel; wrap would kill the grid.
         if (maxWidth > 0)
             for (int k = 0; k < outp.Count; k++)
+            {
                 if (DispWidth(outp[k]) > maxWidth)
                     outp[k] = HardTruncate(outp[k], maxWidth);
+            }
 
         return outp;
     }
@@ -85,8 +86,10 @@ public static class GfmTableFormatter
             // Narrow the widest column still above the minimum floor.
             int idx = -1;
             for (int c = 0; c < widths.Length; c++)
+            {
                 if (widths[c] > MinCell && (idx < 0 || widths[c] > widths[idx]))
                     idx = c;
+            }
             if (idx < 0)
                 break; // every column pinned at minimum; cannot fit
             // Cut the whole excess in one pass (not one char at a time).
@@ -148,7 +151,7 @@ public static class GfmTableFormatter
     private static int DispWidth(string text)
     {
         int w = 0;
-        foreach (var ch in text)
+        foreach (char ch in text)
             w += IsWide(ch) ? 2 : 1;
         return w;
     }
@@ -157,17 +160,17 @@ public static class GfmTableFormatter
     {
         // Covers common wide ranges (CJK, Hangul, fullwidth forms). Cyrillic is
         // NOT wide in terminals; this stays conservative to avoid under-sizing.
-        return (c >= 0x1100 && c <= 0x115F) || // Hangul Jamo
-               (c >= 0x2E80 && c <= 0x303E) ||
-               (c >= 0x3041 && c <= 0x33FF) ||
-               (c >= 0x3400 && c <= 0x4DBF) ||
-               (c >= 0x4E00 && c <= 0x9FFF) ||
-               (c >= 0xA000 && c <= 0xA4CF) ||
-               (c >= 0xAC00 && c <= 0xD7A3) ||
-               (c >= 0xF900 && c <= 0xFAFF) ||
-               (c >= 0xFE30 && c <= 0xFE4F) ||
-               (c >= 0xFF00 && c <= 0xFF60) ||
-               (c >= 0xFFE0 && c <= 0xFFE6);
+        return c >= 0x1100 && c <= 0x115F || // Hangul Jamo
+               c >= 0x2E80 && c <= 0x303E ||
+               c >= 0x3041 && c <= 0x33FF ||
+               c >= 0x3400 && c <= 0x4DBF ||
+               c >= 0x4E00 && c <= 0x9FFF ||
+               c >= 0xA000 && c <= 0xA4CF ||
+               c >= 0xAC00 && c <= 0xD7A3 ||
+               c >= 0xF900 && c <= 0xFAFF ||
+               c >= 0xFE30 && c <= 0xFE4F ||
+               c >= 0xFF00 && c <= 0xFF60 ||
+               c >= 0xFFE0 && c <= 0xFFE6;
     }
 
     private static string HardTruncate(string text, int width)
@@ -175,7 +178,7 @@ public static class GfmTableFormatter
         // Cut to fit `width` display columns, appending an ellipsis.
         var sb = new StringBuilder();
         int w = 0;
-        foreach (var ch in text)
+        foreach (char ch in text)
         {
             int cw = IsWide(ch) ? 2 : 1;
             if (w + cw > width - 1) // leave room for the ellipsis

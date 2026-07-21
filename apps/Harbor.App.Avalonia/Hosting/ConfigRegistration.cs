@@ -2,24 +2,23 @@ using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.Ui.Framework.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Hosting;
-
 /// <summary>
 ///     Configuration registration — eagerly loads
-///     <see cref="CommonConfig"/> (<c>~/.harbor/config.json</c>) and
-///     <see cref="AvaloniaConfig"/> (<c>~/.harbor/avalonia.json</c>) using
+///     <see cref="CommonConfig" /> (<c>~/.harbor/config.json</c>) and
+///     <see cref="AvaloniaConfig" /> (<c>~/.harbor/avalonia.json</c>) using
 ///     a bootstrap logger factory, then registers the loaded configs +
-///     their stores + the <see cref="IAuthResolver"/> /
-///     <see cref="IModelCatalog"/> / <see cref="CompositeConfig{T}"/> as
+///     their stores + the <see cref="IAuthResolver" /> /
+///     <see cref="IModelCatalog" /> / <see cref="CompositeConfig{T}" /> as
 ///     singletons on the DI container.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         We load the configs eagerly using a *bootstrap* logger factory
-///         so we can register the loaded <see cref="AvaloniaConfig"/> as a
+///         so we can register the loaded <see cref="AvaloniaConfig" /> as a
 ///         singleton before the host is built. The previous pattern called
 ///         <c>BuildServiceProvider()</c> twice just to get an ILogger — that
 ///         creates a parallel DI container that disposes out from under us
@@ -95,8 +94,7 @@ internal static class ConfigRegistration
         // SessionFactory (in Ui.Framework) can't read the persisted
         // provider/model because Ui.Framework can't reference Desktop.Abstractions
         // (circular dependency via Terminal.Abstractions).
-        services.AddSingleton<Harbor.Ui.Framework.Configuration.ICommonConfigReader>(
-            sp => new Harbor.App.Avalonia.Services.CommonConfigReaderAdapter(sp));
+        services.AddSingleton<ICommonConfigReader>(sp => new CommonConfigReaderAdapter(sp));
 
         // ── Auth resolver + model catalog for OpenAI-compatible providers ──
         // The wizard persists API keys to CommonConfig.ApiKeys. This resolver
@@ -128,10 +126,10 @@ internal static class ConfigRegistration
 
 /// <summary>
 ///     Bundle of eagerly-loaded config singletons + auth/model dependencies
-///     returned by <see cref="ConfigRegistration.RegisterAsync"/> so the
+///     returned by <see cref="ConfigRegistration.RegisterAsync" /> so the
 ///     caller can pass them to the eager registry builders
-///     (<see cref="ProviderRegistration"/>, <see cref="AgentRegistration"/>,
-///     <see cref="StorageRegistration"/>).
+///     (<see cref="ProviderRegistration" />, <see cref="AgentRegistration" />,
+///     <see cref="StorageRegistration" />).
 /// </summary>
 internal sealed record ConfigBundle(
     CommonConfig CommonConfig,

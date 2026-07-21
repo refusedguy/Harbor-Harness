@@ -1,10 +1,8 @@
 using Avalonia.Controls;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Toast container view. No code-behind logic — purely bound to
-/// <c>MainViewModel.Toasts</c>.
+///     <c>MainViewModel.Toasts</c>.
 /// </summary>
 public partial class ToastNotificationsView : UserControl
 {

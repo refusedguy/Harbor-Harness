@@ -1,9 +1,8 @@
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Wpf.Services;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     AvalonEdit-backed code editor view model. Owns the file path, dirty
 ///     state, and delegates open/save to <see cref="WpfFilePicker" />.
@@ -11,6 +10,20 @@ namespace Harbor.App.Wpf.ViewModels;
 public sealed partial class CodeEditorViewModel : ObservableObject
 {
     private readonly WpfFilePicker? _picker;
+
+    /// <summary>Editor content.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsDirty))]
+    private string _content = string.Empty;
+
+    /// <summary>Currently open file path (or <see langword="null" /> for untitled).</summary>
+    [ObservableProperty] private string? _filePath;
+
+    /// <summary>Whether the buffer has unsaved changes.</summary>
+    [ObservableProperty] private bool _isDirty;
+
+    /// <summary>Syntax language name (C#, JSON, Markdown, etc.).</summary>
+    [ObservableProperty] private string _syntaxLanguage = "C#";
 
     /// <summary>Construct a <see cref="CodeEditorViewModel" />.</summary>
     public CodeEditorViewModel() : this(picker: null) { }
@@ -26,31 +39,17 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         SyntaxLanguage = "C#";
     }
 
-    /// <summary>Currently open file path (or <see langword="null" /> for untitled).</summary>
-    [ObservableProperty] private string? _filePath;
-
-    /// <summary>Editor content.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDirty))]
-    private string _content = string.Empty;
-
-    /// <summary>Whether the buffer has unsaved changes.</summary>
-    [ObservableProperty] private bool _isDirty;
-
-    /// <summary>Syntax language name (C#, JSON, Markdown, etc.).</summary>
-    [ObservableProperty] private string _syntaxLanguage = "C#";
-
     /// <summary>Display title for the tab.</summary>
     public string DisplayTitle =>
-        (string.IsNullOrEmpty(FilePath) ? "untitled" : System.IO.Path.GetFileName(FilePath)) +
+        (string.IsNullOrEmpty(FilePath) ? "untitled" : Path.GetFileName(FilePath)) +
         (IsDirty ? " *" : string.Empty);
 
-    partial void OnFilePathChanged(string? value) => OnPropertyChanged(nameof(DisplayTitle));
+    partial void OnFilePathChanged(string? value) => this.OnPropertyChanged(nameof(DisplayTitle));
 
     partial void OnContentChanged(string value)
     {
         IsDirty = true;
-        OnPropertyChanged(nameof(DisplayTitle));
+        this.OnPropertyChanged(nameof(DisplayTitle));
     }
 
     /// <summary>Open a file via the file picker.</summary>
@@ -58,11 +57,11 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private void OpenFile()
     {
         if (_picker is null) return;
-        var path = _picker.PickOpenFile("Open file", WpfFilePicker.FilterAll);
+        string? path = _picker.PickOpenFile("Open file", WpfFilePicker.FilterAll);
         if (path is null) return;
         try
         {
-            Content = System.IO.File.ReadAllText(path);
+            Content = File.ReadAllText(path);
             FilePath = path;
             IsDirty = false;
             SyntaxLanguage = GuessLanguageFromExtension(path);
@@ -80,15 +79,15 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         if (_picker is null) return;
         if (string.IsNullOrEmpty(FilePath))
         {
-            var path = _picker.PickSaveFile("Save file", WpfFilePicker.FilterAll, "cs", "untitled.cs");
+            string? path = _picker.PickSaveFile("Save file", WpfFilePicker.FilterAll, "cs", "untitled.cs");
             if (path is null) return;
             FilePath = path;
         }
         try
         {
-            System.IO.File.WriteAllText(FilePath, Content);
+            File.WriteAllText(FilePath, Content);
             IsDirty = false;
-            OnPropertyChanged(nameof(DisplayTitle));
+            this.OnPropertyChanged(nameof(DisplayTitle));
         }
         catch
         {
@@ -96,8 +95,10 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
     }
 
-    /// <summary>Format the buffer (placeholder — full implementation would
-    /// call into a Roslyn formatter).</summary>
+    /// <summary>
+    ///     Format the buffer (placeholder — full implementation would
+    ///     call into a Roslyn formatter).
+    /// </summary>
     [RelayCommand]
     private void Format()
     {
@@ -106,7 +107,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 
     private static string GuessLanguageFromExtension(string path)
     {
-        return System.IO.Path.GetExtension(path).ToLowerInvariant() switch
+        return Path.GetExtension(path).ToLowerInvariant() switch
         {
             ".cs" => "C#",
             ".json" => "JSON",

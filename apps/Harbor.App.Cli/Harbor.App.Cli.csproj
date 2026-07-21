@@ -73,20 +73,20 @@
       Granular feature flags. Default: all true (full build). When
       HARBOR_MINIMAL=true, all forced to false.
     -->
-    <HarborWithPlugins       Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
-    <HarborWithPlugins       Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
+    <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
+    <HarborWithPlugins Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
 
-    <HarborWithScripting     Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithScripting>
-    <HarborWithScripting     Condition="'$(HarborWithScripting)' == ''">true</HarborWithScripting>
+    <HarborWithScripting Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithScripting>
+    <HarborWithScripting Condition="'$(HarborWithScripting)' == ''">true</HarborWithScripting>
 
-    <HarborWithSpectreTui    Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
-    <HarborWithSpectreTui    Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
+    <HarborWithSpectreTui Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
+    <HarborWithSpectreTui Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
 
-    <HarborWithAllProviders  Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllProviders>
-    <HarborWithAllProviders  Condition="'$(HarborWithAllProviders)' == ''">true</HarborWithAllProviders>
+    <HarborWithAllProviders Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllProviders>
+    <HarborWithAllProviders Condition="'$(HarborWithAllProviders)' == ''">true</HarborWithAllProviders>
 
-    <HarborWithAllTools      Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllTools>
-    <HarborWithAllTools      Condition="'$(HarborWithAllTools)' == ''">true</HarborWithAllTools>
+    <HarborWithAllTools Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllTools>
+    <HarborWithAllTools Condition="'$(HarborWithAllTools)' == ''">true</HarborWithAllTools>
 
     <!--
       C# symbol definitions for granular #if guards in HostBuilder.cs.

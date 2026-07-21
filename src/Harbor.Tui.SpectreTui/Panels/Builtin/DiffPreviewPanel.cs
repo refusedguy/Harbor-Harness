@@ -1,12 +1,9 @@
-using System.Collections.Generic;
 using System.Text.Json;
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows recent file changes from <c>edit</c>, <c>write</c>,
 ///     and <c>read</c> tool calls. Parses tool args from the transcript and renders a
@@ -28,7 +25,7 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 public sealed class DiffPreviewPanel : IPanelProvider
 {
     private static readonly HashSet<string> TrackedTools =
-        new(System.StringComparer.Ordinal) { "edit", "write", "read", "patch" };
+        new(StringComparer.Ordinal) { "edit", "write", "read", "patch" };
 
     /// <inheritdoc />
     public string Id => "diff-preview";
@@ -45,7 +42,7 @@ public sealed class DiffPreviewPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        var changes = ExtractRecentChanges(ctx.State, max: 8);
+        var changes = ExtractRecentChanges(ctx.State, 8);
 
         var p = new Paragraph().Alignment(Justify.Left);
         p.Lines.Add(TextLine.FromMarkup("[bold cyan]Diff Preview[/] " +
@@ -76,7 +73,7 @@ public sealed class DiffPreviewPanel : IPanelProvider
 
             if (!string.IsNullOrEmpty(change.DiffBody))
             {
-                foreach (var diffLine in SplitLines(change.DiffBody, maxLines: 4))
+                foreach (string diffLine in SplitLines(change.DiffBody, 4))
                 {
                     string rendered = RenderDiffLine(diffLine);
                     p.Lines.Add(TextLine.FromMarkup($"    {rendered}"));
@@ -153,8 +150,8 @@ public sealed class DiffPreviewPanel : IPanelProvider
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
                 if (prop.Value.ValueKind == JsonValueKind.String &&
-                    (prop.Name.Contains("file", System.StringComparison.OrdinalIgnoreCase)
-                     || prop.Name.Contains("path", System.StringComparison.OrdinalIgnoreCase)))
+                    (prop.Name.Contains("file", StringComparison.OrdinalIgnoreCase)
+                     || prop.Name.Contains("path", StringComparison.OrdinalIgnoreCase)))
                 {
                     return prop.Value.GetString() ?? "<unknown>";
                 }

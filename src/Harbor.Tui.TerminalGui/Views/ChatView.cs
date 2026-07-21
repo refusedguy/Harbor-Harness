@@ -1,10 +1,7 @@
-using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.TerminalGui.Handlers;
 using Harbor.Tui.TerminalGui.Rendering;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Projects an immutable <see cref="UiState" /> snapshot into the
 ///     Terminal.Gui-rendered chat transcript. Each <see cref="ChatLine" />
@@ -23,7 +20,7 @@ public sealed class ChatView
         {
             if (line.Role is not ChatRole.ToolResult)
                 outp.Add(TerminalGuiMarkdownRenderer.RenderHeader(line.Role));
-            foreach (var body in TerminalGuiMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
+            foreach (string body in TerminalGuiMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
                 outp.Add("  " + body);
             outp.Add(" ");
         }
@@ -33,13 +30,13 @@ public sealed class ChatView
             if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
             {
                 outp.Add(TerminalGuiMarkdownRenderer.RenderHeader(ChatRole.Thinking));
-                foreach (var b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
+                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
             if (!string.IsNullOrEmpty(s.Active.TextBuffer))
             {
                 outp.Add(TerminalGuiMarkdownRenderer.RenderHeader(ChatRole.Assistant));
-                foreach (var b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
+                foreach (string b in TerminalGuiMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
         }

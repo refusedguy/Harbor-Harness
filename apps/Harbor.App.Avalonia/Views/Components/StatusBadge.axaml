@@ -21,7 +21,7 @@
     -->
 
     <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey"/>
+        <vw:BrushKeyConverter x:Key="BrushKey" />
     </UserControl.Resources>
 
     <Border Background="{StaticResource MochaSurface0}"
@@ -34,11 +34,11 @@
             <Ellipse Width="8"
                      Height="8"
                      Fill="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                     IsVisible="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                     IsVisible="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}}" />
             <TextBlock Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontSize="11"
                        FontFamily="{StaticResource CodeFont}"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" />
         </StackPanel>
     </Border>
 </UserControl>

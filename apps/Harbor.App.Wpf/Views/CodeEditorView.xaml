@@ -9,23 +9,23 @@
                 Padding="6,4" Margin="0,0,0,6" CornerRadius="4">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="📄" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="📄" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <TextBlock Text="{Binding DisplayTitle}" Foreground="{DynamicResource App.Text}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" />
                     <TextBlock Text="{Binding SyntaxLanguage, StringFormat=' · {0}'}"
-                               Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center"/>
+                               Foreground="{DynamicResource App.TextMuted}" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Content="Open" Padding="10,4" Margin="0,0,4,0"
-                            Command="{Binding OpenFileCommand}"/>
+                            Command="{Binding OpenFileCommand}" />
                     <Button Content="Save" Padding="10,4" Margin="0,0,4,0"
-                            Command="{Binding SaveFileCommand}"/>
+                            Command="{Binding SaveFileCommand}" />
                     <Button Content="Format" Padding="10,4"
-                            Command="{Binding FormatCommand}"/>
+                            Command="{Binding FormatCommand}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -40,6 +40,6 @@
                                HorizontalScrollBarVisibility="Auto"
                                VerticalScrollBarVisibility="Auto"
                                WordWrap="False"
-                               Padding="4"/>
+                               Padding="4" />
     </DockPanel>
 </UserControl>

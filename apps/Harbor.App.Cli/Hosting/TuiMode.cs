@@ -1,7 +1,6 @@
+using System.Text.Json;
 using Harbor.Ui.Framework.Diagnostics;
-
 namespace Harbor.Cli.Hosting;
-
 /// <summary>
 ///     Resolves the active TUI renderer id from <c>HARBOR_TUI</c> /
 ///     <c>CliConfig.DefaultTuiRenderer</c>, and classifies it as interactive
@@ -133,9 +132,9 @@ internal static class TuiMode
             if (!File.Exists(path))
                 return null;
             string json = File.ReadAllText(path);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("defaultTuiRenderer", out var el)
-                && el.ValueKind == System.Text.Json.JsonValueKind.String)
+                && el.ValueKind == JsonValueKind.String)
             {
                 return el.GetString();
             }
@@ -177,13 +176,16 @@ internal static class TuiMode
 internal static class DiagnosticsSink
 {
     private static readonly object InitLock = new();
-    private static InMemoryDiagnosticsPanel? _current;
 
     /// <summary>
     ///     The shared panel, or <see langword="null" /> when no interactive TUI
     ///     is active (one-shot command, plain/ansi TUI).
     /// </summary>
-    public static InMemoryDiagnosticsPanel? Current => _current;
+    public static InMemoryDiagnosticsPanel? Current
+    {
+        get;
+        private set;
+    }
 
     /// <summary>
     ///     Create (or reuse) the shared <see cref="InMemoryDiagnosticsPanel" />.
@@ -194,8 +196,8 @@ internal static class DiagnosticsSink
     {
         lock (InitLock)
         {
-            _current ??= new InMemoryDiagnosticsPanel();
-            return _current;
+            Current ??= new InMemoryDiagnosticsPanel();
+            return Current;
         }
     }
 
@@ -208,7 +210,7 @@ internal static class DiagnosticsSink
     {
         lock (InitLock)
         {
-            _current = null;
+            Current = null;
         }
     }
 }

@@ -1,9 +1,6 @@
-using Harbor.Build.Components;
 using Nuke.Common.ProjectModel;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Restore target — runs <c>dotnet restore</c> against the entire
 ///     solution. Uses <c>--locked-mode</c> when a <c>packages.lock.json</c>

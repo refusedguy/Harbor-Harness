@@ -1,7 +1,4 @@
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Providers;
 namespace Harbor.Providers.OpenAiCompatible.Compat;
-
 /// <summary>
 ///     Strategy (GOF) for provider-specific request quirks.
 /// </summary>
@@ -27,7 +24,7 @@ namespace Harbor.Providers.OpenAiCompatible.Compat;
 public interface IProviderCompatFlag
 {
     /// <summary>The provider this quirk targets (informational; used for registration filtering).</summary>
-    ProviderId ProviderId { get; }
+    public ProviderId ProviderId { get; }
 
     /// <summary>
     ///     Mutate the request payload in place to satisfy the provider's quirks.
@@ -36,7 +33,7 @@ public interface IProviderCompatFlag
     /// </summary>
     /// <param name="payload">The mutable JSON payload being built for the chat-completions request.</param>
     /// <param name="request">The originating <see cref="LlmRequest" /> (read-only context).</param>
-    void Apply(Dictionary<string, object?> payload, LlmRequest request);
+    public void Apply(Dictionary<string, object?> payload, LlmRequest request);
 }
 
 /// <summary>

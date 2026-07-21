@@ -6,11 +6,11 @@
 
 ## What's inside
 
-| File | Contents |
-| --- | --- |
-| `ArrayPoolExtensions.cs` | `ArrayPoolExtensions.RentScoped<T>(this ArrayPool<T>, int)` returning a disposable `RentedArray<T>` ref-struct (auto-returns on `Dispose`); `StringBuilderPool` static class with a `ConcurrentBag<StringBuilder>` backing and `MaxRetainCapacity = 16 KiB` LOH-avoidance; `PooledStringBuilder` readonly struct |
-| `CollectionExtensions.cs` | `ToFrozenSet<T>`, `ToFrozenDictionary<...>` (3 overloads), `AsReadOnlyCollection<T>`, `AsReadOnlyList<T>`, `AddRange<T>(List<T>, ReadOnlySpan<T>)` — Frozen-collection materializers and read-only-collection upcasters for hot-path public APIs |
-| `MemoryPackExtensions.cs` | `ToMemoryPackBytes<T>(this T)` and `FromMemoryPackBytes<T>(this byte[])` — extension-method sugar over `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` for `IMemoryPackable<T>` types |
+| File                      | Contents                                                                                                                                                                                                                                                                                                         |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ArrayPoolExtensions.cs`  | `ArrayPoolExtensions.RentScoped<T>(this ArrayPool<T>, int)` returning a disposable `RentedArray<T>` ref-struct (auto-returns on `Dispose`); `StringBuilderPool` static class with a `ConcurrentBag<StringBuilder>` backing and `MaxRetainCapacity = 16 KiB` LOH-avoidance; `PooledStringBuilder` readonly struct |
+| `CollectionExtensions.cs` | `ToFrozenSet<T>`, `ToFrozenDictionary<...>` (3 overloads), `AsReadOnlyCollection<T>`, `AsReadOnlyList<T>`, `AddRange<T>(List<T>, ReadOnlySpan<T>)` — Frozen-collection materializers and read-only-collection upcasters for hot-path public APIs                                                                 |
+| `MemoryPackExtensions.cs` | `ToMemoryPackBytes<T>(this T)` and `FromMemoryPackBytes<T>(this byte[])` — extension-method sugar over `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` for `IMemoryPackable<T>` types                                                                                                                     |
 
 ## Layer
 
@@ -18,11 +18,11 @@
 
 ## Dependencies
 
-| Dependency | Why |
-| --- | --- |
-| `Harbor.Domain` (project) | `MemoryPackExtensions.ToMemoryPackBytes<T>` is constrained to `IMemoryPackable<T>` — types like `Session`, `AgentMessage`, `ToolResult` (declared in `Harbor.Domain`) implement this interface. Without the project ref, the extension methods couldn't be tested against real types. |
-| `CommunityToolkit.HighPerformance` | `FrozenDictionary<TKey, TValue>` / `FrozenSet<T>` are actually in-box (`System.Collections.Frozen`), but the toolkit is referenced for incidental helpers and consistency with the rest of the codebase. |
-| `MemoryPack` | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point. |
+| Dependency                         | Why                                                                                                                                                                                                                                                                                   |
+|------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Harbor.Domain` (project)          | `MemoryPackExtensions.ToMemoryPackBytes<T>` is constrained to `IMemoryPackable<T>` — types like `Session`, `AgentMessage`, `ToolResult` (declared in `Harbor.Domain`) implement this interface. Without the project ref, the extension methods couldn't be tested against real types. |
+| `CommunityToolkit.HighPerformance` | `FrozenDictionary<TKey, TValue>` / `FrozenSet<T>` are actually in-box (`System.Collections.Frozen`), but the toolkit is referenced for incidental helpers and consistency with the rest of the codebase.                                                                              |
+| `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point.                                                                                                                                                          |
 
 `System.Buffers` (`ArrayPool<T>`) is in-box for `net10.0` — no package ref needed.
 
@@ -32,9 +32,9 @@
 
 All files in `Harbor.Extensions` keep their original `Harbor.Abstractions.Extensions` namespace:
 
-| File | Namespace |
-| --- | --- |
-| `ArrayPoolExtensions.cs` | `Harbor.Abstractions.Extensions` |
+| File                      | Namespace                        |
+|---------------------------|----------------------------------|
+| `ArrayPoolExtensions.cs`  | `Harbor.Abstractions.Extensions` |
 | `CollectionExtensions.cs` | `Harbor.Abstractions.Extensions` |
 | `MemoryPackExtensions.cs` | `Harbor.Abstractions.Extensions` |
 

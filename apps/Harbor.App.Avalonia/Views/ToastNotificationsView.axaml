@@ -34,7 +34,7 @@
                   Background="Transparent">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
-                <StackPanel Orientation="Vertical" Spacing="8"/>
+                <StackPanel Orientation="Vertical" Spacing="8" />
             </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
@@ -51,15 +51,15 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <TextBlock Text="{Binding Kind, Converter={x:Static views:ToastIconConverter.Instance}}"
                                        FontSize="14" VerticalAlignment="Center"
-                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}" />
                             <TextBlock Text="{Binding Kind, StringFormat='{}{0}'}"
                                        FontSize="11" FontWeight="SemiBold"
                                        VerticalAlignment="Center"
-                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"/>
+                                       Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}" />
                         </StackPanel>
                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
                                    Foreground="{StaticResource TextBrush}"
-                                   FontSize="13" LineHeight="18"/>
+                                   FontSize="13" LineHeight="18" />
                     </StackPanel>
                 </Border>
             </DataTemplate>

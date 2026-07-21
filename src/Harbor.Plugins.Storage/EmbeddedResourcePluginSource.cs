@@ -1,14 +1,13 @@
-using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Storage;
-
 /// <summary>
 ///     <see cref="IPluginSource" /> that reads <c>.cs</c> files from
-/// <see cref="Assembly.GetManifestResourceStream(string)" /> entries. Each entry is
-/// decoded as UTF-8 and wrapped in a <see cref="PluginScript" /> whose
-/// <see cref="PluginScript.Path" /> is the resource name (for diagnostics only).
+///     <see cref="Assembly.GetManifestResourceStream(string)" /> entries. Each entry is
+///     decoded as UTF-8 and wrapped in a <see cref="PluginScript" /> whose
+///     <see cref="PluginScript.Path" /> is the resource name (for diagnostics only).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -25,8 +24,8 @@ namespace Harbor.Plugins.Storage;
 public sealed class EmbeddedResourcePluginSource : IPluginSource
 {
     private readonly Assembly _assembly;
-    private readonly string _resourceSuffix;
     private readonly ILogger<EmbeddedResourcePluginSource> _logger;
+    private readonly string _resourceSuffix;
 
     /// <summary>
     ///     Construct a new embedded-resource plugin source.
@@ -49,7 +48,7 @@ public sealed class EmbeddedResourcePluginSource : IPluginSource
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         string[] resourceNames = _assembly.GetManifestResourceNames();
-        foreach (var name in resourceNames)
+        foreach (string name in resourceNames)
         {
             ct.ThrowIfCancellationRequested();
             if (!name.EndsWith(_resourceSuffix, StringComparison.Ordinal))

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Tui.SpectreTui.View;
 namespace Harbor.Tui.Tests;
@@ -8,7 +7,7 @@ public class GfmTableParserTests
     [Test]
     public async Task IsTableStart_DetectsHeaderPlusSeparator()
     {
-        var lines = new[]
+        string[] lines = new[]
         {
             "| a | b |",
             "|---|---|",
@@ -20,14 +19,14 @@ public class GfmTableParserTests
     [Test]
     public async Task IsTableStart_FalseForLonePipeLine()
     {
-        var lines = new[] { "| a | b |", "just text" };
+        string[] lines = new[] { "| a | b |", "just text" };
         await Assert.That(GfmTableParser.IsTableStart(lines, 0)).IsFalse();
     }
 
     [Test]
     public async Task TryParse_ReadsHeadersRowsAlignments()
     {
-        var lines = new[]
+        string[] lines = new[]
         {
             "| name | score |",
             "|------|:-----:|",
@@ -47,7 +46,7 @@ public class GfmTableParserTests
     [Test]
     public async Task TryParse_PadsShortRowsAndStopsAtBlank()
     {
-        var lines = new[]
+        string[] lines = new[]
         {
             "| a | b | c |",
             "|---|---|---|",
@@ -104,7 +103,7 @@ public class GfmTableFormatterTests
             },
             new[] { GfmAlign.Left, GfmAlign.Left, GfmAlign.Left });
         var grid = GfmTableFormatter.Format(wide, 40);
-        foreach (var row in grid)
+        foreach (string row in grid)
             await Assert.That(row.Length).IsLessThanOrEqualTo(40);
     }
 
@@ -135,7 +134,7 @@ public class GfmTableFormatterTests
             new[] { GfmAlign.Left, GfmAlign.Left, GfmAlign.Left, GfmAlign.Left });
         var grid = GfmTableFormatter.Format(t, 50);
         int w = grid[0].Length;
-        foreach (var row in grid)
+        foreach (string row in grid)
             await Assert.That(row.Length).IsEqualTo(w);
         await Assert.That(w).IsLessThanOrEqualTo(50);
     }
@@ -155,20 +154,20 @@ public class GfmTableFormatterTests
             },
             new[] { GfmAlign.Left, GfmAlign.Left });
         var grid = GfmTableFormatter.Format(t, 36);
-        foreach (var row in grid)
+        foreach (string row in grid)
             await Assert.That(DispLen(row)).IsLessThanOrEqualTo(36);
     }
 
     private static int DispLen(string s)
     {
         int w = 0;
-        foreach (var c in s)
+        foreach (char c in s)
         {
-            bool wide = (c >= 0x1100 && c <= 0x115F) ||
-                        (c >= 0x2E80 && c <= 0xA4CF) ||
-                        (c >= 0xAC00 && c <= 0xD7A3) ||
-                        (c >= 0xF900 && c <= 0xFAFF) ||
-                        (c >= 0xFF00 && c <= 0xFFE6);
+            bool wide = c >= 0x1100 && c <= 0x115F ||
+                        c >= 0x2E80 && c <= 0xA4CF ||
+                        c >= 0xAC00 && c <= 0xD7A3 ||
+                        c >= 0xF900 && c <= 0xFAFF ||
+                        c >= 0xFF00 && c <= 0xFFE6;
             w += wide ? 2 : 1;
         }
         return w;
@@ -190,12 +189,12 @@ public class ChatMarkdownInlineTests
             "a*b_c_d*e"
         };
 
-        foreach (var input in inputs)
+        foreach (string input in inputs)
         {
             var task = Task.Run(() => ChatMarkdown.ToSpans(input).ToList());
             var completed = await Task.WhenAny(task, Task.Delay(2000));
             await Assert.That(completed == task).IsTrue(); // not the timeout
-            await Assert.That(task.IsCompleted).IsTrue();   // finished, not hung
+            await Assert.That(task.IsCompleted).IsTrue(); // finished, not hung
             _ = task.Result; // must have produced spans
         }
     }
@@ -203,7 +202,7 @@ public class ChatMarkdownInlineTests
     [Test]
     public async Task ToSpans_HugeRunawayInput_IsBounded()
     {
-        var input = "*" + new string('x', 100_000) + "_tail";
+        string input = "*" + new string('x', 100_000) + "_tail";
         var sw = Stopwatch.StartNew();
         var spans = ChatMarkdown.ToSpans(input).ToList();
         sw.Stop();

@@ -16,18 +16,18 @@
 </div>
 
 @code {
-    protected override void OnInitialized()
-    {
-        Toasts.Changed += OnChanged;
-    }
+protected override void OnInitialized()
+{
+    Toasts.Changed += OnChanged;
+}
 
-    private async void OnChanged(object? _, EventArgs __)
-    {
-        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-    }
+private async void OnChanged(object? _, EventArgs __)
+{
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
 
-    public void Dispose()
-    {
-        Toasts.Changed -= OnChanged;
-    }
+public void Dispose()
+{
+    Toasts.Changed -= OnChanged;
+}
 }

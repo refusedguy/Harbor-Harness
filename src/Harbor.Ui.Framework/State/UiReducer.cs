@@ -262,7 +262,7 @@ public static class UiReducer
     {
         if (string.IsNullOrEmpty(id) || !state.PanelStates.ContainsKey(id) || delta == 0)
             return state;
-        int current = state.PanelSizes.TryGetValue(id, out var s) ? s : 0;
+        int current = state.PanelSizes.TryGetValue(id, out int s) ? s : 0;
         int next = Math.Clamp(current + delta, PanelRegistry.MinSize, PanelRegistry.MaxSize);
         return state with { PanelSizes = state.PanelSizes.SetItem(id, next) };
     }

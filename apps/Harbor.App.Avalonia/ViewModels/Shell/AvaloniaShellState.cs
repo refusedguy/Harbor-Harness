@@ -1,7 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Harbor.App.Avalonia.ViewModels.Shell;
-
 /// <summary>
 ///     Local shell state for the experimental Orca shell — layout/chrome only.
 /// </summary>
@@ -21,13 +19,21 @@ namespace Harbor.App.Avalonia.ViewModels.Shell;
 /// </remarks>
 public sealed partial class AvaloniaShellState : ObservableObject
 {
-    /// <summary>Current left-rail width in px (resizable in Phase D).</summary>
+
+    /// <summary>Active main mode: Chat | Code.</summary>
     [ObservableProperty]
-    private double _leftRailWidth = 280;
+    private string _activeMode = "Chat";
+
+    /// <summary>True when the user opts into the compact density (Phase B toggle).</summary>
+    [ObservableProperty]
+    private bool _isCompactDensity;
 
     /// <summary>True when the user collapsed the left rail (Ctrl+B).</summary>
     [ObservableProperty]
     private bool _leftRailCollapsed;
+    /// <summary>Current left-rail width in px (resizable in Phase D).</summary>
+    [ObservableProperty]
+    private double _leftRailWidth = 280;
 
     /// <summary>Active right-panel tab: None | Files | Diff | Usage.</summary>
     [ObservableProperty]
@@ -37,15 +43,7 @@ public sealed partial class AvaloniaShellState : ObservableObject
     [ObservableProperty]
     private double _rightPanelWidth = 300;
 
-    /// <summary>Active main mode: Chat | Code.</summary>
-    [ObservableProperty]
-    private string _activeMode = "Chat";
-
     /// <summary>Free-text filter applied to the session list.</summary>
     [ObservableProperty]
     private string _sessionListFilter = string.Empty;
-
-    /// <summary>True when the user opts into the compact density (Phase B toggle).</summary>
-    [ObservableProperty]
-    private bool _isCompactDensity;
 }

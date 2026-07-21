@@ -1,13 +1,7 @@
 // Hosting layer tests — ScriptHost orchestrates engine + store + compiler.
 using Harbor.Scripting.Abstractions;
-using Harbor.Scripting.Bridge;
-using Harbor.Scripting.Compilation;
-using Harbor.Scripting.Engines;
-using Harbor.Scripting.Hosting;
-using Harbor.Scripting.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Hosting;
-
 /// <summary>
 ///     A fake engine that records Evaluate calls and returns canned results.
 ///     Used to test ScriptHost in isolation from real engines.
@@ -16,7 +10,6 @@ internal sealed class FakeEngine : IScriptEngine
 {
     public int EvaluateCalls { get; private set; }
     public Func<string, Result> OnEvaluate { get; set; } = _ => Result.Success();
-    public Func<string, Result<T>> OnEvaluateT<T>() => _ => Result.Failure<T>("not implemented");
 
     public Result Evaluate(string code, ScriptEngineOptions options, ScriptGlobals globals)
     {
@@ -29,6 +22,7 @@ internal sealed class FakeEngine : IScriptEngine
         EvaluateCalls++;
         return OnEvaluateT<T>()(code);
     }
+    public Func<string, Result<T>> OnEvaluateT<T>() => _ => Result.Failure<T>("not implemented");
 }
 
 public class ScriptHostTests

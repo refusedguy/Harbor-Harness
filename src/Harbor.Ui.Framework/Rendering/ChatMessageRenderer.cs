@@ -5,9 +5,8 @@ using Harbor.Ui.Framework.ViewModels;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Ui.Framework.Rendering;
-
 /// <summary>
-///     Renders <see cref="UiState"/> transitions into the chat-line and
+///     Renders <see cref="UiState" /> transitions into the chat-line and
 ///     tool-call collections the chat view binds to. Encapsulates the
 ///     append-only projection (the <c>while</c> loop that walks new lines)
 ///     plus the start/end coalescing of tool-call cards so
@@ -23,7 +22,7 @@ namespace Harbor.Ui.Framework.Rendering;
 ///     </para>
 ///     <para>
 ///         Registered as a singleton in <c>AppHost</c> so tests can drive
-///         <see cref="Render"/> with synthetic <see cref="UiState"/>
+///         <see cref="Render" /> with synthetic <see cref="UiState" />
 ///         values and assert the projected collections without spinning
 ///         up the full chat view-model + dispatcher subscription.
 ///     </para>
@@ -31,8 +30,8 @@ namespace Harbor.Ui.Framework.Rendering;
 public sealed class ChatMessageRenderer
 {
     /// <summary>
-    ///     Project new lines from <paramref name="state"/> into
-    ///     <paramref name="lines"/> / <paramref name="toolCalls"/>.
+    ///     Project new lines from <paramref name="state" /> into
+    ///     <paramref name="lines" /> / <paramref name="toolCalls" />.
     ///     Idempotent under repeated notifications: only lines with
     ///     index &gt;= the rendered cursor are projected, so calling
     ///     this twice with the same state is a no-op on the second call.
@@ -73,9 +72,9 @@ public sealed class ChatMessageRenderer
     }
 
     /// <summary>
-    ///     Project a <see cref="ChatRole.Tool"/> (start) or
-    ///     <see cref="ChatRole.ToolResult"/> (end) line into a
-    ///     <see cref="ToolCallViewModel"/> card. Coalesces start/end
+    ///     Project a <see cref="ChatRole.Tool" /> (start) or
+    ///     <see cref="ChatRole.ToolResult" /> (end) line into a
+    ///     <see cref="ToolCallViewModel" /> card. Coalesces start/end
     ///     pairs by tool name + index parity.
     /// </summary>
     private static void ProjectToolLine(
@@ -112,7 +111,7 @@ public sealed class ChatMessageRenderer
                     IconText = IconForTool(toolName),
                     Status = ToolCallStatus.Running,
                     ArgsPreview = TruncateForPreview(payload),
-                    IsExpanded = false,
+                    IsExpanded = false
                 };
                 toolCallById[id] = card;
                 toolCalls.Add(card);
@@ -141,11 +140,11 @@ public sealed class ChatMessageRenderer
             if (card is not null)
             {
                 bool isError = payload.StartsWith("error", StringComparison.OrdinalIgnoreCase)
-                    || payload.StartsWith("fail", StringComparison.OrdinalIgnoreCase);
+                               || payload.StartsWith("fail", StringComparison.OrdinalIgnoreCase);
                 card.Complete(
-                    status: isError ? ToolCallStatus.Error : ToolCallStatus.Success,
-                    resultPreview: TruncateForPreview(payload),
-                    duration: stopwatch.Elapsed);
+                    isError ? ToolCallStatus.Error : ToolCallStatus.Success,
+                    TruncateForPreview(payload),
+                    stopwatch.Elapsed);
             }
             else
             {
@@ -156,7 +155,7 @@ public sealed class ChatMessageRenderer
                     ToolName = toolName,
                     IconText = IconForTool(toolName),
                     Status = ToolCallStatus.Success,
-                    ResultPreview = TruncateForPreview(payload),
+                    ResultPreview = TruncateForPreview(payload)
                 };
                 toolCallById[id] = standalone;
                 toolCalls.Add(standalone);
@@ -192,6 +191,6 @@ public sealed class ChatMessageRenderer
         "task" => "📋",
         "notebook" => "📓",
         "mcp" => "🔌",
-        _ => "🔧",
+        _ => "🔧"
     };
 }

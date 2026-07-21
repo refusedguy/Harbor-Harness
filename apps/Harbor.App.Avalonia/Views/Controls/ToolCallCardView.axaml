@@ -1,6 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
              xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.Controls.ToolCallCardView">
 
@@ -23,7 +22,7 @@
     -->
 
     <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey"/>
+        <vw:BrushKeyConverter x:Key="BrushKey" />
     </UserControl.Resources>
 
     <Border Classes="ToolCallCard"
@@ -40,7 +39,7 @@
                 <TextBlock Grid.Column="0"
                            Text="{Binding IconText}"
                            FontSize="13"
-                           VerticalAlignment="Center"/>
+                           VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1"
                            Text="{Binding ToolName}"
                            FontWeight="SemiBold"
@@ -48,7 +47,7 @@
                            FontSize="12"
                            Margin="6,0,8,0"
                            VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis"/>
+                           TextTrimming="CharacterEllipsis" />
                 <Border Grid.Column="2"
                         Background="{Binding StatusBrushKey, Converter={StaticResource BrushKey}}"
                         CornerRadius="3"
@@ -57,14 +56,14 @@
                     <TextBlock Text="{Binding StatusPill}"
                                FontSize="10"
                                FontFamily="{StaticResource CodeFont}"
-                               Foreground="{StaticResource MochaCrust}"/>
+                               Foreground="{StaticResource MochaCrust}" />
                 </Border>
                 <TextBlock Grid.Column="3"
                            Text="{Binding DurationText}"
                            FontSize="10"
                            Foreground="{StaticResource MochaOverlay2}"
                            Margin="8,0,0,0"
-                           VerticalAlignment="Center"/>
+                           VerticalAlignment="Center" />
             </Grid>
 
             <!-- Expandable body: args + result -->
@@ -76,7 +75,7 @@
                     <TextBlock Text="Args"
                                FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaOverlay2}"/>
+                               Foreground="{StaticResource MochaOverlay2}" />
                     <Border Background="{StaticResource MochaCrust}"
                             CornerRadius="4"
                             Padding="8,4">
@@ -84,13 +83,13 @@
                                    FontFamily="{StaticResource CodeFont}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource MochaSubtext0}"/>
+                                   Foreground="{StaticResource MochaSubtext0}" />
                     </Border>
                     <TextBlock Text="Result"
                                FontSize="10"
                                FontWeight="SemiBold"
                                Foreground="{StaticResource MochaOverlay2}"
-                               Margin="0,4,0,0"/>
+                               Margin="0,4,0,0" />
                     <Border Background="{StaticResource MochaCrust}"
                             CornerRadius="4"
                             Padding="8,4">
@@ -98,11 +97,10 @@
                                    FontFamily="{StaticResource CodeFont}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource MochaSubtext0}"/>
+                                   Foreground="{StaticResource MochaSubtext0}" />
                     </Border>
                 </StackPanel>
             </Expander>
         </Grid>
     </Border>
 </UserControl>
-

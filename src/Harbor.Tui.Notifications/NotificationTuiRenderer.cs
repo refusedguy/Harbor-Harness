@@ -6,31 +6,29 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.Notifications;
-
 /// <summary>
 ///     Non-interactive renderer that fires desktop OS notifications on key
-/// agent events. No terminal output — designed for long-running agents in the
-/// background (CI, dev server, watch loop) where the user wants to be notified
-/// when the agent finishes, errors, or runs into compaction.
+///     agent events. No terminal output — designed for long-running agents in the
+///     background (CI, dev server, watch loop) where the user wants to be notified
+///     when the agent finishes, errors, or runs into compaction.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>When to use:</b> you started Harbor in the background with
-/// <c>harbor ask "refactor this entire folder"</c> and switched to another
-/// window. The notification fires when the agent finishes (or fails) so you
-/// don't have to poll the terminal.
+///         <c>harbor ask "refactor this entire folder"</c> and switched to another
+///         window. The notification fires when the agent finishes (or fails) so you
+///         don't have to poll the terminal.
 ///     </para>
 ///     <para>
 ///         Select with <c>HARBOR_TUI=notifications</c>. Combine with
-/// <c>harbor ask "&lt;prompt&gt;"</c> for one-shot background runs.
+///         <c>harbor ask "&lt;prompt&gt;"</c> for one-shot background runs.
 ///     </para>
 /// </remarks>
 public sealed class NotificationTuiRenderer : BaseTuiRenderer
 {
-    private readonly ILogger<NotificationTuiRenderer> _logger;
     private readonly INotificationBackend _backend;
+    private readonly ILogger<NotificationTuiRenderer> _logger;
 
     /// <summary>Construct a <see cref="NotificationTuiRenderer" /> using the platform-default backend.</summary>
     /// <param name="logger">Logger.</param>
@@ -61,20 +59,20 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
             switch (@event)
             {
                 case AgentErrorEvent err:
-                    _backend.Notify("Harbor — error", err.Message, isError: true);
+                    _backend.Notify("Harbor — error", err.Message, true);
                     break;
 
                 case AgentEndEvent:
                     // Fire a "done" notification. Skip if the agent ended in error
                     // (AgentErrorEvent already fired) — note both events arrive in
                     // sequence on errors; this is a heuristic to avoid double-fire.
-                    _backend.Notify("Harbor — done", "Agent finished.", isError: false);
+                    _backend.Notify("Harbor — done", "Agent finished.", false);
                     break;
 
                 case CompactionCompletedEvent cc:
                     _backend.Notify("Harbor — compacted",
                         $"Pruned {cc.PrunedMessageCount} messages, saved ~{cc.TokensSaved} tokens.",
-                        isError: false);
+                        false);
                     break;
 
                 case ToolExecutionEndEvent tee when tee.IsError:
@@ -83,7 +81,7 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
                     // on ToolExecutionStartEvent). Use the call id as the identifier.
                     string preview = tee.Result.Output ?? string.Empty;
                     if (preview.Length > 200) preview = preview[..200] + "…";
-                    _backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, isError: true);
+                    _backend.Notify($"Harbor — tool {tee.ToolCallId} failed", preview, true);
                     break;
             }
         }
@@ -133,20 +131,23 @@ public sealed class NotificationTuiRenderer : BaseTuiRenderer
 public interface INotificationBackend
 {
     /// <summary>Backend display name (for logging).</summary>
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>Fire a desktop notification.</summary>
     /// <param name="title">Notification title.</param>
     /// <param name="body">Notification body text.</param>
     /// <param name="isError">Hint to style the notification as an error.</param>
-    void Notify(string title, string body, bool isError);
+    public void Notify(string title, string body, bool isError);
 }
 
 /// <summary>Linux: shells out to <c>notify-send</c> (libnotify).</summary>
 internal sealed class LinuxNotifySendBackend : INotificationBackend
 {
     private readonly ILogger _logger;
-    public LinuxNotifySendBackend(ILogger logger) => _logger = logger;
+    public LinuxNotifySendBackend(ILogger logger)
+    {
+        _logger = logger;
+    }
     public string Name => "notify-send (libnotify)";
 
     public void Notify(string title, string body, bool isError)
@@ -165,7 +166,7 @@ internal sealed class LinuxNotifySendBackend : INotificationBackend
                 RedirectStandardError = true,
                 UseShellExecute = false
             };
-            foreach (var a in args) psi.ArgumentList.Add(a);
+            foreach (string a in args) psi.ArgumentList.Add(a);
             var p = Process.Start(psi);
             p?.WaitForExit(TimeSpan.FromSeconds(3));
         }
@@ -180,7 +181,10 @@ internal sealed class LinuxNotifySendBackend : INotificationBackend
 internal sealed class MacOsascriptBackend : INotificationBackend
 {
     private readonly ILogger _logger;
-    public MacOsascriptBackend(ILogger logger) => _logger = logger;
+    public MacOsascriptBackend(ILogger logger)
+    {
+        _logger = logger;
+    }
     public string Name => "osascript (macOS Notification Center)";
 
     public void Notify(string title, string body, bool isError)
@@ -208,12 +212,15 @@ internal sealed class MacOsascriptBackend : INotificationBackend
 
 /// <summary>
 ///     Windows: shells out to <c>msg</c> (built-in) or the user can swap in
-/// <c>snoretoast</c> / <c>burnttoast</c> for proper Action Center toasts.
+///     <c>snoretoast</c> / <c>burnttoast</c> for proper Action Center toasts.
 /// </summary>
 internal sealed class WindowsToastBackend : INotificationBackend
 {
     private readonly ILogger _logger;
-    public WindowsToastBackend(ILogger logger) => _logger = logger;
+    public WindowsToastBackend(ILogger logger)
+    {
+        _logger = logger;
+    }
     public string Name => "msg.exe (Windows)";
 
     public void Notify(string title, string body, bool isError)

@@ -1,6 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
              x:Class="Harbor.App.Avalonia.Views.CommandPaletteView"
              Background="#60000000"
@@ -19,9 +18,9 @@
             <Border Grid.Row="0" Background="{StaticResource MochaSurface0}" Padding="16,10">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="⌘" FontSize="16" Foreground="{StaticResource MochaBlue}"
-                               VerticalAlignment="Center" FontWeight="Bold"/>
+                               VerticalAlignment="Center" FontWeight="Bold" />
                     <TextBlock Text="Command palette" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaBlue}" VerticalAlignment="Center"/>
+                               Foreground="{StaticResource MochaBlue}" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
 
@@ -34,7 +33,7 @@
                      BorderBrush="{StaticResource BorderBrush}"
                      Background="Transparent"
                      FontSize="14"
-                     KeyDown="QueryBox_KeyDown"/>
+                     KeyDown="QueryBox_KeyDown" />
 
             <ListBox Grid.Row="2"
                      ItemsSource="{Binding Results}"
@@ -47,11 +46,11 @@
                     <DataTemplate DataType="vma:CommandResultViewModel">
                         <Grid ColumnDefinitions="24,*,Auto" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding Icon}"
-                                       HorizontalAlignment="Center" FontFamily="{StaticResource CodeFont}"/>
+                                       HorizontalAlignment="Center" FontFamily="{StaticResource CodeFont}" />
                             <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
-                                       TextTrimming="CharacterEllipsis"/>
+                                       TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="11"
-                                       Foreground="{StaticResource MochaOverlay2}" Margin="8,0,0,0"/>
+                                       Foreground="{StaticResource MochaOverlay2}" Margin="8,0,0,0" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

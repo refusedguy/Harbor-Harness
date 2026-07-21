@@ -10,19 +10,19 @@ The **thin facade** layer of Harbor — interface contracts only. After the roun
 
 ## What's in it (post-split)
 
-| Subfolder | Contents |
-| --- | --- |
-| `Agents/` | `IAgentRunner`, `IAgent`, `AgentState`, `IAgentLoop` (interfaces + the per-run state record), `AgentDefinition` (the static blueprint record), `IAgentRegistry`, `IAgentRegistryBuilder` |
-| `Events/` | `IEventBus`, `IEventSubscriber` (the event-bus interface — the `AgentEvent` discriminated union itself lives in `Harbor.Domain/Events/`) |
-| `Models/` | _(empty post-split)_ — `Session`, `Messages`, `MemoryPackFormatters`, `Identifiers/*` moved to `Harbor.Domain/Models/` |
-| `Permissions/` | _(empty post-split)_ — `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `PermissionRequest`, `PermissionResponse`, `IPermissionService` moved to `Harbor.Domain/Permissions/` |
-| `Plugins/` | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext`, `IPluginHost` |
-| `Providers/` | `ILlmClient`, `IProviderRegistry`, `IProviderRegistryBuilder`, plus the LLM-message contract types (`LlmRequest`, `LlmMessage` hierarchy, `LlmContentBlock` hierarchy, `ToolDefinition`) |
-| `Sessions/` | `ISessionStore`, `ISessionContext`, `ISystemPromptBuilder`, `SystemPromptContext`, `ContextFile`, `SkillDescriptor`, `ICompactionService`, `CompactionResult`, `ITokenEstimator`, `HeuristicTokenEstimator` |
-| `Tools/` | `ITool`, `ToolContext`, `ToolProgressUpdate`, `ToolDescriptor`, `ExecutionMode`, `IToolRegistry`, `IToolRegistryBuilder`, `IMcpRegistry` |
-| `Tui/` | `IInputHandler`, `KeyPress`, `KeyPressEventArgs`, `ISlashCommand`, `ICommandContext`, `ISlashCommandRouter` (the full TUI contracts may move again to `Harbor.Ui.Framework` per Task A2 — left here for now) |
-| `Extensions/` | _(empty post-split)_ — `ArrayPoolExtensions`, `CollectionExtensions`, `MemoryPackExtensions` moved to `Harbor.Extensions/` |
-| `ZLinqDropInAssemblyAttribute.cs` | Assembly-level source-generator config (kept here because the interfaces' LINQ call sites resolve via ZLinq drop-in) |
+| Subfolder                         | Contents                                                                                                                                                                                                     |
+|-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Agents/`                         | `IAgentRunner`, `IAgent`, `AgentState`, `IAgentLoop` (interfaces + the per-run state record), `AgentDefinition` (the static blueprint record), `IAgentRegistry`, `IAgentRegistryBuilder`                     |
+| `Events/`                         | `IEventBus`, `IEventSubscriber` (the event-bus interface — the `AgentEvent` discriminated union itself lives in `Harbor.Domain/Events/`)                                                                     |
+| `Models/`                         | _(empty post-split)_ — `Session`, `Messages`, `MemoryPackFormatters`, `Identifiers/*` moved to `Harbor.Domain/Models/`                                                                                       |
+| `Permissions/`                    | _(empty post-split)_ — `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `PermissionRequest`, `PermissionResponse`, `IPermissionService` moved to `Harbor.Domain/Permissions/`                      |
+| `Plugins/`                        | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext`, `IPluginHost`                                                                                                                  |
+| `Providers/`                      | `ILlmClient`, `IProviderRegistry`, `IProviderRegistryBuilder`, plus the LLM-message contract types (`LlmRequest`, `LlmMessage` hierarchy, `LlmContentBlock` hierarchy, `ToolDefinition`)                     |
+| `Sessions/`                       | `ISessionStore`, `ISessionContext`, `ISystemPromptBuilder`, `SystemPromptContext`, `ContextFile`, `SkillDescriptor`, `ICompactionService`, `CompactionResult`, `ITokenEstimator`, `HeuristicTokenEstimator`  |
+| `Tools/`                          | `ITool`, `ToolContext`, `ToolProgressUpdate`, `ToolDescriptor`, `ExecutionMode`, `IToolRegistry`, `IToolRegistryBuilder`, `IMcpRegistry`                                                                     |
+| `Tui/`                            | `IInputHandler`, `KeyPress`, `KeyPressEventArgs`, `ISlashCommand`, `ICommandContext`, `ISlashCommandRouter` (the full TUI contracts may move again to `Harbor.Ui.Framework` per Task A2 — left here for now) |
+| `Extensions/`                     | _(empty post-split)_ — `ArrayPoolExtensions`, `CollectionExtensions`, `MemoryPackExtensions` moved to `Harbor.Extensions/`                                                                                   |
+| `ZLinqDropInAssemblyAttribute.cs` | Assembly-level source-generator config (kept here because the interfaces' LINQ call sites resolve via ZLinq drop-in)                                                                                         |
 
 ## What's NOT in it (post-split)
 
@@ -41,9 +41,9 @@ If you find yourself adding any of the above to `Harbor.Abstractions`, **stop** 
 
 ### Project references (the facade wiring)
 
-| Project | Why |
-| --- | --- |
-| `Harbor.Domain` | Interfaces reference domain types: `ITool.ExecuteAsync` returns `Task<ToolResult>` (Domain), `ISessionStore.AppendMessageAsync` takes `AgentMessage` (Domain), `IEventBus.PublishAsync` takes `AgentEvent` (Domain), `IAgentRegistry.GetAgent` returns `AgentDefinition` (Domain). |
+| Project             | Why                                                                                                                                                                                                                                                                                                                        |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Harbor.Domain`     | Interfaces reference domain types: `ITool.ExecuteAsync` returns `Task<ToolResult>` (Domain), `ISessionStore.AppendMessageAsync` takes `AgentMessage` (Domain), `IEventBus.PublishAsync` takes `AgentEvent` (Domain), `IAgentRegistry.GetAgent` returns `AgentDefinition` (Domain).                                         |
 | `Harbor.Extensions` | The facade re-exports `ArrayPoolExtensions`, `StringBuilderPool`, `CollectionExtensions`, `MemoryPackExtensions` transitively so downstream consumers (e.g. `Harbor.Application`, `Harbor.Tools.*`) that already reference `Harbor.Abstractions` don't need to add a new `<ProjectReference Include="Harbor.Extensions">`. |
 
 ### Package references (the interface-only contracts)

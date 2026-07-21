@@ -1,6 +1,5 @@
 // Storage layer — filesystem-backed script store. See IScriptStore.cs for layering rules.
 namespace Harbor.Scripting.Storage;
-
 /// <summary>
 ///     <see cref="IScriptStore" /> backed by a local filesystem directory.
 /// </summary>
@@ -23,8 +22,8 @@ namespace Harbor.Scripting.Storage;
 public sealed class FileSystemScriptStore : IScriptStore
 {
     private static readonly string[] Extensions = [".js", ".ts", ".mjs", ".mts"];
-    private readonly string[] _roots;
     private readonly bool _createRoots;
+    private readonly string[] _roots;
 
     /// <summary>
     ///     Construct a filesystem store over one or more root directories.
@@ -61,14 +60,17 @@ public sealed class FileSystemScriptStore : IScriptStore
     {
         var entries = new List<ScriptEntry>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in _roots)
+        foreach (string root in _roots)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(root))
             {
                 if (_createRoots)
                 {
-                    try { Directory.CreateDirectory(root); } catch { /* ignore; surface on read */ }
+                    try { Directory.CreateDirectory(root); }
+                    catch
+                    { /* ignore; surface on read */
+                    }
                 }
                 continue;
             }
@@ -83,7 +85,7 @@ public sealed class FileSystemScriptStore : IScriptStore
                 return Task.FromResult(Result.Failure<IReadOnlyList<ScriptEntry>>($"Failed to enumerate '{root}': {ex.Message}"));
             }
 
-            foreach (var file in files)
+            foreach (string file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string ext = Path.GetExtension(file);
@@ -113,10 +115,10 @@ public sealed class FileSystemScriptStore : IScriptStore
     /// <inheritdoc />
     public Task<Result<ScriptEntry>> ReadAsync(string name, CancellationToken cancellationToken = default)
     {
-        foreach (var root in _roots)
+        foreach (string root in _roots)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var ext in Extensions)
+            foreach (string ext in Extensions)
             {
                 string path = Path.Combine(root, name + ext);
                 if (File.Exists(path))
@@ -137,7 +139,7 @@ public sealed class FileSystemScriptStore : IScriptStore
             return Task.FromResult(Result.Failure("Script name is empty."));
         }
 
-        var root = _roots[0];
+        string root = _roots[0];
         try
         {
             if (_createRoots)
@@ -198,7 +200,7 @@ public sealed class FileSystemScriptStore : IScriptStore
     {
         try
         {
-            var content = File.ReadAllText(path);
+            string content = File.ReadAllText(path);
             var info = new FileInfo(path);
             string hash = HashContent(content);
             return Result.Success(new ScriptEntry(name, path, content, hash, info.LastWriteTimeUtc));
@@ -211,16 +213,16 @@ public sealed class FileSystemScriptStore : IScriptStore
 
     private static string HashContent(string content)
     {
-        var bytes = Encoding.UTF8.GetBytes(content);
-        var hash = SHA256.HashData(bytes);
+        byte[] bytes = Encoding.UTF8.GetBytes(content);
+        byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
     }
 
     private string? FindExisting(string name)
     {
-        foreach (var root in _roots)
+        foreach (string root in _roots)
         {
-            foreach (var ext in Extensions)
+            foreach (string ext in Extensions)
             {
                 string path = Path.Combine(root, name + ext);
                 if (File.Exists(path))

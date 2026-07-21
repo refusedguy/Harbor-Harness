@@ -1,12 +1,9 @@
 using Harbor.E2E.Framework;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.Cli;
-
 /// <summary>
 ///     End-to-end tests for the Harbor CLI one-shot commands. Each test spawns
-///     a real <c>Harbor.App.Cli</c> subprocess via <see cref="CliDriver"/>,
-///     feeds it args + env (pointing at the in-process <see cref="MockLlmServer"/>
+///     a real <c>Harbor.App.Cli</c> subprocess via <see cref="CliDriver" />,
+///     feeds it args + env (pointing at the in-process <see cref="MockLlmServer" />
 ///     when needed), and asserts on captured stdout.
 /// </summary>
 /// <remarks>
@@ -27,7 +24,7 @@ public class CliE2ETests : E2eTestBase
     public async Task VersionCommand_PrintsVersion()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(args: ["--version"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["--version"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -44,7 +41,7 @@ public class CliE2ETests : E2eTestBase
     public async Task HelpCommand_ListsCommands()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(args: ["help"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["help"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -63,7 +60,7 @@ public class CliE2ETests : E2eTestBase
     public async Task TuiCommand_ListsAllRenderers()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(args: ["tui"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["tui"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -82,7 +79,7 @@ public class CliE2ETests : E2eTestBase
     public async Task StorageCommand_ListsBackends()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(args: ["storage"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["storage"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -101,7 +98,7 @@ public class CliE2ETests : E2eTestBase
     public async Task ProvidersCommand_ListsAllRegisteredProviders()
     {
         await using var driver = new CliDriver(CliProjectPath);
-        await driver.StartAsync(args: ["providers"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["providers"], this.GetEnv()).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
@@ -128,20 +125,20 @@ public class CliE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AskCommand_WithMockServer_ReturnsResponse()
     {
-        Server.SetResponse("test-model", "Hello from mock LLM!");
+        this.Server.SetResponse("test-model", "Hello from mock LLM!");
 
         await using var driver = new CliDriver(CliProjectPath);
-        var env = GetEnv();
+        var env = this.GetEnv();
         // Plain renderer: writes streamed text directly to Console.Out for
         // non-interactive ask mode (interactive renderers need a PTY).
         env["HARBOR_TUI"] = "plain";
-        await driver.StartAsync(args: ["ask", "What is the answer?"], env: env).ConfigureAwait(false);
+        await driver.StartAsync(["ask", "What is the answer?"], env).ConfigureAwait(false);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
         string output = await driver.ReadScreenAsync().ConfigureAwait(false);
 
         await Assert.That(exit).IsEqualTo(0);
         await Assert.That(output).Contains("Hello from mock LLM!");
         // Verify the mock server actually received a chat-completion request.
-        await Assert.That(Server.ReceivedRequests.Count).IsGreaterThan(0);
+        await Assert.That(this.Server.ReceivedRequests.Count).IsGreaterThan(0);
     }
 }

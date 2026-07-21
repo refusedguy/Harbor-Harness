@@ -1,8 +1,7 @@
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
-
 /// <summary>
 ///     Per-test fixture: creates a unique temp <c>~/.harbor</c>-like directory with a
-/// <c>plugins/</c> subdirectory. Disposes on test completion.
+///     <c>plugins/</c> subdirectory. Disposes on test completion.
 /// </summary>
 public sealed class PluginTestFixture : IDisposable
 {
@@ -26,6 +25,15 @@ public sealed class PluginTestFixture : IDisposable
     /// <summary>The synthetic <c>~/.harbor/plugins/cache</c> directory.</summary>
     public string CacheDir { get; }
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        try { Directory.Delete(_tempRoot, true); }
+        catch (IOException)
+        { /* best-effort cleanup */
+        }
+    }
+
     /// <summary>Create a new fixture under a unique temp path.</summary>
     public static Task<PluginTestFixture> CreateAsync(string? uniqueSuffix = null)
     {
@@ -40,12 +48,5 @@ public sealed class PluginTestFixture : IDisposable
     {
         string path = Path.Combine(PluginsDir, fileName);
         await File.WriteAllTextAsync(path, source).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        try { Directory.Delete(_tempRoot, recursive: true); }
-        catch (IOException) { /* best-effort cleanup */ }
     }
 }

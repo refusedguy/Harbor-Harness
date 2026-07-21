@@ -1,18 +1,16 @@
+using System.Diagnostics;
+using Excubo.Analyzers.DependencyInjection;
 using Harbor.App.Blazor.Configuration;
 using Harbor.App.Blazor.Services;
 using Harbor.App.Blazor.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
-using Excubo.Analyzers.DependencyInjection;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Blazor;
-
 /// <summary>
 ///     Entry point for the Harbor Blazor Server desktop app. Spins up Kestrel
 ///     on <c>http://localhost:5000</c>, opens the host browser, and serves the
@@ -27,10 +25,10 @@ namespace Harbor.App.Blazor;
 ///         <c>--no-open-browser</c>.
 ///     </para>
 ///     <para>
-///         All UI state flows through <see cref="UiStore"/> (TEA/MVU pattern).
-///         Razor components subscribe to <see cref="UiStore.Changed"/> and
-///         re-render via <see cref="ComponentBase.InvokeAsync"/> marshalled by
-///         <see cref="BlazorDispatcherAdapter"/>.
+///         All UI state flows through <see cref="UiStore" /> (TEA/MVU pattern).
+///         Razor components subscribe to <see cref="UiStore.Changed" /> and
+///         re-render via <see cref="ComponentBase.InvokeAsync" /> marshalled by
+///         <see cref="BlazorDispatcherAdapter" />.
 ///     </para>
 /// </remarks>
 internal static class Program
@@ -64,7 +62,7 @@ internal static class Program
     {
         bool autoOpenArg = !Array.Exists(args, a => a is "--no-open-browser" or "--no-browser");
 
-        WebApplication app = BuildApp(args);
+        var app = BuildApp(args);
 
         // Resolve BlazorConfig from the built host so Main can honour the
         // persisted ListenPort + AutoOpenBrowser preferences. The CLI flag
@@ -108,17 +106,17 @@ internal static class Program
     }
 
     /// <summary>
-    ///     Builds the configured <see cref="WebApplication"/> without starting
+    ///     Builds the configured <see cref="WebApplication" /> without starting
     ///     Kestrel. Internal so <c>Harbor.App.Blazor.Tests</c> can resolve every
-    ///     registered service from <see cref="WebApplication.Services"/> and
-    ///     assert the DI container is complete. <see cref="Main"/> calls this
+    ///     registered service from <see cref="WebApplication.Services" /> and
+    ///     assert the DI container is complete. <see cref="Main" /> calls this
     ///     and then invokes <c>app.RunAsync()</c> on the result.
     /// </summary>
-    /// <param name="args">CLI args forwarded to <see cref="WebApplication.CreateBuilder"/>.</param>
-    /// <returns>A built (but not started) <see cref="WebApplication"/>.</returns>
+    /// <param name="args">CLI args forwarded to <see cref="WebApplication.CreateBuilder" />.</param>
+    /// <returns>A built (but not started) <see cref="WebApplication" />.</returns>
     internal static WebApplication BuildApp(string[] args)
     {
-        WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+        var builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents()
@@ -196,7 +194,7 @@ internal static class Program
         // Blazor circuit-scoped JS interop.
         builder.Services.AddScoped<HarborJsInterop>();
 
-        WebApplication app = builder.Build();
+        var app = builder.Build();
 
         app.UseStaticFiles();
         app.UseAntiforgery();
@@ -211,7 +209,7 @@ internal static class Program
     {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            Process.Start(new ProcessStartInfo
             {
                 FileName = url,
                 UseShellExecute = true

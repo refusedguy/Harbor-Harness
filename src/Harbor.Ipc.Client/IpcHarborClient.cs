@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Out-of-process <see cref="IHarborClient" /> implementation. Talks to
 ///     a remote <c>HarborIpcServer</c> via MessagePack-over-pipe (Windows)
@@ -28,8 +28,8 @@ public sealed class IpcHarborClient : IHarborClient
     private readonly ILogger<IpcHarborClient> _logger;
     private readonly MessagePackRpcClient _rpc;
     private readonly ClientPipeTransport _transport;
-    private int _disposed;
     private int _connected;
+    private int _disposed;
 
     /// <summary>
     ///     Construct an IPC client targeting the given pipe / socket.
@@ -200,7 +200,7 @@ public sealed class IpcHarborClient : IHarborClient
 
     /// <inheritdoc />
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         // Tell the server to start pushing events for this client.
         var resp = await _rpc.SendAsync(new SubscribeToEventsRequest(), ct).ConfigureAwait(false);
@@ -234,6 +234,6 @@ internal static class HarborResponseExtensions
     /// <summary>Cast to <see cref="OkResponse" />, throwing if it's not.</summary>
     public static OkResponse AsOk(this HarborResponse response)
         => response as OkResponse
-            ?? throw new InvalidOperationException(
-                $"Expected OkResponse, got {response.GetType().Name}");
+           ?? throw new InvalidOperationException(
+               $"Expected OkResponse, got {response.GetType().Name}");
 }

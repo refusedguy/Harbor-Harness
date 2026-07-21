@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Target file path. |
 | `content` | string | Required. UTF-8 text to write. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"path":"notes.txt","content":"hello world"}
+
 ```
 
         ## Dependencies

@@ -1,11 +1,8 @@
-using System.IO;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Extensions;
-
 /// <summary>
-///     Fluent extension methods for <see cref="DotNetPublishSettings"/>.
+///     Fluent extension methods for <see cref="DotNetPublishSettings" />.
 ///     Centralizes the per-flag <c>SetProperty</c> chains so target code
 ///     stays readable.
 /// </summary>
@@ -13,7 +10,7 @@ public static class DotNetPublishExtensions
 {
     /// <summary>
     ///     Adds a single <c>/p:Name=value</c> property to the publish invocation
-    ///     only if <paramref name="value"/> is not <c>null</c> or whitespace.
+    ///     only if <paramref name="value" /> is not <c>null</c> or whitespace.
     /// </summary>
     public static DotNetPublishSettings SetPropertyIfValue(
         this DotNetPublishSettings settings,

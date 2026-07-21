@@ -1,8 +1,5 @@
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Tools;
-
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Discriminated union of streaming events delivered to
 ///     <see cref="IHarborClient.SubscribeToEventsAsync" />.
@@ -100,7 +97,7 @@ public abstract record HarborEvent
         public override HarborEventKind Kind => HarborEventKind.CompactionStarted;
     }
 
-    /// <summary>Compaction completed; <paramref name="Pruned"/> messages folded, <paramref name="Saved"/> tokens reclaimed.</summary>
+    /// <summary>Compaction completed; <paramref name="Pruned" /> messages folded, <paramref name="Saved" /> tokens reclaimed.</summary>
     public sealed record CompactionCompleted(string SessionId, int Pruned, int Saved) : HarborEvent
     {
         /// <inheritdoc />
@@ -146,5 +143,5 @@ public enum HarborEventKind
     CompactionStarted = 9,
 
     /// <summary>See <see cref="HarborEvent.CompactionCompleted" />.</summary>
-    CompactionCompleted = 10,
+    CompactionCompleted = 10
 }

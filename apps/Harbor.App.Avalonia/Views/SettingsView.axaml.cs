@@ -2,9 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Settings dialog code-behind.
 /// </summary>

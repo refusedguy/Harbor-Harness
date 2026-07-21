@@ -1,25 +1,23 @@
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Ui.Framework.Configuration;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Sessions;
-
 /// <summary>
-///     Creates <see cref="Session"/> objects with the correct provider/model
-///     resolved from <see cref="ICommonConfigReader"/> (with HARBOR_MODEL
+///     Creates <see cref="Session" /> objects with the correct provider/model
+///     resolved from <see cref="ICommonConfigReader" /> (with HARBOR_MODEL
 ///     env-var override). Owns the agent-definition resolution + provider/model
-///     split logic so the <see cref="SessionManager"/> facade stays slim.
+///     split logic so the <see cref="SessionManager" /> facade stays slim.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Per-session UiStore:</b> the factory no longer touches the
 ///         UiStore directly — store binding + history replay is done by
-///         <see cref="SessionSwitcher.OpenAsync"/> on the per-session
-///         UiStore owned by <see cref="SessionContext"/>. The factory just
+///         <see cref="SessionSwitcher.OpenAsync" /> on the per-session
+///         UiStore owned by <see cref="SessionContext" />. The factory just
 ///         creates the session record (and, for branches, copies messages).
 ///     </para>
 ///     <para>
@@ -31,12 +29,12 @@ namespace Harbor.Ui.Framework.Sessions;
 /// </remarks>
 public sealed class SessionFactory
 {
-    private readonly IServiceProvider _services;
     private readonly IAgent _agent;
-    private readonly ISessionStore _sessionStore;
     private readonly ILogger<SessionFactory> _logger;
+    private readonly IServiceProvider _services;
+    private readonly ISessionStore _sessionStore;
 
-    /// <summary>Construct a <see cref="SessionFactory"/>.</summary>
+    /// <summary>Construct a <see cref="SessionFactory" />.</summary>
     public SessionFactory(
         IServiceProvider services,
         IAgent agent,
@@ -62,7 +60,7 @@ public sealed class SessionFactory
         var pair = await configReader.TryReadProviderModelAsync().ConfigureAwait(false);
         if (pair is null) return (null, null);
 
-        var (provider, model) = pair.Value;
+        (string? provider, string? model) = pair.Value;
         if (string.IsNullOrEmpty(provider) || string.IsNullOrEmpty(model))
             return (null, null);
 
@@ -77,21 +75,21 @@ public sealed class SessionFactory
     }
 
     /// <summary>
-    ///     Resolve an <see cref="AgentDefinition"/> from the registry with
+    ///     Resolve an <see cref="AgentDefinition" /> from the registry with
     ///     optional name/provider/model overrides. Falls back to the first
     ///     registered agent when the named agent doesn't exist.
     /// </summary>
     /// <param name="agentName">Optional agent name override (defaults to "code").</param>
     /// <param name="providerId">Optional provider id override.</param>
     /// <param name="modelId">Optional model id override.</param>
-    /// <returns>The resolved <see cref="AgentDefinition"/>.</returns>
+    /// <returns>The resolved <see cref="AgentDefinition" />.</returns>
     public AgentDefinition ResolveAgentDefinition(string? agentName, string? providerId, string? modelId)
     {
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
+        var agents = _services.GetRequiredService<IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
-            ?? agents.GetAllAgents().First();
+                       ?? agents.GetAllAgents().First();
 
-        var (configProvider, configModel) = ResolveProviderModelFromConfigAsync().GetAwaiter().GetResult();
+        (string? configProvider, string? configModel) = ResolveProviderModelFromConfigAsync().GetAwaiter().GetResult();
         string provider = providerId ?? configProvider ?? agentDef.ProviderId;
         string model = modelId ?? configModel ?? agentDef.Model;
         return agentDef.WithModel(model, provider);
@@ -99,22 +97,22 @@ public sealed class SessionFactory
 
     /// <summary>
     ///     Create the default session if none exists yet. Reads the fresh
-    ///     <see cref="CommonConfig"/> from disk so the wizard's saved
+    ///     <see cref="CommonConfig" /> from disk so the wizard's saved
     ///     provider/model take effect even though the DI singleton was
     ///     loaded before the wizard ran. Does NOT bind the agent or UiStore
-    ///     — that's <see cref="SessionSwitcher.OpenAsync"/>'s job, called
-    ///     by <see cref="SessionManager.EnsureDefaultSessionAsync"/> /
-    ///     <see cref="SessionManager.OpenSessionAsync"/>.
+    ///     — that's <see cref="SessionSwitcher.OpenAsync" />'s job, called
+    ///     by <see cref="SessionManager.EnsureDefaultSessionAsync" /> /
+    ///     <see cref="SessionManager.OpenSessionAsync" />.
     /// </summary>
     /// <returns>The created session, or null on failure.</returns>
     public async Task<Session?> CreateDefaultAsync()
     {
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
+        var agents = _services.GetRequiredService<IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault()
-            ?? throw new InvalidOperationException("No agents registered.");
+                       ?? throw new InvalidOperationException("No agents registered.");
 
         // Override the agent definition with the fresh CommonConfig values.
-        var (providerId, modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        (string? providerId, string? modelId) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         if (!string.IsNullOrEmpty(providerId) && !string.IsNullOrEmpty(modelId))
         {
             agentDef = agentDef.WithModel(modelId, providerId);
@@ -137,7 +135,7 @@ public sealed class SessionFactory
 
     /// <summary>
     ///     Create a new session with the given agent/model overrides. Does
-    ///     NOT bind the agent or UiStore — see <see cref="CreateDefaultAsync"/>.
+    ///     NOT bind the agent or UiStore — see <see cref="CreateDefaultAsync" />.
     /// </summary>
     /// <param name="agentName">Optional agent name override.</param>
     /// <param name="providerId">Optional provider id override.</param>
@@ -201,17 +199,17 @@ public sealed class SessionFactory
         return branch;
     }
 
-    /// <summary>Convert an <see cref="AgentMessage"/> into a chat-line role + text for the UI store.</summary>
-    public static (Harbor.Ui.Framework.State.ChatRole role, string text) MessageToChatLine(AgentMessage msg)
+    /// <summary>Convert an <see cref="AgentMessage" /> into a chat-line role + text for the UI store.</summary>
+    public static (ChatRole role, string text) MessageToChatLine(AgentMessage msg)
     {
         return msg switch
         {
-            Harbor.Abstractions.Models.UserMessage u => (Harbor.Ui.Framework.State.ChatRole.User, u.Content),
-            Harbor.Abstractions.Models.AssistantMessage a => (Harbor.Ui.Framework.State.ChatRole.Assistant,
-                string.Join(string.Empty, a.Parts.OfType<Harbor.Abstractions.Models.TextPart>().Select(p => p.Text))),
-            Harbor.Abstractions.Models.ToolResultMessage t => (Harbor.Ui.Framework.State.ChatRole.ToolResult,
+            UserMessage u => (ChatRole.User, u.Content),
+            AssistantMessage a => (ChatRole.Assistant,
+                string.Join(string.Empty, a.Parts.OfType<TextPart>().Select(p => p.Text))),
+            ToolResultMessage t => (ChatRole.ToolResult,
                 string.Join("\n", t.Results.Select(r => $"[{r.ToolName}] {r.Output}"))),
-            _ => (Harbor.Ui.Framework.State.ChatRole.System, msg.Role)
+            _ => (ChatRole.System, msg.Role)
         };
     }
 }

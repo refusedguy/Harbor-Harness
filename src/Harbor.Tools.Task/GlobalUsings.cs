@@ -9,4 +9,3 @@ global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Models;
 global using Harbor.Abstractions.Models.Identifiers;
 global using Harbor.Abstractions.Tools;
-

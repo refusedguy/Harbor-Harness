@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Absolute or relative file path. |
 | `offset` | integer | Optional. 1-based start line. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"path":"src/Program.cs","offset":50,"limit":20}
+
 ```
 
         ## Dependencies

@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Transport;
-
 /// <summary>
 ///     Client-side transport. Opens an outbound connection to a server
 ///     <see cref="ServerPipeTransport" /> (named pipe on Windows, Unix
@@ -21,10 +20,9 @@ namespace Harbor.Ipc.Transport;
 /// </remarks>
 public sealed class ClientPipeTransport : IPipeTransport
 {
-    private readonly string _endpoint;
     private readonly ILogger _logger;
-    private Stream? _stream;
     private bool _disposed;
+    private Stream? _stream;
 
     /// <summary>
     ///     Construct a client transport targeting the given pipe / socket.
@@ -32,16 +30,26 @@ public sealed class ClientPipeTransport : IPipeTransport
     public ClientPipeTransport(string pipeName, ILogger logger)
     {
         _logger = logger;
-        _endpoint = OperatingSystem.IsWindows()
+        Endpoint = OperatingSystem.IsWindows()
             ? pipeName
             : Path.Combine(Path.GetTempPath(), pipeName + ".sock");
     }
 
     /// <inheritdoc />
-    public string Endpoint => _endpoint;
+    public string Endpoint
+    {
+        get;
+    }
 
     /// <inheritdoc />
     public bool IsBound => _stream is not null && _stream.CanRead && _stream.CanWrite;
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, true)) return;
+        await DisconnectAsync().ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Open a connection to the server. Idempotent — returns the
@@ -56,7 +64,7 @@ public sealed class ClientPipeTransport : IPipeTransport
             ? await ConnectWindowsAsync(ct).ConfigureAwait(false)
             : await ConnectUnixAsync(ct).ConfigureAwait(false);
 
-        _logger.LogInformation("Connected to {Endpoint}", _endpoint);
+        _logger.LogInformation("Connected to {Endpoint}", Endpoint);
         return _stream;
     }
 
@@ -72,18 +80,11 @@ public sealed class ClientPipeTransport : IPipeTransport
         _stream = null;
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, true)) return;
-        await DisconnectAsync().ConfigureAwait(false);
-    }
-
     private async Task<Stream> ConnectWindowsAsync(CancellationToken ct)
     {
         var client = new NamedPipeClientStream(
             ".",
-            _endpoint,
+            Endpoint,
             PipeDirection.InOut,
             PipeOptions.Asynchronous);
         await client.ConnectAsync(ct).ConfigureAwait(false);
@@ -92,11 +93,11 @@ public sealed class ClientPipeTransport : IPipeTransport
 
     private async Task<Stream> ConnectUnixAsync(CancellationToken ct)
     {
-        var endpoint = new UnixDomainSocketEndPoint(_endpoint);
+        var endpoint = new UnixDomainSocketEndPoint(Endpoint);
         // Do NOT `using` the socket — the NetworkStream below takes ownership
         // via ownsSocket: true and disposes it when the stream is disposed.
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         await socket.ConnectAsync(endpoint, ct).ConfigureAwait(false);
-        return new NetworkStream(socket, ownsSocket: true);
+        return new NetworkStream(socket, true);
     }
 }

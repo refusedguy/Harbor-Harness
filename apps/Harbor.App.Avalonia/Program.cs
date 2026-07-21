@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Harbor.App.Avalonia;
 
 // Harbor.App.Avalonia — standalone desktop GUI entry point.
@@ -47,7 +48,7 @@ AppBuilder.Configure<App>()
         App.Services = host.Services;
         App.Host = host;
     })
-    .StartWithClassicDesktopLifetime(args, Avalonia.Controls.ShutdownMode.OnMainWindowClose);
+    .StartWithClassicDesktopLifetime(args, ShutdownMode.OnMainWindowClose);
 
 return 0;
 
@@ -68,7 +69,7 @@ static string ResolveShellMode(string[] args)
             {
                 "orca" => "orca",
                 "classic" => "classic",
-                _ => LogFallback($"unknown --shell value '{args[i + 1]}', falling back to classic"),
+                _ => LogFallback($"unknown --shell value '{args[i + 1]}', falling back to classic")
             };
         }
     }
@@ -82,7 +83,7 @@ static string ResolveShellMode(string[] args)
         {
             "orca" => "orca",
             "classic" => "classic",
-            _ => LogFallback($"unknown HARBOR_SHELL value '{env}', falling back to classic"),
+            _ => LogFallback($"unknown HARBOR_SHELL value '{env}', falling back to classic")
         };
     }
 

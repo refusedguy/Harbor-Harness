@@ -2,13 +2,10 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 namespace Harbor.Plugins.Runtime.Tests.Compilation;
-
 /// <summary>
 ///     Tests for the Compilation layer: <see cref="RoslynPluginCompiler" /> and
-/// <see cref="CachingCompiler" />.
+///     <see cref="CachingCompiler" />.
 /// </summary>
 public sealed class CompilationLayerTests
 {
@@ -83,7 +80,7 @@ public sealed class CompilationLayerTests
         await Assert.That(first.FromCache).IsFalse();
 
         // Cache file should exist now.
-        var cacheFiles = Directory.GetFiles(fixture.CacheDir, "*.dll");
+        string[] cacheFiles = Directory.GetFiles(fixture.CacheDir, "*.dll");
         await Assert.That(cacheFiles.Length).IsGreaterThanOrEqualTo(1);
 
         // Second compile — same hash → cache hit.

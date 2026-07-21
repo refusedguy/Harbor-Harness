@@ -115,12 +115,12 @@ scrollable history, multi-line input with history + autocomplete, status
 bar, stream bar, hotkeys, session sidebar, command palette, toasts, TEA
 integration). Pick by killer feature:
 
-| Renderer       | Killer feature                                            | Trade-off                                          | Best for                                              |
-|----------------|-----------------------------------------------------------|----------------------------------------------------|-------------------------------------------------------|
-| `spectre-tui`  | Official Spectre widget framework (default)               | Heaviest of the four (~50 MB RSS)                  | Everyday chat — the default                           |
-| `termina`      | ANSI precision: 24-bit true color, Kitty kbd, DCS sync    | More code for less (no widget zoo)                 | Power users on Kitty/WezTerm/Ghostty/iTerm2           |
-| `terminal-gui` | Complete widget set: Window/Menu/Dialog/TextView/TreeView | Synchronous `Application.Run` blocks calling thread| Classic full-screen TUI (tig/htop/lazygit style)      |
-| `razor`        | Component model: `.razor` files, hot reload, React-like   | Stream-based repaint; slower build (Razor codegen) | Web devs moving to TUI; reusable component libraries  |
+| Renderer       | Killer feature                                            | Trade-off                                           | Best for                                             |
+|----------------|-----------------------------------------------------------|-----------------------------------------------------|------------------------------------------------------|
+| `spectre-tui`  | Official Spectre widget framework (default)               | Heaviest of the four (~50 MB RSS)                   | Everyday chat — the default                          |
+| `termina`      | ANSI precision: 24-bit true color, Kitty kbd, DCS sync    | More code for less (no widget zoo)                  | Power users on Kitty/WezTerm/Ghostty/iTerm2          |
+| `terminal-gui` | Complete widget set: Window/Menu/Dialog/TextView/TreeView | Synchronous `Application.Run` blocks calling thread | Classic full-screen TUI (tig/htop/lazygit style)     |
+| `razor`        | Component model: `.razor` files, hot reload, React-like   | Stream-based repaint; slower build (Razor codegen)  | Web devs moving to TUI; reusable component libraries |
 
 All four ship the **same hotkey table** (Enter submit, Esc abort/quit,
 Ctrl+L clear, Ctrl+C abort, F2 toggle focus, ↑/↓ line scroll, PgUp/PgDn
@@ -132,30 +132,31 @@ shape (`provider/model/agent · tokens↑↓ · $cost · status · scroll%`).
 See [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) for
 the full comparison matrix.
 
-
 ## Common commands (inside REPL)
 
-| Command           | Description                                         |
-|-------------------|----------------------------------------------------|
-| `/help`           | List all commands.                                  |
-| `/model <name>`   | Switch the active model on the fly.                 |
+| Command           | Description                                          |
+|-------------------|------------------------------------------------------|
+| `/help`           | List all commands.                                   |
+| `/model <name>`   | Switch the active model on the fly.                  |
 | `/provider <key>` | Switch the active provider (anthropic, openai, ...). |
-| `/sessions`       | List saved sessions.                                |
-| `/load <id>`      | Resume a saved session.                             |
-| `/save`           | Save the current session (auto-saves on exit).      |
-| `/clear`          | Clear the transcript (does not delete the session). |
-| `/compact`        | Manually trigger anchored-summary compaction.       |
-| `/tools`          | List registered tools.                              |
-| `/plugins`        | List loaded plugins.                                |
-| `/permissions`    | Open the permission editor.                         |
-| `/quit`           | Exit.                                               |
+| `/sessions`       | List saved sessions.                                 |
+| `/load <id>`      | Resume a saved session.                              |
+| `/save`           | Save the current session (auto-saves on exit).       |
+| `/clear`          | Clear the transcript (does not delete the session).  |
+| `/compact`        | Manually trigger anchored-summary compaction.        |
+| `/tools`          | List registered tools.                               |
+| `/plugins`        | List loaded plugins.                                 |
+| `/permissions`    | Open the permission editor.                          |
+| `/quit`           | Exit.                                                |
 
 ## Troubleshooting
 
 ### `Error: HARBOR_PROVIDER not set`
+
 You didn't pick a provider. Either set the env var or write `~/.harbor/config.json`.
 
 ### `Error: 401 Unauthorized`
+
 API key is wrong, expired, or doesn't have access to the requested model. Verify with `curl`:
 
 ```bash
@@ -167,12 +168,15 @@ curl https://api.anthropic.com/v1/messages \
 ```
 
 ### TUI looks broken on Windows cmd.exe
+
 Use Windows Terminal. Legacy conhost doesn't render ANSI escapes correctly.
 
 ### Plugin load failed with Roslyn error
+
 Check the compile error in the log (`HARBOR_LOGLEVEL=Debug`). Most common: missing `using` directive, or plugin references a type from an assembly the host doesn't expose.
 
 ### Memory keeps growing
+
 Long sessions accumulate. Run `/compact` to fold old turns into a summary, or `/save` + restart.
 
 ## Project structure

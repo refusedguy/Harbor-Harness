@@ -1,16 +1,14 @@
 using System.Text;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Stateless formatter that projects the shared
-/// <see cref="IDiagnosticsPanel" /> ring buffer into a single
-/// multi-line string suitable for assignment to a Terminal.Gui
-/// <c>TextView.Text</c>. Invoked every dirty frame by
-/// <c>TerminalGuiScreen.ApplySnapshot</c> when the F12 diagnostics
-/// overlay is visible.
+///     <see cref="IDiagnosticsPanel" /> ring buffer into a single
+///     multi-line string suitable for assignment to a Terminal.Gui
+///     <c>TextView.Text</c>. Invoked every dirty frame by
+///     <c>TerminalGuiScreen.ApplySnapshot</c> when the F12 diagnostics
+///     overlay is visible.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -67,7 +65,7 @@ public sealed class DiagnosticsView
             string cat = ShortenCategory(e.Category);
             string msg = CollapseWhitespace(e.Message);
             sb.Append(time).Append(' ').Append(tag).Append(' ')
-              .Append(cat).Append(": ").Append(msg).Append('\n');
+                .Append(cat).Append(": ").Append(msg).Append('\n');
         }
 
         return sb.ToString();

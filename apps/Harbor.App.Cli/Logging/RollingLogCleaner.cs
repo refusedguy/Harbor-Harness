@@ -1,23 +1,20 @@
-using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Logging;
-
 /// <summary>
 ///     Keeps the <c>~/.harbor/logs/</c> directory from growing without bound.
-///     On each process startup, <see cref="Cleanup"/> deletes the oldest
-///     <c>harbor-*.log</c> files until at most <see cref="MaxFiles"/> remain.
+///     On each process startup, <see cref="Cleanup" /> deletes the oldest
+///     <c>harbor-*.log</c> files until at most <see cref="MaxFiles" /> remain.
 /// </summary>
 /// <remarks>
-///     Default <see cref="MaxFiles"/> is 50. With one file per CLI run, that's
+///     Default <see cref="MaxFiles" /> is 50. With one file per CLI run, that's
 ///     roughly 50 runs of history — enough to debug a regression reported
 ///     "yesterday" without disk usage ballooning over months of daily use.
 /// </remarks>
 public sealed class RollingLogCleaner
 {
     private readonly string _logDir;
-    private readonly int _maxFiles;
 
     /// <summary>
-    ///     Create a cleaner for <paramref name="logDir"/>.
+    ///     Create a cleaner for <paramref name="logDir" />.
     /// </summary>
     /// <param name="logDir">Directory holding <c>harbor-*.log</c> files.</param>
     /// <param name="maxFiles">How many recent files to keep. Defaults to 50.</param>
@@ -28,13 +25,19 @@ public sealed class RollingLogCleaner
         if (maxFiles < 1)
             throw new ArgumentOutOfRangeException(nameof(maxFiles), "must keep at least 1 file");
         _logDir = logDir;
-        _maxFiles = maxFiles;
+        MaxFiles = maxFiles;
+    }
+
+    /// <summary>Convenience accessor.</summary>
+    public int MaxFiles
+    {
+        get;
     }
 
     /// <summary>
-    ///     Delete all but the newest <see cref="MaxFiles"/> <c>harbor-*.log</c>
-    ///     files in <see cref="_logDir"/>. Files are sorted by
-    ///     <see cref="FileInfo.CreationTimeUtc"/> descending. Missing directory
+    ///     Delete all but the newest <see cref="MaxFiles" /> <c>harbor-*.log</c>
+    ///     files in <see cref="_logDir" />. Files are sorted by
+    ///     <see cref="FileInfo.CreationTimeUtc" /> descending. Missing directory
     ///     is a no-op. Per-file delete failures are swallowed (best-effort).
     /// </summary>
     public void Cleanup()
@@ -60,10 +63,10 @@ public sealed class RollingLogCleaner
             return;
         }
 
-        if (files.Length <= _maxFiles)
+        if (files.Length <= MaxFiles)
             return;
 
-        foreach (FileInfo file in files.Skip(_maxFiles))
+        foreach (var file in files.Skip(MaxFiles))
         {
             try
             {
@@ -79,7 +82,4 @@ public sealed class RollingLogCleaner
             }
         }
     }
-
-    /// <summary>Convenience accessor.</summary>
-    public int MaxFiles => _maxFiles;
 }

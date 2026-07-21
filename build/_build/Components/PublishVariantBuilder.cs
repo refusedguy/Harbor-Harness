@@ -1,25 +1,20 @@
-using System.Collections.Generic;
-using Harbor.Build.Configuration;
-using Nuke.Common;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Components;
-
 /// <summary>
-///     Builds the <c>DotNetPublishSettings</c> for each <see cref="PublishVariant"/>.
+///     Builds the <c>DotNetPublishSettings</c> for each <see cref="PublishVariant" />.
 ///     Knows which <c>dotnet publish</c> properties to set for framework-dependent
 ///     vs. self-contained vs. single-file vs. trimmed vs. NativeAOT.
 /// </summary>
 /// <remarks>
-///     Single responsibility: translate a <see cref="PublishVariant"/> + flags
+///     Single responsibility: translate a <see cref="PublishVariant" /> + flags
 ///     into a <c>DotNetPublishSettings</c> configurator. Does NOT execute the
 ///     publish — that's <c>PublishTarget</c>'s job.
 /// </remarks>
 public sealed class PublishVariantBuilder
 {
-    private readonly BuildSettings _settings;
     private readonly CliBuildConfigurator _configurator;
+    private readonly BuildSettings _settings;
 
     /// <summary>Construct a builder bound to the given build settings.</summary>
     public PublishVariantBuilder(BuildSettings settings, CliBuildConfigurator configurator)
@@ -125,7 +120,7 @@ public sealed class PublishVariantBuilder
     private DotNetPublishSettings ApplyFeatureFlags(DotNetPublishSettings settings, FeatureFlags flags)
     {
         var props = _configurator.BuildProperties(flags);
-        foreach (var (key, value) in props)
+        foreach ((string key, string value) in props)
         {
             settings = settings.SetProperty(key, value);
         }

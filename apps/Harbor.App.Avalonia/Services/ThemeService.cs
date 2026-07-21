@@ -1,13 +1,9 @@
-using Avalonia.Styling;
 using Avalonia;
-using Avalonia.Markup.Xaml;
-using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Styling;
+using Avalonia.Styling;
 using Harbor.App.Avalonia.Configuration;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
 ///     Switches between the Catppuccin-Mocha (dark) and Catppuccin-Latte (light)
 ///     themes by swapping the merged resource dictionaries on the application.
@@ -17,13 +13,13 @@ public sealed class ThemeService
     private readonly ILogger<ThemeService> _logger;
     private Application? _app;
 
-    /// <summary>Construct a <see cref="ThemeService"/>.</summary>
+    /// <summary>Construct a <see cref="ThemeService" />.</summary>
     public ThemeService(ILogger<ThemeService> logger)
     {
         _logger = logger;
     }
 
-    /// <summary>The owning <see cref="Application"/>. Set by <see cref="App.OnFrameworkInitializationCompleted"/>.</summary>
+    /// <summary>The owning <see cref="Application" />. Set by <see cref="App.OnFrameworkInitializationCompleted" />.</summary>
     public Application Application
     {
         get => _app ?? throw new InvalidOperationException("ThemeService.Application is not set yet.");
@@ -35,7 +31,7 @@ public sealed class ThemeService
 
     /// <summary>
     ///     Swap the merged resource dictionaries so the dark (Mocha) palette
-    ///     is the only one loaded. Also sets <see cref="Application.RequestedThemeVariant"/>
+    ///     is the only one loaded. Also sets <see cref="Application.RequestedThemeVariant" />
     ///     so FluentTheme + theme-aware resources pick up the dark variant.
     /// </summary>
     private void ApplyResourceDictionary(bool dark)
@@ -58,32 +54,32 @@ public sealed class ThemeService
         // ctor was removed in 12.x). We pass the app's resource root as
         // baseUri and set Source to the absolute theme path so the loader
         // resolves the XAML at the correct location.
-        var themePath = dark
+        string themePath = dark
             ? "avares://Harbor.App.Avalonia/Themes/Dark.axaml"
             : "avares://Harbor.App.Avalonia/Themes/Light.axaml";
         var newTheme = new ResourceInclude(new Uri("avares://Harbor.App.Avalonia/", UriKind.Absolute))
         {
-            Source = new Uri(themePath, UriKind.Absolute),
+            Source = new Uri(themePath, UriKind.Absolute)
         };
         merged.Add(newTheme);
         _logger.LogDebug("Theme resource dictionary swapped to {Theme}", dark ? "Dark" : "Light");
     }
 
     /// <summary>
-    ///     Apply the theme configured in <paramref name="config"/>. Called once
+    ///     Apply the theme configured in <paramref name="config" />. Called once
     ///     at startup from <c>App.OnFrameworkInitializationCompleted</c> after
-    ///     <see cref="Application"/> is set. The mapping is:
+    ///     <see cref="Application" /> is set. The mapping is:
     ///     <list type="bullet">
-    ///         <item><c>"dark"</c> → <see cref="ApplyDark"/>.</item>
-    ///         <item><c>"light"</c> → <see cref="ApplyLight"/>.</item>
+    ///         <item><c>"dark"</c> → <see cref="ApplyDark" />.</item>
+    ///         <item><c>"light"</c> → <see cref="ApplyLight" />.</item>
     ///         <item><c>"system"</c> (or anything else) → leave the default (dark).</item>
     ///     </list>
     /// </summary>
-    /// <param name="config">The Avalonia configuration whose <see cref="AvaloniaConfig.Theme"/> field is read.</param>
+    /// <param name="config">The Avalonia configuration whose <see cref="AvaloniaConfig.Theme" /> field is read.</param>
     public void ApplyFromConfig(AvaloniaConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
-        var theme = (config.Theme ?? "system").ToLowerInvariant();
+        string theme = (config.Theme ?? "system").ToLowerInvariant();
         switch (theme)
         {
             case "dark":
@@ -109,7 +105,7 @@ public sealed class ThemeService
     /// <param name="theme">Theme name (case-insensitive).</param>
     public void Apply(string theme)
     {
-        var t = (theme ?? "system").ToLowerInvariant();
+        string t = (theme ?? "system").ToLowerInvariant();
         switch (t)
         {
             case "light":
@@ -149,6 +145,7 @@ public sealed class ThemeService
     /// <summary>Toggle between dark and light themes.</summary>
     public void Toggle()
     {
-        if (IsDark) ApplyLight(); else ApplyDark();
+        if (IsDark) ApplyLight();
+        else ApplyDark();
     }
 }

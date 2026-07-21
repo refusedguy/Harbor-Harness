@@ -1,8 +1,6 @@
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.Termina.Handlers;
-
 /// <summary>
 ///     Maps a raw <see cref="ConsoleKeyInfo" /> into the framework-neutral
 ///     <see cref="UiKey" />, resolves the <see cref="ChatAction" /> via
@@ -14,8 +12,8 @@ namespace Harbor.Tui.Termina.Handlers;
 public sealed class KeyHandler
 {
     private readonly ChatKeyMap _keyMap = new();
-    private readonly UiStore _store;
     private readonly ILogger? _logger;
+    private readonly UiStore _store;
 
     public KeyHandler(UiStore store, ILogger? logger = null)
     {

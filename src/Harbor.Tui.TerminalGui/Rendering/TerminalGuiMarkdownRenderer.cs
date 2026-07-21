@@ -2,10 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
-using TerminalColor = Terminal.Gui.Drawing.Color;
-
 namespace Harbor.Tui.TerminalGui.Rendering;
-
 /// <summary>
 ///     Renders markdown into Terminal.Gui v2 attribute-ready plain text.
 ///     Mirrors the SpectreTui ChatMarkdown behaviour (headings, bold, italic,
@@ -27,7 +24,7 @@ public static class TerminalGuiMarkdownRenderer
     public static IReadOnlyList<string> RenderBody(ChatRole role, string content, int maxWidth = 0)
     {
         bool md = TerminalGuiColorMapper.SupportsMarkdown(role);
-        var lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
+        string[] lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
         var outp = new List<string>(lines.Length + 4);
 
         int i = 0;
@@ -37,7 +34,7 @@ public static class TerminalGuiMarkdownRenderer
             {
                 if (GfmTableParser.TryParse(lines, i, out var table, out int next))
                 {
-                    foreach (var row in GfmTableFormatter.Format(table, maxWidth))
+                    foreach (string row in GfmTableFormatter.Format(table, maxWidth))
                         outp.Add(row);
                     i = next;
                     continue;
@@ -63,7 +60,7 @@ public static class TerminalGuiMarkdownRenderer
         if (heading.Success)
             return heading.Groups[2].Value;
 
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         if (trimmed is "---" or "***" or "___")
             return new string('─', 12);
 

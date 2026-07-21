@@ -1,14 +1,13 @@
-using Harbor.Plugins.Abstractions;
 using System.Reflection;
 using Harbor.Abstractions.Plugins;
+using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Instantiation;
-
 /// <summary>
 ///     Default <see cref="IPluginInstantiator" />. Uses plain reflection to find
-/// <see cref="IPlugin" /> implementations and <see cref="Activator.CreateInstance" />
-/// to construct them with their parameterless constructor. Does NOT call
-/// <see cref="IPlugin.Initialize" /> — that is the responsibility of the registration
-/// layer (<see cref="Harbor.Plugins.Runtime.Registration.PluginRegistrar" />).
+///     <see cref="IPlugin" /> implementations and <see cref="Activator.CreateInstance" />
+///     to construct them with their parameterless constructor. Does NOT call
+///     <see cref="IPlugin.Initialize" /> — that is the responsibility of the registration
+///     layer (<see cref="Harbor.Plugins.Runtime.Registration.PluginRegistrar" />).
 /// </summary>
 public sealed class ReflectionPluginInstantiator : IPluginInstantiator
 {
@@ -41,13 +40,13 @@ public sealed class ReflectionPluginInstantiator : IPluginInstantiator
             }
 
             loaded.Add(new LoadedPlugin(
-                Instance: instance,
-                Name: instance.Name,
-                Version: instance.Version,
-                PluginType: type,
-                SourcePath: compiled.SourcePath,
-                SourceHash: compiled.SourceHash,
-                LoadedFromCache: compiled.FromCache));
+                instance,
+                instance.Name,
+                instance.Version,
+                type,
+                compiled.SourcePath,
+                compiled.SourceHash,
+                compiled.FromCache));
         }
 
         if (loaded.Count == 0)
@@ -65,7 +64,7 @@ public sealed class ReflectionPluginInstantiator : IPluginInstantiator
     /// </summary>
     private static List<Type> FindPluginTypes(Assembly assembly)
     {
-        Type pluginType = typeof(IPlugin);
+        var pluginType = typeof(IPlugin);
 
         Type[] types;
         try

@@ -1,14 +1,12 @@
-using Microsoft.Extensions.Logging;
 using Harbor.Ui.Framework.Diagnostics;
-
+using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.RazorConsole.Views;
-
 /// <summary>
 ///     Stateless formatter that projects the shared
-/// <see cref="IDiagnosticsPanel" /> ring buffer into a sequence of
-/// <see cref="ChatLine" />s for inline display inside the RazorConsole
-/// chat transcript. Invoked from <see cref="ChatBridge.DumpDiagnostics" />
-/// when the user submits <c>/logs</c>.
+///     <see cref="IDiagnosticsPanel" /> ring buffer into a sequence of
+///     <see cref="ChatLine" />s for inline display inside the RazorConsole
+///     chat transcript. Invoked from <see cref="ChatBridge.DumpDiagnostics" />
+///     when the user submits <c>/logs</c>.
 /// </summary>
 /// <remarks>
 ///     <para>

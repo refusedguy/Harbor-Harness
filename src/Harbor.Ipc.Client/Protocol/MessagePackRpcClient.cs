@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     MessagePack RPC client. Sends <see cref="HarborRequest" />s over a
 ///     <see cref="ClientPipeTransport" /> stream and awaits the matching
@@ -24,22 +23,22 @@ namespace Harbor.Ipc.Protocol;
 /// </remarks>
 public sealed class MessagePackRpcClient : IAsyncDisposable
 {
+    private readonly CancellationTokenSource _cts = new();
     private readonly Channel<HarborEvent> _eventChannel =
         Channel.CreateUnbounded<HarborEvent>(new UnboundedChannelOptions
         {
             SingleReader = false,
             SingleWriter = true
         });
+    private readonly ILogger _logger;
 
     private readonly Dictionary<Guid, TaskCompletionSource<HarborResponse>> _pending = new();
     private readonly Lock _pendingLock = new();
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ClientPipeTransport _transport;
-    private readonly ILogger _logger;
-    private Stream? _stream;
-    private Task? _readLoopTask;
-    private CancellationTokenSource _cts = new();
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed;
+    private Task? _readLoopTask;
+    private Stream? _stream;
 
     /// <summary>
     ///     Construct an RPC client over the given transport.
@@ -55,6 +54,38 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     ///     enumerates this.
     /// </summary>
     public ChannelReader<HarborEvent> EventReader => _eventChannel.Reader;
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        _cts.Cancel();
+        _eventChannel.Writer.TryComplete();
+
+        if (_readLoopTask is not null)
+        {
+            try { await _readLoopTask.ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            { /* expected on shutdown */
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Read loop ended with error during dispose"); }
+        }
+
+        // Cancel any pending request TCSs so their awaiters don't hang.
+        lock (_pendingLock)
+        {
+            foreach (var tcs in _pending.Values)
+            {
+                tcs.TrySetCanceled();
+            }
+            _pending.Clear();
+        }
+
+        await _transport.DisposeAsync().ConfigureAwait(false);
+        _cts.Dispose();
+        _writeLock.Dispose();
+    }
 
     /// <summary>
     ///     Connect to the server and start the background read loop.
@@ -101,36 +132,6 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         });
 
         return await tcs.Task.ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-        _cts.Cancel();
-        _eventChannel.Writer.TryComplete();
-
-        if (_readLoopTask is not null)
-        {
-            try { await _readLoopTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected on shutdown */ }
-            catch (Exception ex) { _logger.LogDebug(ex, "Read loop ended with error during dispose"); }
-        }
-
-        // Cancel any pending request TCSs so their awaiters don't hang.
-        lock (_pendingLock)
-        {
-            foreach (var tcs in _pending.Values)
-            {
-                tcs.TrySetCanceled();
-            }
-            _pending.Clear();
-        }
-
-        await _transport.DisposeAsync().ConfigureAwait(false);
-        _cts.Dispose();
-        _writeLock.Dispose();
     }
 
     // ── Read loop ──────────────────────────────────────────────────────────
@@ -190,8 +191,8 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
 
         try
         {
-            HarborEventData data = MessagePackSerializer.Deserialize<HarborEventData>(envelope.EventBytes);
-            HarborEvent evt = HarborEventMapping.FromData(data);
+            var data = MessagePackSerializer.Deserialize<HarborEventData>(envelope.EventBytes);
+            var evt = HarborEventMapping.FromData(data);
             if (!_eventChannel.Writer.TryWrite(evt))
             {
                 _logger.LogDebug("Event channel full; dropping event {Kind}", evt.Kind);

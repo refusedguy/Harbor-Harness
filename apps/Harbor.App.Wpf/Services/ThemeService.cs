@@ -1,10 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using Microsoft.Extensions.Logging;
-using Microsoft.Win32;
-
 namespace Harbor.App.Wpf.Services;
-
 /// <summary>
 ///     Manages the active Catppuccin theme (Dark / Light) by swapping the
 ///     merged dictionary at runtime. Persists the choice to
@@ -24,7 +22,6 @@ public sealed class ThemeService
 
     private const string ThemeFileName = "wpf-theme.txt";
     private readonly ILogger<ThemeService> _logger;
-    private Theme _current = Theme.Dark;
 
     /// <summary>Construct a <see cref="ThemeService" />.</summary>
     /// <param name="logger">Logger.</param>
@@ -34,7 +31,11 @@ public sealed class ThemeService
     }
 
     /// <summary>The currently applied theme.</summary>
-    public Theme Current => _current;
+    public Theme Current
+    {
+        get;
+        private set;
+    } = Theme.Dark;
 
     /// <summary>
     ///     Raised whenever the theme changes. Subscribers can use this to
@@ -74,7 +75,7 @@ public sealed class ThemeService
     /// <param name="theme">The theme to apply.</param>
     public void ApplyTheme(Theme theme)
     {
-        _current = theme;
+        Current = theme;
         try
         {
             var app = Application.Current;
@@ -116,10 +117,7 @@ public sealed class ThemeService
     /// <summary>
     ///     Toggle between Dark and Light.
     /// </summary>
-    public void Toggle()
-    {
-        ApplyTheme(_current == Theme.Dark ? Theme.Light : Theme.Dark);
-    }
+    public void Toggle() => ApplyTheme(Current == Theme.Dark ? Theme.Light : Theme.Dark);
 
     private static void RemapSemanticBrushes(ResourceDictionary resources, string palettePrefix)
     {
@@ -140,10 +138,10 @@ public sealed class ThemeService
             ("App.Info", "Sky")
         };
 
-        foreach (var (semantic, palette) in semanticMap)
+        foreach ((string semantic, string palette) in semanticMap)
         {
             string paletteKey = $"{palettePrefix}.{palette}Brush";
-            if (resources[paletteKey] is System.Windows.Media.SolidColorBrush brush)
+            if (resources[paletteKey] is SolidColorBrush brush)
             {
                 resources[semantic] = brush;
             }

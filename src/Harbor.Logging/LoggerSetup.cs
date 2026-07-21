@@ -1,9 +1,7 @@
 using Serilog;
-using Serilog.Events;
 using Serilog.Core;
-
+using Serilog.Events;
 namespace Harbor.Logging;
-
 /// <summary>
 ///     Centralized Serilog configuration — shared by CLI, Avalonia, and all desktop apps.
 ///     Writes to:
@@ -29,8 +27,8 @@ public static class LoggerSetup
     {
         Directory.CreateDirectory(logDir);
 
-        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
-        var logFile = Path.Combine(logDir, $"harbor-{appPrefix}-{timestamp}.log");
+        string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
+        string logFile = Path.Combine(logDir, $"harbor-{appPrefix}-{timestamp}.log");
 
         var loggerConfig = new LoggerConfiguration()
             .Enrich.WithProperty("App", appPrefix)
@@ -40,7 +38,7 @@ public static class LoggerSetup
         loggerConfig = loggerConfig.WriteTo.Async(a => a.File(
             logFile,
             fileLevel,
-            outputTemplate: "{Timestamp:HH:mm:ss.fff} [{Level:u4}] [{ThreadId,3}] {SourceContext}: {Message:lj}{NewLine}{Exception}",
+            "{Timestamp:HH:mm:ss.fff} [{Level:u4}] [{ThreadId,3}] {SourceContext}: {Message:lj}{NewLine}{Exception}",
             shared: true,
             rollingInterval: RollingInterval.Infinite,
             retainedFileCountLimit: 50));
@@ -48,17 +46,17 @@ public static class LoggerSetup
         // Console sink — colored, filtered
         loggerConfig = loggerConfig.WriteTo.Async(a => a.Console(
             consoleLevel,
-            outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
+            "{Timestamp:HH:mm:ss} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"));
 
         // Filter noisy categories
         loggerConfig = loggerConfig
             .MinimumLevel.Is(fileLevel)
             .Filter.ByExcluding(e => e.Properties.TryGetValue("SourceContext", out var sc)
-                && sc.ToString().Contains("System.Net.Http")
-                && e.Level < LogEventLevel.Warning)
+                                     && sc.ToString().Contains("System.Net.Http")
+                                     && e.Level < LogEventLevel.Warning)
             .Filter.ByExcluding(e => e.Properties.TryGetValue("SourceContext", out var sc)
-                && sc.ToString().Contains("Microsoft.Extensions")
-                && e.Level < LogEventLevel.Warning);
+                                     && sc.ToString().Contains("Microsoft.Extensions")
+                                     && e.Level < LogEventLevel.Warning);
 
         var logger = loggerConfig.CreateLogger();
 
@@ -87,7 +85,7 @@ public static class LoggerSetup
         LogEventLevel fileLevel = LogEventLevel.Debug)
     {
         var baseLogger = Create(appPrefix, logDir, consoleLevel, fileLevel);
-        
+
         // Wrap with a diagnostics sink
         return new LoggerConfiguration()
             .WriteTo.Logger(baseLogger)
@@ -110,10 +108,15 @@ public static class LoggerSetup
 
             foreach (var f in files)
             {
-                try { f.Delete(); } catch { /* best-effort cleanup, ignore errors */ }
+                try { f.Delete(); }
+                catch
+                { /* best-effort cleanup, ignore errors */
+                }
             }
         }
-        catch { /* best-effort cleanup, ignore errors */ }
+        catch
+        { /* best-effort cleanup, ignore errors */
+        }
     }
 }
 
@@ -134,12 +137,14 @@ internal sealed class DiagnosticsSink : ILogEventSink
     {
         try
         {
-            var source = logEvent.Properties.TryGetValue("SourceContext", out var sc)
+            string source = logEvent.Properties.TryGetValue("SourceContext", out var sc)
                 ? sc.ToString().Trim('"')
                 : "";
-            var message = logEvent.RenderMessage();
+            string message = logEvent.RenderMessage();
             _callback(logEvent.Level, source, message);
         }
-        catch { /* best-effort cleanup, ignore errors */ }
+        catch
+        { /* best-effort cleanup, ignore errors */
+        }
     }
 }

@@ -3,9 +3,7 @@ using System.Text.RegularExpressions;
 using Harbor.Terminal.Abstractions.Rendering;
 using Harbor.Ui.Framework.State;
 using Termina.Terminal;
-
 namespace Harbor.Tui.Termina.Rendering;
-
 /// <summary>
 ///     Renders a markdown string into Termina-colored ANSI text. Mirrors the
 ///     SpectreTui <c>ChatMarkdown</c> behaviour (headings, bold, italic, inline
@@ -26,7 +24,7 @@ public static class TerminaMarkdownRenderer
     {
         var color = TerminaColorMapper.ToColor(role);
         bool md = TerminaColorMapper.SupportsMarkdown(role);
-        var lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
+        string[] lines = (content ?? string.Empty).Replace("\\n", "\n", StringComparison.Ordinal).Split('\n');
         var outp = new List<string>(lines.Length + 4);
 
         int i = 0;
@@ -36,7 +34,7 @@ public static class TerminaMarkdownRenderer
             {
                 if (GfmTableParser.TryParse(lines, i, out var table, out int next))
                 {
-                    foreach (var row in GfmTableFormatter.Format(table, maxWidth))
+                    foreach (string row in GfmTableFormatter.Format(table, maxWidth))
                         outp.Add(Ansi(Color.Gray, row));
                     i = next;
                     continue;
@@ -55,7 +53,7 @@ public static class TerminaMarkdownRenderer
     /// <summary>Render the role header band: <c>─ user ─</c>.</summary>
     public static string RenderHeader(ChatRole role)
     {
-        var label = TerminaColorMapper.ToLabel(role);
+        string label = TerminaColorMapper.ToLabel(role);
         var color = TerminaColorMapper.ToColor(role);
         return $"{Ansi(Color.DarkGray, "─ ")}{Ansi(color, label)}{Ansi(Color.DarkGray, " ─")}";
     }
@@ -68,9 +66,9 @@ public static class TerminaMarkdownRenderer
 
         var heading = HeadingRegex.Match(text);
         if (heading.Success)
-            return Ansi(Color.Yellow, heading.Groups[2].Value, bold: true);
+            return Ansi(Color.Yellow, heading.Groups[2].Value, true);
 
-        var trimmed = text.Trim();
+        string trimmed = text.Trim();
         if (trimmed is "---" or "***" or "___")
             return Ansi(Color.DarkGray, new string('─', 12));
 
@@ -112,7 +110,7 @@ public static class TerminaMarkdownRenderer
                 int end = text.IndexOf(new string(c, 2), i + 2, StringComparison.Ordinal);
                 if (end > i)
                 {
-                    sb.Append(Ansi(Color.White, text.Substring(i + 2, end - i - 2), bold: true));
+                    sb.Append(Ansi(Color.White, text.Substring(i + 2, end - i - 2), true));
                     i = end + 2;
                     continue;
                 }

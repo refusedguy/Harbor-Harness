@@ -2,12 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Chat view code-behind. Forwards Enter / Ctrl+Enter from the input box to the
-///     <see cref="ChatViewModel.SendCommand"/>.
+///     <see cref="ChatViewModel.SendCommand" />.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -36,30 +34,19 @@ namespace Harbor.App.Avalonia.Views;
 public partial class ChatView : UserControl
 {
     /// <summary>
-    ///     Defines the <see cref="ShowInputArea"/> styled property.
+    ///     Defines the <see cref="ShowInputArea" /> styled property.
     ///     Default <c>true</c> so the classic shell keeps its inline input.
     /// </summary>
     public static readonly StyledProperty<bool> ShowInputAreaProperty =
         AvaloniaProperty.Register<ChatView, bool>(
             nameof(ShowInputArea),
-            defaultValue: true);
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether the chat view's own input
-    ///     area is visible. Set <c>false</c> when an external composer (e.g.
-    ///     the Orca <c>ComposerView</c>) takes over the input role.
-    /// </summary>
-    public bool ShowInputArea
-    {
-        get => GetValue(ShowInputAreaProperty);
-        set => SetValue(ShowInputAreaProperty, value);
-    }
+            true);
 
     /// <summary>Construct the chat view.</summary>
     public ChatView()
     {
         InitializeComponent();
-        Loaded += (_, _) =>
+        this.Loaded += (_, _) =>
         {
             // Focus the input on first load — ORCA pattern. Only focus when
             // the input area is visible (Orca shell hides it; focusing a
@@ -71,7 +58,18 @@ public partial class ChatView : UserControl
         };
     }
 
-    private ChatViewModel? Vm => DataContext as ChatViewModel;
+    /// <summary>
+    ///     Gets or sets a value indicating whether the chat view's own input
+    ///     area is visible. Set <c>false</c> when an external composer (e.g.
+    ///     the Orca <c>ComposerView</c>) takes over the input role.
+    /// </summary>
+    public bool ShowInputArea
+    {
+        get => this.GetValue(ShowInputAreaProperty);
+        set => this.SetValue(ShowInputAreaProperty, value);
+    }
+
+    private ChatViewModel? Vm => this.DataContext as ChatViewModel;
 
     private void InputBox_KeyDown(object? sender, KeyEventArgs e)
     {
@@ -81,7 +79,7 @@ public partial class ChatView : UserControl
         // Plain Enter (no Shift, no Ctrl) sends. Shift+Enter inserts newline (default).
         // Ctrl+Enter also sends (alternative convention).
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        bool isCtrlEnter  = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
         if (isPlainEnter || isCtrlEnter)
         {

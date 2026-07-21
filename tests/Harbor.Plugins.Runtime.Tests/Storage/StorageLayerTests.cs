@@ -1,14 +1,11 @@
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
-using Harbor.Plugins.Runtime.Tests.TestSupport;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 namespace Harbor.Plugins.Runtime.Tests.Storage;
-
 /// <summary>
 ///     Tests for the Storage layer: <see cref="InMemoryPluginSource" />,
-/// <see cref="FileSystemPluginSource" />, <see cref="CompositePluginSource" />.
+///     <see cref="FileSystemPluginSource" />, <see cref="CompositePluginSource" />.
 /// </summary>
 public sealed class StorageLayerTests
 {
@@ -114,7 +111,7 @@ public sealed class StorageLayerTests
     public async Task InMemorySource_Empty_YieldsNoScripts()
     {
         var source = new InMemoryPluginSource();
-        var count = 0;
+        int count = 0;
         await foreach (var _ in source.GetScriptsAsync().ConfigureAwait(false))
             count++;
         await Assert.That(count).IsEqualTo(0);

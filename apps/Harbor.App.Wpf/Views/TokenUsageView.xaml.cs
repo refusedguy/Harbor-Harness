@@ -1,7 +1,5 @@
 using System.Windows.Controls;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     LiveCharts2 token usage charts.
 /// </summary>

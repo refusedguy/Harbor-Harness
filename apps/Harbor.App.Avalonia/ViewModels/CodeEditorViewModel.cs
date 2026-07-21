@@ -2,11 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
-using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Multi-tab code editor view-model. Uses AvaloniaEdit under the hood (the
 ///     <c>CodeEditorView</c> hosts the <c>TextEditor</c>); this VM owns the tab list,
@@ -14,10 +11,13 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 public sealed partial class CodeEditorViewModel : ObservableObject
 {
-    private readonly AvaloniaFilePicker _picker;
-    private readonly ILogger<CodeEditorViewModel> _logger;
-    private readonly ToastService _toasts;
     private readonly IDispatcherAdapter _dispatcher;
+    private readonly ILogger<CodeEditorViewModel> _logger;
+    private readonly AvaloniaFilePicker _picker;
+    private readonly ToastService _toasts;
+
+    [ObservableProperty]
+    private EditorTabViewModel? _activeTab;
 
     /// <summary>Construct the code editor view-model.</summary>
     public CodeEditorViewModel(
@@ -35,16 +35,13 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     /// <summary>Open editor tabs.</summary>
     public ObservableCollection<EditorTabViewModel> Tabs { get; } = new();
 
-    [ObservableProperty]
-    private EditorTabViewModel? _activeTab;
-
     /// <summary>Open a file picker and load the chosen file into a new tab.</summary>
     [RelayCommand]
     private async Task OpenFileAsync()
     {
         var paths = await _picker.PickFilesAsync("Open file").ConfigureAwait(false);
         if (paths is null || paths.Count == 0) return;
-        foreach (var path in paths)
+        foreach (string path in paths)
         {
             await LoadFileAsync(path).ConfigureAwait(false);
         }
@@ -61,9 +58,9 @@ public sealed partial class CodeEditorViewModel : ObservableObject
                 _toasts.Show($"File not found: {path}", ToastKind.Error);
                 return;
             }
-            var content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-            var name = Path.GetFileName(path);
-            var ext = Path.GetExtension(path).TrimStart('.');
+            string content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            string name = Path.GetFileName(path);
+            string ext = Path.GetExtension(path).TrimStart('.');
             _dispatcher.Post(() =>
             {
                 var tab = new EditorTabViewModel(path, name, ext, content);
@@ -103,7 +100,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private async Task SaveAsAsync()
     {
         if (ActiveTab is null) return;
-        var path = await _picker.PickSaveFileAsync("Save as", ActiveTab.FileName).ConfigureAwait(false);
+        string? path = await _picker.PickSaveFileAsync("Save as", ActiveTab.FileName).ConfigureAwait(false);
         if (path is null) return;
         ActiveTab.FilePath = path;
         ActiveTab.FileName = Path.GetFileName(path);
@@ -126,6 +123,12 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 /// <summary>One editor tab — file path, name, extension, content, dirty flag.</summary>
 public sealed partial class EditorTabViewModel : ObservableObject
 {
+
+    [ObservableProperty]
+    private string _content;
+
+    [ObservableProperty]
+    private bool _isDirty;
     /// <summary>Construct an editor tab.</summary>
     public EditorTabViewModel(string filePath, string fileName, string extension, string content)
     {
@@ -143,18 +146,6 @@ public sealed partial class EditorTabViewModel : ObservableObject
 
     /// <summary>File extension (no leading dot) — drives syntax highlighting.</summary>
     public string Extension { get; }
-
-    [ObservableProperty]
-    private string _content;
-
-    [ObservableProperty]
-    private bool _isDirty;
-
-    /// <summary>Partial-patch setter: updates content + marks the tab dirty.</summary>
-    partial void OnContentChanged(string value)
-    {
-        IsDirty = true;
-    }
 
     /// <summary>The AvaloniaEdit syntax-highlighting definition name.</summary>
     public string SyntaxName => Extension.ToLowerInvariant() switch
@@ -175,4 +166,7 @@ public sealed partial class EditorTabViewModel : ObservableObject
         "sh" or "bash" => "Bash",
         _ => "C#"
     };
+
+    /// <summary>Partial-patch setter: updates content + marks the tab dirty.</summary>
+    partial void OnContentChanged(string value) => IsDirty = true;
 }

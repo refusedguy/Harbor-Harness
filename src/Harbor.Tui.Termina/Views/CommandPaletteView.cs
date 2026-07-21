@@ -1,10 +1,9 @@
 using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.Termina.Rendering;
+using Harbor.Ui.Framework.State;
 using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;
-
 /// <summary>
 ///     Ctrl+P command palette: fuzzy-search over slash commands + registered
 ///     panels + recent sessions. Pure projection — selection state lives in
@@ -19,34 +18,34 @@ public sealed class CommandPaletteView
         var sb = new StringBuilder(256);
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, "┌─ command palette ─────────────┐\n"));
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-          .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Yellow, query))
-          .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "▍\n"));
+            .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Yellow, query))
+            .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "▍\n"));
 
         int shown = 0;
-        foreach (var cmd in ChatCommands.Slash)
+        foreach (string cmd in ChatCommands.Slash)
         {
             if (!string.IsNullOrEmpty(query) && !cmd.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
             sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-              .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.White, cmd)).Append('\n');
+                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.White, cmd)).Append('\n');
             if (++shown >= 8) break;
         }
 
-        foreach (var p in panels)
+        foreach (string p in panels)
         {
             if (!string.IsNullOrEmpty(query) && !p.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
             sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-              .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Blue, $"panel: {p}")).Append('\n');
+                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Blue, $"panel: {p}")).Append('\n');
             if (++shown >= 12) break;
         }
 
-        foreach (var sess in sessions)
+        foreach (string sess in sessions)
         {
             if (!string.IsNullOrEmpty(query) && !sess.Contains(query, StringComparison.OrdinalIgnoreCase))
                 continue;
             sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "│ "))
-              .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Magenta, $"session: {sess}")).Append('\n');
+                .Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Magenta, $"session: {sess}")).Append('\n');
             if (++shown >= 16) break;
         }
 

@@ -1,9 +1,7 @@
 using System.Buffers;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.RegularExpressions;
-using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -21,9 +19,9 @@ public sealed class WebFetchTool : ITool
     private const int HttpTimeoutSeconds = 30;
 
     private static readonly HttpClient SharedClient = BuildClient();
+    private readonly Func<HttpClient> _clientFactory;
 
     private readonly ILogger<WebFetchTool> _logger;
-    private readonly Func<HttpClient> _clientFactory;
 
     /// <summary>
     ///     Construct a <see cref="WebFetchTool" /> that uses the process-wide shared
@@ -96,7 +94,7 @@ public sealed class WebFetchTool : ITool
 
         string url = urlEl.GetString()!;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            || (uri.Scheme != "http" && uri.Scheme != "https"))
+            || uri.Scheme != "http" && uri.Scheme != "https")
         {
             return Result.Failure($"'url' must be an absolute http(s) URL: {url}");
         }
@@ -216,11 +214,11 @@ public sealed class WebFetchTool : ITool
 
             var summary = new StringBuilder(128);
             summary.Append("Fetched ").Append(url).Append(" — ").Append((int)response.StatusCode)
-                   .Append(' ').Append(response.ReasonPhrase ?? HttpStatusCode.OK.ToString())
-                   .Append(" (").Append(bytes.Length).Append(" bytes, ").Append(contentType).Append(')');
+                .Append(' ').Append(response.ReasonPhrase ?? HttpStatusCode.OK.ToString())
+                .Append(" (").Append(bytes.Length).Append(" bytes, ").Append(contentType).Append(')');
 
             return ToolResult.Success(
-                summary.ToString() + "\n\n" + markdown,
+                summary + "\n\n" + markdown,
                 new
                 {
                     url,
@@ -243,7 +241,7 @@ public sealed class WebFetchTool : ITool
             AutomaticDecompression = DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
         };
-        return new HttpClient(handler, disposeHandler: true)
+        return new HttpClient(handler, true)
         {
             DefaultRequestVersion = HttpVersion.Version20,
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
@@ -291,7 +289,7 @@ public sealed class WebFetchTool : ITool
 
     private static byte[] CopyToExact(byte[] src, int len)
     {
-        var dst = new byte[len];
+        byte[] dst = new byte[len];
         Buffer.BlockCopy(src, 0, dst, 0, len);
         return dst;
     }
@@ -300,7 +298,8 @@ public sealed class WebFetchTool : ITool
     {
         int probe = Math.Min(bytes.Length, 8192);
         for (int i = 0; i < probe; i++)
-            if (bytes[i] == 0) return true;
+            if (bytes[i] == 0)
+                return true;
         return false;
     }
 

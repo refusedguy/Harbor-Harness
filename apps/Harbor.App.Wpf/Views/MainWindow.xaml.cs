@@ -1,18 +1,16 @@
 using System.Windows;
 using System.Windows.Input;
-using Harbor.App.Wpf.ViewModels;
 using Harbor.App.Wpf.Services;
-
+using Harbor.App.Wpf.ViewModels;
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     Main application window — 1200x800, sidebar + main + status bar.
 ///     Hosts the AvalonDock docking manager and the toast overlay.
 /// </summary>
 public partial class MainWindow : Window
 {
-    private readonly MainViewModel _vm;
     private readonly WpfDispatcherAdapter? _dispatcher;
+    private readonly MainViewModel _vm;
 
     /// <summary>Construct the <see cref="MainWindow" />.</summary>
     /// <param name="vm">Main view model.</param>
@@ -22,19 +20,19 @@ public partial class MainWindow : Window
     {
         _vm = vm;
         _dispatcher = dispatcher;
-        DataContext = vm;
+        this.DataContext = vm;
         InitializeComponent();
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         // Wire Ctrl+P command palette.
-        InputBindings.Add(new KeyBinding(
+        this.InputBindings.Add(new KeyBinding(
             new RelayCommand(() => _vm.OpenCommandPaletteCommand.Execute(this)),
             Key.P, ModifierKeys.Control));
 
         // Wire Ctrl+T theme toggle.
-        InputBindings.Add(new KeyBinding(
+        this.InputBindings.Add(new KeyBinding(
             new RelayCommand(() => _vm.ToggleThemeCommand.Execute(null)),
             Key.T, ModifierKeys.Control));
     }
@@ -57,7 +55,10 @@ public sealed class RelayCommand : ICommand
 {
     private readonly Action _action;
     /// <summary>Construct a <see cref="RelayCommand" />.</summary>
-    public RelayCommand(Action action) => _action = action;
+    public RelayCommand(Action action)
+    {
+        _action = action;
+    }
     /// <inheritdoc />
     public bool CanExecute(object? parameter) => true;
     /// <inheritdoc />

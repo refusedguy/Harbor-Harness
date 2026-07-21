@@ -1,7 +1,5 @@
 using MessagePack;
-
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Base type for all Harbor IPC requests. Carries a client-generated
 ///     <see cref="RequestId" /> so the client can match responses to requests.
@@ -24,7 +22,7 @@ namespace Harbor.Ipc.Protocol;
 ///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
 ///         ModelInfo, ProviderId, ToolResult) are carried inside the
 ///         concrete request/response payloads as
-///         <see cref="PayloadBytes"/> — a MessagePack-typeless-serialized
+///         <see cref="PayloadBytes" /> — a MessagePack-typeless-serialized
 ///         <c>byte[]</c>. The TypelessContractlessStandardResolver handles
 ///         them transparently (they are POCOs with public get/init properties).
 ///         This keeps the wire contract small and decoupled from the domain

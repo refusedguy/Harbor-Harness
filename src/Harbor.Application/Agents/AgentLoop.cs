@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Extensions;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Agents;
@@ -9,8 +8,8 @@ namespace Harbor.Core.Agents;
 ///         <b>Decomposition (Task R32):</b> the streaming-buffer coalescing
 ///         and tool-execution dispatch were extracted into:
 ///         <list type="bullet">
-///             <item><see cref="StreamingCoalescer"/> — text/thinking/tool-call buffer management</item>
-///             <item><see cref="ToolDispatcher"/> — parallel/sequential tool execution + permission gating</item>
+///             <item><see cref="StreamingCoalescer" /> — text/thinking/tool-call buffer management</item>
+///             <item><see cref="ToolDispatcher" /> — parallel/sequential tool execution + permission gating</item>
 ///         </list>
 ///         The loop itself now focuses on turn orchestration, event
 ///         publishing, and compaction checks.
@@ -27,8 +26,8 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
     private readonly ITokenEstimator _tokenEstimator;
-    private readonly IToolRegistry _tools;
     private readonly ToolDispatcher _toolDispatcher;
+    private readonly IToolRegistry _tools;
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -386,5 +385,4 @@ public sealed class AgentLoop : IAgentLoop
         }
         return snapshot;
     }
-
 }

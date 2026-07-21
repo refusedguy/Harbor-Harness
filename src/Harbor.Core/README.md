@@ -10,16 +10,16 @@ Application — sits above `Harbor.Abstractions` (Domain), below Infrastructure 
 
 ## What's in it
 
-| Subfolder          | Contents                                                                     |
-|--------------------|------------------------------------------------------------------------------|
-| `Agents/`          | `AgentLoop` (the core orchestrator), `AgentRunner`, `AgentContext`           |
-| `Configuration/`   | `HarborOptions`, `ProviderOptions`, `StorageOptions` (Strongly-typed config) |
-| `Events/`          | `IEventBus`, `InMemoryEventBus` (pub/sub)                                    |
-| `Onboarding/`      | First-run setup, config bootstrap                                            |
-| `Permissions/`     | `PermissionService` (default impl of `IPermissionService`)                   |
-| `Providers/`       | `ProviderRegistry` (FrozenDictionary), `LlmClientFactory`                    |
-| `Sessions/`        | `SessionManager`, `CompactionEngine` (anchored-summary fold)                 |
-| `Tools/`           | `ToolRegistry` (FrozenDictionary), `ToolDispatcher`                          |
+| Subfolder        | Contents                                                                     |
+|------------------|------------------------------------------------------------------------------|
+| `Agents/`        | `AgentLoop` (the core orchestrator), `AgentRunner`, `AgentContext`           |
+| `Configuration/` | `HarborOptions`, `ProviderOptions`, `StorageOptions` (Strongly-typed config) |
+| `Events/`        | `IEventBus`, `InMemoryEventBus` (pub/sub)                                    |
+| `Onboarding/`    | First-run setup, config bootstrap                                            |
+| `Permissions/`   | `PermissionService` (default impl of `IPermissionService`)                   |
+| `Providers/`     | `ProviderRegistry` (FrozenDictionary), `LlmClientFactory`                    |
+| `Sessions/`      | `SessionManager`, `CompactionEngine` (anchored-summary fold)                 |
+| `Tools/`         | `ToolRegistry` (FrozenDictionary), `ToolDispatcher`                          |
 
 ## Dependencies
 
@@ -54,6 +54,7 @@ public sealed class AgentLoop
 ```
 
 Each `RunAsync` call:
+
 1. Loads the session from `ISessionStore`.
 2. Resolves the active provider + model.
 3. Builds the system prompt (tools, agents, context).

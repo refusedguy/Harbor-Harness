@@ -1,32 +1,27 @@
-using Harbor.App.Blazor;
 using Harbor.App.Blazor.Configuration;
 using Harbor.App.Blazor.Services;
 using Harbor.App.Blazor.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
 using Harbor.Ui.Framework.State;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Blazor.Tests;
-
 /// <summary>
-///     DI registration tests for <see cref="Program.BuildApp"/>.
+///     DI registration tests for <see cref="Program.BuildApp" />.
 ///     Exercises the Blazor composition root without starting Kestrel — the
 ///     internal BuildApp hook returns the built WebApplication whose
-///     <see cref="Microsoft.AspNetCore.Builder.WebApplication.Services"/>
+///     <see cref="Microsoft.AspNetCore.Builder.WebApplication.Services" />
 ///     ServiceProvider the tests query.
 /// </summary>
 public class ProgramDiTests
 {
-    private static readonly Lazy<Microsoft.AspNetCore.Builder.WebApplication> _appLazy = new(() =>
+    private static readonly Lazy<WebApplication> _appLazy = new(() =>
         Program.BuildApp(Array.Empty<string>()));
 
     private static IServiceProvider Services => _appLazy.Value.Services;
 
-    [After(HookType.Class)]
+    [After(Class)]
     public static async ValueTask DisposeAppAsync()
     {
         if (_appLazy.IsValueCreated)
@@ -166,7 +161,7 @@ public class ProgramDiTests
             typeof(SessionListViewModel),
             typeof(ProviderBrowserViewModel),
             typeof(SettingsViewModel),
-            typeof(TokenUsageViewModel),
+            typeof(TokenUsageViewModel)
         };
 
         var missing = new List<Type>();

@@ -1,19 +1,18 @@
 #if HARBOR_WITH_PLUGINS
-using Harbor.Plugins.Abstractions;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Terminal.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Hosting;
-
 /// <summary>
 ///     Adapter that exposes the already-constructed <c>ToolRegistry</c>,
 ///     <c>ProviderRegistry</c>, and <c>AgentRegistry</c> instances (plus the host's
@@ -30,16 +29,11 @@ namespace Harbor.Cli.Hosting;
 /// </remarks>
 internal sealed class PluginLoadHost : IPluginLoadHost
 {
-    private readonly IServiceCollection _services;
-    private readonly IConfiguration _configuration;
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly IEventBus _eventBus;
-    private readonly IToolRegistry _tools;
-    private readonly IProviderRegistry _providers;
     private readonly IAgentRegistry _agents;
-    private readonly PanelRegistry _panels;
-    private readonly List<ITuiPlugin> _tuiPlugins = new();
+    private readonly IProviderRegistry _providers;
+    private readonly IToolRegistry _tools;
     private readonly object _tuiLock = new();
+    private readonly List<ITuiPlugin> _tuiPlugins = new();
 
     public PluginLoadHost(
         IServiceCollection services,
@@ -51,27 +45,15 @@ internal sealed class PluginLoadHost : IPluginLoadHost
         IAgentRegistry agents,
         PanelRegistry panels)
     {
-        _services = services;
-        _configuration = configuration;
-        _loggerFactory = loggerFactory;
-        _eventBus = eventBus;
+        Services = services;
+        Configuration = configuration;
+        LoggerFactory = loggerFactory;
+        EventBus = eventBus;
         _tools = tools;
         _providers = providers;
         _agents = agents;
-        _panels = panels ?? throw new ArgumentNullException(nameof(panels));
+        Panels = panels ?? throw new ArgumentNullException(nameof(panels));
     }
-
-    /// <inheritdoc />
-    public IServiceCollection Services => _services;
-
-    /// <inheritdoc />
-    public IConfiguration Configuration => _configuration;
-
-    /// <inheritdoc />
-    public ILoggerFactory LoggerFactory => _loggerFactory;
-
-    /// <inheritdoc />
-    public IEventBus EventBus => _eventBus;
 
     /// <summary>
     ///     The host-owned <see cref="PanelRegistry" /> singleton. Plugin-contributed
@@ -79,7 +61,10 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     ///     <see cref="RegisterPanelProvider" />; the active interactive renderer
     ///     reads from this same instance (resolved from DI).
     /// </summary>
-    public PanelRegistry Panels => _panels;
+    public PanelRegistry Panels
+    {
+        get;
+    }
 
     /// <summary>
     ///     The TUI plugins collected via <see cref="RegisterTuiPlugin" />. The renderer
@@ -95,6 +80,30 @@ internal sealed class PluginLoadHost : IPluginLoadHost
                 return _tuiPlugins.ToArray();
             }
         }
+    }
+
+    /// <inheritdoc />
+    public IServiceCollection Services
+    {
+        get;
+    }
+
+    /// <inheritdoc />
+    public IConfiguration Configuration
+    {
+        get;
+    }
+
+    /// <inheritdoc />
+    public ILoggerFactory LoggerFactory
+    {
+        get;
+    }
+
+    /// <inheritdoc />
+    public IEventBus EventBus
+    {
+        get;
     }
 
     /// <inheritdoc />
@@ -121,7 +130,7 @@ internal sealed class PluginLoadHost : IPluginLoadHost
     }
 
     /// <inheritdoc />
-    public Result RegisterPanelProvider(IPanelProvider panel) => _panels.Register(panel);
+    public Result RegisterPanelProvider(IPanelProvider panel) => Panels.Register(panel);
 }
 #endif
 // HARBOR_MINIMAL: PluginLoadHost is omitted — the entire Harbor.Plugins.*

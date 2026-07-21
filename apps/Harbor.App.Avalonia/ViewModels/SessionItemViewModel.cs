@@ -1,27 +1,20 @@
-using System.Collections.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Abstractions.Models;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     One row in the session sidebar list. Shows title, model, relative time,
 ///     status (idle/working/done/error), and git info (branch + dirty).
 /// </summary>
 public sealed partial class SessionItemViewModel : ObservableObject
 {
-    public string Id { get; }
-    public string Title { get; }
-    public string Agent { get; }
-    public string Model { get; }
-    public string ProviderId { get; }
-    public DateTimeOffset UpdatedAt { get; }
+    [ObservableProperty] private string? _gitBranch;
+    [ObservableProperty] private bool _gitIsDirty;
 
     /// <summary>
     ///     Live message count for this session. Originally populated from the
     ///     persisted <c>SessionMetadata.MessageCount</c> at refresh time, but
-    ///     also updated in real time by <see cref="SessionListViewModel"/>
-    ///     (subscribed to <see cref="Services.SessionManager.MessageCountChanged"/>)
+    ///     also updated in real time by <see cref="SessionListViewModel" />
+    ///     (subscribed to <see cref="Services.SessionManager.MessageCountChanged" />)
     ///     so the count tracks new messages without a full RefreshAsync round-trip
     ///     (Task S2 / Problem 2: “stale message count after send”).
     /// </summary>
@@ -29,8 +22,6 @@ public sealed partial class SessionItemViewModel : ObservableObject
     private int _messageCount;
 
     [ObservableProperty] private SessionStatus _status = SessionStatus.Idle;
-    [ObservableProperty] private string? _gitBranch;
-    [ObservableProperty] private bool _gitIsDirty;
     [ObservableProperty] private string _workingDirectory = "";
 
     public SessionItemViewModel(string id, string title, string agent, string model,
@@ -46,6 +37,12 @@ public sealed partial class SessionItemViewModel : ObservableObject
         _messageCount = messageCount;
         WorkingDirectory = workingDirectory;
     }
+    public string Id { get; }
+    public string Title { get; }
+    public string Agent { get; }
+    public string Model { get; }
+    public string ProviderId { get; }
+    public DateTimeOffset UpdatedAt { get; }
 
     /// <summary>Relative time: "now", "5m", "3h", "2d", "07/18".</summary>
     public string RelativeTime => UpdatedAt switch
@@ -54,7 +51,7 @@ public sealed partial class SessionItemViewModel : ObservableObject
         var t when (DateTimeOffset.UtcNow - t).TotalHours < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalMinutes}m",
         var t when (DateTimeOffset.UtcNow - t).TotalDays < 1 => $"{(int)(DateTimeOffset.UtcNow - t).TotalHours}h",
         var t when (DateTimeOffset.UtcNow - t).TotalDays < 7 => $"{(int)(DateTimeOffset.UtcNow - t).TotalDays}d",
-        _ => UpdatedAt.ToString("MM/dd"),
+        _ => UpdatedAt.ToString("MM/dd")
     };
 
     /// <summary>Model · folder short name for the meta line.</summary>
@@ -62,10 +59,10 @@ public sealed partial class SessionItemViewModel : ObservableObject
     {
         get
         {
-            var branch = GitBranch ?? "";
-            var dirty = GitIsDirty ? " *" : "";
-            var folder = !string.IsNullOrEmpty(WorkingDirectory)
-                ? System.IO.Path.GetFileName(WorkingDirectory)
+            string branch = GitBranch ?? "";
+            string dirty = GitIsDirty ? " *" : "";
+            string folder = !string.IsNullOrEmpty(WorkingDirectory)
+                ? Path.GetFileName(WorkingDirectory)
                 : "";
             var parts = new List<string>();
             if (!string.IsNullOrEmpty(branch))
@@ -84,7 +81,7 @@ public sealed partial class SessionItemViewModel : ObservableObject
         SessionStatus.Done => "done",
         SessionStatus.Error => "error",
         SessionStatus.Aborted => "aborted",
-        _ => "idle",
+        _ => "idle"
     };
 
     /// <summary>Status dot color key.</summary>
@@ -94,6 +91,6 @@ public sealed partial class SessionItemViewModel : ObservableObject
         SessionStatus.Done => "StateSuccessBrush",
         SessionStatus.Error => "StateErrorBrush",
         SessionStatus.Aborted => "StateWarningBrush",
-        _ => "TextTertiaryBrush",
+        _ => "TextTertiaryBrush"
     };
 }

@@ -1,5 +1,4 @@
 namespace Harbor.Core;
-
 /// <summary>
 ///     Marker type that lives in Harbor.Core.dll so the assembly has at least
 ///     one type. Harbor.Core is a thin backward-compat facade after the S1

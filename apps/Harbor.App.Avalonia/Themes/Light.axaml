@@ -22,20 +22,20 @@
     <Color x:Key="LatteTeal">#179299</Color>
     <Color x:Key="LatteSky">#04A5E5</Color>
 
-    <SolidColorBrush x:Key="AppBackgroundBrush"        Color="{StaticResource LatteBase}"/>
-    <SolidColorBrush x:Key="PanelBackgroundBrush"      Color="{StaticResource LatteMantle}"/>
-    <SolidColorBrush x:Key="SidebarBackgroundBrush"    Color="{StaticResource LatteCrust}"/>
-    <SolidColorBrush x:Key="StatusBarBackgroundBrush"  Color="{StaticResource LatteMantle}"/>
-    <SolidColorBrush x:Key="CardBackgroundBrush"       Color="{StaticResource LatteSurface0}"/>
-    <SolidColorBrush x:Key="HoverBackgroundBrush"      Color="{StaticResource LatteSurface0}"/>
-    <SolidColorBrush x:Key="SelectedBackgroundBrush"   Color="{StaticResource LatteSurface1}"/>
-    <SolidColorBrush x:Key="BorderBrush"               Color="{StaticResource LatteSurface0}"/>
-    <SolidColorBrush x:Key="AccentBrush"               Color="{StaticResource LatteBlue}"/>
-    <SolidColorBrush x:Key="AccentForegroundBrush"     Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="SuccessBrush"              Color="{StaticResource LatteGreen}"/>
-    <SolidColorBrush x:Key="WarningBrush"              Color="{StaticResource LattePeach}"/>
-    <SolidColorBrush x:Key="ErrorBrush"                Color="{StaticResource LatteRed}"/>
-    <SolidColorBrush x:Key="TextBrush"                 Color="{StaticResource LatteText}"/>
-    <SolidColorBrush x:Key="TextSubtleBrush"           Color="{StaticResource LatteSubtext0}"/>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource LatteBase}" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource LatteMantle}" />
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{StaticResource LatteCrust}" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="{StaticResource LatteMantle}" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource LatteSurface0}" />
+    <SolidColorBrush x:Key="HoverBackgroundBrush" Color="{StaticResource LatteSurface0}" />
+    <SolidColorBrush x:Key="SelectedBackgroundBrush" Color="{StaticResource LatteSurface1}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource LatteSurface0}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource LatteBlue}" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource LatteGreen}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource LattePeach}" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource LatteRed}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource LatteText}" />
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="{StaticResource LatteSubtext0}" />
 
 </ResourceDictionary>

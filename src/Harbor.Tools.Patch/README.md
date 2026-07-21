@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Target file path. |
 | `patch` | string | Required. Unified-diff body. |
@@ -19,7 +20,9 @@
         ## Example usage
 
         ```json
+
 {"path":"src/Foo.cs","patch":"--- a/src/Foo.cs\n+++ b/src/Foo.cs\n@@ -1,3 +1,3 @@\n-old\n+new\n"}
+
 ```
 
         ## Dependencies

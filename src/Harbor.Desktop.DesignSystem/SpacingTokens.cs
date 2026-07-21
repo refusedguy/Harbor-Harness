@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.DesignSystem;
-
 /// <summary>
 ///     Spacing tokens on the 4/8/12/16/24/32/48/64 px scale. Matched to
 ///     <c>Harbor.Desktop.Abstractions.DesignSystem.DesignTokens</c> (which

@@ -3,12 +3,10 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using Harbor.Ui.Framework.Converters;
-
 namespace Harbor.App.Wpf.Converters;
-
 /// <summary>
 ///     Resolves a resource-key string (e.g. "ChatUserBrush") to the
-///     registered <see cref="Brush"/> from <c>Application.Current.Resources</c>.
+///     registered <see cref="Brush" /> from <c>Application.Current.Resources</c>.
 ///     Mirrors the Avalonia <c>BrushKeyConverter</c> so the same
 ///     <c>StatusMappers.*BrushKey</c> strings can be reused across both
 ///     desktop frameworks.
@@ -18,7 +16,7 @@ public sealed class BrushKeyConverter : IValueConverter
     /// <summary>Singleton instance for use as a static resource.</summary>
     public static readonly BrushKeyConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string key) return null;
@@ -26,7 +24,7 @@ public sealed class BrushKeyConverter : IValueConverter
         return Application.Current.Resources[key] as Brush;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
@@ -40,7 +38,7 @@ public sealed class NullToCollapsedConverter : IValueConverter
 {
     public static readonly NullToCollapsedConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return string.IsNullOrEmpty(value?.ToString())
@@ -48,43 +46,43 @@ public sealed class NullToCollapsedConverter : IValueConverter
             : Visibility.Visible;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.StatusToBrushKey"/> as a WPF
-///     <see cref="IValueConverter"/>. Resolves the returned resource key
-///     to a <see cref="Brush"/> via <see cref="BrushKeyConverter"/> so the
+///     Wraps <see cref="StatusMappers.StatusToBrushKey" /> as a WPF
+///     <see cref="IValueConverter" />. Resolves the returned resource key
+///     to a <see cref="Brush" /> via <see cref="BrushKeyConverter" /> so the
 ///     status-bar accent can be bound directly to a status string.
 /// </summary>
 public sealed class StatusTextToBrushConverter : IValueConverter
 {
     public static readonly StatusTextToBrushConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        var key = StatusMappers.StatusToBrushKey(value?.ToString());
+        string key = StatusMappers.StatusToBrushKey(value?.ToString());
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.TimeAgo"/> as a WPF
-///     <see cref="IValueConverter"/>. Bound to a UTC <c>DateTime</c>,
+///     Wraps <see cref="StatusMappers.TimeAgo" /> as a WPF
+///     <see cref="IValueConverter" />. Bound to a UTC <c>DateTime</c>,
 ///     returns "5m ago" / "2h ago" / "Mar 5".
 /// </summary>
 public sealed class TimeAgoConverter : IValueConverter
 {
     public static readonly TimeAgoConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
@@ -95,20 +93,20 @@ public sealed class TimeAgoConverter : IValueConverter
         };
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.TokensToCompact"/> as a WPF
-///     <see cref="IValueConverter"/>.
+///     Wraps <see cref="StatusMappers.TokensToCompact" /> as a WPF
+///     <see cref="IValueConverter" />.
 /// </summary>
 public sealed class TokensToCompactConverter : IValueConverter
 {
     public static readonly TokensToCompactConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
@@ -119,20 +117,20 @@ public sealed class TokensToCompactConverter : IValueConverter
         };
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.CostToUsd"/> as a WPF
-///     <see cref="IValueConverter"/>.
+///     Wraps <see cref="StatusMappers.CostToUsd" /> as a WPF
+///     <see cref="IValueConverter" />.
 /// </summary>
 public sealed class CostToUsdConverter : IValueConverter
 {
     public static readonly CostToUsdConverter Instance = new();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
@@ -143,7 +141,7 @@ public sealed class CostToUsdConverter : IValueConverter
         };
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }

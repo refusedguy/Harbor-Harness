@@ -78,8 +78,8 @@ public sealed class TreeTool : ITool
     public Result ValidateArguments(JsonElement args)
     {
         if (args.TryGetProperty("maxDepth", out var d) && d.ValueKind == JsonValueKind.Number
-                                                      && d.TryGetInt32(out int depth)
-                                                      && (depth < 1 || depth > HardMaxDepth))
+                                                       && d.TryGetInt32(out int depth)
+                                                       && (depth < 1 || depth > HardMaxDepth))
             return Result.Failure($"'maxDepth' must be between 1 and {HardMaxDepth}.");
 
         if (args.TryGetProperty("maxEntries", out var m) && m.ValueKind == JsonValueKind.Number
@@ -94,10 +94,7 @@ public sealed class TreeTool : ITool
     public Task<ToolResult> ExecuteAsync(
         JsonElement args,
         ToolContext context,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => ExecuteCore(args, cancellationToken), cancellationToken);
-    }
+        CancellationToken cancellationToken = default) => Task.Run(() => ExecuteCore(args, cancellationToken), cancellationToken);
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
@@ -122,7 +119,7 @@ public sealed class TreeTool : ITool
         _logger.LogDebug("Tree: {Path} (maxDepth={MaxDepth})", path, maxDepth);
 
         // Try to get the tracked-files set from `git ls-files` (cached per call).
-        HashSet<string>? tracked = useGitignore ? TryGetGitTrackedFiles(path) : null;
+        var tracked = useGitignore ? TryGetGitTrackedFiles(path) : null;
 
         var state = new WalkState(maxEntries);
         using var sb = StringBuilderPool.Rent(8192);
@@ -263,7 +260,10 @@ public sealed class TreeTool : ITool
             // Don't begin async read — read synchronously with a hard timeout.
             if (!p.WaitForExit(GitTimeoutMs))
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
+                try { p.Kill(entireProcessTree: true); }
+                catch
+                { /* ignore */
+                }
                 return null;
             }
             if (p.ExitCode != 0) return null;

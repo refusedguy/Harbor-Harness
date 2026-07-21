@@ -1,7 +1,4 @@
-using Microsoft.AspNetCore.Components;
-
 namespace Harbor.App.Blazor.Services;
-
 /// <summary>
 ///     Catppuccin theme identifier. The UI ships with Mocha (dark),
 ///     Latte (light), and Macchiato.
@@ -17,7 +14,7 @@ public enum HarborTheme
 }
 
 /// <summary>
-///     Event args for <see cref="ThemeService.ThemeChanged"/>. Carries the
+///     Event args for <see cref="ThemeService.ThemeChanged" />. Carries the
 ///     newly selected theme so subscribers don't need to re-read the service.
 /// </summary>
 public sealed class ThemeChangedEventArgs : EventArgs
@@ -35,14 +32,14 @@ public sealed class ThemeChangedEventArgs : EventArgs
 
 /// <summary>
 ///     Singleton theme service. Holds the current theme and raises
-///     <see cref="ThemeChanged"/> when it changes so the layout can update
+///     <see cref="ThemeChanged" /> when it changes so the layout can update
 ///     the <c>data-theme</c> attribute on the <c>&lt;html&gt;</c> element.
 /// </summary>
 public sealed class ThemeService
 {
-    private HarborTheme _current = HarborTheme.Mocha;
     private readonly BlazorDispatcherAdapter _dispatcher;
     private readonly object _gate = new();
+    private HarborTheme _current = HarborTheme.Mocha;
 
     /// <summary>Construct the theme service.</summary>
     /// <param name="dispatcher">Render-thread marshal adapter.</param>
@@ -54,8 +51,17 @@ public sealed class ThemeService
     /// <summary>The currently selected theme.</summary>
     public HarborTheme Current
     {
-        get { lock (_gate) return _current; }
+        get
+        {
+            lock (_gate)
+            {
+                return _current;
+            }
+        }
     }
+
+    /// <summary>Return the CSS data-theme attribute value for the current theme.</summary>
+    public string DataThemeValue => Current.ToString().ToLowerInvariant();
 
     /// <summary>Raised on the render thread after the theme changes.</summary>
     public event EventHandler<ThemeChangedEventArgs>? ThemeChanged;
@@ -71,20 +77,16 @@ public sealed class ThemeService
         var args = new ThemeChangedEventArgs(theme);
         await _dispatcher.InvokeAsync(() => ThemeChanged?.Invoke(this, args)).ConfigureAwait(false);
     }
-
-    /// <summary>Return the CSS data-theme attribute value for the current theme.</summary>
-    public string DataThemeValue => Current.ToString().ToLowerInvariant();
 }
 
 /// <summary>
 ///     Dialog service — opens modal dialogs (confirm, prompt, file picker) over
-///     the current page. Components subscribe to <see cref="Changed"/>
+///     the current page. Components subscribe to <see cref="Changed" />
 ///     to render the actual modal HTML.
 /// </summary>
 public sealed class DialogService
 {
     private readonly BlazorDispatcherAdapter _dispatcher;
-    private DialogRequest? _current;
 
     /// <summary>Construct the dialog service.</summary>
     /// <param name="dispatcher">Render-thread marshal adapter.</param>
@@ -93,8 +95,12 @@ public sealed class DialogService
         _dispatcher = dispatcher;
     }
 
-    /// <summary>Currently open dialog request, or <see langword="null"/> if none.</summary>
-    public DialogRequest? Current => _current;
+    /// <summary>Currently open dialog request, or <see langword="null" /> if none.</summary>
+    public DialogRequest? Current
+    {
+        get;
+        private set;
+    }
 
     /// <summary>Raised when a dialog is opened or closed.</summary>
     public event EventHandler? Changed;
@@ -104,17 +110,17 @@ public sealed class DialogService
     /// <param name="message">Dialog body text.</param>
     /// <param name="okLabel">Label for the confirm button (default "OK").</param>
     /// <param name="cancelLabel">Label for the cancel button (default "Cancel").</param>
-    /// <returns><see langword="true"/> if the user confirmed; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true" /> if the user confirmed; otherwise <see langword="false" />.</returns>
     public async Task<bool> ConfirmAsync(string title, string message, string okLabel = "OK", string cancelLabel = "Cancel")
     {
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var req = new DialogRequest(
-            Title: title,
-            Message: message,
-            OkLabel: okLabel,
-            CancelLabel: cancelLabel,
-            OnOk: () => tcs.TrySetResult(true),
-            OnCancel: () => tcs.TrySetResult(false));
+            title,
+            message,
+            okLabel,
+            cancelLabel,
+            () => tcs.TrySetResult(true),
+            () => tcs.TrySetResult(false));
         await OpenAsync(req).ConfigureAwait(false);
         return await tcs.Task.ConfigureAwait(false);
     }
@@ -122,14 +128,14 @@ public sealed class DialogService
     /// <summary>Open a dialog request and notify subscribers.</summary>
     public async Task OpenAsync(DialogRequest request)
     {
-        _current = request;
+        Current = request;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 
     /// <summary>Close the current dialog (no action).</summary>
     public async Task CloseAsync()
     {
-        _current = null;
+        Current = null;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 }
@@ -142,9 +148,10 @@ public sealed record DialogRequest(
     string CancelLabel,
     Action OnOk,
     Action OnCancel);
+
 /// <summary>
 ///     Toast notification service. Pushes transient messages to a
-///     <see cref="ToastContainer"/> component. Toasts auto-dismiss after
+///     <see cref="ToastContainer" /> component. Toasts auto-dismiss after
 ///     4 seconds by default.
 /// </summary>
 public sealed class ToastService
@@ -163,7 +170,13 @@ public sealed class ToastService
     /// <summary>Current visible toasts (snapshot).</summary>
     public IReadOnlyList<Toast> Current
     {
-        get { lock (_toasts) return _toasts.ToArray(); }
+        get
+        {
+            lock (_toasts)
+            {
+                return _toasts.ToArray();
+            }
+        }
     }
 
     /// <summary>Raised when a toast is added or removed.</summary>
@@ -179,7 +192,7 @@ public sealed class ToastService
     public Task WarnAsync(string message, string? title = null) => PushAsync(ToastLevel.Warn, message, title);
 
     /// <summary>Push an error toast (no auto-dismiss).</summary>
-    public Task ErrorAsync(string message, string? title = null) => PushAsync(ToastLevel.Error, message, title, autoDismiss: false);
+    public Task ErrorAsync(string message, string? title = null) => PushAsync(ToastLevel.Error, message, title, false);
 
     /// <summary>Dismiss a toast by id.</summary>
     public async Task DismissAsync(int id)
@@ -224,17 +237,14 @@ public sealed record Toast(int Id, ToastLevel Level, string Title, string Messag
 /// <summary>
 ///     Command palette service (Ctrl+P fuzzy finder). Holds the list of
 ///     available commands, opens/closes the palette overlay, and tracks the
-///     current query + selected index. Use <see cref="Register"/>
+///     current query + selected index. Use <see cref="Register" />
 ///     on app start to seed the default navigation commands; pages register
 ///     their own commands in <c>OnInitialized</c>.
 /// </summary>
 public sealed class CommandPaletteService
 {
-    private readonly BlazorDispatcherAdapter _dispatcher;
-    private bool _isOpen;
-    private string _query = string.Empty;
-    private int _selectedIndex;
     private readonly List<CommandEntry> _commands = new();
+    private readonly BlazorDispatcherAdapter _dispatcher;
 
     /// <summary>Construct the service.</summary>
     /// <param name="dispatcher">Render-thread marshal adapter.</param>
@@ -245,16 +255,25 @@ public sealed class CommandPaletteService
     }
 
     /// <summary>Whether the palette overlay is currently open.</summary>
-    public bool IsOpen => _isOpen;
+    public bool IsOpen
+    {
+        get;
+        private set;
+    }
 
     /// <summary>Current search query.</summary>
-    public string Query => _query;
+    public string Query
+    {
+        get;
+        private set;
+    } = string.Empty;
 
     /// <summary>Index of the highlighted command in the filtered list.</summary>
-    public int SelectedIndex => _selectedIndex;
-
-    /// <summary>Raised when the palette state changes (open/close/query/selection).</summary>
-    public event EventHandler? Changed;
+    public int SelectedIndex
+    {
+        get;
+        private set;
+    }
 
     /// <summary>All registered commands.</summary>
     public IReadOnlyList<CommandEntry> Commands => _commands;
@@ -264,7 +283,7 @@ public sealed class CommandPaletteService
     {
         get
         {
-            string q = _query.Trim();
+            string q = Query.Trim();
             if (q.Length == 0) return _commands;
             var matches = new List<CommandEntry>();
             foreach (var c in _commands)
@@ -279,7 +298,10 @@ public sealed class CommandPaletteService
         }
     }
 
-    /// <summary>Register a new command. Idempotent by <see cref="CommandEntry.Id"/>.</summary>
+    /// <summary>Raised when the palette state changes (open/close/query/selection).</summary>
+    public event EventHandler? Changed;
+
+    /// <summary>Register a new command. Idempotent by <see cref="CommandEntry.Id" />.</summary>
     public void Register(CommandEntry entry)
     {
         if (_commands.Exists(c => c.Id == entry.Id)) return;
@@ -289,31 +311,31 @@ public sealed class CommandPaletteService
     /// <summary>Open the palette and reset the query.</summary>
     public async Task OpenAsync()
     {
-        _isOpen = true;
-        _query = string.Empty;
-        _selectedIndex = 0;
+        IsOpen = true;
+        Query = string.Empty;
+        SelectedIndex = 0;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 
     /// <summary>Close the palette.</summary>
     public async Task CloseAsync()
     {
-        _isOpen = false;
+        IsOpen = false;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 
     /// <summary>Toggle open/closed.</summary>
     public async Task ToggleAsync()
     {
-        if (_isOpen) await CloseAsync().ConfigureAwait(false);
+        if (IsOpen) await CloseAsync().ConfigureAwait(false);
         else await OpenAsync().ConfigureAwait(false);
     }
 
     /// <summary>Update the query and reset the selection.</summary>
     public async Task SetQueryAsync(string query)
     {
-        _query = query;
-        _selectedIndex = 0;
+        Query = query;
+        SelectedIndex = 0;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 
@@ -322,8 +344,8 @@ public sealed class CommandPaletteService
     {
         var filtered = Filtered;
         if (filtered.Count == 0) return;
-        _selectedIndex = (_selectedIndex + delta) % filtered.Count;
-        if (_selectedIndex < 0) _selectedIndex += filtered.Count;
+        SelectedIndex = (SelectedIndex + delta) % filtered.Count;
+        if (SelectedIndex < 0) SelectedIndex += filtered.Count;
         await _dispatcher.InvokeAsync(() => Changed?.Invoke(this, EventArgs.Empty)).ConfigureAwait(false);
     }
 
@@ -331,8 +353,8 @@ public sealed class CommandPaletteService
     public async Task ExecuteSelectedAsync()
     {
         var filtered = Filtered;
-        if (_selectedIndex < 0 || _selectedIndex >= filtered.Count) return;
-        await filtered[_selectedIndex].ExecuteAsync().ConfigureAwait(false);
+        if (SelectedIndex < 0 || SelectedIndex >= filtered.Count) return;
+        await filtered[SelectedIndex].ExecuteAsync().ConfigureAwait(false);
         await CloseAsync().ConfigureAwait(false);
     }
 
@@ -355,6 +377,37 @@ public sealed class CommandPaletteService
 /// <summary>One command in the palette.</summary>
 public sealed record CommandEntry
 {
+
+    /// <summary>Create a navigation-only command.</summary>
+    public CommandEntry(string id, string title, string? hint, string navigateUri)
+    {
+        Id = id;
+        Title = title;
+        Hint = hint;
+        NavigateUri = navigateUri;
+    }
+
+    /// <summary>Create an action-only command.</summary>
+    public CommandEntry(string id, string title, string? hint, Action action)
+    {
+        Id = id;
+        Title = title;
+        Hint = hint;
+        Action = () =>
+        {
+            action();
+            return Task.CompletedTask;
+        };
+    }
+
+    /// <summary>Create a fully custom command.</summary>
+    public CommandEntry(string id, string title, string? hint, Func<Task> action)
+    {
+        Id = id;
+        Title = title;
+        Hint = hint;
+        Action = action;
+    }
     /// <summary>Stable id used for deduplication and keyboard assignment.</summary>
     public string Id { get; init; }
 
@@ -372,31 +425,4 @@ public sealed record CommandEntry
 
     /// <summary>Execute the command (navigate + run action).</summary>
     public Task ExecuteAsync() => Action?.Invoke() ?? Task.CompletedTask;
-
-    /// <summary>Create a navigation-only command.</summary>
-    public CommandEntry(string id, string title, string? hint, string navigateUri)
-    {
-        Id = id;
-        Title = title;
-        Hint = hint;
-        NavigateUri = navigateUri;
-    }
-
-    /// <summary>Create an action-only command.</summary>
-    public CommandEntry(string id, string title, string? hint, Action action)
-    {
-        Id = id;
-        Title = title;
-        Hint = hint;
-        Action = () => { action(); return Task.CompletedTask; };
-    }
-
-    /// <summary>Create a fully custom command.</summary>
-    public CommandEntry(string id, string title, string? hint, Func<Task> action)
-    {
-        Id = id;
-        Title = title;
-        Hint = hint;
-        Action = action;
-    }
 }

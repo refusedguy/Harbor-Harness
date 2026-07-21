@@ -4,7 +4,6 @@
              x:Class="Harbor.App.Avalonia.Views.Shell.StatusBarView">
 
     <UserControl.Resources>
-        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
     </UserControl.Resources>
 
     <!--
@@ -31,74 +30,74 @@
             <!-- Group 1: status -->
             <Ellipse Grid.Column="0" Width="6" Height="6"
                      VerticalAlignment="Center" Margin="0,0,6,0"
-                     Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"/>
+                     Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}" />
             <TextBlock Grid.Column="1" Text="{Binding StatusText}"
                        VerticalAlignment="Center" FontSize="11"
-                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                       Foreground="{DynamicResource TextSecondaryBrush}" />
 
             <Border Grid.Column="2" Width="1" Margin="12,4"
-                    Background="{DynamicResource BorderSubtleBrush}"/>
+                    Background="{DynamicResource BorderSubtleBrush}" />
 
             <!-- Group 2: agent · model -->
             <TextBlock Grid.Column="3" Text="{Binding AgentLabel}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource AccentPrimaryBrush}"
-                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                       VerticalAlignment="Center" Margin="0,0,6,0" />
             <TextBlock Grid.Column="4" Text="·"
                        Foreground="{DynamicResource TextTertiaryBrush}"
-                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                       VerticalAlignment="Center" Margin="0,0,6,0" />
             <TextBlock Grid.Column="5" Text="{Binding ModelLabel}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextMonoBrush}"
                        VerticalAlignment="Center" Margin="0,0,0,0"
-                       TextTrimming="CharacterEllipsis"/>
+                       TextTrimming="CharacterEllipsis" />
 
             <Border Grid.Column="6" Width="1" Margin="12,4"
-                    Background="{DynamicResource BorderSubtleBrush}"/>
+                    Background="{DynamicResource BorderSubtleBrush}" />
 
             <!-- Group 3: tokens -->
             <TextBlock Grid.Column="7"
                        Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextSecondaryBrush}"
-                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                       VerticalAlignment="Center" Margin="0,0,12,0" />
             <TextBlock Grid.Column="8"
                        Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextSecondaryBrush}"
-                       VerticalAlignment="Center" Margin="0,0,0,0"/>
+                       VerticalAlignment="Center" Margin="0,0,0,0" />
 
             <!-- Message count (live, tracks new messages without a RefreshAsync
                  round-trip — Task D2 / Problem 2). Placed next to tokens so the
                  "how much is happening right now" group stays visually contiguous. -->
             <Border Grid.Column="9" Width="1" Margin="12,4"
-                    Background="{DynamicResource BorderSubtleBrush}"/>
+                    Background="{DynamicResource BorderSubtleBrush}" />
             <TextBlock Grid.Column="10"
                        Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextSecondaryBrush}"
-                       VerticalAlignment="Center" Margin="0,0,0,0"/>
+                       VerticalAlignment="Center" Margin="0,0,0,0" />
 
             <!-- Spacer -->
-            <TextBlock Grid.Column="11" Text=""/>
+            <TextBlock Grid.Column="11" Text="" />
 
             <!-- Group 4 (right): cost -->
             <Border Grid.Column="12" Width="1" Margin="12,4"
-                    Background="{DynamicResource BorderSubtleBrush}"/>
+                    Background="{DynamicResource BorderSubtleBrush}" />
             <TextBlock Grid.Column="13"
                        Text="{Binding CostUsd, StringFormat='${0:F4}'}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextWarningBrush}"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" />
 
             <!-- Group 5 (far right): session count -->
             <Border Grid.Column="14" Width="1" Margin="12,4"
-                    Background="{DynamicResource BorderSubtleBrush}"/>
+                    Background="{DynamicResource BorderSubtleBrush}" />
             <TextBlock Grid.Column="15"
                        Text="{Binding ActiveSessionCount, StringFormat='{}{0} session'}"
                        FontFamily="{DynamicResource FontMono}" FontSize="11"
                        Foreground="{DynamicResource TextTertiaryBrush}"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" />
         </Grid>
     </Border>
 </UserControl>

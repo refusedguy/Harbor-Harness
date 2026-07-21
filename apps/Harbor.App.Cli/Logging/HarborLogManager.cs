@@ -1,13 +1,12 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Logging;
-
 /// <summary>
-///     Process-wide owner of the shared <see cref="FileLoggerProvider"/>.
+///     Process-wide owner of the shared <see cref="FileLoggerProvider" />.
 ///     Both <c>Program.Main</c> (which builds a tiny logger factory for
 ///     one-shot commands like <c>harbor --version</c>) and
 ///     <c>HostBuilder.Build</c> (which builds the full host) call
-///     <see cref="Initialize"/> to obtain the same singleton provider, so
+///     <see cref="Initialize" /> to obtain the same singleton provider, so
 ///     every log line — from the very first line of <c>Main</c> to the last
 ///     line emitted during host disposal — lands in the same per-run file.
 /// </summary>
@@ -22,33 +21,36 @@ namespace Harbor.Cli.Logging;
 ///     </para>
 ///     <para>
 ///         <b>Console level vs file level:</b> the file always captures down
-///         to <see cref="LogLevel.Debug"/> (overridable via
-///         <see cref="Initialize(string, LogLevel?)"/>'s <c>fileLevel</c>
+///         to <see cref="LogLevel.Debug" /> (overridable via
+///         <see cref="Initialize(string, LogLevel?)" />'s <c>fileLevel</c>
 ///         argument) for post-mortem analysis. The console level is decided
-///         by the caller — typically <see cref="LogLevel.Debug"/> when a
-///         debugger is attached, <see cref="LogLevel.Information"/> otherwise.
+///         by the caller — typically <see cref="LogLevel.Debug" /> when a
+///         debugger is attached, <see cref="LogLevel.Information" /> otherwise.
 ///     </para>
 ///     <para>
 ///         <b>Lifetime:</b> the provider is disposed by whichever logger
 ///         factory is disposed first (the host's, when the
-///         <c>using var host = …</c> exits). <see cref="FileLoggerProvider.Dispose"/>
+///         <c>using var host = …</c> exits). <see cref="FileLoggerProvider.Dispose" />
 ///         is idempotent, so subsequent disposes are no-ops. Tests that build
 ///         the host multiple times in one process get separate per-run files
-///         — one per <see cref="Initialize"/> call — because each call closes
+///         — one per <see cref="Initialize" /> call — because each call closes
 ///         the previous provider before opening a new one.
 ///     </para>
 /// </remarks>
 public static class HarborLogManager
 {
     private static readonly object InitLock = new();
-    private static FileLoggerProvider? _current;
     private static bool _cleanupDone;
 
     /// <summary>
-    ///     The shared provider, or <see langword="null"/> if
-    ///     <see cref="Initialize"/> has not been called yet.
+    ///     The shared provider, or <see langword="null" /> if
+    ///     <see cref="Initialize" /> has not been called yet.
     /// </summary>
-    public static FileLoggerProvider? Current => _current;
+    public static FileLoggerProvider? Current
+    {
+        get;
+        private set;
+    }
 
     /// <summary>
     ///     Absolute path to the directory under which per-run log files are
@@ -65,22 +67,22 @@ public static class HarborLogManager
     }
 
     /// <summary>
-    ///     Create (or reuse) the shared <see cref="FileLoggerProvider"/>.
+    ///     Create (or reuse) the shared <see cref="FileLoggerProvider" />.
     ///     Subsequent calls return the already-initialized instance until
-    ///     <see cref="Shutdown"/> is called.
+    ///     <see cref="Shutdown" /> is called.
     /// </summary>
     /// <param name="appPrefix">Short prefix embedded in the filename (e.g. "cli").</param>
     /// <param name="fileLevel">
     ///     Minimum level captured to the file. Defaults to
-    ///     <see cref="LogLevel.Debug"/> so post-mortem always has full detail.
+    ///     <see cref="LogLevel.Debug" /> so post-mortem always has full detail.
     /// </param>
-    /// <returns>The shared provider. Never <see langword="null"/>.</returns>
+    /// <returns>The shared provider. Never <see langword="null" />.</returns>
     public static FileLoggerProvider Initialize(string appPrefix, LogLevel? fileLevel = null)
     {
         lock (InitLock)
         {
-            if (_current is not null)
-                return _current;
+            if (Current is not null)
+                return Current;
 
             string logDir = DefaultLogDirectory;
             var provider = new FileLoggerProvider(
@@ -92,7 +94,7 @@ public static class HarborLogManager
             {
                 try
                 {
-                    new RollingLogCleaner(logDir, maxFiles: 50).Cleanup();
+                    new RollingLogCleaner(logDir, 50).Cleanup();
                 }
                 catch
                 {
@@ -101,14 +103,14 @@ public static class HarborLogManager
                 _cleanupDone = true;
             }
 
-            _current = provider;
+            Current = provider;
             return provider;
         }
     }
 
     /// <summary>
     ///     Dispose the current provider and reset state so the next
-    ///     <see cref="Initialize"/> call opens a fresh file. Intended for
+    ///     <see cref="Initialize" /> call opens a fresh file. Intended for
     ///     tests that need a clean per-test log; production code never calls
     ///     this — the OS reclaims the file handle on process exit.
     /// </summary>
@@ -116,16 +118,16 @@ public static class HarborLogManager
     {
         lock (InitLock)
         {
-            _current?.Dispose();
-            _current = null;
+            Current?.Dispose();
+            Current = null;
         }
     }
 
     /// <summary>
     ///     Resolve the console log level from CLI args / env, with a sensible
-    ///     default: <see cref="LogLevel.Debug"/> when a debugger is attached,
-    ///     <see cref="LogLevel.Information"/> otherwise. The previous default
-    ///     was <see cref="LogLevel.Warning"/>, which is why the user "only saw
+    ///     default: <see cref="LogLevel.Debug" /> when a debugger is attached,
+    ///     <see cref="LogLevel.Information" /> otherwise. The previous default
+    ///     was <see cref="LogLevel.Warning" />, which is why the user "only saw
     ///     a minimal log".
     /// </summary>
     /// <param name="args">CLI args (parsed for <c>--loglevel</c>/<c>-ll</c>).</param>

@@ -1,59 +1,52 @@
 using System.Buffers;
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
-using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Core.Agents;
-
 /// <summary>
-///     Dispatches tool calls to the registered <see cref="ITool"/>s and
-///     aggregates results into a <see cref="ToolResultMessage"/>. Extracted
-///     from <see cref="AgentLoop"/> (Task R32 god-object decomposition) so
+///     Dispatches tool calls to the registered <see cref="ITool" />s and
+///     aggregates results into a <see cref="ToolResultMessage" />. Extracted
+///     from <see cref="AgentLoop" /> (Task R32 god-object decomposition) so
 ///     the loop can focus on orchestration while this class owns tool
 ///     execution, permission gating, and event publishing.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Execution modes:</b> if any tool in the batch declares
-///         <see cref="ExecutionMode.Sequential"/> (e.g. <c>bash</c>,
+///         <see cref="ExecutionMode.Sequential" /> (e.g. <c>bash</c>,
 ///         <c>write</c>), the entire batch runs sequentially. Otherwise
-///         the batch runs in parallel via <see cref="Task.WhenAll"/> with
+///         the batch runs in parallel via <see cref="Task.WhenAll" /> with
 ///         an ArrayPool-rented task array (avoids the LINQ
 ///         <c>Select(...).ToArray()</c> allocation).
 ///     </para>
 ///     <para>
 ///         <b>Per-tool-call lifecycle:</b>
 ///         <list type="number">
-///             <item>Validate tool name + look up the tool via <see cref="IToolRegistry"/>.</item>
-///             <item>Validate arguments via <see cref="ITool.ValidateArguments"/>.</item>
-///             <item>Check permission via <see cref="IPermissionService.CheckAsync"/>.</item>
-///             <item>Publish <see cref="ToolExecutionStartEvent"/>.</item>
-///             <item>Execute via <see cref="ITool.ExecuteAsync"/> with a <see cref="ToolContext"/> that wires up progress reporting + user-prompt callback.</item>
-///             <item>Publish <see cref="ToolExecutionEndEvent"/> (success or error).</item>
+///             <item>Validate tool name + look up the tool via <see cref="IToolRegistry" />.</item>
+///             <item>Validate arguments via <see cref="ITool.ValidateArguments" />.</item>
+///             <item>Check permission via <see cref="IPermissionService.CheckAsync" />.</item>
+///             <item>Publish <see cref="ToolExecutionStartEvent" />.</item>
+///             <item>
+///                 Execute via <see cref="ITool.ExecuteAsync" /> with a <see cref="ToolContext" /> that wires up
+///                 progress reporting + user-prompt callback.
+///             </item>
+///             <item>Publish <see cref="ToolExecutionEndEvent" /> (success or error).</item>
 ///         </list>
 ///     </para>
 ///     <para>
 ///         <b>Error handling:</b> validation errors, permission denies, and
-///         exceptions are all converted into <see cref="ToolResultEntry"/>
+///         exceptions are all converted into <see cref="ToolResultEntry" />
 ///         with <c>IsError=true</c> — the agent loop treats them as
 ///         successful "tool returned an error" rather than throwing.
 ///     </para>
 /// </remarks>
 internal sealed class ToolDispatcher
 {
-    private readonly IToolRegistry _tools;
-    private readonly IPermissionService _permissions;
     private readonly IEventBus _eventBus;
 #pragma warning disable S6672 // Logger category should match enclosing type — ToolDispatcher is internal, sharing AgentLoop's logger is fine
     private readonly ILogger<AgentLoop> _logger;
 #pragma warning restore S6672
+    private readonly IPermissionService _permissions;
+    private readonly IToolRegistry _tools;
 
     public ToolDispatcher(
         IToolRegistry tools,
@@ -71,8 +64,8 @@ internal sealed class ToolDispatcher
 
     /// <summary>
     ///     Execute a batch of tool calls either sequentially (if any tool
-    ///     declares <see cref="ExecutionMode.Sequential"/>) or in parallel.
-    ///     Returns a <see cref="ToolResultMessage"/> ready to append to
+    ///     declares <see cref="ExecutionMode.Sequential" />) or in parallel.
+    ///     Returns a <see cref="ToolResultMessage" /> ready to append to
     ///     the session.
     /// </summary>
     public async Task<ToolResultMessage> ExecuteAsync(
@@ -131,7 +124,7 @@ internal sealed class ToolDispatcher
     }
 
     /// <summary>
-    ///     Check if any tool in the batch declares <see cref="ExecutionMode.Sequential"/>.
+    ///     Check if any tool in the batch declares <see cref="ExecutionMode.Sequential" />.
     ///     If so, the entire batch must run sequentially (otherwise sequential
     ///     tools would race on shared state like the file system or shell).
     /// </summary>
@@ -156,7 +149,7 @@ internal sealed class ToolDispatcher
     /// <summary>
     ///     Execute a single tool call: validate name → validate args → check
     ///     permission → publish start event → execute → publish end event.
-    ///     All error paths return a <see cref="ToolResultEntry"/> with
+    ///     All error paths return a <see cref="ToolResultEntry" /> with
     ///     <c>IsError=true</c> rather than throwing.
     /// </summary>
     private async Task<ToolResultEntry> ExecuteSingleAsync(

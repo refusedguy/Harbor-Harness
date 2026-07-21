@@ -1,12 +1,8 @@
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
-
 /// <summary>
-///     Unit tests for the platform-agnostic <see cref="ChatLineViewModel"/>
+///     Unit tests for the platform-agnostic <see cref="ChatLineViewModel" />
 ///     record. Verifies that the role-to-brush-key / role-to-label /
 ///     timestamp-text / preview projections stay stable across UI
 ///     frameworks (the same VM is bound from Avalonia, WPF, MAUI, Blazor).
@@ -169,7 +165,7 @@ public class ChatLineViewModelTests
     [Test]
     public async Task Preview_LongText_TruncatesTo77CharsPlusEllipsis()
     {
-        var longText = new string('a', 100);
+        string longText = new('a', 100);
         var vm = new ChatLineViewModel(ChatRole.User, longText);
         await Assert.That(vm.Preview.Length).IsEqualTo(80);
         await Assert.That(vm.Preview).EndsWith("...");
@@ -178,7 +174,7 @@ public class ChatLineViewModelTests
     [Test]
     public async Task Preview_Exactly80Chars_ReturnsFullText()
     {
-        var text = new string('a', 80);
+        string text = new('a', 80);
         var vm = new ChatLineViewModel(ChatRole.User, text);
         await Assert.That(vm.Preview).IsEqualTo(text);
     }

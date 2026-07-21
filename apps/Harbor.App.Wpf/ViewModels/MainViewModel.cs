@@ -1,19 +1,44 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Wpf.Services;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Root view model for the main window. Coordinates the sidebar, the
 ///     active main-panel VM, and the global status bar.
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject
 {
-    private readonly ThemeService _theme;
     private readonly DialogService _dialogs;
+    private readonly ThemeService _theme;
     private readonly ToastNotificationViewModel _toasts;
+
+    /// <summary>The currently selected panel.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActivePanelContent))]
+    private PanelTab? _activePanel;
+
+    /// <summary>Cost summary (status bar).</summary>
+    [ObservableProperty] private string _costText = "$0.0000";
+
+    /// <summary>Whether the agent is currently running.</summary>
+    [ObservableProperty] private bool _isRunning;
+
+    /// <summary>Active model id (status bar).</summary>
+    [ObservableProperty] private string _model = "claude-3-5-sonnet-20241022";
+
+    /// <summary>Active provider id (status bar).</summary>
+    [ObservableProperty] private string _provider = "anthropic";
+
+    /// <summary>Status text shown in the status bar.</summary>
+    [ObservableProperty] private string _statusText = "Ready";
+
+    /// <summary>Window title.</summary>
+    [ObservableProperty] private string _title = "Harbor";
+
+    /// <summary>Token usage summary (status bar).</summary>
+    [ObservableProperty] private string _tokenCount = "0 in / 0 out";
 
     /// <summary>Construct the <see cref="MainViewModel" />.</summary>
     /// <param name="theme">Theme service.</param>
@@ -62,34 +87,8 @@ public sealed partial class MainViewModel : ObservableObject
         CostText = "$0.0000";
     }
 
-    /// <summary>Window title.</summary>
-    [ObservableProperty] private string _title = "Harbor";
-
-    /// <summary>Active provider id (status bar).</summary>
-    [ObservableProperty] private string _provider = "anthropic";
-
-    /// <summary>Active model id (status bar).</summary>
-    [ObservableProperty] private string _model = "claude-3-5-sonnet-20241022";
-
-    /// <summary>Status text shown in the status bar.</summary>
-    [ObservableProperty] private string _statusText = "Ready";
-
-    /// <summary>Token usage summary (status bar).</summary>
-    [ObservableProperty] private string _tokenCount = "0 in / 0 out";
-
-    /// <summary>Cost summary (status bar).</summary>
-    [ObservableProperty] private string _costText = "$0.0000";
-
-    /// <summary>Whether the agent is currently running.</summary>
-    [ObservableProperty] private bool _isRunning;
-
     /// <summary>Collection of dockable panels.</summary>
     public ObservableCollection<PanelTab> Panels { get; }
-
-    /// <summary>The currently selected panel.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ActivePanelContent))]
-    private PanelTab? _activePanel;
 
     /// <summary>Content for the active panel (bound to ContentPresenter).</summary>
     public ObservableObject? ActivePanelContent => ActivePanel?.Content;
@@ -117,26 +116,20 @@ public sealed partial class MainViewModel : ObservableObject
     private void ToggleTheme()
     {
         _theme.Toggle();
-        _toasts.Show($"Theme: {_theme.Current}", ToastKind.Info);
+        _toasts.Show($"Theme: {_theme.Current}");
     }
 
     /// <summary>Open the provider + model browser.</summary>
     [RelayCommand]
-    private void BrowseProviders()
-    {
-        _dialogs.ShowProviderBrowser();
-    }
+    private void BrowseProviders() => _dialogs.ShowProviderBrowser();
 
     /// <summary>Open the settings dialog.</summary>
     [RelayCommand]
-    private void OpenSettings()
-    {
-        _dialogs.ShowSettings();
-    }
+    private void OpenSettings() => _dialogs.ShowSettings();
 
     /// <summary>Open the command palette (Ctrl+P).</summary>
     [RelayCommand]
-    private void OpenCommandPalette(System.Windows.Window? owner)
+    private void OpenCommandPalette(Window? owner)
     {
         if (owner is null) return;
         _dialogs.ShowCommandPalette(owner);

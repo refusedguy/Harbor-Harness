@@ -17,12 +17,12 @@
         driven by BrushKey (resolved by BrushKeyConverter at bind time).
     -->
     <UserControl.Resources>
-        <conv:BrushKeyConverter x:Key="BrushKey"/>
+        <conv:BrushKeyConverter x:Key="BrushKey" />
     </UserControl.Resources>
     <Grid Margin="0,6">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="100"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="100" />
+            <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- Role pill -->
@@ -38,7 +38,7 @@
                        FontFamily="Consolas"
                        FontSize="11"
                        FontWeight="SemiBold"
-                       Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                       Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
         </Border>
 
         <!-- Message body -->
@@ -53,14 +53,14 @@
                 <TextBlock Text="{Binding Text, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            TextWrapping="Wrap"
                            FontSize="14"
-                           Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                           Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                 <TextBlock Text="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontSize="10"
                            FontFamily="Consolas"
                            HorizontalAlignment="Right"
                            Margin="0,6,0,0"
                            Foreground="{DynamicResource App.TextMuted}"
-                           Visibility="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource NullToCollapsed}}"/>
+                           Visibility="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource NullToCollapsed}}" />
             </StackPanel>
         </Border>
     </Grid>

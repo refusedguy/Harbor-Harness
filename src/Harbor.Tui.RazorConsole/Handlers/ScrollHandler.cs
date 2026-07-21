@@ -1,7 +1,5 @@
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.RazorConsole.Handlers;
-
 /// <summary>
 ///     Pure scroll math over <see cref="UiState" />. Mirrors SpectreTui's
 ///     semantics: scroll is rows-from-bottom (0 = live tail), grows toward
@@ -14,7 +12,7 @@ public static class ScrollHandler
         Math.Max(0, s.TotalLines - Math.Max(1, s.ViewportLines));
 
     /// <summary>Visible slice of <see cref="UiState.Lines" /> given the current scroll offset.</summary>
-    public static IEnumerable<Harbor.Ui.Framework.State.ChatLine> VisibleSlice(UiState s)
+    public static IEnumerable<Ui.Framework.State.ChatLine> VisibleSlice(UiState s)
     {
         if (s.Lines.IsDefaultOrEmpty)
             yield break;

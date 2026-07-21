@@ -5,7 +5,6 @@
 //   it produces a compiled form (also a string). The contract is engine-neutral:
 //   the Hosting layer pairs an engine with the right compiler.
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     Compiles script source into a form ready for an
 ///     <see cref="IScriptEngine" /> to evaluate.
@@ -32,5 +31,5 @@ public interface IScriptCompiler
     /// <param name="sourceName">Source name (file path or label) — used for error messages only.</param>
     /// <param name="source">Script source code.</param>
     /// <returns>Success with the compiled source, or failure with a descriptive error.</returns>
-    Result<string> Compile(string sourceName, string source);
+    public Result<string> Compile(string sourceName, string source);
 }

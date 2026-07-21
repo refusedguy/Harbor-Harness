@@ -1,10 +1,8 @@
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows the global keymap, registered panel list with their
 ///     hotkeys (Alt+1..Alt+9), and the available slash commands. Toggled with <c>?</c>.
@@ -68,7 +66,7 @@ public sealed class HelpPanel : IPanelProvider
                 {
                     // Read state directly from UiState — TEA single source of truth.
                     bool isFocused = panel.Id == ctx.State.FocusedPanelId;
-                    TuiPanelState s = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps)
+                    var s = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps)
                         ? ps
                         : TuiPanelState.Hidden;
                     string state = isFocused
@@ -88,7 +86,7 @@ public sealed class HelpPanel : IPanelProvider
 
         // Slash commands.
         p.Lines.Add(TextLine.FromMarkup("[bold]Slash commands[/]"));
-        foreach (var cmd in ChatCommands.Slash)
+        foreach (string cmd in ChatCommands.Slash)
             p.Lines.Add(TextLine.FromMarkup($"  [grey]{ChatMarkup.Escape(cmd)}[/]"));
         p.Lines.Add(TextLine.FromMarkup(string.Empty));
         p.Lines.Add(TextLine.FromMarkup("[grey]Press ? to close this panel.[/]"));

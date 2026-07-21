@@ -23,7 +23,7 @@
                    FontFamily="{StaticResource CodeFont}"
                    FontSize="11"
                    Foreground="{DynamicResource MochaSubtext0}"
-                   VerticalAlignment="Center"/>
+                   VerticalAlignment="Center" />
         <TextBlock x:Name="BlinkCursor"
                    Text="▋"
                    FontFamily="{StaticResource CodeFont}"
@@ -32,6 +32,6 @@
                    FontWeight="Bold"
                    VerticalAlignment="Center"
                    Margin="1,0,0,0"
-                   Classes="BlinkingCursor"/>
+                   Classes="BlinkingCursor" />
     </StackPanel>
 </UserControl>

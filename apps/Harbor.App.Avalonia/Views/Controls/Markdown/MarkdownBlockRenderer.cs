@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Markdig.Syntax;
 using MdBlock = Markdig.Syntax.Block;
 using MdCodeBlock = Markdig.Syntax.CodeBlock;
 using MdFencedCodeBlock = Markdig.Syntax.FencedCodeBlock;
@@ -14,25 +13,24 @@ using MdQuoteBlock = Markdig.Syntax.QuoteBlock;
 using MdThematicBreakBlock = Markdig.Syntax.ThematicBreakBlock;
 
 namespace Harbor.App.Avalonia.Views.Controls.Markdown;
-
 /// <summary>
-///     Renders Markdig block-level elements into Avalonia <see cref="Control"/>s.
+///     Renders Markdig block-level elements into Avalonia <see cref="Control" />s.
 ///     Extracted from <c>MarkdownRenderer.axaml.cs</c> (Task R31 god-object
 ///     decomposition) — the renderer UserControl now just calls
-///     <see cref="RenderBlock"/> per top-level block and adds the result
+///     <see cref="RenderBlock" /> per top-level block and adds the result
 ///     to its children. All block-type-specific logic lives here.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Supported block types: ATX headings (H1–H6), paragraphs,
-///         fenced code blocks (delegated to <see cref="CodeBlock"/>),
+///         fenced code blocks (delegated to <see cref="CodeBlock" />),
 ///         plain code blocks, bullet &amp; numbered lists, blockquotes,
 ///         thematic breaks. Unhandled block types return null and are
 ///         silently skipped by the caller.
 ///     </para>
 ///     <para>
 ///         All brush / font lookups go through
-///         <see cref="MarkdownResourceResolver"/> so theme-variant changes
+///         <see cref="MarkdownResourceResolver" /> so theme-variant changes
 ///         are picked up automatically.
 ///     </para>
 /// </remarks>
@@ -51,38 +49,43 @@ internal static class MarkdownBlockRenderer
         MdListBlock l => RenderList(l),
         MdQuoteBlock q => RenderQuote(q),
         MdThematicBreakBlock => RenderThematicBreak(),
-        _ => null,
+        _ => null
     };
 
     private static Control RenderHeading(MdHeadingBlock h)
     {
-        var text = MarkdownTextExtractor.ExtractInlineText(h.Inline);
+        string text = MarkdownTextExtractor.ExtractInlineText(h.Inline);
         var tb = new TextBlock
         {
             Text = text,
             TextWrapping = TextWrapping.Wrap,
-            Foreground = MarkdownResourceResolver.TryFindBrush("TextBrush", Brushes.White),
+            Foreground = MarkdownResourceResolver.TryFindBrush("TextBrush", Brushes.White)
         };
         switch (h.Level)
         {
             case 1:
-                tb.FontSize = 22; tb.FontWeight = FontWeight.Bold;
+                tb.FontSize = 22;
+                tb.FontWeight = FontWeight.Bold;
                 tb.Margin = new Thickness(0, 8, 0, 4);
                 break;
             case 2:
-                tb.FontSize = 18; tb.FontWeight = FontWeight.SemiBold;
+                tb.FontSize = 18;
+                tb.FontWeight = FontWeight.SemiBold;
                 tb.Margin = new Thickness(0, 6, 0, 3);
                 break;
             case 3:
-                tb.FontSize = 16; tb.FontWeight = FontWeight.SemiBold;
+                tb.FontSize = 16;
+                tb.FontWeight = FontWeight.SemiBold;
                 tb.Margin = new Thickness(0, 4, 0, 2);
                 break;
             case 4:
-                tb.FontSize = 14; tb.FontWeight = FontWeight.SemiBold;
+                tb.FontSize = 14;
+                tb.FontWeight = FontWeight.SemiBold;
                 tb.Margin = new Thickness(0, 3, 0, 2);
                 break;
             default:
-                tb.FontSize = 13; tb.FontWeight = FontWeight.SemiBold;
+                tb.FontSize = 13;
+                tb.FontWeight = FontWeight.SemiBold;
                 tb.Margin = new Thickness(0, 2, 0, 1);
                 break;
         }
@@ -97,7 +100,7 @@ internal static class MarkdownBlockRenderer
             LineHeight = 20,
             FontSize = 14,
             Foreground = MarkdownResourceResolver.TryFindBrush("TextBrush", Brushes.White),
-            Margin = new Thickness(0, 1),
+            Margin = new Thickness(0, 1)
         };
         var inlines = MarkdownInlineRenderer.BuildInlines(p.Inline);
         foreach (var run in inlines)
@@ -109,15 +112,12 @@ internal static class MarkdownBlockRenderer
 
     private static Control RenderFencedCode(MdFencedCodeBlock fc)
     {
-        var code = MarkdownTextExtractor.ExtractCodeText(fc);
-        var lang = fc.Info ?? string.Empty;
+        string code = MarkdownTextExtractor.ExtractCodeText(fc);
+        string lang = fc.Info ?? string.Empty;
         return new CodeBlock { Code = code, Language = lang };
     }
 
-    private static Control RenderPlainCode(MdCodeBlock c)
-    {
-        return new CodeBlock { Code = MarkdownTextExtractor.ExtractCodeText(c), Language = string.Empty };
-    }
+    private static Control RenderPlainCode(MdCodeBlock c) => new CodeBlock { Code = MarkdownTextExtractor.ExtractCodeText(c), Language = string.Empty };
 
     private static Control RenderList(MdListBlock l)
     {
@@ -133,7 +133,7 @@ internal static class MarkdownBlockRenderer
             var row = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-                Margin = new Thickness(0, 1),
+                Margin = new Thickness(0, 1)
             };
 
             var bullet = new TextBlock
@@ -143,7 +143,7 @@ internal static class MarkdownBlockRenderer
                 Foreground = MarkdownResourceResolver.TryFindBrush("MochaPeach", Brushes.Orange),
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, 0, 8, 0),
-                Text = l.IsOrdered ? $"{orderedIndex}." : "\u2022",
+                Text = l.IsOrdered ? $"{orderedIndex}." : "\u2022"
             };
             row.Children.Add(bullet);
             Grid.SetColumn(bullet, 0);
@@ -186,7 +186,7 @@ internal static class MarkdownBlockRenderer
             BorderThickness = new Thickness(3, 0, 0, 0),
             Padding = new Thickness(12, 6, 0, 6),
             Margin = new Thickness(0, 2),
-            Child = inner,
+            Child = inner
         };
     }
 
@@ -196,7 +196,7 @@ internal static class MarkdownBlockRenderer
         {
             Height = 1,
             Background = MarkdownResourceResolver.TryFindStaticBrush("MochaSurface1"),
-            Margin = new Thickness(0, 6),
+            Margin = new Thickness(0, 6)
         };
     }
 }

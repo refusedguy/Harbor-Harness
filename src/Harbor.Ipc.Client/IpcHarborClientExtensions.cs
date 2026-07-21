@@ -1,8 +1,6 @@
-using Harbor.Ipc;
 using Microsoft.Extensions.DependencyInjection;
-
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Ipc.Client;
-
 /// <summary>
 ///     DI extensions for registering <see cref="IpcHarborClient" /> as the
 ///     active <see cref="IHarborClient" />.
@@ -20,7 +18,7 @@ public static class IpcHarborClientExtensions
     {
         services.AddSingleton<IHarborClient>(sp =>
             new IpcHarborClient(pipeName, sp.GetService<ILoggerFactory>()?.CreateLogger<IpcHarborClient>()
-                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<IpcHarborClient>.Instance));
+                                          ?? NullLogger<IpcHarborClient>.Instance));
         return services;
     }
 }

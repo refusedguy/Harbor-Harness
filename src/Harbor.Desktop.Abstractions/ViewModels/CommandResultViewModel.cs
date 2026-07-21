@@ -1,5 +1,4 @@
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     One command-palette result row. Pure record — no UI-framework
 ///     dependency — extracted from <c>CommandPaletteViewModel.cs</c> so the
@@ -15,9 +14,9 @@ public sealed record CommandResultViewModel(string Kind, string Label, string Hi
     public string Icon => Kind switch
     {
         "command" => "⚡",
-        "slash"   => "/",
-        "file"    => "📄",
+        "slash" => "/",
+        "file" => "📄",
         "session" => "💬",
-        _         => "•"
+        _ => "•"
     };
 }

@@ -3,9 +3,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Benchmarks;
-
 /// <summary>
 ///     Benchmarks the <see cref="MessageConverter" /> JSON hot path used by
 ///     <see cref="JsonlSessionStore" />: every turn serializes each
@@ -30,14 +28,14 @@ public class MessageConverterBenchmark
     private AssistantMessage _assistantLarge = null!;
     private AssistantMessage _assistantMedium = null!;
     private AssistantMessage _assistantSmall = null!;
-    private UserMessage _userMessage = null!;
+    private IReadOnlyList<AgentMessage> _messages = null!;
     private string _rootDirectory = null!;
     private Session _session = null!;
-    private string _sessionId = null!;
     private string _sessionFile = null!;
+    private string _sessionId = null!;
     private JsonlSessionStore _store = null!;
     private ToolResultMessage _toolResultMessage = null!;
-    private IReadOnlyList<AgentMessage> _messages = null!;
+    private UserMessage _userMessage = null!;
 
     [Params(1, 10, 100)]
     public int MessageCount { get; set; }
@@ -134,7 +132,7 @@ public class MessageConverterBenchmark
             Guid.NewGuid().ToString("N"),
             _sessionId,
             now.AddSeconds(2),
-            new ToolResultEntry[]
+            new[]
             {
                 new ToolResultEntry("tc_1", "write", "Wrote 512 bytes to Calculator.cs", false)
             });

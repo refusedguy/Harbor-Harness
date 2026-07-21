@@ -1,24 +1,25 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using Harbor.App.Avalonia.Services;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Command palette (cmdk-style) view-model. Fuzzy-searches across:
 ///     slash commands, sessions, recently opened files, view switches, settings actions.
 /// </summary>
 public sealed partial class CommandPaletteViewModel : ObservableObject
 {
-    private readonly IServiceProvider _services;
-    private readonly ILogger<CommandPaletteViewModel> _logger;
-    private readonly IDispatcherAdapter _dispatcher;
     private readonly List<CommandResultViewModel> _allCommands;
+    private readonly IDispatcherAdapter _dispatcher;
+    private readonly ILogger<CommandPaletteViewModel> _logger;
+    private readonly IServiceProvider _services;
+
+    [ObservableProperty]
+    private string _query = string.Empty;
+
+    [ObservableProperty]
+    private int _selectedIndex;
 
     /// <summary>Construct the palette view-model.</summary>
     public CommandPaletteViewModel(
@@ -32,33 +33,33 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         // Build the command list inside the constructor (instance methods are valid here).
         _allCommands = new List<CommandResultViewModel>
         {
-            new("command", "Switch to chat",         "ChatView",         SwitchToChat),
-            new("command", "Switch to code editor",  "CodeEditorView",   SwitchToCode),
-            new("command", "Open settings",          "SettingsDialog",   OpenSettings),
-            new("command", "Open provider browser",  "ProviderBrowser",  OpenProviderBrowser),
-            new("command", "Open diff view",         "DiffView",         OpenDiff),
-            new("command", "Open token usage chart", "TokenUsageView",   OpenTokenUsage),
-            new("command", "Toggle sidebar (Ctrl+B)","SidebarToggle",    ToggleSidebar),
+            new("command", "Switch to chat", "ChatView", SwitchToChat),
+            new("command", "Switch to code editor", "CodeEditorView", SwitchToCode),
+            new("command", "Open settings", "SettingsDialog", OpenSettings),
+            new("command", "Open provider browser", "ProviderBrowser", OpenProviderBrowser),
+            new("command", "Open diff view", "DiffView", OpenDiff),
+            new("command", "Open token usage chart", "TokenUsageView", OpenTokenUsage),
+            new("command", "Toggle sidebar (Ctrl+B)", "SidebarToggle", ToggleSidebar),
             new("command", "Toggle theme (Ctrl+Shift+T)", "ThemeToggle", ToggleTheme),
-            new("command", "New session",            "SessionNew",       NewSession),
-            new("command", "Branch active session",  "SessionBranch",    BranchSession),
-            new("command", "Open file (Ctrl+O)",     "FileOpen",         OpenFile),
-            new("command", "Save file (Ctrl+S)",     "FileSave",         SaveFile),
-            new("command", "Stop agent",             "AgentStop",        StopAgent),
-            new("command", "Clear chat (Ctrl+L)",    "ChatClear",        ClearChat),
-            new("command", "Refresh session list",   "SessionRefresh",   RefreshSessions),
-            new("slash", "/help",      "Slash command", () => RunSlash("/help")),
-            new("slash", "/exit",      "Slash command", () => RunSlash("/exit")),
-            new("slash", "/setup",     "Slash command", () => RunSlash("/setup")),
-            new("slash", "/auth",      "Slash command", () => RunSlash("/auth")),
-            new("slash", "/model",     "Slash command", () => RunSlash("/model")),
-            new("slash", "/agent",     "Slash command", () => RunSlash("/agent")),
-            new("slash", "/config",    "Slash command", () => RunSlash("/config")),
+            new("command", "New session", "SessionNew", NewSession),
+            new("command", "Branch active session", "SessionBranch", BranchSession),
+            new("command", "Open file (Ctrl+O)", "FileOpen", OpenFile),
+            new("command", "Save file (Ctrl+S)", "FileSave", SaveFile),
+            new("command", "Stop agent", "AgentStop", StopAgent),
+            new("command", "Clear chat (Ctrl+L)", "ChatClear", ClearChat),
+            new("command", "Refresh session list", "SessionRefresh", RefreshSessions),
+            new("slash", "/help", "Slash command", () => RunSlash("/help")),
+            new("slash", "/exit", "Slash command", () => RunSlash("/exit")),
+            new("slash", "/setup", "Slash command", () => RunSlash("/setup")),
+            new("slash", "/auth", "Slash command", () => RunSlash("/auth")),
+            new("slash", "/model", "Slash command", () => RunSlash("/model")),
+            new("slash", "/agent", "Slash command", () => RunSlash("/agent")),
+            new("slash", "/config", "Slash command", () => RunSlash("/config")),
             new("slash", "/providers", "Slash command", () => RunSlash("/providers")),
-            new("slash", "/sessions",  "Slash command", () => RunSlash("/sessions")),
-            new("slash", "/tui",       "Slash command", () => RunSlash("/tui")),
-            new("slash", "/storage",   "Slash command", () => RunSlash("/storage")),
-            new("slash", "/clear",     "Slash command", () => RunSlash("/clear")),
+            new("slash", "/sessions", "Slash command", () => RunSlash("/sessions")),
+            new("slash", "/tui", "Slash command", () => RunSlash("/tui")),
+            new("slash", "/storage", "Slash command", () => RunSlash("/storage")),
+            new("slash", "/clear", "Slash command", () => RunSlash("/clear"))
         };
         Results = new ObservableCollection<CommandResultViewModel>(_allCommands);
         SelectedIndex = 0;
@@ -67,11 +68,9 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
     /// <summary>Visible search results.</summary>
     public ObservableCollection<CommandResultViewModel> Results { get; }
 
-    [ObservableProperty]
-    private string _query = string.Empty;
+    // ── Command implementations — they resolve the MainViewModel from DI and invoke its commands. ──
 
-    [ObservableProperty]
-    private int _selectedIndex;
+    private MainViewModel Main => _services.GetRequiredService<MainViewModel>();
 
     /// <summary>Recompute results when the query changes.</summary>
     partial void OnQueryChanged(string value)
@@ -79,7 +78,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         _dispatcher.Post(() =>
         {
             Results.Clear();
-            var q = (value ?? string.Empty).Trim().ToLowerInvariant();
+            string q = (value ?? string.Empty).Trim().ToLowerInvariant();
             var matches = string.IsNullOrEmpty(q)
                 ? _allCommands
                 : _allCommands
@@ -102,7 +101,11 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         int ti = 0, qi = 0, score = 0;
         while (ti < text.Length && qi < query.Length)
         {
-            if (text[ti] == query[qi]) { score += 1; qi++; }
+            if (text[ti] == query[qi])
+            {
+                score += 1;
+                qi++;
+            }
             ti++;
         }
         return qi == query.Length ? score - (text.Length - query.Length) : -1;
@@ -134,10 +137,6 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
     {
         if (SelectedIndex < Results.Count - 1) SelectedIndex++;
     }
-
-    // ── Command implementations — they resolve the MainViewModel from DI and invoke its commands. ──
-
-    private MainViewModel Main => _services.GetRequiredService<MainViewModel>();
 
     private void SwitchToChat() => Main.SwitchViewCommand.Execute("chat");
     private void SwitchToCode() => Main.SwitchViewCommand.Execute("code");

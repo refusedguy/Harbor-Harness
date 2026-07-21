@@ -55,35 +55,35 @@
     <Color x:Key="CostHighColor">#F07178</Color>
 
     <!-- ════════════ Brushes ════════════ -->
-    <SolidColorBrush x:Key="TransparentBrush" Color="Transparent"/>
-    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource BgAppColor}"/>
-    <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource BgRailColor}"/>
-    <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource BgPanelColor}"/>
-    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource BgPanelElevatedColor}"/>
-    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}"/>
-    <SolidColorBrush x:Key="BgActiveBrush" Color="{StaticResource BgActiveColor}"/>
-    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource BgInputColor}"/>
-    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}"/>
-    <SolidColorBrush x:Key="BorderDefaultBrush" Color="{StaticResource BorderDefaultColor}"/>
-    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}"/>
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}"/>
-    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiaryColor}"/>
-    <SolidColorBrush x:Key="TextMonoBrush" Color="{StaticResource TextMonoColor}"/>
-    <SolidColorBrush x:Key="TextWarningBrush" Color="{StaticResource TextWarningColor}"/>
-    <SolidColorBrush x:Key="TextDangerBrush" Color="{StaticResource TextDangerColor}"/>
-    <SolidColorBrush x:Key="TextSuccessBrush" Color="{StaticResource TextSuccessColor}"/>
-    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource AccentPrimaryColor}"/>
-    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}"/>
-    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}"/>
-    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource StateRunningColor}"/>
-    <SolidColorBrush x:Key="StateIdleBrush" Color="{StaticResource StateIdleColor}"/>
-    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource StateErrorColor}"/>
-    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource StateSuccessColor}"/>
-    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource StateWarningColor}"/>
-    <SolidColorBrush x:Key="CostLowBrush" Color="{StaticResource CostLowColor}"/>
-    <SolidColorBrush x:Key="CostMidBrush" Color="{StaticResource CostMidColor}"/>
-    <SolidColorBrush x:Key="CostHighBrush" Color="{StaticResource CostHighColor}"/>
+    <SolidColorBrush x:Key="TransparentBrush" Color="Transparent" />
+    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource BgAppColor}" />
+    <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource BgRailColor}" />
+    <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource BgPanelColor}" />
+    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource BgPanelElevatedColor}" />
+    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}" />
+    <SolidColorBrush x:Key="BgActiveBrush" Color="{StaticResource BgActiveColor}" />
+    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource BgInputColor}" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
+    <SolidColorBrush x:Key="BorderDefaultBrush" Color="{StaticResource BorderDefaultColor}" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiaryColor}" />
+    <SolidColorBrush x:Key="TextMonoBrush" Color="{StaticResource TextMonoColor}" />
+    <SolidColorBrush x:Key="TextWarningBrush" Color="{StaticResource TextWarningColor}" />
+    <SolidColorBrush x:Key="TextDangerBrush" Color="{StaticResource TextDangerColor}" />
+    <SolidColorBrush x:Key="TextSuccessBrush" Color="{StaticResource TextSuccessColor}" />
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource AccentPrimaryColor}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}" />
+    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource StateRunningColor}" />
+    <SolidColorBrush x:Key="StateIdleBrush" Color="{StaticResource StateIdleColor}" />
+    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource StateErrorColor}" />
+    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource StateSuccessColor}" />
+    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource StateWarningColor}" />
+    <SolidColorBrush x:Key="CostLowBrush" Color="{StaticResource CostLowColor}" />
+    <SolidColorBrush x:Key="CostMidBrush" Color="{StaticResource CostMidColor}" />
+    <SolidColorBrush x:Key="CostHighBrush" Color="{StaticResource CostHighColor}" />
 
     <!-- ════════════ Typography ════════════ -->
     <!-- FontUi intentionally reuses the bundled Inter (UiFont) resource

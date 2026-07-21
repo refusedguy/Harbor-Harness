@@ -1,23 +1,19 @@
-using System.Collections.Generic;
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-
 namespace Harbor.App.Avalonia.Views.Controls;
-
 /// <summary>
 ///     Compact inline sparkline chart (no axes). Renders a polyline from
-///     <see cref="Values"/> auto-scaled to the visible min/max range.
+///     <see cref="Values" /> auto-scaled to the visible min/max range.
 ///     Used in the status bar to surface per-turn token-usage history at
 ///     a glance — ports the sparkline pattern from Opencode's
 ///     <c>progress-circle-v2.tsx</c> and Kilocode's console header.
 /// </summary>
 /// <remarks>
 ///     The control is dependency-property driven so it can be bound
-///     directly from XAML. Re-renders only when <see cref="Values"/>
+///     directly from XAML. Re-renders only when <see cref="Values" />
 ///     changes (AffectsRender flag). Drawing is done in
-///     <see cref="Render"/> using a <see cref="StreamGeometry"/> for
+///     <see cref="Render" /> using a <see cref="StreamGeometry" /> for
 ///     sub-pixel-smooth strokes.
 /// </remarks>
 public partial class Sparkline : UserControl
@@ -28,6 +24,13 @@ public partial class Sparkline : UserControl
     /// </summary>
     public static readonly StyledProperty<IEnumerable<double>?> ValuesProperty =
         AvaloniaProperty.Register<Sparkline, IEnumerable<double>?>(nameof(Values));
+
+    /// <summary>
+    ///     Brush used for the sparkline stroke. Defaults to
+    ///     <c>MochaPeach</c> (output-token color) when available.
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> StrokeBrushProperty =
+        AvaloniaProperty.Register<Sparkline, IBrush?>(nameof(StrokeBrush));
 
     static Sparkline()
     {
@@ -47,21 +50,14 @@ public partial class Sparkline : UserControl
     /// </summary>
     public IEnumerable<double>? Values
     {
-        get => GetValue(ValuesProperty);
-        set => SetValue(ValuesProperty, value);
+        get => this.GetValue(ValuesProperty);
+        set => this.SetValue(ValuesProperty, value);
     }
-
-    /// <summary>
-    ///     Brush used for the sparkline stroke. Defaults to
-    ///     <c>MochaPeach</c> (output-token color) when available.
-    /// </summary>
-    public static readonly StyledProperty<IBrush?> StrokeBrushProperty =
-        AvaloniaProperty.Register<Sparkline, IBrush?>(nameof(StrokeBrush));
 
     public IBrush? StrokeBrush
     {
-        get => GetValue(StrokeBrushProperty);
-        set => SetValue(StrokeBrushProperty, value);
+        get => this.GetValue(StrokeBrushProperty);
+        set => this.SetValue(StrokeBrushProperty, value);
     }
 
     /// <inheritdoc />
@@ -85,8 +81,8 @@ public partial class Sparkline : UserControl
             min = max - 0.5;
         }
 
-        double w = Bounds.Width;
-        double h = Bounds.Height;
+        double w = this.Bounds.Width;
+        double h = this.Bounds.Height;
         if (w <= 0 || h <= 0)
         {
             return;
@@ -95,26 +91,26 @@ public partial class Sparkline : UserControl
         double stepX = w / (values.Count - 1);
 
         // Resolve stroke brush: explicit > MochaPeach > fallback orange.
-        IBrush brush = StrokeBrush
-            ?? (Application.Current?.TryFindResource("MochaPeach", out var r) == true
-                ? r as IBrush
-                : null)
-            ?? Brushes.OrangeRed;
+        var brush = StrokeBrush
+                    ?? (Application.Current?.TryFindResource("MochaPeach", out object? r) == true
+                        ? r as IBrush
+                        : null)
+                    ?? Brushes.OrangeRed;
 
         var pen = new Pen(brush, 1.3)
         {
             LineCap = PenLineCap.Round,
-            LineJoin = PenLineJoin.Round,
+            LineJoin = PenLineJoin.Round
         };
 
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            double y0 = h - ((values[0] - min) / range) * h;
-            ctx.BeginFigure(new Point(0, y0), isFilled: false);
+            double y0 = h - (values[0] - min) / range * h;
+            ctx.BeginFigure(new Point(0, y0), false);
             for (int i = 1; i < values.Count; i++)
             {
-                double y = h - ((values[i] - min) / range) * h;
+                double y = h - (values[i] - min) / range * h;
                 ctx.LineTo(new Point(i * stepX, y));
             }
             ctx.EndFigure(isClosed: false);
@@ -122,7 +118,7 @@ public partial class Sparkline : UserControl
         context.DrawGeometry(null, pen, geometry);
 
         // Final-point dot — gives the "live" feel.
-        double lastY = h - ((values[^1] - min) / range) * h;
+        double lastY = h - (values[^1] - min) / range * h;
         context.DrawEllipse(brush, null, new Rect(w - 3, lastY - 1.5, 3, 3));
     }
 }

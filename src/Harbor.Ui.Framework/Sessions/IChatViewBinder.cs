@@ -1,11 +1,8 @@
-using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Ui.Framework.Sessions;
-
 /// <summary>
 ///     Platform-agnostic contract for binding the active chat view-model
-///     to a different session's <see cref="UiStore"/>. Implemented by
+///     to a different session's <see cref="UiStore" />. Implemented by
 ///     each desktop app (Avalonia / WPF / MAUI / Blazor) to wrap the
 ///     platform-specific dispatcher + chat-VM lookup in a single call.
 /// </summary>
@@ -23,8 +20,8 @@ namespace Harbor.Ui.Framework.Sessions;
 ///     <para>
 ///         <b>Rendered-line-count:</b> the binder also exposes the
 ///         current rendered-line-count snapshot via
-///         <see cref="GetRenderedLineCount"/>. <c>SessionManager</c>
-///         saves this into <see cref="SessionContext.RenderedLineCount"/>
+///         <see cref="GetRenderedLineCount" />. <c>SessionManager</c>
+///         saves this into <see cref="SessionContext.RenderedLineCount" />
 ///         on every session switch so that switching back resumes
 ///         rendering at the right offset (otherwise the renderer would
 ///         re-append every line in the transcript on each switch).
@@ -36,11 +33,11 @@ public interface IChatViewBinder
     ///     Get the current rendered-line-count from the active chat
     ///     view-model, or 0 if no chat VM is bound yet.
     /// </summary>
-    int GetRenderedLineCount();
+    public int GetRenderedLineCount();
 
     /// <summary>
     ///     Rebind the active chat view-model to a different session's
-    ///     <see cref="UiStore"/>. Implementations MUST marshal the call
+    ///     <see cref="UiStore" />. Implementations MUST marshal the call
     ///     onto the UI thread (e.g. <c>Dispatcher.UIThread.Post</c> on
     ///     Avalonia) because <c>RebindToStore</c> mutates
     ///     <c>ObservableCollection</c>s bound to the view.
@@ -50,5 +47,5 @@ public interface IChatViewBinder
     ///     The rendered-line-count snapshot saved when the session was
     ///     previously switched away from (0 if first visit).
     /// </param>
-    void Rebind(UiStore store, int savedRenderedLineCount);
+    public void Rebind(UiStore store, int savedRenderedLineCount);
 }

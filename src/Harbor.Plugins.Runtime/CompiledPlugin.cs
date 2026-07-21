@@ -1,7 +1,5 @@
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Plugins.Runtime;
-
 /// <summary>
 ///     Metadata + instance handle for a plugin that has been successfully compiled from
 ///     CS source and instantiated. Returned by <see cref="CsPluginLoader" /> on success.
@@ -27,5 +25,5 @@ public sealed record CompiledPlugin(
     ///     Human-readable identifier used in log lines, the <c>/plugins</c> slash-command,
     ///     and error reports. Format: <c>name@version (file)</c>.
     /// </summary>
-    public string DisplayName => $"{Name}@{Version} ({System.IO.Path.GetFileName(SourcePath)})";
+    public string DisplayName => $"{Name}@{Version} ({Path.GetFileName(SourcePath)})";
 }

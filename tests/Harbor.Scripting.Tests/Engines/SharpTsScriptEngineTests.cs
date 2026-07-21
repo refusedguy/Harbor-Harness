@@ -5,11 +5,8 @@
 // exercise the real subprocess path (covered by the integration smoke test
 // at the bottom, gated on IsAvailable).
 using Harbor.Scripting.Abstractions;
-using Harbor.Scripting.Bridge;
-using Harbor.Scripting.Engines;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Engines;
-
 public class SharpTsScriptEngineTests
 {
     private static ScriptGlobals NewGlobals(IToolRegistry? tools = null)

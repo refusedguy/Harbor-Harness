@@ -3,13 +3,13 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Terminal.Abstractions;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Terminal.Abstractions.Renderers;
-using Harbor.Ui.Framework.State;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.SpectreTui.Panels;
 using Harbor.Tui.SpectreTui.Panels.Builtin;
 using Harbor.Tui.SpectreTui.View;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 using Spectre.Tui.App;
@@ -38,6 +38,15 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     private Func<string, Task>? _slashHandler;
     private UiStore? _store;
 
+    public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger, PanelRegistry? panels = null) : base(logger)
+    {
+        _logger = logger;
+        // Use the host-supplied registry (so plugin-contributed panels land here) or
+        // construct a fresh one for tests / non-DI callers.
+        Panels = panels ?? new PanelRegistry();
+        Context = new SpectreTuiRenderContext();
+    }
+
     /// <summary>
     ///     Panel registry shared with the screen and any loaded panel plugins.
     ///     Populated during host startup (builtins registered in
@@ -52,15 +61,6 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
     ///     read-only snapshot used during render.
     /// </remarks>
     public PanelRegistry Panels { get; }
-
-    public SpectreTuiRenderer(ILogger<SpectreTuiRenderer> logger, PanelRegistry? panels = null) : base(logger)
-    {
-        _logger = logger;
-        // Use the host-supplied registry (so plugin-contributed panels land here) or
-        // construct a fresh one for tests / non-DI callers.
-        Panels = panels ?? new PanelRegistry();
-        Context = new SpectreTuiRenderContext();
-    }
 
     public override ITuiRenderContext Context { get; }
 
@@ -118,19 +118,19 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         // (env var HARBOR_TUI_NO_BUILTIN_PANELS=1 → opt-out for tests).
         if (!"1".Equals(Environment.GetEnvironmentVariable("HARBOR_TUI_NO_BUILTIN_PANELS"), StringComparison.OrdinalIgnoreCase))
         {
-            Panels.Register(new Panels.Builtin.HelpPanel());
-            Panels.Register(new Panels.Builtin.TodoListPanel());
-            Panels.Register(new Panels.Builtin.DiffPreviewPanel());
-            Panels.Register(new Panels.Builtin.FileTreePanel());
-            Panels.Register(new Panels.Builtin.TokenBreakdownPanel());
-            Panels.Register(new Panels.Builtin.DiagnosticsPanel());
+            Panels.Register(new HelpPanel());
+            Panels.Register(new TodoListPanel());
+            Panels.Register(new DiffPreviewPanel());
+            Panels.Register(new FileTreePanel());
+            Panels.Register(new TokenBreakdownPanel());
+            Panels.Register(new DiagnosticsPanel());
             // LogsPanel: surfaces live ILogger output inside the TUI. Only
             // useful when the host attached DiagnosticsPanelLoggerProvider
             // (which happens when an interactive TUI is active — see
             // HostBuilder.ConfigureLogging). Registering it unconditionally
             // is harmless: when no IDiagnosticsPanel is in DI, the panel
             // shows a "not registered" placeholder.
-            Panels.Register(new Panels.Builtin.LogsPanel());
+            Panels.Register(new LogsPanel());
         }
 
         // Seed registered panel ids + default Hidden states + default sizes into
@@ -147,38 +147,6 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         await Application.Create(settings).RunAsync(_screen).ConfigureAwait(false);
         return 0;
-    }
-
-    /// <summary>
-    ///     Seed the registered panel ids + default Hidden states + default sizes into
-    ///     <see cref="UiState" />. Call this whenever panels are registered or
-    ///     unregistered at runtime. After seeding, the reducer is the single source of
-    ///     truth — there is no runtime state mirror in <see cref="PanelRegistry" />
-    ///     (TEA compliance, §FP-005 / §FP-007).
-    /// </summary>
-    public void SeedPanelRegistryIntoState()
-    {
-        if (_store is null) return;
-        var idsBuilder = ImmutableArray.CreateBuilder<string>(Panels.All.Count);
-        var statesBuilder = ImmutableDictionary.CreateBuilder<string, TuiPanelState>(StringComparer.Ordinal);
-        var sizesBuilder = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
-        var current = _store.State;
-        foreach (var p in Panels.All)
-        {
-            idsBuilder.Add(p.Id);
-            // Preserve any already-known state (in case panels were re-registered at runtime).
-            statesBuilder.Add(p.Id, current.PanelStates.TryGetValue(p.Id, out var s)
-                ? s
-                : TuiPanelState.Hidden);
-            sizesBuilder.Add(p.Id, current.PanelSizes.TryGetValue(p.Id, out var sz)
-                ? sz
-                : p.DefaultSize);
-        }
-        // Dispatch via UiMsg (TEA: no Transition escape hatch from renderers).
-        _store.Dispatch(new UiMsg.SeedPanels(
-            idsBuilder.MoveToImmutable(),
-            statesBuilder.ToImmutable(),
-            sizesBuilder.ToImmutable()));
     }
 
     public override Task<Result<string>> ReadLineAsync(string prompt, CancellationToken ct = default)
@@ -206,6 +174,38 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         return Task.FromResult(Result.Success());
     }
 
+    /// <summary>
+    ///     Seed the registered panel ids + default Hidden states + default sizes into
+    ///     <see cref="UiState" />. Call this whenever panels are registered or
+    ///     unregistered at runtime. After seeding, the reducer is the single source of
+    ///     truth — there is no runtime state mirror in <see cref="PanelRegistry" />
+    ///     (TEA compliance, §FP-005 / §FP-007).
+    /// </summary>
+    public void SeedPanelRegistryIntoState()
+    {
+        if (_store is null) return;
+        var idsBuilder = ImmutableArray.CreateBuilder<string>(Panels.All.Count);
+        var statesBuilder = ImmutableDictionary.CreateBuilder<string, TuiPanelState>(StringComparer.Ordinal);
+        var sizesBuilder = ImmutableDictionary.CreateBuilder<string, int>(StringComparer.Ordinal);
+        var current = _store.State;
+        foreach (var p in Panels.All)
+        {
+            idsBuilder.Add(p.Id);
+            // Preserve any already-known state (in case panels were re-registered at runtime).
+            statesBuilder.Add(p.Id, current.PanelStates.TryGetValue(p.Id, out var s)
+                ? s
+                : TuiPanelState.Hidden);
+            sizesBuilder.Add(p.Id, current.PanelSizes.TryGetValue(p.Id, out int sz)
+                ? sz
+                : p.DefaultSize);
+        }
+        // Dispatch via UiMsg (TEA: no Transition escape hatch from renderers).
+        _store.Dispatch(new UiMsg.SeedPanels(
+            idsBuilder.MoveToImmutable(),
+            statesBuilder.ToImmutable(),
+            sizesBuilder.ToImmutable()));
+    }
+
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
         => false;
 
@@ -221,13 +221,13 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly TuiEffectHost _effects;
         private readonly ChatKeyMap _keyMap = new();
         private readonly ChatViewProjector _layout;
+        private readonly ILogger _logger;
         private readonly PanelViewProjector _panels;
         private readonly PanelLayoutShell _panelShell;
+        private readonly SpectreTuiRenderer _parent;
         private readonly PanelRegistry _registry;
         private readonly IServiceProvider _services;
-        private readonly ILogger _logger;
         private readonly UiStore _store;
-        private readonly SpectreTuiRenderer _parent;
         private ApplicationContext? _app;
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
@@ -246,7 +246,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
             PanelRegistry registry, IServiceProvider services)
-            : this(store, effects, logger, registry, services, parent: null)
+            : this(store, effects, logger, registry, services, null)
         {
             // Backwards-compatible ctor for tests that don't pass a parent.
         }
@@ -303,15 +303,15 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             {
                 // Esc / 'q' while a panel is focused → close panel (return to chat).
                 if (action is ChatAction.ClosePanel
-                    || (uiKey.Code == UiKeyCode.Escape)
-                    || (uiKey.Code == UiKeyCode.Char && uiKey.Character == 'q'
-                        && !uiKey.Mods.HasFlag(KeyModifierSet.Ctrl)))
+                    || uiKey.Code == UiKeyCode.Escape
+                    || uiKey.Code == UiKeyCode.Char && uiKey.Character == 'q'
+                                                    && !uiKey.Mods.HasFlag(KeyModifierSet.Ctrl))
                 {
                     _store.Dispatch(new UiMsg.FocusPanel(null));
                     return;
                 }
 
-                var ctx = new PanelContext(s, Width: 80, Height: 24, Services: _services);
+                var ctx = new PanelContext(s, 80, 24, _services);
                 try
                 {
                     if (focusedPanel.OnKey(uiKey, ctx))

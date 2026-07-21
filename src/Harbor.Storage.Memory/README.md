@@ -10,7 +10,6 @@ Infrastructure — session/persistence backend. References `Harbor.Abstractions`
 
 - `Harbor.Abstractions` (Domain)
 
-
 ## Public API
 
 - `InMemorySessionStore` — implements `ISessionStore` from Harbor.Abstractions

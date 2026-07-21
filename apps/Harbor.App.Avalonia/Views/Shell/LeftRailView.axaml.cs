@@ -1,7 +1,5 @@
 using Avalonia.Controls;
-
 namespace Harbor.App.Avalonia.Views.Shell;
-
 /// <summary>
 ///     Orca left rail — code-behind.
 /// </summary>

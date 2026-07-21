@@ -11,37 +11,34 @@
 // there is exactly one CommonConfig type, so there is exactly one
 // JsonCommonConfigStore registration per app.
 
-using System.Collections.Immutable;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.Configuration;
-
 /// <summary>
-///     JSON-backed <see cref="ICommonConfigStore"/>. Reads and writes the
-///     shared config file at <see cref="CommonConfig.ConfigFilePath"/>.
+///     JSON-backed <see cref="ICommonConfigStore" />. Reads and writes the
+///     shared config file at <see cref="CommonConfig.ConfigFilePath" />.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Atomic writes:</b> every <see cref="SaveAsync"/> writes to a
-///         sibling <c>&lt;file&gt;.tmp</c> file then <see cref="File.Move"/>
+///         <b>Atomic writes:</b> every <see cref="SaveAsync" /> writes to a
+///         sibling <c>&lt;file&gt;.tmp</c> file then <see cref="File.Move" />
 ///         (atomic on POSIX, atomic-replace on Windows) into place. A crash
 ///         mid-write leaves the previous file intact.
 ///     </para>
 ///     <para>
-///         <b>Thread safety:</b> a single <see cref="SemaphoreSlim"/> guards
+///         <b>Thread safety:</b> a single <see cref="SemaphoreSlim" /> guards
 ///         every Load/Save/Update, so concurrent calls are serialised.
 ///     </para>
 ///     <para>
-///         <b>Missing file:</b> <see cref="LoadAsync"/> returns the default
-///         <see cref="CommonConfig"/> passed at construction — apps boot with
+///         <b>Missing file:</b> <see cref="LoadAsync" /> returns the default
+///         <see cref="CommonConfig" /> passed at construction — apps boot with
 ///         sane defaults before the user has ever saved anything.
 ///     </para>
 ///     <para>
 ///         <b>Corrupt file:</b> if JSON deserialisation fails, LoadAsync
-///         returns <see cref="Result.IsFailure"/> with the parser error. The
+///         returns <see cref="Result.IsFailure" /> with the parser error. The
 ///         caller (typically the composition root) decides whether to log +
 ///         fall back to defaults or surface the error to the user.
 ///     </para>
@@ -59,19 +56,19 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             // List<T> / Dictionary<K,V> and call the immutable ToImmutable*
             // builders. Mirrors the approach in JsonAppConfigStore<T>.
             ImmutableListConverter<string>.Instance,
-            ImmutableDictionaryConverter<string, string>.Instance,
+            ImmutableDictionaryConverter<string, string>.Instance
         }
     };
 
     private readonly CommonConfig _default;
-    private readonly ILogger<JsonCommonConfigStore> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly ILogger<JsonCommonConfigStore> _logger;
 
     /// <summary>
     ///     Construct a JSON-backed common-config store.
     /// </summary>
     /// <param name="defaultConfig">
-    ///     The default config returned by <see cref="LoadAsync"/> when the
+    ///     The default config returned by <see cref="LoadAsync" /> when the
     ///     file is missing. Typically <c>new CommonConfig()</c>.
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
@@ -95,7 +92,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            CommonConfig? config = JsonSerializer.Deserialize<CommonConfig>(json, JsonOptions);
+            var config = JsonSerializer.Deserialize<CommonConfig>(json, JsonOptions);
             if (config is null)
             {
                 _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
@@ -150,16 +147,16 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             using (var writer = new Utf8JsonWriter(memStream, new JsonWriterOptions { Indented = true }))
             {
                 writer.WriteStartObject();
-                
+
                 // Write CommonConfig fields
                 // JsonProperty.WriteTo writes BOTH name AND value — don't call WritePropertyName first!
-                var commonJson = JsonSerializer.SerializeToUtf8Bytes(config, JsonOptions);
+                byte[] commonJson = JsonSerializer.SerializeToUtf8Bytes(config, JsonOptions);
                 using var commonDoc = JsonDocument.Parse(commonJson);
                 foreach (var prop in commonDoc.RootElement.EnumerateObject())
                 {
                     prop.WriteTo(writer);
                 }
-                
+
                 // Write existing fields that CommonConfig doesn't have
                 foreach (var prop in existingDoc.RootElement.EnumerateObject())
                 {
@@ -167,11 +164,11 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
                         continue;
                     prop.WriteTo(writer);
                 }
-                
+
                 writer.WriteEndObject();
             }
-            
-            string mergedJson = System.Text.Encoding.UTF8.GetString(memStream.ToArray());
+
+            string mergedJson = Encoding.UTF8.GetString(memStream.ToArray());
             string tempPath = path + ".tmp";
 
             // Write to temp file first, then atomically move into place.
@@ -207,17 +204,17 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             return loadResult;
         }
 
-        CommonConfig updated = updater(loadResult.Value);
+        var updated = updater(loadResult.Value);
         return await SaveAsync(updated, ct).ConfigureAwait(false);
     }
 }
 
 /// <summary>
 ///     Minimal System.Text.Json converter for
-///     <see cref="ImmutableDictionary{TKey, TValue}"/>. Mirrors
+///     <see cref="ImmutableDictionary{TKey, TValue}" />. Mirrors
 ///     <c>ImmutableListConverter&lt;T&gt;</c> in <c>JsonAppConfigStore.cs</c>:
-///     round-trips via a mutable <see cref="Dictionary{TKey, TValue}"/> and
-///     calls <see cref="ImmutableDictionary.ToImmutableDictionary"/>.
+///     round-trips via a mutable <see cref="Dictionary{TKey, TValue}" /> and
+///     calls <see cref="ImmutableDictionary.ToImmutableDictionary" />.
 /// </summary>
 /// <typeparam name="TKey">Key type.</typeparam>
 /// <typeparam name="TValue">Value type.</typeparam>
@@ -254,7 +251,7 @@ internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter
             }
             string? keyStr = reader.GetString();
             reader.Read();
-            TValue? value = JsonSerializer.Deserialize<TValue>(ref reader, options);
+            var value = JsonSerializer.Deserialize<TValue>(ref reader, options);
             if (keyStr is null)
             {
                 throw new JsonException("Null property name in ImmutableDictionary JSON.");
@@ -262,7 +259,7 @@ internal sealed class ImmutableDictionaryConverter<TKey, TValue> : JsonConverter
             // Convert the JSON string key to TKey. Only string keys are
             // supported by CommonConfig today, but the converter stays
             // generic for future reuse.
-            TKey key = (TKey)(object)keyStr;
+            var key = (TKey)(object)keyStr;
             dict[key] = value!;
         }
         return dict.ToImmutableDictionary();

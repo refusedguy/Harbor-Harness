@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.DesignSystem;
-
 /// <summary>
 ///     Typography tokens shared across every desktop app. Font sizes are in
 ///     px (the value platform UI frameworks expect), weights are numeric

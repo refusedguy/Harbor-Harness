@@ -1,39 +1,45 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
-using Harbor.Ui.Framework.Services;
-
 namespace Harbor.App.Avalonia.ViewModels.Shell;
-
 /// <summary>
 ///     Left-rail view-model for the Orca shell — projects
-///     <see cref="SessionListViewModel"/> sessions into dense
-///     <see cref="SessionRowViewModel"/> rows.
+///     <see cref="SessionListViewModel" /> sessions into dense
+///     <see cref="SessionRowViewModel" /> rows.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>TEA boundary:</b> this VM is a pure projection. It owns no
 ///         session state — every mutation (<c>NewSession</c>, <c>Open</c>,
 ///         <c>Branch</c>) is delegated to the shared
-///         <see cref="SessionListViewModel"/> which talks to the
+///         <see cref="SessionListViewModel" /> which talks to the
 ///         <c>SessionManager</c> → <c>ISessionStore</c> → <c>UiStore</c>
 ///         chain. The rail VM only mirrors the resulting collection changes.
 ///     </para>
 ///     <para>
-///         Subscribes to <see cref="ObservableCollection{T}.CollectionChanged"/>
-///         on <see cref="SessionListViewModel.Sessions"/> so the dense rows
+///         Subscribes to <see cref="ObservableCollection{T}.CollectionChanged" />
+///         on <see cref="SessionListViewModel.Sessions" /> so the dense rows
 ///         stay in sync after <c>RefreshAsync</c> / <c>NewSession</c> /
 ///         <c>Branch</c> / <c>Delete</c>.
 ///     </para>
 /// </remarks>
 public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
 {
-    private readonly SessionListViewModel _inner;
     private readonly IDispatcherAdapter _dispatcher;
+    private readonly SessionListViewModel _inner;
+
+    /// <summary>Currently selected row (TwoWay with the ListBox).</summary>
+    [ObservableProperty]
+    private SessionRowViewModel? _activeSession;
     private bool _disposed;
 
-    /// <summary>Construct the rail VM wrapping <paramref name="inner"/>.</summary>
+    /// <summary>Free-text filter applied to <see cref="FilteredSessions" />.</summary>
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    /// <summary>Construct the rail VM wrapping <paramref name="inner" />.</summary>
     public LeftRailViewModel(SessionListViewModel inner, IDispatcherAdapter dispatcher)
     {
         _inner = inner;
@@ -48,36 +54,32 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
         ReprojectAll();
     }
 
-    /// <summary>Dense rows projected from <see cref="SessionListViewModel.Sessions"/>.</summary>
+    /// <summary>Dense rows projected from <see cref="SessionListViewModel.Sessions" />.</summary>
     public ObservableCollection<SessionRowViewModel> FilteredSessions { get; } = new();
-
-    /// <summary>Free-text filter applied to <see cref="FilteredSessions"/>.</summary>
-    [ObservableProperty]
-    private string _searchText = string.Empty;
-
-    /// <summary>Currently selected row (TwoWay with the ListBox).</summary>
-    [ObservableProperty]
-    private SessionRowViewModel? _activeSession;
 
     /// <summary>Title shown at the top of the rail (brand).</summary>
     public string BrandTitle => "Harbor";
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _inner.Sessions.CollectionChanged -= OnInnerCollectionChanged;
+        _inner.ItemStatusChanged -= OnItemStatusChanged;
+        _inner.ItemMessageCountChanged -= OnItemMessageCountChanged;
+    }
+
     /// <summary>Invoke the inner NewSession command (delegates to SessionManager).</summary>
     [RelayCommand]
-    private async Task NewSessionAsync()
-    {
-        await _inner.NewSessionCommand.ExecuteAsync(null).ConfigureAwait(false);
-    }
+    private async Task NewSessionAsync() => await _inner.NewSessionCommand.ExecuteAsync(null).ConfigureAwait(false);
 
     /// <summary>Refresh the underlying session list (delegates to inner VM).</summary>
     [RelayCommand]
-    private async Task RefreshAsync()
-    {
-        await _inner.RefreshCommand.ExecuteAsync(null).ConfigureAwait(false);
-    }
+    private async Task RefreshAsync() => await _inner.RefreshCommand.ExecuteAsync(null).ConfigureAwait(false);
 
     /// <summary>
-    ///     Called when <see cref="ActiveSession"/> changes (ListBox selection).
+    ///     Called when <see cref="ActiveSession" /> changes (ListBox selection).
     ///     Forwards the selection to the inner VM so the SessionManager opens
     ///     the session in the chat view.
     /// </summary>
@@ -95,12 +97,9 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
 
     /// <summary>Re-filter when SearchText changes.</summary>
     /// <param name="value">New search text.</param>
-    partial void OnSearchTextChanged(string value)
-    {
-        ReprojectAll();
-    }
+    partial void OnSearchTextChanged(string value) => ReprojectAll();
 
-    private void OnInnerCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    private void OnInnerCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         // Marshal to UI thread — CollectionChanged fires on whatever thread
         // mutated the source collection (often a threadpool continuation).
@@ -108,32 +107,32 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    ///     Rebuild <see cref="FilteredSessions"/> from the inner collection
-    ///     applying the current <see cref="SearchText"/>. Marks the active
-    ///     row's <see cref="SessionRowViewModel.IsActive"/> flag.
+    ///     Rebuild <see cref="FilteredSessions" /> from the inner collection
+    ///     applying the current <see cref="SearchText" />. Marks the active
+    ///     row's <see cref="SessionRowViewModel.IsActive" /> flag.
     /// </summary>
     public void ReprojectAll()
     {
         var innerActive = _inner.ActiveSession;
         var rows = _inner.Sessions
             .Where(s => string.IsNullOrWhiteSpace(SearchText)
-                || s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                || s.Model.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+                        || s.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                        || s.Agent.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                        || s.Model.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
             .Select(s => new SessionRowViewModel(
-                id: s.Id,
-                title: s.Title,
-                agent: s.Agent,
-                modelName: s.Model,
-                providerId: s.ProviderId,
-                updatedAt: s.UpdatedAt,
-                messageCount: s.MessageCount,
-                status: MapStatus(s.Status),
+                s.Id,
+                s.Title,
+                s.Agent,
+                s.Model,
+                s.ProviderId,
+                s.UpdatedAt,
+                s.MessageCount,
+                MapStatus(s.Status),
                 mode: "Chat",
                 workdir: null,
                 costTotal: null)
             {
-                IsActive = innerActive is not null && innerActive.Id == s.Id,
+                IsActive = innerActive is not null && innerActive.Id == s.Id
             })
             .ToList();
 
@@ -159,11 +158,11 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    ///     Map the domain <see cref="SessionStatus"/> enum to the
-    ///     <see cref="SessionRowViewModel.Status"/> string the Orca rail
+    ///     Map the domain <see cref="SessionStatus" /> enum to the
+    ///     <see cref="SessionRowViewModel.Status" /> string the Orca rail
     ///     template expects (idle/running/error/completed). The mapping
-    ///     is the single source of truth — <see cref="ReprojectAll"/>
-    ///     and <see cref="OnItemStatusChanged"/> both go through here so
+    ///     is the single source of truth — <see cref="ReprojectAll" />
+    ///     and <see cref="OnItemStatusChanged" /> both go through here so
     ///     a full re-projection and a live update produce identical
     ///     dot colours for the same underlying state.
     /// </summary>
@@ -173,7 +172,7 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
         SessionStatus.Error => "error",
         SessionStatus.Done => "completed",
         SessionStatus.Aborted => "error",
-        _ => "idle",
+        _ => "idle"
     };
 
     private void OnItemStatusChanged(string sessionId, SessionStatus status)
@@ -198,15 +197,5 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
                 row.MessageCount = count;
             }
         });
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _inner.Sessions.CollectionChanged -= OnInnerCollectionChanged;
-        _inner.ItemStatusChanged -= OnItemStatusChanged;
-        _inner.ItemMessageCountChanged -= OnItemMessageCountChanged;
     }
 }

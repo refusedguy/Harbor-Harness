@@ -1,9 +1,6 @@
-using System.Collections.Generic;
 using System.IO;
 using Microsoft.Win32;
-
 namespace Harbor.App.Wpf.Services;
-
 /// <summary>
 ///     Thin wrapper over WPF <see cref="OpenFileDialog" /> /
 ///     <see cref="SaveFileDialog" /> / folder browser so view-models can

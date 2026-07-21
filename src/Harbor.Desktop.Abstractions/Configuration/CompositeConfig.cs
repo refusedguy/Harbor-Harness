@@ -15,19 +15,16 @@
 // trivially deep-equality-comparable in tests. Each app's composition root
 // constructs one after both stores have been eagerly loaded.
 
-using System.Collections.Immutable;
-
 namespace Harbor.Desktop.Abstractions.Configuration;
-
 /// <summary>
-///     Immutable pair of the shared <see cref="CommonConfig"/> snapshot and
-///     an app-specific <typeparamref name="TAppConfig"/> snapshot. Resolved
+///     Immutable pair of the shared <see cref="CommonConfig" /> snapshot and
+///     an app-specific <typeparamref name="TAppConfig" /> snapshot. Resolved
 ///     from DI as a singleton so services that need fields from BOTH layers
 ///     can take a single dependency.
 /// </summary>
 /// <typeparam name="TAppConfig">
 ///     The app-specific config record type. Must be a <c>sealed record</c>
-///     deriving from <see cref="AppConfigBase"/>.
+///     deriving from <see cref="AppConfigBase" />.
 /// </typeparam>
 /// <remarks>
 ///     <para>
@@ -71,7 +68,7 @@ public sealed record CompositeConfig<TAppConfig> where TAppConfig : AppConfigBas
     public TAppConfig App { get; init; }
 
     /// <summary>
-    ///     Convenience accessor: the <see cref="AppConfigBase.AppId"/> of the
+    ///     Convenience accessor: the <see cref="AppConfigBase.AppId" /> of the
     ///     app-specific half. Equivalent to <c>App.AppId</c> but lets
     ///     logging / telemetry code read it without caring which app type
     ///     is in the snapshot.
@@ -85,7 +82,7 @@ public sealed record CompositeConfig<TAppConfig> where TAppConfig : AppConfigBas
     /// </summary>
     /// <param name="envOverride">
     ///     Optional env-var value. When non-null + non-empty, wins over
-    ///     <see cref="CommonConfig.StorageBackend"/>.
+    ///     <see cref="CommonConfig.StorageBackend" />.
     /// </param>
     /// <returns>
     ///     The effective storage backend ID (<c>"jsonl"</c>,

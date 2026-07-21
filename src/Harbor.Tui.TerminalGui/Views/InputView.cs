@@ -1,8 +1,6 @@
 using System.Text;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Tui.TerminalGui.Views;
-
 /// <summary>
 ///     Projects <see cref="InputModel" /> into a display string with a
 ///     caret and slash-command autocomplete marker.

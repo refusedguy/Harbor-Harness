@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Transport;
-
 /// <summary>
 ///     Server-side transport that accepts inbound connections over a Named
 ///     Pipe (Windows) or Unix Domain Socket (Linux/Mac). Each accepted
@@ -22,14 +21,13 @@ namespace Harbor.Ipc.Transport;
 /// </remarks>
 public sealed class ServerPipeTransport : IPipeTransport
 {
-    private readonly string _endpoint;
-    private readonly ILogger<ServerPipeTransport> _logger;
-    private readonly CancellationTokenSource _cts = new();
     private readonly Channel<Stream> _acceptChannel;
+    private readonly CancellationTokenSource _cts = new();
+    private readonly ILogger<ServerPipeTransport> _logger;
     private Task? _acceptLoopTask;
-    private Socket? _unixSocket;
-    private bool _disposed;
     private bool _bound;
+    private bool _disposed;
+    private Socket? _unixSocket;
 
     /// <summary>
     ///     Construct a server transport. Call <see cref="BindAsync" /> to
@@ -40,7 +38,7 @@ public sealed class ServerPipeTransport : IPipeTransport
     public ServerPipeTransport(string pipeName, ILogger<ServerPipeTransport> logger)
     {
         _logger = logger;
-        _endpoint = OperatingSystem.IsWindows()
+        Endpoint = OperatingSystem.IsWindows()
             ? pipeName
             : Path.Combine(Path.GetTempPath(), pipeName + ".sock");
         _acceptChannel = Channel.CreateUnbounded<Stream>(new UnboundedChannelOptions
@@ -51,10 +49,21 @@ public sealed class ServerPipeTransport : IPipeTransport
     }
 
     /// <inheritdoc />
-    public string Endpoint => _endpoint;
+    public string Endpoint
+    {
+        get;
+    }
 
     /// <inheritdoc />
     public bool IsBound => Volatile.Read(ref _bound);
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await UnbindAsync().ConfigureAwait(false);
+        _cts.Dispose();
+        Volatile.Write(ref _disposed, true);
+    }
 
     /// <summary>
     ///     Bind the transport and begin accepting connections. Returns the
@@ -71,7 +80,7 @@ public sealed class ServerPipeTransport : IPipeTransport
             ? AcceptLoopWindowsAsync(_cts.Token)
             : AcceptLoopUnixAsync(_cts.Token);
 
-        _logger.LogInformation("Transport bound to {Endpoint}", _endpoint);
+        _logger.LogInformation("Transport bound to {Endpoint}", Endpoint);
         return Task.FromResult<ChannelReader<Stream>>(_acceptChannel.Reader);
     }
 
@@ -89,7 +98,9 @@ public sealed class ServerPipeTransport : IPipeTransport
         if (_acceptLoopTask is not null)
         {
             try { await _acceptLoopTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected on shutdown */ }
+            catch (OperationCanceledException)
+            { /* expected on shutdown */
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
         }
 
@@ -101,19 +112,11 @@ public sealed class ServerPipeTransport : IPipeTransport
         }
 
         // Clean up the socket file on Unix.
-        if (!OperatingSystem.IsWindows() && File.Exists(_endpoint))
+        if (!OperatingSystem.IsWindows() && File.Exists(Endpoint))
         {
-            try { File.Delete(_endpoint); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete socket file {Path}", _endpoint); }
+            try { File.Delete(Endpoint); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete socket file {Path}", Endpoint); }
         }
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await UnbindAsync().ConfigureAwait(false);
-        _cts.Dispose();
-        Volatile.Write(ref _disposed, true);
     }
 
     // ── Windows: NamedPipeServerStream accept loop ─────────────────────────
@@ -123,9 +126,9 @@ public sealed class ServerPipeTransport : IPipeTransport
         while (!ct.IsCancellationRequested)
         {
             var server = new NamedPipeServerStream(
-                _endpoint,
+                Endpoint,
                 PipeDirection.InOut,
-                maxNumberOfServerInstances: 4,
+                4,
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous);
 
@@ -159,13 +162,13 @@ public sealed class ServerPipeTransport : IPipeTransport
     private async Task AcceptLoopUnixAsync(CancellationToken ct)
     {
         // Clean up any stale socket file from a previous crashed run.
-        if (File.Exists(_endpoint))
+        if (File.Exists(Endpoint))
         {
-            try { File.Delete(_endpoint); }
+            try { File.Delete(Endpoint); }
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to delete stale socket file"); }
         }
 
-        var endpoint = new UnixDomainSocketEndPoint(_endpoint);
+        var endpoint = new UnixDomainSocketEndPoint(Endpoint);
         _unixSocket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         _unixSocket.Bind(endpoint);
         _unixSocket.Listen(16);
@@ -187,7 +190,7 @@ public sealed class ServerPipeTransport : IPipeTransport
                 continue;
             }
 
-            var stream = new NetworkStream(client, ownsSocket: true);
+            var stream = new NetworkStream(client, true);
             await _acceptChannel.Writer.WriteAsync(stream, ct).ConfigureAwait(false);
         }
     }

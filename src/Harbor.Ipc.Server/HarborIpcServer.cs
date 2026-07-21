@@ -1,5 +1,4 @@
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Harbor IPC server. Hosts the <see cref="MessagePackRpcServer" />,
 ///     which exposes the in-process <c>IAgent</c> / <c>ISessionStore</c> /
@@ -32,7 +31,10 @@ public sealed class HarborIpcServer : IHarborServer
     /// <summary>
     ///     Construct a server backed by the host's service provider.
     /// </summary>
-    /// <param name="serviceProvider">The host's DI container (must expose IAgent, ISessionStore, IProviderRegistry, IToolRegistry, IEventBus, IAgentRegistry).</param>
+    /// <param name="serviceProvider">
+    ///     The host's DI container (must expose IAgent, ISessionStore, IProviderRegistry,
+    ///     IToolRegistry, IEventBus, IAgentRegistry).
+    /// </param>
     /// <param name="pipeName">Pipe name (Windows) or socket file basename (Unix). Defaults to <c>harbor-ipc</c>.</param>
     /// <param name="loggerFactory">Logger factory.</param>
     public HarborIpcServer(IServiceProvider serviceProvider, string pipeName = "harbor-ipc", ILoggerFactory? loggerFactory = null)

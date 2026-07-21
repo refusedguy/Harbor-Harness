@@ -2,11 +2,8 @@
 // also tested here, but most assertions are about its absence-handling (the
 // `sharpts` tool is not installed in CI) so the tests are deterministic.
 using Harbor.Scripting.Abstractions;
-using Harbor.Scripting.Bridge;
-using Harbor.Scripting.Engines;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Engines;
-
 public class JintScriptEngineTests
 {
     private static ScriptGlobals NewGlobals(IToolRegistry? tools = null)

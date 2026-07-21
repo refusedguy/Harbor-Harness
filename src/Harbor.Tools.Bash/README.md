@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `command` | string | Required. Shell command line. |
 | `cwd` | string | Optional. Working directory override. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"command":"dotnet build","cwd":"/repo","timeout":120}
+
 ```
 
         ## Dependencies

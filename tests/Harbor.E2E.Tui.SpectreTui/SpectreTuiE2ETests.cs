@@ -1,8 +1,5 @@
 using Harbor.E2E.Framework;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.Tui.SpectreTui;
-
 /// <summary>
 ///     End-to-end tests for the Spectre.Tui-based interactive TUI renderer.
 ///     Each test spawns the real CLI inside a pseudo-terminal (allocated via
@@ -12,17 +9,17 @@ namespace Harbor.E2E.Tui.SpectreTui;
 /// <remarks>
 ///     <para>
 ///         <b>Linux sandbox note:</b> tests use the Python <c>pty</c> module
-///         (called from <see cref="TuiDriver"/>) to allocate a PTY. The
+///         (called from <see cref="TuiDriver" />) to allocate a PTY. The
 ///         <c>script(1)</c> util-linux wrapper is the conventional choice but
 ///         is SIGKILL'd by the dev/CI sandbox's seccomp profile before it can
 ///         exec the child; <c>pty.openpty</c> called directly from Python's
 ///         parent process succeeds. On Windows, tests would require a
 ///         ConPTY-backed driver; the TuiDriver throws
-///         <see cref="PlatformNotSupportedException"/> on Windows today.
+///         <see cref="PlatformNotSupportedException" /> on Windows today.
 ///     </para>
 ///     <para>
 ///         <b>Skip when PTY is blocked:</b> each test calls
-///         <see cref="E2eTestBase.EnsurePtyAvailable"/> at the top and bails
+///         <see cref="E2eTestBase.EnsurePtyAvailable" /> at the top and bails
 ///         out (returning without asserting) so the E2E suite stays green in
 ///         PTY-restricted environments without ripping the tests out.
 ///     </para>
@@ -77,7 +74,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
 
         bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
@@ -101,7 +98,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
@@ -126,7 +123,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
@@ -150,7 +147,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
@@ -175,7 +172,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("?").ConfigureAwait(false);
@@ -202,7 +199,7 @@ public class SpectreTuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         // A distinctive sentinel string unlikely to appear in chrome text.

@@ -1,12 +1,10 @@
-using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Tui.SpectreTui.Panels.Builtin;
+using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.Tests;
-
 /// <summary>
 ///     Tests for the in-TUI diagnostics panel infrastructure: the ring buffer,
 ///     the ILogger → IDiagnosticsPanel bridge, and the SpectreTUI LogsPanel
@@ -189,8 +187,8 @@ public class SpectreTuiLogsPanelTests
     public async Task Build_NoPanel_ShowsPlaceholder()
     {
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), Width: 80, Height: 24, Services: null);
-        var widget = panel.Build(ctx);
+        var ctx = new PanelContext(new UiState(), 80, 24, null);
+        object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
 
@@ -206,8 +204,8 @@ public class SpectreTuiLogsPanelTests
         var sp = services.BuildServiceProvider();
 
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), Width: 80, Height: 24, Services: sp);
-        var widget = panel.Build(ctx);
+        var ctx = new PanelContext(new UiState(), 80, 24, sp);
+        object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
 
@@ -220,8 +218,8 @@ public class SpectreTuiLogsPanelTests
         var sp = services.BuildServiceProvider();
 
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), Width: 80, Height: 24, Services: sp);
-        var widget = panel.Build(ctx);
+        var ctx = new PanelContext(new UiState(), 80, 24, sp);
+        object? widget = panel.Build(ctx);
         await Assert.That(widget).IsNotNull();
     }
 
@@ -238,11 +236,11 @@ public class SpectreTuiLogsPanelTests
         var store = new UiStore();
         var servicesWithStore = new ServiceCollection();
         servicesWithStore.AddSingleton<IDiagnosticsPanel>(diag);
-        servicesWithStore.AddSingleton<UiStore>(store);
+        servicesWithStore.AddSingleton(store);
         var sp2 = servicesWithStore.BuildServiceProvider();
 
         var panel = new LogsPanel();
-        var ctx = new PanelContext(store.State, Width: 80, Height: 24, Services: sp2);
+        var ctx = new PanelContext(store.State, 80, 24, sp2);
 
         bool consumed = panel.OnKey(new UiKey(UiKeyCode.F12), ctx);
         await Assert.That(consumed).IsTrue();
@@ -252,7 +250,7 @@ public class SpectreTuiLogsPanelTests
     public async Task OnKey_NonF12_NotConsumed()
     {
         var panel = new LogsPanel();
-        var ctx = new PanelContext(new UiState(), Width: 80, Height: 24, Services: null);
+        var ctx = new PanelContext(new UiState(), 80, 24);
         bool consumed = panel.OnKey(new UiKey(UiKeyCode.Enter), ctx);
         await Assert.That(consumed).IsFalse();
     }
@@ -265,10 +263,7 @@ public class SpectreTuiLogsPanelTests
 public class F12KeyMapTests
 {
     [Test]
-    public async Task UiKeyCode_Includes_F12()
-    {
-        await Assert.That((int)UiKeyCode.F12).IsGreaterThan((int)UiKeyCode.F4);
-    }
+    public async Task UiKeyCode_Includes_F12() => await Assert.That((int)UiKeyCode.F12).IsGreaterThan((int)UiKeyCode.F4);
 
     [Test]
     public async Task ChatAction_Includes_ToggleLogsPanel()

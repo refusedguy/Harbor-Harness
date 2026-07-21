@@ -1,11 +1,10 @@
 namespace Harbor.Desktop.Animations;
-
 /// <summary>
 ///     Easing-function delegates and a registry of named easings. Each
-/// platform app uses the <see cref="Apply"/> function to interpolate an
-/// animation value; the named easing strings
-/// (<see cref="EasingFunctions.CubicInOut"/> etc.) map to
-/// <see cref="Harbor.Desktop.DesignSystem.AnimationTokens"/> for serialization.
+///     platform app uses the <see cref="Apply" /> function to interpolate an
+///     animation value; the named easing strings
+///     (<see cref="EasingFunctions.CubicInOut" /> etc.) map to
+///     <see cref="Harbor.Desktop.DesignSystem.AnimationTokens" /> for serialization.
 /// </summary>
 public static class EasingFunctions
 {
@@ -41,9 +40,9 @@ public static class EasingFunctions
         return 1 - Math.Cos(t * Math.PI * 0.5);
     }
 
-    /// <summary>Resolve a named easing (from <see cref="AnimationTokens"/>) to a delegate.</summary>
+    /// <summary>Resolve a named easing (from <see cref="AnimationTokens" />) to a delegate.</summary>
     /// <param name="name">Easing name (e.g. "cubicInOut").</param>
-    /// <returns>The matching <see cref="Func{T, TResult}"/>, or <see cref="Linear"/> if unknown.</returns>
+    /// <returns>The matching <see cref="Func{T, TResult}" />, or <see cref="Linear" /> if unknown.</returns>
     public static Func<double, double> Resolve(string name) => name switch
     {
         AnimationTokens.EasingLinear => Linear,
@@ -53,10 +52,10 @@ public static class EasingFunctions
         AnimationTokens.EasingCubicInOut => CubicInOut,
         AnimationTokens.EasingQuarticOut => QuarticOut,
         AnimationTokens.EasingSpring => Spring,
-        _ => Linear,
+        _ => Linear
     };
 
-    /// <summary>Sample <paramref name="easing"/> at <paramref name="progress"/> (0..1).</summary>
+    /// <summary>Sample <paramref name="easing" /> at <paramref name="progress" /> (0..1).</summary>
     public static double Apply(Func<double, double> easing, double progress)
         => easing(Math.Clamp(progress, 0.0, 1.0));
 }

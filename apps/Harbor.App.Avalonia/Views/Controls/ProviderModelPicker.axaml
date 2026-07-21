@@ -1,6 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.Controls.ProviderModelPicker">
@@ -25,7 +24,7 @@
     -->
 
     <UserControl.Resources>
-        <views:BrushKeyConverter x:Key="BrushKeyConv"/>
+        <views:BrushKeyConverter x:Key="BrushKeyConv" />
     </UserControl.Resources>
 
     <Border Background="{StaticResource MochaBase}" CornerRadius="8" Padding="12">
@@ -35,13 +34,13 @@
             <TextBox Grid.Row="0"
                      PlaceholderText="Search models or providers…"
                      Text="{Binding SearchText, Mode=TwoWay}"
-                     Margin="0,0,0,8"/>
+                     Margin="0,0,0,8" />
 
             <!-- Loading bar -->
             <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,6" IsVisible="{Binding IsLoading}">
                 <TextBlock Text="Loading providers + models…" FontSize="11"
-                           Foreground="{StaticResource MochaOverlay2}"/>
-                <ProgressBar IsIndeterminate="True" Height="2"/>
+                           Foreground="{StaticResource MochaOverlay2}" />
+                <ProgressBar IsIndeterminate="True" Height="2" />
             </StackPanel>
 
             <!-- Error banner -->
@@ -50,7 +49,7 @@
                     IsVisible="{Binding ErrorMessage}">
                 <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
                            Foreground="{StaticResource MochaPeach}"
-                           TextWrapping="Wrap"/>
+                           TextWrapping="Wrap" />
             </Border>
 
             <!-- Provider list -->
@@ -66,11 +65,11 @@
                                     <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                                         <StackPanel Grid.Column="0" Spacing="1">
                                             <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                                       TextTrimming="CharacterEllipsis" />
                                             <TextBlock Text="{Binding Id}" FontSize="10"
                                                        FontFamily="{StaticResource CodeFont}"
                                                        Foreground="{StaticResource TextMutedBrush}"
-                                                       TextTrimming="CharacterEllipsis"/>
+                                                       TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                         <Border Grid.Column="1"
                                                 Background="{StaticResource MochaSurface0}"
@@ -80,9 +79,9 @@
                                                 <TextBlock Text="{Binding AuthStatusIcon}"
                                                            FontFamily="{StaticResource CodeFont}"
                                                            FontSize="12"
-                                                           Foreground="{Binding AuthStatusBrushKey, Converter={StaticResource BrushKeyConv}}"/>
+                                                           Foreground="{Binding AuthStatusBrushKey, Converter={StaticResource BrushKeyConv}}" />
                                                 <TextBlock Text="{Binding AuthStatusText}" FontSize="10"
-                                                           Foreground="{StaticResource TextMutedBrush}"/>
+                                                           Foreground="{StaticResource TextMutedBrush}" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>
@@ -93,7 +92,7 @@
                                     <TextBlock Text="{Binding SetupHint}" FontSize="10"
                                                Foreground="{StaticResource MochaSapphire}"
                                                TextWrapping="Wrap"
-                                               IsVisible="{Binding SetupHint}"/>
+                                               IsVisible="{Binding SetupHint}" />
 
                                     <!-- Model list -->
                                     <ItemsControl ItemsSource="{Binding Models}">
@@ -107,18 +106,19 @@
                                                         CommandParameter="{Binding}">
                                                     <StackPanel Spacing="2">
                                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
-                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Text="{Binding FeaturesText}" FontSize="10"
-                                                                       Foreground="{StaticResource MochaGreen}"/>
+                                                                       Foreground="{StaticResource MochaGreen}" />
                                                         </StackPanel>
                                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                                             <TextBlock Text="{Binding Id}" FontSize="10"
                                                                        FontFamily="{StaticResource CodeFont}"
                                                                        Foreground="{StaticResource MochaOverlay2}"
-                                                                       TextTrimming="CharacterEllipsis"/>
+                                                                       TextTrimming="CharacterEllipsis" />
                                                             <TextBlock Text="{Binding PricingText}" FontSize="10"
-                                                                       Foreground="{StaticResource MochaYellow}"/>
+                                                                       Foreground="{StaticResource MochaYellow}" />
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </Button>
@@ -130,7 +130,7 @@
                                     <TextBlock Text="No models returned — provider may not be running."
                                                FontSize="11"
                                                Foreground="{StaticResource TextMutedBrush}"
-                                               IsVisible="{Binding !HasModels}"/>
+                                               IsVisible="{Binding !HasModels}" />
                                 </StackPanel>
                             </Expander>
                         </DataTemplate>

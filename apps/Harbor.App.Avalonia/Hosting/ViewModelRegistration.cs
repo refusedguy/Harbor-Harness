@@ -1,9 +1,7 @@
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.App.Avalonia.Hosting;
-
 /// <summary>
 ///     View-model registration — long-lived shell VMs are Singletons so
 ///     that resolves are stable across the app lifetime. Transient

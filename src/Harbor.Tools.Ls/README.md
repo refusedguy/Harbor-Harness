@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Directory path. |
 | `recursive` | bool | Optional. Default false. |
@@ -21,7 +22,9 @@
         ## Example usage
 
         ```json
+
 {"path":".","recursive":false}
+
 ```
 
         ## Dependencies

@@ -1,8 +1,5 @@
 using Harbor.E2E.Framework;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.Tui.TerminalGui;
-
 /// <summary>
 ///     End-to-end tests for the Terminal.Gui v2-based interactive TUI renderer
 ///     (<c>HARBOR_TUI=terminal-gui</c>).
@@ -42,7 +39,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
 
         bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
@@ -60,7 +57,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
@@ -79,7 +76,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);

@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Ui.Framework.Panels;
-
 /// <summary>
 ///     Plugin contract for contributing dockable panels to any TUI renderer that
 ///     supports the Harbor panel system. Implementations register one or more
@@ -39,5 +38,5 @@ public interface ITuiPanelPlugin : IPlugin
     ///     replaces by id).
     /// </summary>
     /// <param name="registry">The host's panel registry.</param>
-    void RegisterPanels(IPanelRegistry registry);
+    public void RegisterPanels(IPanelRegistry registry);
 }

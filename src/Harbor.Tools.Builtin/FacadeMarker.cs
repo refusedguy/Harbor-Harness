@@ -1,5 +1,4 @@
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
 ///     Marker type that lives in Harbor.Tools.Builtin.dll so the assembly has
 ///     at least one type. Harbor.Tools.Builtin is a thin backward-compat facade

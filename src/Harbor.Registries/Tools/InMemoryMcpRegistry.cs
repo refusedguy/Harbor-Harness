@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Tools;
 /// <summary>
@@ -13,8 +12,8 @@ namespace Harbor.Core.Tools;
 /// </remarks>
 public sealed class InMemoryMcpRegistry : IMcpRegistry
 {
-    private readonly ConcurrentDictionary<string, string> _servers = new(StringComparer.Ordinal);
     private readonly ILogger<InMemoryMcpRegistry> _logger;
+    private readonly ConcurrentDictionary<string, string> _servers = new(StringComparer.Ordinal);
 
     /// <summary>
     ///     Construct an empty in-memory registry.
@@ -53,9 +52,9 @@ public sealed class InMemoryMcpRegistry : IMcpRegistry
     {
         // Snapshot into a fresh array — ConcurrentDictionary.GetEnumerator is a snapshot
         // iterator but callers expect a stable list.
-        var names = new string[_servers.Count];
+        string[] names = new string[_servers.Count];
         int i = 0;
-        foreach (var k in _servers.Keys)
+        foreach (string k in _servers.Keys)
             names[i++] = k;
         return names;
     }

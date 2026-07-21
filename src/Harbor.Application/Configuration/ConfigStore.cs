@@ -1,8 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Core.Configuration;
-
 /// <summary>
 ///     Configuration store — reads/writes ~/.harbor/config.json.
 ///     Implements Repository pattern for config.
@@ -24,13 +22,13 @@ public interface IConfigStore
     /// <summary>Load the current configuration.</summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The loaded <see cref="HarborConfig" />, or failure with an error message.</returns>
-    Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default);
+    public Task<Result<HarborConfig>> LoadAsync(CancellationToken ct = default);
 
     /// <summary>Save the supplied configuration atomically.</summary>
     /// <param name="config">The configuration to save.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success, or failure with an error message.</returns>
-    Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default);
+    public Task<Result> SaveAsync(HarborConfig config, CancellationToken ct = default);
 
     /// <summary>
     ///     Load → mutate → save in one atomic operation. The supplied
@@ -40,7 +38,7 @@ public interface IConfigStore
     /// <param name="updater">Pure function that maps the current config to the new one.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success, or failure with an error message.</returns>
-    Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default);
+    public Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default);
 
     /// <summary>
     ///     Look up a single API key without loading the whole config into a
@@ -49,7 +47,7 @@ public interface IConfigStore
     /// <param name="providerId">The provider id (e.g. <c>anthropic</c>).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success with the key, or failure if not present.</returns>
-    Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default);
+    public Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default);
 }
 
 /// <summary>

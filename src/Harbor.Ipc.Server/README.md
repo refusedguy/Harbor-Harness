@@ -44,14 +44,14 @@ Hosts the AgentLoop + registries and exposes them via MessagePack RPC over Named
 
 ## Files
 
-| File | Purpose |
-| --- | --- |
-| `HarborIpcServer.cs` | `IHarborServer` impl. Composes transport + dispatcher + broadcaster. |
-| `HarborIpcServerExtensions.cs` | `UseHarborIpcServer()` DI helper. |
-| `Protocol/RequestDispatcher.cs` | Dispatches `HarborRequest` → `HarborResponse` via the host's DI services. |
-| `Protocol/MessagePackRpcServer.cs` | Per-client request loop; concurrent multi-client. |
-| `Protocol/EventBroadcaster.cs` | Subscribes to `IEventBus`, pushes `HarborEvent`s to all connected client streams. |
-| `Transport/ServerPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) accept loop. |
+| File                               | Purpose                                                                           |
+|------------------------------------|-----------------------------------------------------------------------------------|
+| `HarborIpcServer.cs`               | `IHarborServer` impl. Composes transport + dispatcher + broadcaster.              |
+| `HarborIpcServerExtensions.cs`     | `UseHarborIpcServer()` DI helper.                                                 |
+| `Protocol/RequestDispatcher.cs`    | Dispatches `HarborRequest` → `HarborResponse` via the host's DI services.         |
+| `Protocol/MessagePackRpcServer.cs` | Per-client request loop; concurrent multi-client.                                 |
+| `Protocol/EventBroadcaster.cs`     | Subscribes to `IEventBus`, pushes `HarborEvent`s to all connected client streams. |
+| `Transport/ServerPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) accept loop.                |
 
 ## Registration
 

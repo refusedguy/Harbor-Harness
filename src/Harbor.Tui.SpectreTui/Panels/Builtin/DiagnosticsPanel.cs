@@ -1,12 +1,9 @@
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that collects errors from <c>bash</c> tool outputs and shows
 ///     them in a clickable list. Detects:
@@ -141,7 +138,7 @@ public sealed class DiagnosticsPanel : IPanelProvider
                 var match = pattern.Match(text);
                 if (!match.Success) continue;
 
-                var severity = lines[i].Role == ChatRole.Error || text.StartsWith("error", System.StringComparison.OrdinalIgnoreCase)
+                var severity = lines[i].Role == ChatRole.Error || text.StartsWith("error", StringComparison.OrdinalIgnoreCase)
                     ? DiagnosticSeverity.Error
                     : DiagnosticSeverity.Warning;
 
@@ -161,13 +158,13 @@ public sealed class DiagnosticsPanel : IPanelProvider
 
     private static string ExtractSource(string match)
     {
-        if (match.StartsWith("error CS", System.StringComparison.OrdinalIgnoreCase))
+        if (match.StartsWith("error CS", StringComparison.OrdinalIgnoreCase))
             return "csharp";
-        if (match.StartsWith("error MSB", System.StringComparison.OrdinalIgnoreCase))
+        if (match.StartsWith("error MSB", StringComparison.OrdinalIgnoreCase))
             return "msbuild";
-        if (match.StartsWith("error[E", System.StringComparison.OrdinalIgnoreCase))
+        if (match.StartsWith("error[E", StringComparison.OrdinalIgnoreCase))
             return "rust";
-        if (match.StartsWith("Traceback", System.StringComparison.OrdinalIgnoreCase) || match.Contains("File \""))
+        if (match.StartsWith("Traceback", StringComparison.OrdinalIgnoreCase) || match.Contains("File \""))
             return "python";
         if (match.Contains("Error:"))
             return "node";

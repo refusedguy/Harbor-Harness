@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Services;
-
 /// <summary>
 ///     Fetches git status for a working directory — branch name + dirty/clean.
 ///     Runs `git rev-parse --abbrev-ref HEAD` and `git status --porcelain`.
@@ -28,11 +26,11 @@ public sealed class GitService
 
         try
         {
-            var branch = RunGit(directory, "rev-parse", "--abbrev-ref", "HEAD");
+            string? branch = RunGit(directory, "rev-parse", "--abbrev-ref", "HEAD");
             if (string.IsNullOrEmpty(branch))
                 return (null, false);
 
-            var status = RunGit(directory, "status", "--porcelain");
+            string? status = RunGit(directory, "status", "--porcelain");
             bool isDirty = !string.IsNullOrEmpty(status?.Trim());
 
             return (branch.Trim(), isDirty);
@@ -53,16 +51,19 @@ public sealed class GitService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true,
+            CreateNoWindow = true
         };
-        foreach (var a in args)
+        foreach (string a in args)
             psi.ArgumentList.Add(a);
 
         using var process = Process.Start(psi);
         if (process is null) return null;
         if (!process.WaitForExit(TimeSpan.FromSeconds(3)))
         {
-            try { process.Kill(); } catch { /* process already exited */ }
+            try { process.Kill(); }
+            catch
+            { /* process already exited */
+            }
             return null;
         }
         if (process.ExitCode != 0) return null;

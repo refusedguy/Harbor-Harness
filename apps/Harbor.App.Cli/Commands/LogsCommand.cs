@@ -1,25 +1,38 @@
 using Harbor.Cli.Logging;
 namespace Harbor.Cli.Commands;
-
 /// <summary>
 ///     <c>harbor logs</c> — inspect per-run log files written by
-///     <see cref="FileLoggerProvider"/> to <c>~/.harbor/logs/</c>.
+///     <see cref="FileLoggerProvider" /> to <c>~/.harbor/logs/</c>.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Subcommands:
 ///     </para>
 ///     <list type="table">
-///         <item><term>(default)</term><description>List the 10 most recent log files (same as <c>--list</c>).</description></item>
-///         <item><term>--list</term><description>List all log files, newest first.</description></item>
-///         <item><term>--last</term><description>Print the most recent log file to stdout.</description></item>
-///         <item><term>--follow</term><description>Print the most recent log file, then tail new lines (Ctrl-C to exit).</description></item>
-///         <item><term>--clean</term><description>Delete every <c>harbor-*.log</c> file (after confirmation prompt).</description></item>
-///         <item><term>--help</term><description>Show usage.</description></item>
+///         <item>
+///             <term>(default)</term><description>List the 10 most recent log files (same as <c>--list</c>).</description>
+///         </item>
+///         <item>
+///             <term>--list</term><description>List all log files, newest first.</description>
+///         </item>
+///         <item>
+///             <term>--last</term><description>Print the most recent log file to stdout.</description>
+///         </item>
+///         <item>
+///             <term>--follow</term>
+///             <description>Print the most recent log file, then tail new lines (Ctrl-C to exit).</description>
+///         </item>
+///         <item>
+///             <term>--clean</term>
+///             <description>Delete every <c>harbor-*.log</c> file (after confirmation prompt).</description>
+///         </item>
+///         <item>
+///             <term>--help</term><description>Show usage.</description>
+///         </item>
 ///     </list>
 ///     <para>
-///         <see cref="FileLoggerProvider"/> opens files with
-///         <see cref="FileShare.Read"/>, so <c>--follow</c> and external
+///         <see cref="FileLoggerProvider" /> opens files with
+///         <see cref="FileShare.Read" />, so <c>--follow</c> and external
 ///         <c>tail -f</c> can read a file the CLI is actively writing to.
 ///     </para>
 /// </remarks>
@@ -31,8 +44,8 @@ public sealed class LogsCommand
     private readonly TextWriter _output;
 
     /// <summary>
-    ///     Create a <c>logs</c> command handler writing to <paramref name="output"/>
-    ///     and <paramref name="error"/>.
+    ///     Create a <c>logs</c> command handler writing to <paramref name="output" />
+    ///     and <paramref name="error" />.
     /// </summary>
     public LogsCommand(TextWriter output, TextWriter error)
     {
@@ -124,7 +137,7 @@ public sealed class LogsCommand
         _output.WriteLine();
         int take = all ? files.Length : Math.Min(10, files.Length);
         int index = 1;
-        foreach (FileInfo f in files.Take(take))
+        foreach (var f in files.Take(take))
         {
             string size = f.Length switch
             {
@@ -177,7 +190,9 @@ public sealed class LogsCommand
             using var reader = new StreamReader(fs);
             string? line;
             while ((line = reader.ReadLine()) is not null)
+            {
                 _output.WriteLine(line);
+            }
             _output.Flush();
 
             if (!follow)
@@ -256,7 +271,7 @@ public sealed class LogsCommand
 
         int deleted = 0;
         int skipped = 0;
-        foreach (FileInfo f in files)
+        foreach (var f in files)
         {
             try
             {

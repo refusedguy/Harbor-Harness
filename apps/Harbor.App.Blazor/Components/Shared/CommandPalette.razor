@@ -1,8 +1,6 @@
 @* CommandPalette — Ctrl+P fuzzy finder overlay. Reads from
    CommandPaletteService. Replaces the action of "nav.*" commands with
    NavigationManager.NavigateTo so navigation works without circular DI. @*@
-
-@using Microsoft.AspNetCore.Components.Routing
 @inject NavigationManager Nav
 @inject CommandPaletteService Palette
 @implements IDisposable
@@ -27,7 +25,7 @@
                 }
                 else
                 {
-                    @for (int i = 0; i < Palette.Filtered.Count; i++)
+                    @for (var i = 0; i < Palette.Filtered.Count; i++)
                     {
                         var entry = Palette.Filtered[i];
                         var idx = i;
@@ -47,54 +45,54 @@
 }
 
 @code {
-    protected override void OnInitialized()
-    {
-        Palette.Changed += OnChanged;
-    }
+protected override void OnInitialized()
+{
+    Palette.Changed += OnChanged;
+}
 
-    private async void OnChanged(object? _, EventArgs __)
-    {
-        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-    }
+private async void OnChanged(object? _, EventArgs __)
+{
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
 
-    private async Task OnInputAsync(ChangeEventArgs e)
-    {
-        await Palette.SetQueryAsync(e.Value?.ToString() ?? string.Empty).ConfigureAwait(false);
-    }
+private async Task OnInputAsync(ChangeEventArgs e)
+{
+    await Palette.SetQueryAsync(e.Value?.ToString() ?? string.Empty).ConfigureAwait(false);
+}
 
-    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+private async Task OnKeyDownAsync(KeyboardEventArgs e)
+{
+    switch (e.Key)
     {
-        switch (e.Key)
-        {
-            case "ArrowDown":
-                await Palette.MoveSelectionAsync(1).ConfigureAwait(false);
-                break;
-            case "ArrowUp":
-                await Palette.MoveSelectionAsync(-1).ConfigureAwait(false);
-                break;
-            case "Enter":
-                await Palette.ExecuteSelectedAsync().ConfigureAwait(false);
-                break;
-            case "Escape":
-                await Palette.CloseAsync().ConfigureAwait(false);
-                break;
-        }
+        case "ArrowDown":
+            await Palette.MoveSelectionAsync(1).ConfigureAwait(false);
+            break;
+        case "ArrowUp":
+            await Palette.MoveSelectionAsync(-1).ConfigureAwait(false);
+            break;
+        case "Enter":
+            await Palette.ExecuteSelectedAsync().ConfigureAwait(false);
+            break;
+        case "Escape":
+            await Palette.CloseAsync().ConfigureAwait(false);
+            break;
     }
+}
 
-    private async Task ExecuteAsync(CommandEntry entry)
+private async Task ExecuteAsync(CommandEntry entry)
+{
+    if (!string.IsNullOrEmpty(entry.NavigateUri))
     {
-        if (!string.IsNullOrEmpty(entry.NavigateUri))
-        {
-            Nav.NavigateTo(entry.NavigateUri);
-        }
-        await entry.ExecuteAsync().ConfigureAwait(false);
-        await Palette.CloseAsync().ConfigureAwait(false);
+        Nav.NavigateTo(entry.NavigateUri);
     }
+    await entry.ExecuteAsync().ConfigureAwait(false);
+    await Palette.CloseAsync().ConfigureAwait(false);
+}
 
-    private Task CloseAsync() => Palette.CloseAsync();
+private Task CloseAsync() => Palette.CloseAsync();
 
-    public void Dispose()
-    {
-        Palette.Changed -= OnChanged;
-    }
+public void Dispose()
+{
+    Palette.Changed -= OnChanged;
+}
 }

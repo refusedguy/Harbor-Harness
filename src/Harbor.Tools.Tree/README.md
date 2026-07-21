@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `path` | string | Required. Root directory. |
 | `maxDepth` | integer | Optional. Default 3, hard cap 10. |
@@ -20,7 +21,9 @@
         ## Example usage
 
         ```json
+
 {"path":".","maxDepth":4}
+
 ```
 
         ## Dependencies

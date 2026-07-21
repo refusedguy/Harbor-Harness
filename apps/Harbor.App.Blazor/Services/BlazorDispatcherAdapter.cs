@@ -1,19 +1,17 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
-
 namespace Harbor.App.Blazor.Services;
-
 /// <summary>
-///     Marshals <see cref="Action"/> callbacks onto the Blazor render
+///     Marshals <see cref="Action" /> callbacks onto the Blazor render
 ///     (synchronisation) context. Use whenever a background thread (event bus,
 ///     timer, agent loop) needs to re-render a component — calling
-///     <see cref="ComponentBase.StateHasChanged"/> directly from a non-render
-///     thread throws <see cref="InvalidOperationException"/>.
+///     <see cref="ComponentBase.StateHasChanged" /> directly from a non-render
+///     thread throws <see cref="InvalidOperationException" />.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Why this exists:</b> the <see cref="UiStore"/> raises
-///         <see cref="UiStore.Changed"/> from arbitrary thread-pool threads
+///         <b>Why this exists:</b> the <see cref="UiStore" /> raises
+///         <see cref="UiStore.Changed" /> from arbitrary thread-pool threads
 ///         (the agent loop publishes via <c>Channel&lt;T&gt;</c> readers).
 ///         Razor components need to call <c>StateHasChanged</c> on the
 ///         render thread, so they subscribe to <c>Changed</c> and route the
@@ -33,23 +31,24 @@ public sealed class BlazorDispatcherAdapter
 
     /// <summary>
     ///     Bind the adapter to the current render context. Called once from
-    ///     the layout's <c>OnInitialized</c> via <c>Dispatcher.Bind(a =&gt;
-    ///     InvokeAsync(a))</c>. After this call, every
-    ///     <see cref="InvokeAsync(Action)"/> routes through the Blazor
+    ///     the layout's <c>OnInitialized</c> via
+    ///     <c>
+    ///         Dispatcher.Bind(a =&gt;
+    ///         InvokeAsync(a))
+    ///     </c>
+    ///     . After this call, every
+    ///     <see cref="InvokeAsync(Action)" /> routes through the Blazor
     ///     render thread.
     /// </summary>
     /// <param name="invokeAsync">
     ///     A delegate that runs an action on the render thread (typically
     ///     <c>a =&gt; InvokeAsync(a)</c> from a <c>ComponentBase</c>).
     /// </param>
-    public void Bind(Func<Action, Task> invokeAsync)
-    {
-        _invokeAsync = invokeAsync;
-    }
+    public void Bind(Func<Action, Task> invokeAsync) => _invokeAsync = invokeAsync;
 
     /// <summary>Invoke an action on the render thread. Returns immediately if no dispatcher is bound yet.</summary>
     /// <param name="action">The action to invoke.</param>
-    /// <returns>A <see cref="Task"/> that completes when the action has run on the render thread.</returns>
+    /// <returns>A <see cref="Task" /> that completes when the action has run on the render thread.</returns>
     public Task InvokeAsync(Action action)
     {
         var invoke = _invokeAsync;

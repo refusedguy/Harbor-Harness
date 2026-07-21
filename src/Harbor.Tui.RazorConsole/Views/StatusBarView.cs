@@ -1,10 +1,8 @@
 using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.RazorConsole.Handlers;
 using Harbor.Tui.RazorConsole.Rendering;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.RazorConsole.Views;
-
 /// <summary>
 ///     Status bar projection: <c>provider/model/agent · tokens↑↓ · $cost · status · scroll%</c>.
 /// </summary>

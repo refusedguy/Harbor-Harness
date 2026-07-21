@@ -1,9 +1,7 @@
+@using System.Text.Json
 @* TokenUsageChart — Chart.js bar chart showing input vs output tokens.
    Renders into a <canvas> with a unique id; calls harborCharts.render
    via JS interop. Re-renders when the Series parameter changes. @*@
-
-@using System.Text.Json
-@using Harbor.App.Blazor.ViewModels
 @inject HarborJsInterop Js
 
 <div class="token-usage-chart">
@@ -11,69 +9,69 @@
 </div>
 
 @code {
-    private readonly string _canvasId = "chart-" + Guid.NewGuid().ToString("N");
+private readonly string _canvasId = "chart-" + Guid.NewGuid().ToString("N");
 
-    /// <summary>Series of token samples to plot.</summary>
-    [Parameter]
-    public IReadOnlyList<TokenPoint> Series { get; set; } = Array.Empty<TokenPoint>();
+/// <summary>Series of token samples to plot.</summary>
+[Parameter]
+public IReadOnlyList<TokenPoint> Series { get; set; } = Array.Empty<TokenPoint>();
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+protected override async Task OnAfterRenderAsync(bool firstRender)
+{
+    if (!firstRender) return;
+    await RenderChartAsync().ConfigureAwait(false);
+}
+
+protected override async Task OnParametersSetAsync()
+{
+    if (Series is null) return;
+    // Re-render on data change (after the first render).
+    await RenderChartAsync().ConfigureAwait(false);
+}
+
+private async Task RenderChartAsync()
+{
+    var config = new
     {
-        if (!firstRender) return;
-        await RenderChartAsync().ConfigureAwait(false);
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (Series is null) return;
-        // Re-render on data change (after the first render).
-        await RenderChartAsync().ConfigureAwait(false);
-    }
-
-    private async Task RenderChartAsync()
-    {
-        var config = new
+        type = "bar",
+        data = new
         {
-            type = "bar",
-            data = new
+            labels = Series.Select(p => p.Label).ToArray(),
+            datasets = new[]
             {
-                labels = Series.Select(p => p.Label).ToArray(),
-                datasets = new[]
+                new
                 {
-                    new
-                    {
-                        label = "Input",
-                        data = Series.Select(p => p.InputTokens).ToArray(),
-                        backgroundColor = "rgba(137, 180, 250, 0.7)",
-                        borderColor = "rgba(137, 180, 250, 1)",
-                        borderWidth = 1
-                    },
-                    new
-                    {
-                        label = "Output",
-                        data = Series.Select(p => p.OutputTokens).ToArray(),
-                        backgroundColor = "rgba(166, 227, 161, 0.7)",
-                        borderColor = "rgba(166, 227, 161, 1)",
-                        borderWidth = 1
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { labels = new { color = "#cdd6f4" } }
+                    label = "Input",
+                    data = Series.Select(p => p.InputTokens).ToArray(),
+                    backgroundColor = "rgba(137, 180, 250, 0.7)",
+                    borderColor = "rgba(137, 180, 250, 1)",
+                    borderWidth = 1
                 },
-                scales = new
+                new
                 {
-                    x = new { ticks = new { color = "#a6adc8" }, grid = new { color = "rgba(108, 112, 134, 0.2)" } },
-                    y = new { ticks = new { color = "#a6adc8" }, grid = new { color = "rgba(108, 112, 134, 0.2)" } }
+                    label = "Output",
+                    data = Series.Select(p => p.OutputTokens).ToArray(),
+                    backgroundColor = "rgba(166, 227, 161, 0.7)",
+                    borderColor = "rgba(166, 227, 161, 1)",
+                    borderWidth = 1
                 }
             }
-        };
-        string json = JsonSerializer.Serialize(config);
-        await Js.RenderChartAsync(_canvasId, json).ConfigureAwait(false);
-    }
+        },
+        options = new
+        {
+            responsive = true,
+            maintainAspectRatio = false,
+            plugins = new
+            {
+                legend = new { labels = new { color = "#cdd6f4" } }
+            },
+            scales = new
+            {
+                x = new { ticks = new { color = "#a6adc8" }, grid = new { color = "rgba(108, 112, 134, 0.2)" } },
+                y = new { ticks = new { color = "#a6adc8" }, grid = new { color = "rgba(108, 112, 134, 0.2)" } }
+            }
+        }
+    };
+    var json = JsonSerializer.Serialize(config);
+    await Js.RenderChartAsync(_canvasId, json).ConfigureAwait(false);
+}
 }

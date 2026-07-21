@@ -1,8 +1,4 @@
-using Harbor.Ipc;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Ipc.Server;
-
 /// <summary>
 ///     DI extensions for registering <see cref="HarborIpcServer" /> as a
 ///     hosted <see cref="IHarborServer" /> singleton.

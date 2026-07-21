@@ -1,4 +1,4 @@
-using System.Buffers;
+using System.Globalization;
 using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
@@ -140,7 +140,7 @@ public sealed class PatchTool : ITool
         var applied = new List<string>(originalLines.Length + 16);
         int originalCursor = 0;
 
-        foreach (Hunk h in hunks)
+        foreach (var h in hunks)
         {
             // The hunk header is 1-based; we use 0-based internally.
             int targetStart = h.OldStart - 1;
@@ -166,7 +166,7 @@ public sealed class PatchTool : ITool
             }
 
             // Apply the hunk: walk its lines.
-            foreach (HunkLine hl in h.Lines)
+            foreach (var hl in h.Lines)
             {
                 switch (hl.Type)
                 {
@@ -224,7 +224,7 @@ public sealed class PatchTool : ITool
 
             // File.Move with overwrite = true is atomic on POSIX same-filesystem; on Windows
             // it's atomic too as of .NET 5+ when overwriting on the same drive.
-            File.Move(tempPath, path, overwrite: true);
+            File.Move(tempPath, path, true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -243,7 +243,7 @@ public sealed class PatchTool : ITool
 
         var msg = new StringBuilder(128);
         msg.Append("Patched ").Append(path)
-           .Append(": ").Append(hunks.Count).Append(" hunk(s) applied");
+            .Append(": ").Append(hunks.Count).Append(" hunk(s) applied");
         if (preview.Length > 0)
             msg.Append("\n\n").Append(preview);
 
@@ -257,7 +257,7 @@ public sealed class PatchTool : ITool
         // Try the targetStart as-is, then ±1, ±2, ±3 for whitespace/line-number drift.
         for (int delta = 0; delta <= 3; delta++)
         {
-            foreach (int sign in (delta == 0 ? new[] { 0 } : new[] { -1, 1 }))
+            foreach (int sign in delta == 0 ? new[] { 0 } : new[] { -1, 1 })
             {
                 int candidate = targetStart + sign * delta;
                 if (candidate < 0 || candidate >= lines.Length) continue;
@@ -271,7 +271,7 @@ public sealed class PatchTool : ITool
     private static bool ContextMatches(string[] lines, int start, Hunk h)
     {
         int cursor = start;
-        foreach (HunkLine hl in h.Lines)
+        foreach (var hl in h.Lines)
         {
             if (hl.Type == HunkLineType.Addition)
                 continue;
@@ -286,14 +286,16 @@ public sealed class PatchTool : ITool
     {
         var hunks = new List<Hunk>();
         string[] lines = patch.Replace("\r\n", "\n", StringComparison.Ordinal)
-                              .Replace('\r', '\n')
-                              .Split('\n');
+            .Replace('\r', '\n')
+            .Split('\n');
 
         int i = 0;
         // Skip past the diff header lines (origin and destination file markers)
         // until we reach the first hunk header line beginning with double-at sign.
         while (i < lines.Length && !lines[i].StartsWith("@@", StringComparison.Ordinal))
+        {
             i++;
+        }
 
         while (i < lines.Length)
         {
@@ -304,7 +306,7 @@ public sealed class PatchTool : ITool
             }
 
             // Parse "@@ -oldStart,oldCount +newStart,newCount @@"
-            HunkHeader header = ParseHunkHeader(lines[i]);
+            var header = ParseHunkHeader(lines[i]);
             i++;
 
             var hunkLines = new List<HunkLine>(header.OldCount + header.NewCount);
@@ -319,7 +321,8 @@ public sealed class PatchTool : ITool
                 {
                     // Empty line in the patch is treated as a blank context line.
                     hunkLines.Add(new HunkLine(HunkLineType.Context, string.Empty));
-                    seenOld++; seenNew++;
+                    seenOld++;
+                    seenNew++;
                     i++;
                     continue;
                 }
@@ -330,7 +333,8 @@ public sealed class PatchTool : ITool
                 {
                     case ' ':
                         hunkLines.Add(new HunkLine(HunkLineType.Context, text));
-                        seenOld++; seenNew++;
+                        seenOld++;
+                        seenNew++;
                         break;
                     case '-':
                         hunkLines.Add(new HunkLine(HunkLineType.Deletion, text));
@@ -385,10 +389,10 @@ public sealed class PatchTool : ITool
 
         int comma = s.IndexOf(',');
         if (comma < 0)
-            return (int.Parse(s, System.Globalization.CultureInfo.InvariantCulture), 1);
+            return (int.Parse(s, CultureInfo.InvariantCulture), 1);
 
-        int start = int.Parse(s.AsSpan(0, comma), System.Globalization.CultureInfo.InvariantCulture);
-        int count = int.Parse(s.AsSpan(comma + 1), System.Globalization.CultureInfo.InvariantCulture);
+        int start = int.Parse(s.AsSpan(0, comma), CultureInfo.InvariantCulture);
+        int count = int.Parse(s.AsSpan(comma + 1), CultureInfo.InvariantCulture);
         return (start, count);
     }
 
@@ -398,13 +402,13 @@ public sealed class PatchTool : ITool
         var b = sb.Builder;
         b.Append("Patch preview:");
         int lines = 0;
-        foreach (Hunk h in hunks)
+        foreach (var h in hunks)
         {
             if (lines >= maxLines) break;
             b.Append("\n@@ -").Append(h.OldStart).Append(',').Append(h.OldCount)
-             .Append(" +").Append(h.NewStart).Append(',').Append(h.NewCount).Append(" @@");
+                .Append(" +").Append(h.NewStart).Append(',').Append(h.NewCount).Append(" @@");
             lines++;
-            foreach (HunkLine hl in h.Lines)
+            foreach (var hl in h.Lines)
             {
                 if (lines >= maxLines)
                 {
@@ -429,14 +433,19 @@ public sealed class PatchTool : ITool
     {
         // Keep the same convention as EditTool: split on \n, treating \r\n as \n.
         return text.Replace("\r\n", "\n", StringComparison.Ordinal)
-                   .Replace('\r', '\n')
-                   .Split('\n');
+            .Replace('\r', '\n')
+            .Split('\n');
     }
 
     private static void TryDelete(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
-        catch { /* best effort */ }
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch
+        { /* best effort */
+        }
     }
 
     private enum HunkLineType { Context, Deletion, Addition }
@@ -444,7 +453,10 @@ public sealed class PatchTool : ITool
     private readonly record struct HunkLine(HunkLineType Type, string Text);
 
     private sealed record Hunk(
-        int OldStart, int OldCount, int NewStart, int NewCount,
+        int OldStart,
+        int OldCount,
+        int NewStart,
+        int NewCount,
         IReadOnlyList<HunkLine> Lines);
 
     private readonly record struct HunkHeader(int OldStart, int OldCount, int NewStart, int NewCount);

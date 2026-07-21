@@ -1,8 +1,6 @@
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Tui.TerminalGui.Handlers;
-
 /// <summary>
 ///     Maps a BCL <see cref="ConsoleKeyInfo" /> (which Terminal.Gui v2 can
 ///     convert its native <c>Key</c> into via <c>ConsoleKeyInfo</c> mapping)
@@ -27,8 +25,8 @@ namespace Harbor.Tui.TerminalGui.Handlers;
 public sealed class KeyHandler
 {
     private readonly ChatKeyMap _keyMap = new();
-    private readonly UiStore _store;
     private readonly ILogger? _logger;
+    private readonly UiStore _store;
 
     public KeyHandler(UiStore store, ILogger? logger = null)
     {

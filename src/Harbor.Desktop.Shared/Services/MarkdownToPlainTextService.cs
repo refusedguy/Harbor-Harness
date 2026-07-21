@@ -1,9 +1,7 @@
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
-
 namespace Harbor.Desktop.Shared.Services;
-
 /// <summary>
 ///     Converts Markdown to plain text using Markdig. Used by the command
 ///     palette to fuzzy-search chat messages and by the toast notifications
@@ -15,22 +13,22 @@ public sealed class MarkdownToPlainTextService
         .UseAdvancedExtensions()
         .Build();
 
-    /// <summary>Convert <paramref name="markdown"/> to plain text (no HTML).</summary>
+    /// <summary>Convert <paramref name="markdown" /> to plain text (no HTML).</summary>
     /// <param name="markdown">Markdown source. If null or empty, returns empty string.</param>
     /// <returns>Plain-text rendering — headings, lists, code blocks all flattened to text.</returns>
     public string ToPlainText(string markdown)
     {
         if (string.IsNullOrEmpty(markdown)) return string.Empty;
-        var doc = Markdig.Markdown.Parse(markdown, Pipeline);
-        var writer = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
+        var doc = Markdown.Parse(markdown, Pipeline);
+        var writer = new StringWriter(CultureInfo.InvariantCulture);
         WriteBlock(doc, writer);
         return writer.ToString().Trim();
     }
 
-    /// <summary>Truncate <paramref name="markdown"/> to <paramref name="maxChars"/> of plain text.</summary>
+    /// <summary>Truncate <paramref name="markdown" /> to <paramref name="maxChars" /> of plain text.</summary>
     public string ToSummary(string markdown, int maxChars = 100)
     {
-        var text = ToPlainText(markdown);
+        string text = ToPlainText(markdown);
         if (text.Length <= maxChars) return text;
         return text[..(maxChars - 1)] + "…";
     }
@@ -45,7 +43,7 @@ public sealed class MarkdownToPlainTextService
                     WriteInlines(leaf.Inline, writer);
                     writer.Write('\n');
                     break;
-                case LeafBlock leaf when leaf is Markdig.Syntax.CodeBlock code:
+                case LeafBlock leaf when leaf is CodeBlock code:
                     // Code blocks: write the raw lines as-is.
                     var slice = code.Lines;
                     for (int i = 0; i < slice.Count; i++)

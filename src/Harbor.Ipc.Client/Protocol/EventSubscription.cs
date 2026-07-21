@@ -1,5 +1,5 @@
+using System.Runtime.CompilerServices;
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Adapter that exposes the RPC client's event channel as an
 ///     <see cref="IAsyncEnumerable{HarborEvent}" /> for
@@ -22,7 +22,7 @@ public sealed class EventSubscription
     ///     <paramref name="ct" /> is cancelled or the channel completes.
     /// </summary>
     public async IAsyncEnumerable<HarborEvent> ReadAllAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var evt in _client.EventReader.ReadAllAsync(ct).ConfigureAwait(false))
         {

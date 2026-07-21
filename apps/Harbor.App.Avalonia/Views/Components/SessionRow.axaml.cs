@@ -1,9 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Metadata;
-
 namespace Harbor.App.Avalonia.Views.Components;
-
 /// <summary>
 ///     Reusable row for the session sidebar list. Renders title, subtitle
 ///     (agent + model), relative time, message count, dirty indicator,
@@ -19,7 +17,7 @@ namespace Harbor.App.Avalonia.Views.Components;
 ///         the layout.
 ///     </para>
 ///     <para>
-///         <b>Status dot color:</b> bound to <see cref="StatusColorKey"/>
+///         <b>Status dot color:</b> bound to <see cref="StatusColorKey" />
 ///         (a resource key string) and resolved by <c>BrushKeyConverter</c>
 ///         so the row stays platform-agnostic at the model level — the
 ///         same pattern as <c>ToolCallViewModel.StatusBrushKey</c>.
@@ -28,82 +26,33 @@ namespace Harbor.App.Avalonia.Views.Components;
 [PseudoClasses(":active", ":dirty", ":empty")]
 public sealed partial class SessionRow : UserControl
 {
-    /// <summary>Property for <see cref="Title"/>.</summary>
+    /// <summary>Property for <see cref="Title" />.</summary>
     public static readonly StyledProperty<string> TitleProperty =
         AvaloniaProperty.Register<SessionRow, string>(nameof(Title), string.Empty);
 
-    /// <summary>Property for <see cref="Subtitle"/>.</summary>
+    /// <summary>Property for <see cref="Subtitle" />.</summary>
     public static readonly StyledProperty<string> SubtitleProperty =
         AvaloniaProperty.Register<SessionRow, string>(nameof(Subtitle), string.Empty);
 
-    /// <summary>Property for <see cref="RelativeTime"/>.</summary>
+    /// <summary>Property for <see cref="RelativeTime" />.</summary>
     public static readonly StyledProperty<string> RelativeTimeProperty =
         AvaloniaProperty.Register<SessionRow, string>(nameof(RelativeTime), string.Empty);
 
-    /// <summary>Property for <see cref="MessageCount"/>.</summary>
+    /// <summary>Property for <see cref="MessageCount" />.</summary>
     public static readonly StyledProperty<int> MessageCountProperty =
-        AvaloniaProperty.Register<SessionRow, int>(nameof(MessageCount), 0);
+        AvaloniaProperty.Register<SessionRow, int>(nameof(MessageCount));
 
-    /// <summary>Property for <see cref="StatusColorKey"/>.</summary>
+    /// <summary>Property for <see cref="StatusColorKey" />.</summary>
     public static readonly StyledProperty<string> StatusColorKeyProperty =
         AvaloniaProperty.Register<SessionRow, string>(nameof(StatusColorKey), "MochaOverlay0");
 
-    /// <summary>Property for <see cref="IsDirty"/>.</summary>
+    /// <summary>Property for <see cref="IsDirty" />.</summary>
     public static readonly StyledProperty<bool> IsDirtyProperty =
-        AvaloniaProperty.Register<SessionRow, bool>(nameof(IsDirty), false);
+        AvaloniaProperty.Register<SessionRow, bool>(nameof(IsDirty));
 
-    /// <summary>Property for <see cref="IsActive"/>.</summary>
+    /// <summary>Property for <see cref="IsActive" />.</summary>
     public static readonly StyledProperty<bool> IsActiveProperty =
-        AvaloniaProperty.Register<SessionRow, bool>(nameof(IsActive), false);
-
-    /// <summary>Session title (e.g. "main chat").</summary>
-    public string Title
-    {
-        get => GetValue(TitleProperty);
-        set => SetValue(TitleProperty, value);
-    }
-
-    /// <summary>Subtitle — usually agent + model ("code · gpt-4o").</summary>
-    public string Subtitle
-    {
-        get => GetValue(SubtitleProperty);
-        set => SetValue(SubtitleProperty, value);
-    }
-
-    /// <summary>Pre-formatted relative time ("5m ago").</summary>
-    public string RelativeTime
-    {
-        get => GetValue(RelativeTimeProperty);
-        set => SetValue(RelativeTimeProperty, value);
-    }
-
-    /// <summary>Live message count for this session.</summary>
-    public int MessageCount
-    {
-        get => GetValue(MessageCountProperty);
-        set => SetValue(MessageCountProperty, value);
-    }
-
-    /// <summary>Resource key for the status dot color (resolved by BrushKeyConverter).</summary>
-    public string StatusColorKey
-    {
-        get => GetValue(StatusColorKeyProperty);
-        set => SetValue(StatusColorKeyProperty, value);
-    }
-
-    /// <summary>True when git working tree has uncommitted changes.</summary>
-    public bool IsDirty
-    {
-        get => GetValue(IsDirtyProperty);
-        set => SetValue(IsDirtyProperty, value);
-    }
-
-    /// <summary>True when this row is the currently-active session.</summary>
-    public bool IsActive
-    {
-        get => GetValue(IsActiveProperty);
-        set => SetValue(IsActiveProperty, value);
-    }
+        AvaloniaProperty.Register<SessionRow, bool>(nameof(IsActive));
 
     /// <summary>Construct the row.</summary>
     public SessionRow()
@@ -122,12 +71,12 @@ public sealed partial class SessionRow : UserControl
         // In a real app the AXAML auto-generated InitializeComponent()
         // is still called by the Avalonia runtime via the partial class
         // generated by the build task.
-        if (global::Avalonia.Application.Current is not null)
+        if (Application.Current is not null)
         {
             InitializeComponent();
         }
         UpdatePseudoClasses();
-        PropertyChanged += (_, e) =>
+        this.PropertyChanged += (_, e) =>
         {
             if (e.Property == TitleProperty
                 || e.Property == IsDirtyProperty
@@ -138,10 +87,59 @@ public sealed partial class SessionRow : UserControl
         };
     }
 
+    /// <summary>Session title (e.g. "main chat").</summary>
+    public string Title
+    {
+        get => this.GetValue(TitleProperty);
+        set => this.SetValue(TitleProperty, value);
+    }
+
+    /// <summary>Subtitle — usually agent + model ("code · gpt-4o").</summary>
+    public string Subtitle
+    {
+        get => this.GetValue(SubtitleProperty);
+        set => this.SetValue(SubtitleProperty, value);
+    }
+
+    /// <summary>Pre-formatted relative time ("5m ago").</summary>
+    public string RelativeTime
+    {
+        get => this.GetValue(RelativeTimeProperty);
+        set => this.SetValue(RelativeTimeProperty, value);
+    }
+
+    /// <summary>Live message count for this session.</summary>
+    public int MessageCount
+    {
+        get => this.GetValue(MessageCountProperty);
+        set => this.SetValue(MessageCountProperty, value);
+    }
+
+    /// <summary>Resource key for the status dot color (resolved by BrushKeyConverter).</summary>
+    public string StatusColorKey
+    {
+        get => this.GetValue(StatusColorKeyProperty);
+        set => this.SetValue(StatusColorKeyProperty, value);
+    }
+
+    /// <summary>True when git working tree has uncommitted changes.</summary>
+    public bool IsDirty
+    {
+        get => this.GetValue(IsDirtyProperty);
+        set => this.SetValue(IsDirtyProperty, value);
+    }
+
+    /// <summary>True when this row is the currently-active session.</summary>
+    public bool IsActive
+    {
+        get => this.GetValue(IsActiveProperty);
+        set => this.SetValue(IsActiveProperty, value);
+    }
+
     private void UpdatePseudoClasses()
     {
-        PseudoClasses.Set(":empty", string.IsNullOrEmpty(Title));
-        PseudoClasses.Set(":dirty", IsDirty);
-        PseudoClasses.Set(":active", IsActive);
+        this.PseudoClasses.Set(":empty", string.IsNullOrEmpty(Title));
+        this.PseudoClasses.Set(":dirty", IsDirty);
+        this.PseudoClasses.Set(":active", IsActive);
     }
 }

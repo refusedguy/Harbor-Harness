@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.Configuration;
-
 /// <summary>
 ///     Cross-platform contract for reading the per-user Harbor
 ///     "common config" (provider, model, theme, etc.). Mirrors the
@@ -38,6 +37,6 @@ public interface ICommonConfigReader
     ///     A (<c>ProviderId</c>, <c>ModelId</c>) tuple, or null if no
     ///     config has been written yet.
     /// </returns>
-    Task<(string? ProviderId, string? ModelId)?> TryReadProviderModelAsync(
+    public Task<(string? ProviderId, string? ModelId)?> TryReadProviderModelAsync(
         CancellationToken cancellationToken = default);
 }

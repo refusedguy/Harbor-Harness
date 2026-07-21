@@ -1,10 +1,6 @@
-using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Blazor.Services;
-
 /// <summary>
 ///     Reads the list of saved sessions from a directory or from the
 ///     in-memory store as a fallback. Used by the Sessions page and the
@@ -26,14 +22,11 @@ public sealed class SessionBrowserService
     }
 
     /// <summary>Set the directory to scan for JSONL session files.</summary>
-    public void SetDirectory(string? directory)
-    {
-        _directory = directory;
-    }
+    public void SetDirectory(string? directory) => _directory = directory;
 
     /// <summary>Return the list of recent session summaries.</summary>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A list of <see cref="SessionSummary"/> records, newest first.</returns>
+    /// <returns>A list of <see cref="SessionSummary" /> records, newest first.</returns>
     public async Task<IReadOnlyList<SessionSummary>> ListAsync(CancellationToken ct = default)
     {
         var list = new List<SessionSummary>();
@@ -41,15 +34,15 @@ public sealed class SessionBrowserService
         {
             if (!string.IsNullOrEmpty(_directory) && Directory.Exists(_directory))
             {
-                foreach (var file in Directory.EnumerateFiles(_directory, "*.jsonl"))
+                foreach (string file in Directory.EnumerateFiles(_directory, "*.jsonl"))
                 {
                     var info = new FileInfo(file);
                     list.Add(new SessionSummary(
-                        Id: Path.GetFileNameWithoutExtension(file),
-                        Path: file,
-                        Title: Path.GetFileNameWithoutExtension(file),
-                        LastModified: info.LastWriteTimeUtc,
-                        SizeBytes: info.Length));
+                        Path.GetFileNameWithoutExtension(file),
+                        file,
+                        Path.GetFileNameWithoutExtension(file),
+                        info.LastWriteTimeUtc,
+                        info.Length));
                 }
             }
         }
@@ -101,7 +94,7 @@ public sealed class ProviderBrowserService
         string? providersDir = LocateProvidersDirectory();
         if (providersDir is not null && Directory.Exists(providersDir))
         {
-            foreach (var file in Directory.EnumerateFiles(providersDir, "*.json"))
+            foreach (string file in Directory.EnumerateFiles(providersDir, "*.json"))
             {
                 try
                 {
@@ -115,7 +108,7 @@ public sealed class ProviderBrowserService
             }
         }
         _cache = list;
-        return Task.FromResult<IReadOnlyList<ProviderSummary>>(_cache);
+        return Task.FromResult(_cache);
     }
 
     private static string? LocateProvidersDirectory()

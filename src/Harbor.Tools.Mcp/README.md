@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `server` | string | Required. Registered MCP server name. |
 | `method` | string | Required. JSON-RPC method name. |
@@ -21,7 +22,9 @@
         ## Example usage
 
         ```json
+
 {"server":"filesystem","method":"read_file","params":{"path":"/tmp/a.txt"}}
+
 ```
 
         ## Dependencies

@@ -1,8 +1,4 @@
-using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     One model row in the provider/model picker. Clicking the row raises
 ///     <c>ProviderModelPickerViewModel.SelectModelCommand</c>. Pure record —
@@ -29,6 +25,14 @@ public sealed record PickerModelViewModel(
 /// </remarks>
 public sealed partial class ProviderGroupViewModel : ObservableObject
 {
+
+    /// <summary>Whether <see cref="Models" /> has been populated.</summary>
+    [ObservableProperty]
+    private bool _hasModels;
+
+    /// <summary>Whether the Expander is open.</summary>
+    [ObservableProperty]
+    private bool _isExpanded;
     /// <summary>Construct a provider group.</summary>
     public ProviderGroupViewModel(
         string id,
@@ -78,12 +82,4 @@ public sealed partial class ProviderGroupViewModel : ObservableObject
 
     /// <summary>Models exposed by this provider.</summary>
     public ObservableCollection<PickerModelViewModel> Models { get; } = new();
-
-    /// <summary>Whether the Expander is open.</summary>
-    [ObservableProperty]
-    private bool _isExpanded;
-
-    /// <summary>Whether <see cref="Models"/> has been populated.</summary>
-    [ObservableProperty]
-    private bool _hasModels;
 }

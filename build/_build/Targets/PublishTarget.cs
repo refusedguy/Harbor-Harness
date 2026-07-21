@@ -1,14 +1,11 @@
 using Harbor.Build.Components;
-using Harbor.Build.Configuration;
 using Harbor.Build.Extensions;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Publish target — runs <c>dotnet publish</c> on the named app with the
-///     given <see cref="PublishVariant"/> + <see cref="FeatureFlags"/>.
+///     given <see cref="PublishVariant" /> + <see cref="FeatureFlags" />.
 ///     Output lands in <c>artifacts/publish/&lt;app&gt;/&lt;variant&gt;/</c>.
 /// </summary>
 public static class PublishTarget
@@ -39,7 +36,7 @@ public static class PublishTarget
 
         DotNetTasks.DotNetPublish(settings);
 
-        var size = outputDir.GetHumanReadableSize();
+        string size = outputDir.GetHumanReadableSize();
         Console.WriteLine($"==> Publish: done — {outputDir} ({size})");
         return outputDir;
     }

@@ -7,7 +7,6 @@
 //   lets any engine (SharpTS subprocess, Jint in-process, future engines)
 //   supply tools without circular dependencies.
 namespace Harbor.Scripting.Bridge;
-
 /// <summary>
 ///     <see cref="ITool" /> implementation backed by a script function
 ///     registered via <c>Harbor.registerTool</c>.

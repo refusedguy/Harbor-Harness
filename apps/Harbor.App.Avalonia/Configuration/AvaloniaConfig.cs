@@ -14,9 +14,7 @@
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
-
 namespace Harbor.App.Avalonia.Configuration;
-
 /// <summary>
 ///     Per-app configuration for the Harbor Avalonia desktop app. Stored at
 ///     <c>~/.harbor/avalonia.json</c>. Non-overlapping with CLI/WPF/MAUI/Blazor
@@ -52,7 +50,7 @@ public sealed record AvaloniaConfig : AppConfigBase
 
     /// <summary>
     ///     Whether the window should open maximized on next launch. When
-    ///     <c>true</c>, <see cref="WindowWidth"/> / <see cref="WindowHeight"/>
+    ///     <c>true</c>, <see cref="WindowWidth" /> / <see cref="WindowHeight" />
     ///     are ignored until the user un-maximizes. Defaults to <c>false</c>.
     /// </summary>
     public bool WindowMaximized { get; init; } = false;

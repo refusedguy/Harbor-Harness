@@ -35,15 +35,15 @@ ASPNETCORE_URLS=http://0.0.0.0:5000 dotnet run --project apps/Harbor.App.Blazor
 
 Tested on:
 
-| Browser              | Status        | Notes                                  |
-|----------------------|---------------|----------------------------------------|
-| Chrome 120+          | Fully working | Best perf.                              |
-| Firefox 121+         | Fully working |                                        |
-| Safari 17+           | Fully working |                                        |
-| Edge 120+            | Fully working |                                        |
-| Chrome on iPad       | Working       | Streaming works; touch keyboard OK.    |
-| Safari on iPhone     | Working       | Small screen — usable but cramped.     |
-| IE 11                | Not supported | Blazor Server requires modern browser. |
+| Browser          | Status        | Notes                                  |
+|------------------|---------------|----------------------------------------|
+| Chrome 120+      | Fully working | Best perf.                             |
+| Firefox 121+     | Fully working |                                        |
+| Safari 17+       | Fully working |                                        |
+| Edge 120+        | Fully working |                                        |
+| Chrome on iPad   | Working       | Streaming works; touch keyboard OK.    |
+| Safari on iPhone | Working       | Small screen — usable but cramped.     |
+| IE 11            | Not supported | Blazor Server requires modern browser. |
 
 ## Dev instructions
 

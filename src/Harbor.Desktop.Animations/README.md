@@ -15,11 +15,11 @@ and delegates to configure its own animation primitives (Avalonia
   `Slow` (500ms), `Slower` (800ms), plus convenience aliases (`Fade`,
   `Slide`, `Scale`, `Toast`, `Palette`).
 - **`Transitions`**:
-  - `FadeTransition` — opacity 0 ↔ 1
-  - `SlideTransition` — translate from (offsetX, offsetY) to (0, 0)
-  - `ScaleTransition` — scale from `FromScale` to 1.0
-  - `ColorTransition` — animate between two `RgbColor` values (used by the
-    theme switcher for a smooth color fade)
+    - `FadeTransition` — opacity 0 ↔ 1
+    - `SlideTransition` — translate from (offsetX, offsetY) to (0, 0)
+    - `ScaleTransition` — scale from `FromScale` to 1.0
+    - `ColorTransition` — animate between two `RgbColor` values (used by the
+      theme switcher for a smooth color fade)
 
 ## Dependency rules
 

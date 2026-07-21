@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Tui.RazorConsole.Views;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -387,8 +388,8 @@ public sealed class ChatBridge
             PushLine(ChatRoles.System, "/logs: no diagnostics panel registered (non-interactive build).");
             return;
         }
-        var view = new Views.DiagnosticsView();
-        foreach (var line in view.Render(DiagnosticsPanel, max: 10))
+        var view = new DiagnosticsView();
+        foreach (var line in view.Render(DiagnosticsPanel, 10))
             _messages.Add(line);
         RaiseChanged();
     }

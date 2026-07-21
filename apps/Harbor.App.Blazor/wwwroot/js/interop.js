@@ -23,7 +23,7 @@
             // Try the bundled loader first; fall back to CDN if missing.
             function tryRequire() {
                 if (typeof require !== 'undefined' && typeof require.config === 'function') {
-                    require.config({ paths: { vs: '_content/monaco-editor/min/vs' } });
+                    require.config({paths: {vs: '_content/monaco-editor/min/vs'}});
                     require(['vs/editor/editor.main'], function () {
                         resolve(window.monaco);
                     }, function (err) {
@@ -33,6 +33,7 @@
                     reject(new Error('requirejs not present'));
                 }
             }
+
             tryRequire();
         });
         return monacoReady;
@@ -53,7 +54,7 @@
                     automaticLayout: true,
                     fontSize: 13,
                     fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                    minimap: { enabled: false },
+                    minimap: {enabled: false},
                     scrollBeyondLastLine: false,
                     wordWrap: 'on',
                     tabSize: 4,
@@ -70,7 +71,7 @@
                 el.innerHTML = '<textarea style="width:100%;height:100%;background:#11111b;color:#cdd6f4;border:none;font-family:monospace;padding:8px;"></textarea>';
                 const ta = el.querySelector('textarea');
                 ta.value = initialValue || '';
-                editors.set(containerId, { fallback: ta });
+                editors.set(containerId, {fallback: ta});
             }
         },
         getValue(containerId) {
@@ -82,7 +83,10 @@
         setValue(containerId, value) {
             const e = editors.get(containerId);
             if (!e) return;
-            if (e.fallback) { e.fallback.value = value; return; }
+            if (e.fallback) {
+                e.fallback.value = value;
+                return;
+            }
             e.setValue(value);
         },
         setLanguage(containerId, language) {
@@ -96,8 +100,11 @@
         dispose(containerId) {
             const e = editors.get(containerId);
             if (!e) return;
-            if (e.fallback) { e.fallback.remove(); }
-            else { e.dispose(); }
+            if (e.fallback) {
+                e.fallback.remove();
+            } else {
+                e.dispose();
+            }
             editors.delete(containerId);
         }
     };
@@ -111,7 +118,10 @@
     function loadChartJs() {
         if (chartjsReady) return chartjsReady;
         chartjsReady = new Promise((resolve, reject) => {
-            if (window.Chart) { resolve(window.Chart); return; }
+            if (window.Chart) {
+                resolve(window.Chart);
+                return;
+            }
             const s = document.createElement('script');
             s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
             s.onload = () => resolve(window.Chart);
@@ -144,7 +154,10 @@
         },
         dispose(canvasId) {
             const c = charts.get(canvasId);
-            if (c) { c.destroy(); charts.delete(canvasId); }
+            if (c) {
+                c.destroy();
+                charts.delete(canvasId);
+            }
         }
     };
 
@@ -156,7 +169,8 @@
                     await navigator.clipboard.writeText(text);
                     return true;
                 }
-            } catch (e) { /* fall through */ }
+            } catch (e) { /* fall through */
+            }
             // Legacy fallback for non-secure contexts.
             const ta = document.createElement('textarea');
             ta.value = text;
@@ -164,7 +178,10 @@
             ta.style.left = '-9999px';
             document.body.appendChild(ta);
             ta.select();
-            try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+            try {
+                document.execCommand('copy');
+            } catch (e) { /* ignore */
+            }
             document.body.removeChild(ta);
             return true;
         },

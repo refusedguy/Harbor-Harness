@@ -1,5 +1,4 @@
 @page "/settings"
-@using Harbor.App.Blazor.ViewModels
 @inject SettingsViewModel Vm
 
 <h1>Settings</h1>
@@ -35,13 +34,13 @@
 </div>
 
 @code {
-    private async Task OnThemeChangedAsync(ChangeEventArgs e)
+private async Task OnThemeChangedAsync(ChangeEventArgs e)
+{
+    if (Enum.TryParse<HarborTheme>(e.Value?.ToString(), out var theme))
     {
-        if (Enum.TryParse<HarborTheme>(e.Value?.ToString(), out var theme))
-        {
-            Vm.SelectedTheme = theme;
-        }
+        Vm.SelectedTheme = theme;
     }
+}
 
-    private Task ApplyDirectoryAsync() => Vm.ApplyDirectoryAsync();
+private Task ApplyDirectoryAsync() => Vm.ApplyDirectoryAsync();
 }

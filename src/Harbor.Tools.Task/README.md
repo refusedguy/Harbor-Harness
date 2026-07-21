@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `agent` | string | Required. Sub-agent name (e.g. 'explore'). |
 | `prompt` | string | Required. Self-contained task description. |
@@ -19,7 +20,9 @@
         ## Example usage
 
         ```json
+
 {"agent":"explore","prompt":"Find all TODO markers in src/"}
+
 ```
 
         ## Dependencies

@@ -2,11 +2,11 @@ using System.Reflection;
 using System.Text.Json;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
+using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
 #endif
-using Microsoft.Extensions.Logging;
 namespace Harbor.Cli.Hosting;
 /// <summary>
 ///     Provider registration — single responsibility: discover and register LLM providers.
@@ -14,6 +14,54 @@ namespace Harbor.Cli.Hosting;
 /// </summary>
 internal static class ProviderRegistration
 {
+
+    private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        foreach (string name in assembly.GetManifestResourceNames()
+                     .Where(n => n.Contains("providers.") && n.EndsWith(".json")))
+        {
+            using var stream = assembly.GetManifestResourceStream(name);
+            if (stream is null) continue;
+            using var reader = new StreamReader(stream);
+            string content = reader.ReadToEnd();
+            string shortName = name.Substring(name.LastIndexOf("providers.", StringComparison.Ordinal) + "providers.".Length);
+            yield return (shortName, content);
+        }
+    }
+
+    public static string? FindProvidersDirectory() =>
+        FindProvidersDirectories().FirstOrDefault(Directory.Exists);
+
+    /// <summary>
+    ///     Enumerate every candidate providers directory in precedence order:
+    ///     user config (<c>~/.harbor/providers/</c>) first, then bundled
+    ///     (<c>&lt;exeDir&gt;/providers/</c> and any ancestor). User config wins
+    ///     on id collisions so E2E tests (and power users) can override a
+    ///     bundled provider with their own JSON.
+    /// </summary>
+    public static IEnumerable<string> FindProvidersDirectories()
+    {
+        // 1. User config — always checked first so user overrides win.
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string userProviders = Path.Combine(home, ".harbor", "providers");
+        yield return userProviders;
+
+        // 2. providers/ next to the running executable (single-file publish, etc.).
+        string exeDir = AppContext.BaseDirectory;
+        string providersInExe = Path.Combine(exeDir, "providers");
+        yield return providersInExe;
+
+        // 3. Walk up from exeDir looking for a sibling providers/ directory
+        //    (the typical dev-clone layout: repo root has providers/ next to apps/).
+        string? current = exeDir;
+        for (int i = 0; i < 8 && current is not null; i++)
+        {
+            string candidate = Path.Combine(current, "providers");
+            yield return candidate;
+            current = Path.GetDirectoryName(current);
+        }
+    }
 #if HARBOR_WITH_ALL_PROVIDERS
     public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
@@ -101,52 +149,4 @@ internal static class ProviderRegistration
         }
     }
 #endif
-
-    private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        foreach (string name in assembly.GetManifestResourceNames()
-                     .Where(n => n.Contains("providers.") && n.EndsWith(".json")))
-        {
-            using var stream = assembly.GetManifestResourceStream(name);
-            if (stream is null) continue;
-            using var reader = new StreamReader(stream);
-            string content = reader.ReadToEnd();
-            string shortName = name.Substring(name.LastIndexOf("providers.", StringComparison.Ordinal) + "providers.".Length);
-            yield return (shortName, content);
-        }
-    }
-
-    public static string? FindProvidersDirectory() =>
-        FindProvidersDirectories().FirstOrDefault(Directory.Exists);
-
-    /// <summary>
-    ///     Enumerate every candidate providers directory in precedence order:
-    ///     user config (<c>~/.harbor/providers/</c>) first, then bundled
-    ///     (<c>&lt;exeDir&gt;/providers/</c> and any ancestor). User config wins
-    ///     on id collisions so E2E tests (and power users) can override a
-    ///     bundled provider with their own JSON.
-    /// </summary>
-    public static IEnumerable<string> FindProvidersDirectories()
-    {
-        // 1. User config — always checked first so user overrides win.
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string userProviders = Path.Combine(home, ".harbor", "providers");
-        yield return userProviders;
-
-        // 2. providers/ next to the running executable (single-file publish, etc.).
-        string exeDir = AppContext.BaseDirectory;
-        string providersInExe = Path.Combine(exeDir, "providers");
-        yield return providersInExe;
-
-        // 3. Walk up from exeDir looking for a sibling providers/ directory
-        //    (the typical dev-clone layout: repo root has providers/ next to apps/).
-        string? current = exeDir;
-        for (int i = 0; i < 8 && current is not null; i++)
-        {
-            string candidate = Path.Combine(current, "providers");
-            yield return candidate;
-            current = Path.GetDirectoryName(current);
-        }
-    }
 }

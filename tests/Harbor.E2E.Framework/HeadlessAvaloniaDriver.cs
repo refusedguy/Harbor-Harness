@@ -1,5 +1,4 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     <see cref="IE2eDriver" /> implementation that drives the Harbor Avalonia
 ///     desktop app via <c>Avalonia.Headless</c> (off-screen rendering on a
@@ -18,7 +17,7 @@ namespace Harbor.E2E.Framework;
 ///         platform-specific skia rendering that does not currently boot on the
 ///         Linux sandbox without a virtual framebuffer (Xvfb). Rather than ship
 ///         a flaky test, the Linux build marks every Avalonia E2E test with
-///         <c>[Skip(...)]</c> via the <see cref="E2eTestBase"/> helper. The
+///         <c>[Skip(...)]</c> via the <see cref="E2eTestBase" /> helper. The
 ///         Windows build (when the developer is on Windows) replaces this with
 ///         a real Avalonia.Headless implementation — see docs/E2E_TESTING.md.
 ///     </para>
@@ -27,7 +26,6 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
 {
     private readonly string _projectRelativePath;
     private CliDriver? _proxy;
-    private readonly bool _available;
 
     /// <summary>
     ///     Create a driver for the Avalonia app at <paramref name="projectRelativePath" />.
@@ -39,14 +37,17 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
         // Linux/macOS the driver still constructs so the test code is
         // portable, but StartAsync throws PlatformNotSupportedException which
         // the test catches and reports as a skip.
-        _available = OperatingSystem.IsWindows();
+        IsSupportedOnCurrentOs = OperatingSystem.IsWindows();
     }
 
     /// <summary>
     ///     Whether true headless Avalonia is supported on the current OS.
     ///     Test code can read this to decide whether to <c>[Skip]</c>.
     /// </summary>
-    public bool IsSupportedOnCurrentOs => _available;
+    public bool IsSupportedOnCurrentOs
+    {
+        get;
+    }
 
     /// <inheritdoc />
     public bool IsRunning => _proxy?.IsRunning ?? false;
@@ -54,7 +55,7 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
     /// <inheritdoc />
     public Task StartAsync(string[] args, IDictionary<string, string>? env = null, CancellationToken ct = default)
     {
-        if (!_available)
+        if (!IsSupportedOnCurrentOs)
         {
             throw new PlatformNotSupportedException(
                 "HeadlessAvaloniaDriver requires Windows. On Linux/macOS, run the " +
@@ -104,10 +105,7 @@ public sealed class HeadlessAvaloniaDriver : IE2eDriver
     }
 
     /// <inheritdoc />
-    public Task StopAsync(CancellationToken ct = default)
-    {
-        return _proxy?.StopAsync(ct) ?? Task.CompletedTask;
-    }
+    public Task StopAsync(CancellationToken ct = default) => _proxy?.StopAsync(ct) ?? Task.CompletedTask;
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()

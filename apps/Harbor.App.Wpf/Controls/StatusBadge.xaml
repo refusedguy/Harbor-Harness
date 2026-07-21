@@ -7,8 +7,8 @@
         Mirrors the Avalonia Harbor.App.Avalonia.Views.Components.StatusBadge.
     -->
     <UserControl.Resources>
-        <conv:BrushKeyConverter x:Key="BrushKey"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:BrushKeyConverter x:Key="BrushKey" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
     <Border Background="{DynamicResource App.Surface}"
             BorderBrush="{DynamicResource App.Border}"
@@ -21,11 +21,11 @@
                      Height="8"
                      Margin="0,0,6,0"
                      Fill="{Binding BrushKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}"
-                     Visibility="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
+                     Visibility="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
             <TextBlock Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontSize="11"
                        FontFamily="Consolas"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" />
         </StackPanel>
     </Border>
 </UserControl>

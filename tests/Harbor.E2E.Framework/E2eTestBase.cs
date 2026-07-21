@@ -1,8 +1,7 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     Base class for all Harbor E2E test fixtures. Owns a per-class
-///     <see cref="MockLlmServer"/> + a temporary <c>HOME</c> directory so each
+///     <see cref="MockLlmServer" /> + a temporary <c>HOME</c> directory so each
 ///     test class runs in isolation (no cross-test config leakage, no port
 ///     collisions between concurrent test classes).
 /// </summary>
@@ -28,7 +27,7 @@ public abstract class E2eTestBase
 {
     /// <summary>
     ///     The in-process mock LLM server. Started before each test method;
-    ///     stopped after. <see cref="MockLlmServer.BaseUri"/> is non-null
+    ///     stopped after. <see cref="MockLlmServer.BaseUri" /> is non-null
     ///     inside a test body.
     /// </summary>
     protected MockLlmServer Server { get; private set; } = null!;
@@ -39,12 +38,12 @@ public abstract class E2eTestBase
     protected string TempHome { get; private set; } = string.Empty;
 
     /// <summary>
-    ///     Per-test setup: start <see cref="Server"/>, allocate
-    ///     <see cref="TempHome"/>, install <c>providers/mock.json</c> so the
+    ///     Per-test setup: start <see cref="Server" />, allocate
+    ///     <see cref="TempHome" />, install <c>providers/mock.json</c> so the
     ///     Harbor CLI can resolve a provider whose BaseUrl points at
-    ///     <see cref="Server"/>.
+    ///     <see cref="Server" />.
     /// </summary>
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupAsync()
     {
         Server = new MockLlmServer();
@@ -64,39 +63,39 @@ public abstract class E2eTestBase
         Directory.CreateDirectory(providersDir);
         string mockConfigPath = Path.Combine(providersDir, "mock.json");
         string mockConfig = $$"""
-            {
-              "id": "mock",
-              "displayName": "Mock LLM (E2E)",
-              "description": "In-process mock for E2E tests.",
-              "baseUrl": "{{Server.BaseUri}}",
-              "apiType": "openai-compatible",
-              "authType": "bearer",
-              "authEnvVar": "MOCK_API_KEY",
-              "models": [
-                { "id": "test-model", "displayName": "Mock Test Model", "contextLength": 4096, "maxOutputTokens": 1024 }
-              ]
-            }
-            """;
+                              {
+                                "id": "mock",
+                                "displayName": "Mock LLM (E2E)",
+                                "description": "In-process mock for E2E tests.",
+                                "baseUrl": "{{Server.BaseUri}}",
+                                "apiType": "openai-compatible",
+                                "authType": "bearer",
+                                "authEnvVar": "MOCK_API_KEY",
+                                "models": [
+                                  { "id": "test-model", "displayName": "Mock Test Model", "contextLength": 4096, "maxOutputTokens": 1024 }
+                                ]
+                              }
+                              """;
         await File.WriteAllTextAsync(mockConfigPath, mockConfig).ConfigureAwait(false);
 
         // Mark onboarding complete so the CLI doesn't launch the wizard.
         // HarborConfig.json is consumed by HarborConfig + JsonConfigStore.
         string harborConfigPath = Path.Combine(harborDir, "config.json");
         string harborConfig = """
-            {
-              "provider": "mock",
-              "model": "mock/test-model",
-              "agent": "code",
-              "onboarded": true
-            }
-            """;
+                              {
+                                "provider": "mock",
+                                "model": "mock/test-model",
+                                "agent": "code",
+                                "onboarded": true
+                              }
+                              """;
         await File.WriteAllTextAsync(harborConfigPath, harborConfig).ConfigureAwait(false);
     }
 
     /// <summary>
-    ///     Per-test teardown: stop the server, delete <see cref="TempHome"/>.
+    ///     Per-test teardown: stop the server, delete <see cref="TempHome" />.
     /// </summary>
-    [After(HookType.Test)]
+    [After(Test)]
     public async Task TeardownAsync()
     {
         try
@@ -104,20 +103,24 @@ public abstract class E2eTestBase
             if (Server is not null)
                 await Server.StopAsync().ConfigureAwait(false);
         }
-        catch { /* swallow — teardown must not throw */ }
+        catch
+        { /* swallow — teardown must not throw */
+        }
 
         try
         {
             if (!string.IsNullOrEmpty(TempHome) && Directory.Exists(TempHome))
-                Directory.Delete(TempHome, recursive: true);
+                Directory.Delete(TempHome, true);
         }
-        catch { /* swallow — temp dir cleanup is best-effort */ }
+        catch
+        { /* swallow — temp dir cleanup is best-effort */
+        }
     }
 
     /// <summary>
     ///     Build the standard env-var dict that points a Harbor app at the
-    ///     <see cref="Server"/> mock. Tests can extend the result with extra
-    ///     vars before passing to <see cref="IE2eDriver.StartAsync"/>.
+    ///     <see cref="Server" /> mock. Tests can extend the result with extra
+    ///     vars before passing to <see cref="IE2eDriver.StartAsync" />.
     /// </summary>
     protected Dictionary<string, string> GetEnv() => new()
     {
@@ -128,13 +131,13 @@ public abstract class E2eTestBase
         // Quiet logging so test stdout isn't drowned in MS log noise.
         ["HARBOR_LOGLEVEL"] = "Warning",
         // Bypass the onboarding wizard gate (also set in config.json, belt + braces).
-        ["HARBOR_SKIP_ONBOARDING"] = "1",
+        ["HARBOR_SKIP_ONBOARDING"] = "1"
     };
 
     /// <summary>
-    ///     Per-test guard for TUI E2E tests: returns <see langword="true"/> if
+    ///     Per-test guard for TUI E2E tests: returns <see langword="true" /> if
     ///     the current sandbox supports PTY allocation (so the test should run
-    ///     normally) or <see langword="false"/> if PTY is blocked (in which
+    ///     normally) or <see langword="false" /> if PTY is blocked (in which
     ///     case the test should bail out with a passing no-op).
     /// </summary>
     /// <remarks>

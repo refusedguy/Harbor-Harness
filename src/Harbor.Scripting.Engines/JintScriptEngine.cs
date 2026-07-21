@@ -4,7 +4,6 @@
 //   Knows about ScriptGlobals (Bridge) and Harbor.Abstractions only.
 //   Knows NOTHING about filesystem, storage, or compilation.
 namespace Harbor.Scripting.Engines;
-
 /// <summary>
 ///     Jint-based <see cref="IScriptEngine" /> — pure-.NET (no native deps),
 ///     AOT-friendly, with per-call engine instances for thread safety.
@@ -43,34 +42,37 @@ namespace Harbor.Scripting.Engines;
 public sealed class JintScriptEngine : IScriptEngine
 {
     private const string HarborBridgeScript = """
-                                               var __harbor_state = { tools: {} };
-                                               var Harbor = {
-                                                 __tools: __harbor_state.tools,
-                                                 registerTool: function(def) {
-                                                   if (typeof def !== 'object' || def === null) throw new Error("registerTool requires an object");
-                                                   if (typeof def.name !== 'string' || def.name.length === 0) throw new Error("registerTool: .name (non-empty string) required");
-                                                   if (typeof def.execute !== 'function') throw new Error("registerTool: .execute (function) required");
-                                                   def.displayName = def.displayName || def.name;
-                                                   def.description  = def.description  || ('Script tool: ' + def.name);
-                                                   def.parameterSchema = def.parameterSchema || { type: 'object', properties: {} };
-                                                   def.executionMode = def.executionMode || 'Parallel';
-                                                   __harbor_registerTool(def);
-                                                   __harbor_state.tools[def.name] = def;
-                                                   return def;
-                                                 },
-                                                 log: function(msg) { __harbor_log(String(msg)); },
-                                                 tools:    { get: function(n) { return __harbor_getTool(n); }, list: function() { return __harbor_listTools(); } },
-                                                 providers:{ list: function() { return __harbor_listProviders(); } },
-                                                 agents:   { list: function() { return __harbor_listAgents(); } }
-                                               };
-                                               """;
+                                              var __harbor_state = { tools: {} };
+                                              var Harbor = {
+                                                __tools: __harbor_state.tools,
+                                                registerTool: function(def) {
+                                                  if (typeof def !== 'object' || def === null) throw new Error("registerTool requires an object");
+                                                  if (typeof def.name !== 'string' || def.name.length === 0) throw new Error("registerTool: .name (non-empty string) required");
+                                                  if (typeof def.execute !== 'function') throw new Error("registerTool: .execute (function) required");
+                                                  def.displayName = def.displayName || def.name;
+                                                  def.description  = def.description  || ('Script tool: ' + def.name);
+                                                  def.parameterSchema = def.parameterSchema || { type: 'object', properties: {} };
+                                                  def.executionMode = def.executionMode || 'Parallel';
+                                                  __harbor_registerTool(def);
+                                                  __harbor_state.tools[def.name] = def;
+                                                  return def;
+                                                },
+                                                log: function(msg) { __harbor_log(String(msg)); },
+                                                tools:    { get: function(n) { return __harbor_getTool(n); }, list: function() { return __harbor_listTools(); } },
+                                                providers:{ list: function() { return __harbor_listProviders(); } },
+                                                agents:   { list: function() { return __harbor_listAgents(); } }
+                                              };
+                                              """;
 
     private readonly ILogger _logger;
 
     /// <summary>
     ///     Construct a Jint-based script engine.
     /// </summary>
-    /// <param name="logger">Logger for engine lifecycle events (script <c>Harbor.log</c> calls go through <see cref="ScriptGlobals.Logger" />).</param>
+    /// <param name="logger">
+    ///     Logger for engine lifecycle events (script <c>Harbor.log</c> calls go through
+    ///     <see cref="ScriptGlobals.Logger" />).
+    /// </param>
     public JintScriptEngine(ILogger logger)
     {
         _logger = logger;
@@ -194,7 +196,7 @@ public sealed class JintScriptEngine : IScriptEngine
                 : Result.Success<T>(default!);
         }
 
-        var direct = value.ToObject();
+        object? direct = value.ToObject();
         if (direct is T typed)
         {
             return Result.Success(typed);
@@ -202,7 +204,7 @@ public sealed class JintScriptEngine : IScriptEngine
 
         try
         {
-            var json = JsonSerializer.Serialize(direct, JintJsonOptions.Default);
+            string json = JsonSerializer.Serialize(direct, JintJsonOptions.Default);
             var deserialized = JsonSerializer.Deserialize<T>(json, JintJsonOptions.Default);
             return deserialized is null
                 ? Result.Failure<T>($"Script result deserialized to null for target type {typeof(T).Name}.")
@@ -217,9 +219,9 @@ public sealed class JintScriptEngine : IScriptEngine
     private static bool IsScriptException(Exception ex)
     {
         return ex is JavaScriptException
-               or JintException
-               or TimeoutException
-               or OperationCanceledException
+                   or JintException
+                   or TimeoutException
+                   or OperationCanceledException
                || ex.GetType().Name.Contains("Limit", StringComparison.Ordinal)
                || ex.GetType().Name.Contains("Recursion", StringComparison.Ordinal)
                || ex.GetType().Name.Contains("Memory", StringComparison.Ordinal)
@@ -257,17 +259,14 @@ public sealed class JintScriptEngine : IScriptEngine
     /// </summary>
     private sealed class CancellationWatcher : IDisposable
     {
-        private CancellationTokenRegistration _reg;
+        private readonly CancellationTokenRegistration _reg;
 
         public CancellationWatcher(CancellationToken token)
         {
             _reg = token.Register(static state => _ = state, null);
         }
 
-        public void Dispose()
-        {
-            _reg.Dispose();
-        }
+        public void Dispose() => _reg.Dispose();
     }
 }
 
@@ -297,10 +296,10 @@ internal static class JintBridge
         JsonDocument schema;
         try
         {
-            var schemaDotnet = schemaValue.IsUndefined()
-                ? (object)new { type = "object", properties = new { } }
+            object? schemaDotnet = schemaValue.IsUndefined()
+                ? new { type = "object", properties = new { } }
                 : schemaValue.ToObject();
-            var schemaJson = JsonSerializer.Serialize(schemaDotnet, JintJsonOptions.Default);
+            string schemaJson = JsonSerializer.Serialize(schemaDotnet, JintJsonOptions.Default);
             schema = JsonDocument.Parse(schemaJson);
         }
         catch (Exception ex)
@@ -346,12 +345,12 @@ internal static class JintBridge
             };
 
         var tool = new ScriptTool(
-            name: name,
-            displayName: displayName,
-            description: description,
-            schema: schema,
-            executionMode: mode,
-            execute: execute);
+            name,
+            displayName,
+            description,
+            schema,
+            mode,
+            execute);
 
         var result = globals.Tools.Register(tool);
         if (result.IsFailure)
@@ -409,7 +408,7 @@ internal static class JintBridge
     public static JsValue ListTools(Engine engine, ScriptGlobals globals)
     {
         var all = globals.Tools.GetAllTools();
-        var arr = new object[all.Count];
+        object[] arr = new object[all.Count];
         for (int i = 0; i < all.Count; i++)
         {
             var t = all[i];
@@ -425,7 +424,7 @@ internal static class JintBridge
 
     public static JsValue ListProviders(Engine engine, ScriptGlobals globals)
     {
-        var ids = globals.Providers is null
+        string[] ids = globals.Providers is null
             ? Array.Empty<string>()
             : globals.Providers.GetRegisteredProviderIds().Select(p => p.Value).ToArray();
         return JsValue.FromObject(engine, ids);
@@ -433,7 +432,7 @@ internal static class JintBridge
 
     public static JsValue ListAgents(Engine engine, ScriptGlobals globals)
     {
-        var ids = globals.Agents is null
+        string[] ids = globals.Agents is null
             ? Array.Empty<string>()
             : globals.Agents.GetAllAgents().Select(a => a.Name.Value).ToArray();
         return JsValue.FromObject(engine, ids);

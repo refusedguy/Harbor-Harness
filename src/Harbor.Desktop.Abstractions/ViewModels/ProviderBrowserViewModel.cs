@@ -1,14 +1,8 @@
-using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Providers;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Browse providers + models with metadata. Read-only view; configuring a new
-///     provider is done in <see cref="SettingsViewModel"/>.
+///     provider is done in <see cref="SettingsViewModel" />.
 /// </summary>
 public sealed partial class ProviderBrowserViewModel : ObservableObject
 {
@@ -20,10 +14,23 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     ///     the user doesn't think the app hung.
     /// </summary>
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
+    private readonly ILogger<ProviderBrowserViewModel> _logger;
 
     private readonly IProviderRegistry _providers;
-    private readonly ILogger<ProviderBrowserViewModel> _logger;
+
+    /// <summary>
+    ///     Error message shown in the UI when a model fetch fails (e.g. "Ollama
+    ///     not running on http://localhost:11434 — start it with `ollama serve`.").
+    /// </summary>
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isLoading;
     private CancellationTokenSource? _loadCts;
+
+    [ObservableProperty]
+    private ProviderRowViewModel? _selectedProvider;
 
     /// <summary>Construct the provider browser view-model.</summary>
     public ProviderBrowserViewModel(IProviderRegistry providers, ILogger<ProviderBrowserViewModel> logger)
@@ -38,19 +45,6 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     /// <summary>Models for the selected provider.</summary>
     public ObservableCollection<ModelRowViewModel> Models { get; } = new();
 
-    [ObservableProperty]
-    private ProviderRowViewModel? _selectedProvider;
-
-    [ObservableProperty]
-    private bool _isLoading;
-
-    /// <summary>
-    ///     Error message shown in the UI when a model fetch fails (e.g. "Ollama
-    ///     not running on http://localhost:11434 — start it with `ollama serve`.").
-    /// </summary>
-    [ObservableProperty]
-    private string _errorMessage = string.Empty;
-
     /// <summary>Load providers from the registry.</summary>
     [RelayCommand]
     private async Task LoadProvidersAsync()
@@ -64,7 +58,7 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
         IsLoading = true;
         ErrorMessage = string.Empty;
         Providers.Clear();
-        foreach (var id in _providers.GetRegisteredProviderIds().Select(p => p.Value))
+        foreach (string id in _providers.GetRegisteredProviderIds().Select(p => p.Value))
         {
             Providers.Add(new ProviderRowViewModel(id, id, "ready"));
         }
@@ -160,7 +154,7 @@ public sealed record ModelRowViewModel(
         {
             SupportsToolUse ? "tools" : null,
             SupportsVision ? "vision" : null,
-            SupportsReasoning ? "reasoning" : null,
+            SupportsReasoning ? "reasoning" : null
         }.Where(s => s is not null)!) ?? "—";
 
     /// <summary>Per-million pricing label.</summary>

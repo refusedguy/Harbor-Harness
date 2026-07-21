@@ -1,5 +1,4 @@
 namespace Harbor.Core.Configuration;
-
 /// <summary>
 ///     Provider / model / agent identity selection.
 ///     Replaces the flat <c>Provider</c>/<c>Model</c>/<c>Agent</c> string fields
@@ -21,6 +20,8 @@ public sealed record IdentityConfig(
 
     public ProviderId EffectiveProvider => Provider ?? ProviderId.Create(FallbackProvider);
 
+    public AgentName EffectiveAgent => Agent ?? AgentName.Create(FallbackAgent);
+
     /// <summary>
     ///     Effective model — uses the explicit <see cref="Model" /> when set,
     ///     otherwise falls back to the default model for the effective provider.
@@ -33,8 +34,6 @@ public sealed record IdentityConfig(
             return ModelRef.TryParse($"{EffectiveProvider}/{preset.DefaultModel}");
         return ModelRef.TryParse($"{EffectiveProvider}/default");
     }
-
-    public AgentName EffectiveAgent => Agent ?? AgentName.Create(FallbackAgent);
 }
 
 /// <summary>

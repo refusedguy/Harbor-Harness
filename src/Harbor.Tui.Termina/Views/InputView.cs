@@ -1,10 +1,9 @@
 using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.Termina.Rendering;
-using TerminaColor = global::Termina.Terminal.Color;
+using Harbor.Ui.Framework.State;
+using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;
-
 /// <summary>
 ///     Projects <see cref="InputModel" /> into a display string with a
 ///     caret, history navigation hint, and slash-command autocomplete marker.

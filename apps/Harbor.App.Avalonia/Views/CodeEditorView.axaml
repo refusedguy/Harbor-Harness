@@ -13,7 +13,7 @@
                 <ItemsControl ItemsSource="{Binding Tabs}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal"/>
+                            <StackPanel Orientation="Horizontal" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -21,12 +21,13 @@
                             <Border Padding="10,4" Background="{StaticResource MochaSurface0}" Margin="2,2,0,2"
                                     CornerRadius="4,4,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding FileName}" FontFamily="{StaticResource CodeFont}" FontSize="12"/>
+                                    <TextBlock Text="{Binding FileName}" FontFamily="{StaticResource CodeFont}"
+                                               FontSize="12" />
                                     <TextBlock Text="●" Foreground="{StaticResource MochaYellow}" FontSize="9"
-                                               IsVisible="{Binding IsDirty}"/>
+                                               IsVisible="{Binding IsDirty}" />
                                     <Button Classes="Subtle" Content="×" Padding="6,2"
                                             Command="{Binding $parent[views:CodeEditorView].(UserControl.DataContext).CloseTabCommand}"
-                                            CommandParameter="{Binding}"/>
+                                            CommandParameter="{Binding}" />
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
@@ -34,8 +35,8 @@
                 </ItemsControl>
             </ScrollViewer>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="8,0">
-                <Button Classes="Subtle" Content="Open (Ctrl+O)" Command="{Binding OpenFileCommand}"/>
-                <Button Classes="Subtle" Content="Save (Ctrl+S)" Command="{Binding SaveCommand}"/>
+                <Button Classes="Subtle" Content="Open (Ctrl+O)" Command="{Binding OpenFileCommand}" />
+                <Button Classes="Subtle" Content="Save (Ctrl+S)" Command="{Binding SaveCommand}" />
             </StackPanel>
         </Grid>
 
@@ -45,7 +46,7 @@
                 <TextBlock Text="No file open — press Ctrl+O to open a file."
                            HorizontalAlignment="Center" VerticalAlignment="Center"
                            Foreground="{StaticResource TextSubtleBrush}"
-                           IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectIsNullConverter.Instance}}"/>
+                           IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectIsNullConverter.Instance}}" />
                 <avaloniaEdit:TextEditor
                     x:Name="Editor"
                     IsVisible="{Binding ActiveTab, Converter={x:Static views:ObjectNotNullConverter.Instance}}"
@@ -53,7 +54,7 @@
                     FontFamily="JetBrains Mono, Cascadia Code, monospace"
                     FontSize="13"
                     Background="Transparent"
-                    Foreground="{StaticResource MochaText}"/>
+                    Foreground="{StaticResource MochaText}" />
             </Grid>
         </Border>
     </Grid>

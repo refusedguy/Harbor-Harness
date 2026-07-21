@@ -1,23 +1,18 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
-using Harbor.Plugins.Instantiation;
-using Harbor.Plugins.Registration;
-using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Hosting;
-
 /// <summary>
 ///     Composition root for the layered plugin runtime. Iterates the supplied
-/// <see cref="IPluginSource" />, compiles each script via <see cref="IPluginCompiler" />,
-/// instantiates <see cref="Harbor.Abstractions.Plugins.IPlugin" /> types via
-/// <see cref="IPluginInstantiator" />, and wires them into the host via
-/// <see cref="IPluginRegistrar" />.
+///     <see cref="IPluginSource" />, compiles each script via <see cref="IPluginCompiler" />,
+///     instantiates <see cref="Harbor.Abstractions.Plugins.IPlugin" /> types via
+///     <see cref="IPluginInstantiator" />, and wires them into the host via
+///     <see cref="IPluginRegistrar" />.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         The host itself is stateless beyond constructor-injected dependencies. All
 ///         per-plugin state lives in the layers below. This makes the host trivially
-/// testable with in-memory doubles.
+///         testable with in-memory doubles.
 ///     </para>
 ///     <para>
 ///         Failures at any stage are logged. Whether they abort the run or not depends
@@ -26,12 +21,12 @@ namespace Harbor.Plugins.Hosting;
 /// </remarks>
 public sealed class PluginHost
 {
-    private readonly IPluginSource _source;
     private readonly IPluginCompiler _compiler;
     private readonly IPluginInstantiator _instantiator;
-    private readonly IPluginRegistrar _registrar;
-    private readonly PluginHostOptions _options;
     private readonly ILogger<PluginHost> _logger;
+    private readonly PluginHostOptions _options;
+    private readonly IPluginRegistrar _registrar;
+    private readonly IPluginSource _source;
 
     /// <summary>
     ///     Construct a new plugin host.

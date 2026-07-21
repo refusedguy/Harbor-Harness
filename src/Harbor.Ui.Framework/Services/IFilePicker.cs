@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.Services;
-
 /// <summary>
 ///     Cross-platform file-picker contract. Each platform implements this with
 ///     its own native picker (Avalonia <c>IStorageProvider</c>, WPF
@@ -13,7 +12,7 @@ public interface IFilePicker
     /// <param name="allowMultiple">Allow multi-select.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The selected paths, or an empty list if the user cancelled.</returns>
-    Task<IReadOnlyList<string>> PickFilesAsync(
+    public Task<IReadOnlyList<string>> PickFilesAsync(
         string title,
         bool allowMultiple = false,
         CancellationToken cancellationToken = default);
@@ -23,7 +22,7 @@ public interface IFilePicker
     /// <param name="defaultFileName">Default file name to pre-populate.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The selected path, or null if the user cancelled.</returns>
-    Task<string?> PickSaveFileAsync(
+    public Task<string?> PickSaveFileAsync(
         string title,
         string defaultFileName,
         CancellationToken cancellationToken = default);
@@ -32,7 +31,7 @@ public interface IFilePicker
     /// <param name="title">Dialog title.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The selected folder path, or null if the user cancelled.</returns>
-    Task<string?> PickFolderAsync(
+    public Task<string?> PickFolderAsync(
         string title = "Select Folder",
         CancellationToken cancellationToken = default);
 }

@@ -2,14 +2,14 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.RazorConsole;
-using Harbor.Tui.TerminalGui;
 using Harbor.Tui.Termina;
+using Harbor.Tui.Termina.Views;
+using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-
+using StatusBarView = Harbor.Tui.TerminalGui.Views.StatusBarView;
 namespace Harbor.Tui.Tests;
-
 /// <summary>
 ///     TEA-integration tests for the three renderer bridges (Termina,
 ///     Terminal.Gui, RazorConsole). Each test verifies that the bridge
@@ -22,8 +22,8 @@ public class TeaBridgeTests
     private static IAgent MockAgent()
     {
         var definition = AgentDefinition.CodeDefault(
-            model: "claude-3-5-sonnet",
-            providerId: "anthropic");
+            "claude-3-5-sonnet",
+            "anthropic");
         var state = AgentState.Idle("s1", definition);
         var mock = new Mock<IAgent>();
         mock.SetupGet(a => a.State).Returns(state);
@@ -79,8 +79,8 @@ public class TeaBridgeTests
             bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello **world**"), AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
 
-            var view = new Harbor.Tui.Termina.Views.ChatView();
-            var lines = view.Build(bridge.Store.State, historyWidth: 80);
+            var view = new ChatView();
+            var lines = view.Build(bridge.Store.State, 80);
             await Assert.That(lines.Count).IsGreaterThan(0);
             await Assert.That(lines.Any(l => l.Contains("assistant"))).IsTrue();
         }
@@ -115,7 +115,7 @@ public class TeaBridgeTests
         try
         {
             bridge.Push(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
-            var view = new Harbor.Tui.TerminalGui.Views.StatusBarView();
+            var view = new StatusBarView();
             string text = view.Build(bridge.Store.State);
             await Assert.That(text).Contains("claude-3-5-sonnet");
             await Assert.That(text).Contains("anthropic");
@@ -153,8 +153,8 @@ public class TeaBridgeTests
             bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "bold"), AssistantMessage.Empty("s1", "m")));
             bridge.Push(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
 
-            var view = new Harbor.Tui.RazorConsole.Views.ChatView();
-            var lines = view.Build(bridge.Store.State, historyWidth: 80);
+            var view = new RazorConsole.Views.ChatView();
+            var lines = view.Build(bridge.Store.State, 80);
             await Assert.That(lines.Count).IsGreaterThan(0);
             // The Spectre markup wrapper for the assistant role should appear.
             await Assert.That(lines.Any(l => l.Contains("[white]"))).IsTrue();

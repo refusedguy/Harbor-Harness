@@ -18,6 +18,15 @@ public sealed class DefaultAgent : IAgent
     private readonly Channel<AgentMessage> _steeringQueue;
 
     /// <summary>
+    ///     Backing field for <see cref="AbortSource" />. Replaced wholesale by
+    ///     <see cref="ResetAbortSource" /> — a single CTS can only be cancelled
+    ///     once, so after every abort we swap in a fresh one or the next
+    ///     <see cref="PromptAsync" /> would observe the cancelled token and
+    ///     fail immediately.
+    /// </summary>
+    private CancellationTokenSource _abortSource = new();
+
+    /// <summary>
     ///     Per-run completion source. A fresh instance is swapped in at the
     ///     start of every <see cref="PromptAsync" /> call (see
     ///     <see cref="StartRunCompletion" />) and completed with the run's
@@ -40,15 +49,6 @@ public sealed class DefaultAgent : IAgent
     /// </remarks>
     private volatile TaskCompletionSource<Result> _runCompletion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    /// <summary>
-    ///     Backing field for <see cref="AbortSource" />. Replaced wholesale by
-    ///     <see cref="ResetAbortSource" /> — a single CTS can only be cancelled
-    ///     once, so after every abort we swap in a fresh one or the next
-    ///     <see cref="PromptAsync" /> would observe the cancelled token and
-    ///     fail immediately.
-    /// </summary>
-    private CancellationTokenSource _abortSource = new();
 
     /// <summary>
     ///     Construct a <see cref="DefaultAgent" /> wired to the supplied services.
@@ -264,22 +264,6 @@ public sealed class DefaultAgent : IAgent
     }
 
     /// <summary>
-    ///     Atomically swap <see cref="_runCompletion" /> for a fresh
-    ///     <see cref="TaskCompletionSource{TResult}" /> and complete the previous
-    ///     one (if any) with a <c>Result.Failure("Agent was cancelled.")</c>
-    ///     sentinel so any <see cref="WaitForIdleAsync" /> caller awaiting it
-    ///     returns promptly.
-    /// </summary>
-    /// <returns>The new completion source for this run.</returns>
-    private TaskCompletionSource<Result> StartRunCompletion()
-    {
-        var fresh = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var previous = Interlocked.Exchange(ref _runCompletion, fresh);
-        previous?.TrySetResult(Result.Failure("Agent was cancelled."));
-        return fresh;
-    }
-
-    /// <summary>
     ///     Inject a steering message into the current run. The message is processed at the next
     ///     safe boundary (between turns).
     /// </summary>
@@ -339,6 +323,22 @@ public sealed class DefaultAgent : IAgent
         AbortSource?.Dispose();
         _steeringQueue.Writer.TryComplete();
         _followUpQueue.Writer.TryComplete();
+    }
+
+    /// <summary>
+    ///     Atomically swap <see cref="_runCompletion" /> for a fresh
+    ///     <see cref="TaskCompletionSource{TResult}" /> and complete the previous
+    ///     one (if any) with a <c>Result.Failure("Agent was cancelled.")</c>
+    ///     sentinel so any <see cref="WaitForIdleAsync" /> caller awaiting it
+    ///     returns promptly.
+    /// </summary>
+    /// <returns>The new completion source for this run.</returns>
+    private TaskCompletionSource<Result> StartRunCompletion()
+    {
+        var fresh = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var previous = Interlocked.Exchange(ref _runCompletion, fresh);
+        previous?.TrySetResult(Result.Failure("Agent was cancelled."));
+        return fresh;
     }
 
     private async Task<ISessionContext> LoadSessionContextAsync(string sessionId, CancellationToken ct)

@@ -1,9 +1,6 @@
 using Harbor.Build.Components;
-using Harbor.Build.Extensions;
 using Nuke.Common.IO;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Clean target — deletes <c>bin</c>/<c>obj</c> directories under
 ///     <c>src/</c>, <c>apps/</c>, <c>tests/</c>, <c>samples/</c>, and clears
@@ -13,7 +10,7 @@ public static class CleanTarget
 {
     /// <summary>
     ///     Executes the clean operation against the directories resolved by
-    ///     <paramref name="resolver"/>.
+    ///     <paramref name="resolver" />.
     /// </summary>
     public static void Execute(ArtifactPathResolver resolver)
     {

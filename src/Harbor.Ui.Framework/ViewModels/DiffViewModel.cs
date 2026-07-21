@@ -1,10 +1,8 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.ViewModels;
-
 /// <summary>
 ///     Side-by-side diff view-model. Accepts two text inputs (left = before, right = after)
 ///     and computes a simple line-by-line diff. Real production would use a proper diff
@@ -15,34 +13,34 @@ public sealed partial class DiffViewModel : ObservableObject
 {
     private readonly ILogger<DiffViewModel> _logger;
 
+    [ObservableProperty]
+    private string _leftText = string.Empty;
+
+    [ObservableProperty]
+    private string _leftTitle = "before";
+
+    [ObservableProperty]
+    private string _rightText = string.Empty;
+
+    [ObservableProperty]
+    private string _rightTitle = "after";
+
     /// <summary>Construct the diff view-model.</summary>
     public DiffViewModel(ILogger<DiffViewModel> logger)
     {
         _logger = logger;
     }
 
-    [ObservableProperty]
-    private string _leftText = string.Empty;
-
-    [ObservableProperty]
-    private string _rightText = string.Empty;
-
-    [ObservableProperty]
-    private string _leftTitle = "before";
-
-    [ObservableProperty]
-    private string _rightTitle = "after";
-
     /// <summary>The diff rows for the view.</summary>
-    public System.Collections.ObjectModel.ObservableCollection<DiffRowViewModel> Rows { get; } = new();
+    public ObservableCollection<DiffRowViewModel> Rows { get; } = new();
 
-    /// <summary>Compute the diff between <see cref="LeftText"/> and <see cref="RightText"/>.</summary>
+    /// <summary>Compute the diff between <see cref="LeftText" /> and <see cref="RightText" />.</summary>
     [RelayCommand]
     private void Compute()
     {
         Rows.Clear();
-        var leftLines = LeftText.Replace("\r\n", "\n").Split('\n');
-        var rightLines = RightText.Replace("\r\n", "\n").Split('\n');
+        string[] leftLines = LeftText.Replace("\r\n", "\n").Split('\n');
+        string[] rightLines = RightText.Replace("\r\n", "\n").Split('\n');
         int max = Math.Max(leftLines.Length, rightLines.Length);
         for (int i = 0; i < max; i++)
         {

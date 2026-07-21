@@ -1,10 +1,7 @@
-using System.Text;
-using Harbor.Ui.Framework.State;
 using Harbor.Tui.Termina.Handlers;
 using Harbor.Tui.Termina.Rendering;
-
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.Termina.Views;
-
 /// <summary>
 ///     Projects an immutable <see cref="UiState" /> snapshot into the
 ///     Termina-rendered chat transcript. Each <see cref="ChatLine" /> is
@@ -26,7 +23,7 @@ public sealed class ChatView
         {
             if (line.Role is not ChatRole.ToolResult)
                 outp.Add(TerminaMarkdownRenderer.RenderHeader(line.Role));
-            foreach (var body in TerminaMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
+            foreach (string body in TerminaMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
                 outp.Add("  " + body);
             outp.Add(" ");
         }
@@ -37,13 +34,13 @@ public sealed class ChatView
             if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
             {
                 outp.Add(TerminaMarkdownRenderer.RenderHeader(ChatRole.Thinking));
-                foreach (var b in TerminaMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
+                foreach (string b in TerminaMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
             if (!string.IsNullOrEmpty(s.Active.TextBuffer))
             {
                 outp.Add(TerminaMarkdownRenderer.RenderHeader(ChatRole.Assistant));
-                foreach (var b in TerminaMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
+                foreach (string b in TerminaMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
                     outp.Add("  " + b);
             }
         }

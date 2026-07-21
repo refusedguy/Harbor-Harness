@@ -1,13 +1,9 @@
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.ViewModels;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
-
 /// <summary>
-///     Unit tests for the platform-agnostic <see cref="StatusMappers"/>
+///     Unit tests for the platform-agnostic <see cref="StatusMappers" />
 ///     helpers. These ensure the resource-key / display-string lookups
 ///     stay stable across UI frameworks (Avalonia / WPF / MAUI / Blazor
 ///     all wrap these functions in their own IValueConverter adapters).
@@ -202,16 +198,10 @@ public class StatusMappersTests
     // ── TimeAgo ────────────────────────────────────────────────────
 
     [Test]
-    public async Task TimeAgo_Null_ReturnsEmpty()
-    {
-        await Assert.That(StatusMappers.TimeAgo(null)).IsEqualTo(string.Empty);
-    }
+    public async Task TimeAgo_Null_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(null)).IsEqualTo(string.Empty);
 
     [Test]
-    public async Task TimeAgo_MinValue_ReturnsEmpty()
-    {
-        await Assert.That(StatusMappers.TimeAgo(DateTime.MinValue)).IsEqualTo(string.Empty);
-    }
+    public async Task TimeAgo_MinValue_ReturnsEmpty() => await Assert.That(StatusMappers.TimeAgo(DateTime.MinValue)).IsEqualTo(string.Empty);
 
     [Test]
     public async Task TimeAgo_JustNow_ReturnsJustNow()
@@ -244,58 +234,31 @@ public class StatusMappersTests
     // ── TokensToCompact ────────────────────────────────────────────
 
     [Test]
-    public async Task TokensToCompact_Zero_ReturnsZero()
-    {
-        await Assert.That(StatusMappers.TokensToCompact(0)).IsEqualTo("0");
-    }
+    public async Task TokensToCompact_Zero_ReturnsZero() => await Assert.That(StatusMappers.TokensToCompact(0)).IsEqualTo("0");
 
     [Test]
-    public async Task TokensToCompact_Negative_ReturnsZero()
-    {
-        await Assert.That(StatusMappers.TokensToCompact(-5)).IsEqualTo("0");
-    }
+    public async Task TokensToCompact_Negative_ReturnsZero() => await Assert.That(StatusMappers.TokensToCompact(-5)).IsEqualTo("0");
 
     [Test]
-    public async Task TokensToCompact_BelowThousand_ReturnsRaw()
-    {
-        await Assert.That(StatusMappers.TokensToCompact(500)).IsEqualTo("500");
-    }
+    public async Task TokensToCompact_BelowThousand_ReturnsRaw() => await Assert.That(StatusMappers.TokensToCompact(500)).IsEqualTo("500");
 
     [Test]
-    public async Task TokensToCompact_AboveThousand_ReturnsK()
-    {
-        await Assert.That(StatusMappers.TokensToCompact(1200)).IsEqualTo("1.2K");
-    }
+    public async Task TokensToCompact_AboveThousand_ReturnsK() => await Assert.That(StatusMappers.TokensToCompact(1200)).IsEqualTo("1.2K");
 
     [Test]
-    public async Task TokensToCompact_AboveMillion_ReturnsM()
-    {
-        await Assert.That(StatusMappers.TokensToCompact(1_400_000)).IsEqualTo("1.4M");
-    }
+    public async Task TokensToCompact_AboveMillion_ReturnsM() => await Assert.That(StatusMappers.TokensToCompact(1_400_000)).IsEqualTo("1.4M");
 
     // ── CostToUsd ──────────────────────────────────────────────────
 
     [Test]
-    public async Task CostToUsd_Zero_ReturnsZeroUsd()
-    {
-        await Assert.That(StatusMappers.CostToUsd(0m)).IsEqualTo("$0.0000");
-    }
+    public async Task CostToUsd_Zero_ReturnsZeroUsd() => await Assert.That(StatusMappers.CostToUsd(0m)).IsEqualTo("$0.0000");
 
     [Test]
-    public async Task CostToUsd_Negative_ReturnsZeroUsd()
-    {
-        await Assert.That(StatusMappers.CostToUsd(-1.5m)).IsEqualTo("$0.0000");
-    }
+    public async Task CostToUsd_Negative_ReturnsZeroUsd() => await Assert.That(StatusMappers.CostToUsd(-1.5m)).IsEqualTo("$0.0000");
 
     [Test]
-    public async Task CostToUsd_SmallCost_ReturnsFourDecimal()
-    {
-        await Assert.That(StatusMappers.CostToUsd(0.0123m)).IsEqualTo("$0.0123");
-    }
+    public async Task CostToUsd_SmallCost_ReturnsFourDecimal() => await Assert.That(StatusMappers.CostToUsd(0.0123m)).IsEqualTo("$0.0123");
 
     [Test]
-    public async Task CostToUsd_LargeCost_ReturnsFourDecimal()
-    {
-        await Assert.That(StatusMappers.CostToUsd(12.5m)).IsEqualTo("$12.5000");
-    }
+    public async Task CostToUsd_LargeCost_ReturnsFourDecimal() => await Assert.That(StatusMappers.CostToUsd(12.5m)).IsEqualTo("$12.5000");
 }

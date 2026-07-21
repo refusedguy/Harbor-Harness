@@ -181,7 +181,7 @@ public sealed class ChatBridge : IDisposable
             return;
         }
         var view = new DiagnosticsView();
-        foreach (var line in view.Render(DiagnosticsPanel, max: 10))
+        foreach (var line in view.Render(DiagnosticsPanel, 10))
             _outputStream.OnNext(line);
     }
 

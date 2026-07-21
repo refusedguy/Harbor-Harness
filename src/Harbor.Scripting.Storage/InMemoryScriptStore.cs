@@ -1,6 +1,5 @@
 // Storage layer — in-memory store, primarily for tests. See IScriptStore.cs for layering rules.
 namespace Harbor.Scripting.Storage;
-
 /// <summary>
 ///     <see cref="IScriptStore" /> backed by an in-memory dictionary. Intended
 ///     for unit tests and ephemeral REPL sessions; not persistent.
@@ -81,13 +80,13 @@ public sealed class InMemoryScriptStore : IScriptStore
 
     private static ScriptEntry MakeEntry(string name, string content)
     {
-        var bytes = Encoding.UTF8.GetBytes(content);
-        var hash = SHA256.HashData(bytes);
+        byte[] bytes = Encoding.UTF8.GetBytes(content);
+        byte[] hash = SHA256.HashData(bytes);
         return new ScriptEntry(
-            Name: name,
-            Path: $"inmemory://{name}",
-            Content: content,
-            Hash: Convert.ToHexString(hash),
-            LastModified: DateTimeOffset.UtcNow);
+            name,
+            $"inmemory://{name}",
+            content,
+            Convert.ToHexString(hash),
+            DateTimeOffset.UtcNow);
     }
 }

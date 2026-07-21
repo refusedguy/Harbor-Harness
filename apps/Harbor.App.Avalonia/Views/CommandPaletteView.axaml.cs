@@ -1,9 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Command palette view code-behind. Handles keyboard navigation
 ///     (↑/↓ to move, Enter to invoke, Esc to close) and focuses the query box on load.
@@ -14,10 +12,10 @@ public partial class CommandPaletteView : UserControl
     public CommandPaletteView()
     {
         InitializeComponent();
-        AttachedToVisualTree += (_, _) => QueryBox.Focus();
+        this.AttachedToVisualTree += (_, _) => QueryBox.Focus();
     }
 
-    private CommandPaletteViewModel? Vm => DataContext as CommandPaletteViewModel;
+    private CommandPaletteViewModel? Vm => this.DataContext as CommandPaletteViewModel;
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)

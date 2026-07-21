@@ -1,15 +1,13 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views.Shell;
-
 /// <summary>
 ///     Orca composer — code-behind.
 /// </summary>
 /// <remarks>
 ///     Forwards Enter (no Shift) from the input box to the
-///     <see cref="ChatViewModel.SendCommand"/>. Shift+Enter inserts a newline
+///     <see cref="ChatViewModel.SendCommand" />. Shift+Enter inserts a newline
 ///     (the TextBox's <c>AcceptsReturn=True</c> default behaviour).
 /// </remarks>
 public partial class ComposerView : UserControl
@@ -18,10 +16,10 @@ public partial class ComposerView : UserControl
     public ComposerView()
     {
         InitializeComponent();
-        Loaded += (_, _) => InputBox.Focus();
+        this.Loaded += (_, _) => InputBox.Focus();
     }
 
-    private ChatViewModel? Vm => DataContext as ChatViewModel;
+    private ChatViewModel? Vm => this.DataContext as ChatViewModel;
 
     private void InputBox_KeyDown(object? sender, KeyEventArgs e)
     {

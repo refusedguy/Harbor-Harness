@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Ctrl+P command palette. Fuzzy-matches a query against a list of
 ///     commands and lets the user invoke the top hit.
@@ -11,6 +9,12 @@ namespace Harbor.App.Wpf.ViewModels;
 public sealed partial class CommandPaletteViewModel : ObservableObject
 {
     private readonly List<CommandEntry> _allCommands;
+
+    /// <summary>Search query.</summary>
+    [ObservableProperty] private string _query = string.Empty;
+
+    /// <summary>Selected result index.</summary>
+    [ObservableProperty] private int _selectedIndex;
 
     /// <summary>Construct a <see cref="CommandPaletteViewModel" />.</summary>
     public CommandPaletteViewModel()
@@ -33,14 +37,8 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
         Query = string.Empty;
     }
 
-    /// <summary>Search query.</summary>
-    [ObservableProperty] private string _query = string.Empty;
-
     /// <summary>Visible results (filtered by <see cref="Query" />).</summary>
     public ObservableCollection<CommandEntry> Results { get; }
-
-    /// <summary>Selected result index.</summary>
-    [ObservableProperty] private int _selectedIndex;
 
     /// <summary>Invoked when the user picks a command. Carries the command id.</summary>
     public event Action<string>? CommandInvoked;
@@ -72,7 +70,7 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
 
     partial void OnQueryChanged(string value)
     {
-        var needle = (value ?? string.Empty).Trim().ToLowerInvariant();
+        string needle = (value ?? string.Empty).Trim().ToLowerInvariant();
         Results.Clear();
         foreach (var c in _allCommands)
         {

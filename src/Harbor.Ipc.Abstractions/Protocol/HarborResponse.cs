@@ -1,7 +1,5 @@
 using MessagePack;
-
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Base type for all Harbor IPC responses. The server always echoes the
 ///     <see cref="RequestId" /> from the originating <see cref="HarborRequest" />.

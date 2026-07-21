@@ -5,9 +5,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Per-provider configuration row view-model. One instance per
 ///     registered provider — holds the editable API key, the live auth
@@ -17,8 +15,8 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     <para>
 ///         Extracted from <c>SettingsViewModel</c> so the per-provider
 ///         save / test logic is unit-testable in isolation (construct a
-///         <see cref="ProviderConfigViewModel"/> with a fake
-///         <see cref="ICommonConfigStore"/> + <see cref="IProviderRegistry"/>
+///         <see cref="ProviderConfigViewModel" /> with a fake
+///         <see cref="ICommonConfigStore" /> + <see cref="IProviderRegistry" />
 ///         and assert the commands behave correctly without spinning up
 ///         the full Settings dialog).
 ///     </para>
@@ -31,11 +29,29 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class ProviderConfigViewModel : ObservableObject
 {
-    private readonly ICommonConfigStore _commonStore;
-    private readonly IProviderRegistry _providers;
     private readonly IAuthResolver _authResolver;
-    private readonly ToastService _toasts;
+    private readonly ICommonConfigStore _commonStore;
     private readonly ILogger<ProviderConfigViewModel> _logger;
+    private readonly IProviderRegistry _providers;
+    private readonly ToastService _toasts;
+
+    /// <summary>API key (editable in the UI).</summary>
+    [ObservableProperty]
+    private string _apiKey;
+
+    /// <summary>Whether an API key has been resolved for this provider.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AuthIcon))]
+    [NotifyPropertyChangedFor(nameof(AuthText))]
+    private bool _isAuthenticated;
+
+    /// <summary>True while a Test connection request is in flight.</summary>
+    [ObservableProperty]
+    private bool _isTesting;
+
+    /// <summary>Human-readable result of the last Test connection attempt.</summary>
+    [ObservableProperty]
+    private string _testResult = string.Empty;
 
     /// <summary>Construct a per-provider config row.</summary>
     /// <param name="id">Provider id (e.g. <c>ollama</c>, <c>kilocode</c>).</param>
@@ -82,35 +98,19 @@ public sealed partial class ProviderConfigViewModel : ObservableObject
     public bool RequiresApiKey { get; }
 
     /// <summary>Auth status icon — <c>✓</c> or <c>✗</c>.</summary>
-    public string AuthIcon => IsAuthenticated ? "✓" : (RequiresApiKey ? "✗" : "—");
+    public string AuthIcon => IsAuthenticated ? "✓" : RequiresApiKey ? "✗" : "—";
 
     /// <summary>Auth status text — e.g. "Authenticated", "No key".</summary>
     public string AuthText => !RequiresApiKey
         ? "No key needed"
-        : (IsAuthenticated ? "Authenticated" : "No key");
-
-    /// <summary>API key (editable in the UI).</summary>
-    [ObservableProperty]
-    private string _apiKey;
-
-    /// <summary>Whether an API key has been resolved for this provider.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AuthIcon))]
-    [NotifyPropertyChangedFor(nameof(AuthText))]
-    private bool _isAuthenticated;
-
-    /// <summary>True while a Test connection request is in flight.</summary>
-    [ObservableProperty]
-    private bool _isTesting;
-
-    /// <summary>Human-readable result of the last Test connection attempt.</summary>
-    [ObservableProperty]
-    private string _testResult = string.Empty;
+        : IsAuthenticated
+            ? "Authenticated"
+            : "No key";
 
     /// <summary>
     ///     Save this provider's API key immediately, without requiring the
     ///     user to click the global "Save" button. Persists via
-    ///     <see cref="ICommonConfigStore.UpdateAsync"/> so the key is available
+    ///     <see cref="ICommonConfigStore.UpdateAsync" /> so the key is available
     ///     to the agent + picker right away (the in-process auth resolver
     ///     reloads the config on every request).
     /// </summary>
@@ -179,7 +179,9 @@ public sealed partial class ProviderConfigViewModel : ObservableObject
                 row.IsAuthenticated = count > 0 || !row.RequiresApiKey;
                 row.TestResult = count > 0
                     ? $"✓ {count} model(s) available"
-                    : (row.RequiresApiKey ? "✓ Reachable but no models returned" : "✓ Reachable (no key needed)");
+                    : row.RequiresApiKey
+                        ? "✓ Reachable but no models returned"
+                        : "✓ Reachable (no key needed)";
             }
             else
             {
@@ -202,7 +204,7 @@ public sealed partial class ProviderConfigViewModel : ObservableObject
         }
     }
 
-    /// <summary>CanExecute for <see cref="TestConnectionCommand"/> — disabled while a test is in flight.</summary>
+    /// <summary>CanExecute for <see cref="TestConnectionCommand" /> — disabled while a test is in flight.</summary>
     /// <returns>True when no test is currently running.</returns>
     private bool CanTestConnection() => !IsTesting;
 }

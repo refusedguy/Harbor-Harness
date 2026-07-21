@@ -1,6 +1,5 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
              xmlns:uvm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
@@ -32,7 +31,7 @@
                 <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,8,12,4">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="uvm:ToolCallViewModel">
-                            <ctrl:ToolCallCardView/>
+                            <ctrl:ToolCallCardView />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -53,7 +52,7 @@
                                         BorderThickness="2,0,0,0">
                                     <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
                                                FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
                                 </Border>
                                 <!-- Message body — plain TextBlock. (The MarkdownRenderer
                                      control was stubbed out in another subagent's WIP but
@@ -71,7 +70,7 @@
                                                FontFamily="{StaticResource UiFont}"
                                                FontSize="14"
                                                LineHeight="20"
-                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"/>
+                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
                                 </Border>
                             </Grid>
                         </DataTemplate>
@@ -91,12 +90,12 @@
                 Padding="40"
                 IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}">
             <StackPanel Spacing="12" HorizontalAlignment="Center">
-                <TextBlock Text="💬" FontSize="48" HorizontalAlignment="Center" Opacity="0.5"/>
+                <TextBlock Text="💬" FontSize="48" HorizontalAlignment="Center" Opacity="0.5" />
                 <TextBlock Text="Start a conversation" FontSize="20" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}"/>
+                           HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}" />
                 <TextBlock Text="Type a message below to begin chatting with the AI agent"
                            FontSize="14" Opacity="0.6" HorizontalAlignment="Center"
-                           Foreground="{StaticResource TextMutedBrush}"/>
+                           Foreground="{StaticResource TextMutedBrush}" />
             </StackPanel>
         </Border>
 
@@ -114,14 +113,14 @@
                     BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
                     IsVisible="{Binding IsAgentRunning}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center"/>
+                    <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{StaticResource MochaBlue}" FontWeight="SemiBold"
                                FontFamily="{StaticResource CodeFont}" FontSize="12"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" />
                     <TextBlock Text="●●●" Foreground="{StaticResource MochaBlue}" FontSize="10"
                                VerticalAlignment="Center" Opacity="0.7"
-                               Classes="BlinkingCursor"/>
+                               Classes="BlinkingCursor" />
                 </StackPanel>
             </Border>
 
@@ -132,10 +131,10 @@
                     IsVisible="{Binding IsStreaming}">
                 <StackPanel Spacing="6">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse Width="8" Height="8" Classes="StreamingDot" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Classes="StreamingDot" VerticalAlignment="Center" />
                         <TextBlock Text="streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
                                    FontFamily="{StaticResource CodeFont}" FontSize="11"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center" />
                     </StackPanel>
                     <!-- Streaming text: wraps, bounded width, no overflow -->
                     <TextBlock Text="{Binding StreamingBuffer}"
@@ -144,7 +143,7 @@
                                FontSize="14"
                                LineHeight="20"
                                Foreground="{DynamicResource MochaText}"
-                               MaxWidth="800"/>
+                               MaxWidth="800" />
                 </StackPanel>
             </Border>
 
@@ -154,10 +153,10 @@
                     BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
                     IsVisible="{Binding IsThinking}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14"/>
+                    <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14" />
                     <TextBlock Text="thinking…" Foreground="{StaticResource MochaBlue}"
                                FontFamily="{StaticResource CodeFont}" FontSize="11"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
         </StackPanel>
@@ -179,18 +178,18 @@
                          MinHeight="48" MaxHeight="160"
                          FontSize="14"
                          Padding="12,10"
-                         KeyDown="InputBox_KeyDown"/>
+                         KeyDown="InputBox_KeyDown" />
                 <Button Grid.Column="1" Classes="Primary" Content="Send ▶"
                         Command="{Binding SendCommand}"
                         Margin="8,0,0,0"
                         Padding="20,12"
-                        VerticalAlignment="Bottom"/>
+                        VerticalAlignment="Bottom" />
                 <Button Grid.Column="2" Classes="Secondary" Content="Stop ■"
                         Command="{Binding StopCommand}"
                         Margin="8,0,0,0"
                         Padding="16,12"
                         VerticalAlignment="Bottom"
-                        IsVisible="{Binding IsThinking}"/>
+                        IsVisible="{Binding IsThinking}" />
             </Grid>
         </Border>
     </Grid>

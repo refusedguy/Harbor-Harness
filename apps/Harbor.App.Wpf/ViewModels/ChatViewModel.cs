@@ -3,15 +3,25 @@ using System.Windows;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Streaming chat view model. Maintains the message list and the active
 ///     streaming buffer; user prompts are dispatched to the agent loop.
 /// </summary>
 public sealed partial class ChatViewModel : ObservableObject
 {
+
+    /// <summary>Whether the user is dragging the splitter (suppresses auto-scroll).</summary>
+    [ObservableProperty] private bool _autoScroll = true;
+
+    /// <summary>User input text.</summary>
+    [ObservableProperty] private string _inputText = string.Empty;
+
+    /// <summary>Whether the agent is currently streaming.</summary>
+    [ObservableProperty] private bool _isStreaming;
+
+    /// <summary>Active streaming buffer — visible while the assistant is generating.</summary>
+    [ObservableProperty] private string _streamingBuffer = string.Empty;
     /// <summary>Construct a <see cref="ChatViewModel" />.</summary>
     public ChatViewModel()
     {
@@ -29,18 +39,6 @@ public sealed partial class ChatViewModel : ObservableObject
     /// <summary>Chat transcript, oldest first.</summary>
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
 
-    /// <summary>Active streaming buffer — visible while the assistant is generating.</summary>
-    [ObservableProperty] private string _streamingBuffer = string.Empty;
-
-    /// <summary>User input text.</summary>
-    [ObservableProperty] private string _inputText = string.Empty;
-
-    /// <summary>Whether the agent is currently streaming.</summary>
-    [ObservableProperty] private bool _isStreaming;
-
-    /// <summary>Whether the user is dragging the splitter (suppresses auto-scroll).</summary>
-    [ObservableProperty] private bool _autoScroll = true;
-
     /// <summary>Visibility for the streaming buffer border.</summary>
     public Visibility StreamingVisibility => IsStreaming ? Visibility.Visible : Visibility.Collapsed;
 
@@ -53,7 +51,7 @@ public sealed partial class ChatViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
-        var text = (InputText ?? string.Empty).Trim();
+        string text = (InputText ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(text)) return;
 
         Messages.Add(new ChatMessageViewModel("user", text, DateTimeOffset.UtcNow));
@@ -82,30 +80,24 @@ public sealed partial class ChatViewModel : ObservableObject
 
     /// <summary>Clear the transcript.</summary>
     [RelayCommand]
-    private void Clear()
-    {
-        Messages.Clear();
-    }
+    private void Clear() => Messages.Clear();
 
     private bool CanSend() => !IsStreaming && !string.IsNullOrWhiteSpace(InputText);
 
-    partial void OnInputTextChanged(string value)
-    {
-        SendCommand.NotifyCanExecuteChanged();
-    }
+    partial void OnInputTextChanged(string value) => SendCommand.NotifyCanExecuteChanged();
 
     partial void OnIsStreamingChanged(bool value)
     {
         SendCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(StreamingVisibility));
+        this.OnPropertyChanged(nameof(StreamingVisibility));
     }
 
     private async Task SimulateStreamAsync(string prompt)
     {
         // In a real wiring, this method is replaced by an event-bus subscription
         // that feeds MessageUpdateEvent.StreamingDelta into StreamingBuffer.
-        var words = ("Echo: " + prompt).Split(' ');
-        foreach (var w in words)
+        string[] words = ("Echo: " + prompt).Split(' ');
+        foreach (string w in words)
         {
             StreamingBuffer += w + " ";
             await Task.Delay(60).ConfigureAwait(false);
@@ -123,11 +115,11 @@ public sealed partial class ChatViewModel : ObservableObject
 /// <param name="Timestamp">UTC timestamp of the message.</param>
 public sealed partial class ChatMessageViewModel : ObservableObject
 {
-    /// <summary>The role string (user, assistant, tool, tool_result, error).</summary>
-    [ObservableProperty] private string _role;
 
     /// <summary>Markdown-formatted content.</summary>
     [ObservableProperty] private string _content;
+    /// <summary>The role string (user, assistant, tool, tool_result, error).</summary>
+    [ObservableProperty] private string _role;
 
     /// <summary>UTC timestamp of the message.</summary>
     [ObservableProperty] private DateTimeOffset _timestamp;

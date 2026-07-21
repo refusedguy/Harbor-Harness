@@ -1,10 +1,9 @@
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using Harbor.App.Wpf.ViewModels;
 using ICSharpCode.AvalonEdit.Highlighting;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     AvalonEdit-backed code editor view.
 /// </summary>
@@ -15,10 +14,10 @@ public partial class CodeEditorView : UserControl
     {
         InitializeComponent();
         Editor.TextChanged += OnTextChanged;
-        DataContextChanged += OnDataContextChanged;
+        this.DataContextChanged += OnDataContextChanged;
     }
 
-    private void OnDataContextChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (e.OldValue is CodeEditorViewModel old)
         {
@@ -34,7 +33,7 @@ public partial class CodeEditorView : UserControl
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (DataContext is not CodeEditorViewModel vm) return;
+        if (this.DataContext is not CodeEditorViewModel vm) return;
         if (e.PropertyName == nameof(CodeEditorViewModel.SyntaxLanguage))
         {
             ApplySyntax(vm.SyntaxLanguage);
@@ -48,9 +47,9 @@ public partial class CodeEditorView : UserControl
         }
     }
 
-    private void OnTextChanged(object? sender, System.EventArgs e)
+    private void OnTextChanged(object? sender, EventArgs e)
     {
-        if (DataContext is CodeEditorViewModel vm)
+        if (this.DataContext is CodeEditorViewModel vm)
         {
             vm.Content = Editor.Text;
         }

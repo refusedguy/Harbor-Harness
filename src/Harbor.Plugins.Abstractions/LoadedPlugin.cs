@@ -1,9 +1,8 @@
 using Harbor.Abstractions.Plugins;
 namespace Harbor.Plugins.Abstractions;
-
 /// <summary>
 ///     A live <see cref="IPlugin" /> instance plus the metadata the registration layer
-/// needs to wire it into the host. Produced by <see cref="IPluginInstantiator" />.
+///     needs to wire it into the host. Produced by <see cref="IPluginInstantiator" />.
 /// </summary>
 /// <param name="Instance">The live plugin instance.</param>
 /// <param name="Name">Stable plugin id from <see cref="IPlugin.Name" />.</param>
@@ -27,5 +26,5 @@ public sealed record LoadedPlugin(
     ///     Human-readable identifier used in log lines and the <c>/plugins</c>
     ///     slash-command. Format: <c>name@version (file)</c>.
     /// </summary>
-    public string DisplayName => $"{Name}@{Version} ({System.IO.Path.GetFileName(SourcePath)})";
+    public string DisplayName => $"{Name}@{Version} ({Path.GetFileName(SourcePath)})";
 }

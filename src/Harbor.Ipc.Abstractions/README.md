@@ -4,17 +4,17 @@ Shared contract for Harbor's IPC layer. Referenced by **both** the in-process cl
 
 ## What's here
 
-| File | Purpose |
-| --- | --- |
-| `IHarborClient.cs` | Client interface every UI talks to (agent, sessions, providers, tools, events). |
-| `IHarborServer.cs` | Host-side interface (`StartAsync` / `StopAsync` / `IsRunning`). |
-| `IPipeTransport.cs` | Transport abstraction (Named Pipe on Windows, Unix Domain Socket on Linux/Mac). |
-| `HarborEvent.cs` | 11-case discriminated union of streaming events (simplified, wire-stable projection of `AgentEvent`). |
-| `HarborEventMapping.cs` | Bidirectional mapping `HarborEvent ↔ HarborEventData` (wire DTO). |
-| `Protocol/HarborRequest.cs` | MessagePack `[Union]` of all request types (StartAgent, SendPrompt, CreateSession, ListTools, ...). |
-| `Protocol/HarborResponse.cs` | MessagePack `[Union]` of three response shapes: `OkResponse`, `ErrorResponse`, `EventEnvelope`. |
-| `Protocol/HarborEventData.cs` | MessagePack `[Union]` of event wire DTOs (mirror of `HarborEvent`). |
-| `Protocol/WireCodec.cs` | Length-prefixed MessagePack framing + `SerializeDomain<T>` / `DeserializeDomain<T>` helpers. |
+| File                          | Purpose                                                                                               |
+|-------------------------------|-------------------------------------------------------------------------------------------------------|
+| `IHarborClient.cs`            | Client interface every UI talks to (agent, sessions, providers, tools, events).                       |
+| `IHarborServer.cs`            | Host-side interface (`StartAsync` / `StopAsync` / `IsRunning`).                                       |
+| `IPipeTransport.cs`           | Transport abstraction (Named Pipe on Windows, Unix Domain Socket on Linux/Mac).                       |
+| `HarborEvent.cs`              | 11-case discriminated union of streaming events (simplified, wire-stable projection of `AgentEvent`). |
+| `HarborEventMapping.cs`       | Bidirectional mapping `HarborEvent ↔ HarborEventData` (wire DTO).                                     |
+| `Protocol/HarborRequest.cs`   | MessagePack `[Union]` of all request types (StartAgent, SendPrompt, CreateSession, ListTools, ...).   |
+| `Protocol/HarborResponse.cs`  | MessagePack `[Union]` of three response shapes: `OkResponse`, `ErrorResponse`, `EventEnvelope`.       |
+| `Protocol/HarborEventData.cs` | MessagePack `[Union]` of event wire DTOs (mirror of `HarborEvent`).                                   |
+| `Protocol/WireCodec.cs`       | Length-prefixed MessagePack framing + `SerializeDomain<T>` / `DeserializeDomain<T>` helpers.          |
 
 ## Wire format
 
@@ -30,9 +30,9 @@ Payload is one of:
 
 - `HarborRequest` (client → server)
 - `HarborResponse` (server → client), which is one of:
-  - `OkResponse` — with optional MessagePack-typeless `Payload` bytes (domain object)
-  - `ErrorResponse` — with `Message` string
-  - `EventEnvelope` — with `EventBytes` (a serialized `HarborEventData` union member)
+    - `OkResponse` — with optional MessagePack-typeless `Payload` bytes (domain object)
+    - `ErrorResponse` — with `Message` string
+    - `EventEnvelope` — with `EventBytes` (a serialized `HarborEventData` union member)
 
 ## Why parallel DTOs?
 

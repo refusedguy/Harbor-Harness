@@ -3,14 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Provider browser code-behind. Loads providers on first visibility —
-/// NOT on <c>AttachedToVisualTree</c> — because this view is always in the
-/// main window's visual tree (just hidden via IsProviderBrowserOpen).
-/// Loading on attach would block the UI for ~30s on a missing Ollama.
+///     NOT on <c>AttachedToVisualTree</c> — because this view is always in the
+///     main window's visual tree (just hidden via IsProviderBrowserOpen).
+///     Loading on attach would block the UI for ~30s on a missing Ollama.
 /// </summary>
 public partial class ProviderBrowserView : UserControl
 {
@@ -49,17 +47,14 @@ public partial class ProviderBrowserView : UserControl
         if (change.Property == IsVisibleProperty
             && change.NewValue is true
             && !_loadedOnce
-            && DataContext is ProviderBrowserViewModel vm)
+            && this.DataContext is ProviderBrowserViewModel vm)
         {
             _loadedOnce = true;
             _ = vm.LoadProvidersCommand.ExecuteAsync(null);
         }
     }
 
-    private void Close_Click(object? sender, RoutedEventArgs e)
-    {
-        CloseModal();
-    }
+    private void Close_Click(object? sender, RoutedEventArgs e) => CloseModal();
 
     /// <summary>
     ///     Click on the backdrop (the dark scrim outside the card) closes the
@@ -83,7 +78,7 @@ public partial class ProviderBrowserView : UserControl
 
     private void Provider_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (DataContext is ProviderBrowserViewModel vm && vm.SelectedProvider is not null)
+        if (this.DataContext is ProviderBrowserViewModel vm && vm.SelectedProvider is not null)
         {
             _ = vm.LoadModelsCommand.ExecuteAsync(vm.SelectedProvider);
         }

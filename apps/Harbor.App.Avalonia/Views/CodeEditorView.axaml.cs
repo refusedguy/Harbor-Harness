@@ -1,15 +1,16 @@
+using System.ComponentModel;
+using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Data.Converters;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using Harbor.App.Avalonia.ViewModels;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
-///     Code editor view code-behind. Hosts the <see cref="TextEditor"/> from AvaloniaEdit
+///     Code editor view code-behind. Hosts the <see cref="TextEditor" /> from AvaloniaEdit
 ///     and syncs the active tab's content + syntax-highlighting definition when the
-///     <see cref="CodeEditorViewModel.ActiveTab"/> changes.
+///     <see cref="CodeEditorViewModel.ActiveTab" /> changes.
 /// </summary>
 public partial class CodeEditorView : UserControl
 {
@@ -22,10 +23,10 @@ public partial class CodeEditorView : UserControl
     {
         InitializeComponent();
         Editor.TextChanged += OnEditorTextChanged;
-        DataContextChanged += OnDataContextChanged;
+        this.DataContextChanged += OnDataContextChanged;
     }
 
-    private CodeEditorViewModel? Vm => DataContext as CodeEditorViewModel;
+    private CodeEditorViewModel? Vm => this.DataContext as CodeEditorViewModel;
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
@@ -40,7 +41,7 @@ public partial class CodeEditorView : UserControl
         ApplyTab(vm.ActiveTab);
     }
 
-    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(CodeEditorViewModel.ActiveTab))
         {
@@ -85,31 +86,31 @@ public partial class CodeEditorView : UserControl
 }
 
 /// <summary>Converts null to true (inverse of ObjectNotNullConverter).</summary>
-public sealed class ObjectIsNullConverter : global::Avalonia.Data.Converters.IValueConverter
+public sealed class ObjectIsNullConverter : IValueConverter
 {
     /// <summary>Singleton instance.</summary>
     public static readonly ObjectIsNullConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is null;
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
 
 /// <summary>Converts non-null to true.</summary>
-public sealed class ObjectNotNullConverter : global::Avalonia.Data.Converters.IValueConverter
+public sealed class ObjectNotNullConverter : IValueConverter
 {
     /// <summary>Singleton instance.</summary>
     public static readonly ObjectNotNullConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is not null;
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }

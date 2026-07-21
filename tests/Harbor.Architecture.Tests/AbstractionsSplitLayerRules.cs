@@ -20,13 +20,10 @@
 // These tests enforce that the dependency direction stays clean across future
 // edits.
 
-using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
-
 namespace Harbor.Architecture.Tests;
-
 /// <summary>
 ///     Layer-dependency rules for the Harbor.Abstractions god-project split
 ///     (Task A1). See file header for the canonical allowed/forbidden matrix.
@@ -41,8 +38,11 @@ namespace Harbor.Architecture.Tests;
 ///     </para>
 ///     <para>
 ///         <b>Namespaces preserved:</b> the moved files keep their original
-///         <c>namespace Harbor.Abstractions.{Models,Events,Permissions,
-///         Models.Identifiers,Extensions};</c> declarations so consumer code
+///         <c>
+///             namespace Harbor.Abstractions.{Models,Events,Permissions,
+///             Models.Identifiers,Extensions};
+///         </c>
+///         declarations so consumer code
 ///         keeps compiling without <c>using</c> changes. The tests probe by
 ///         assembly (via <c>typeof(...).Assembly</c>), not by namespace.
 ///     </para>
@@ -81,7 +81,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     // The set of Harbor assemblies that Harbor.Extensions must NOT reference
@@ -115,7 +115,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     // The set of Harbor assemblies that Harbor.Abstractions (the thin facade)
@@ -149,7 +149,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     /// <summary>

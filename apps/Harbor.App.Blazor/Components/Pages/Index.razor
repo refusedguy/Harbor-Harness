@@ -1,5 +1,4 @@
 @page "/"
-@using Harbor.App.Blazor.ViewModels
 @inject ChatViewModel Chat
 @inject ToastService Toasts
 
@@ -36,15 +35,30 @@
 </div>
 
 <style>
-    .page-home { max-width: 960px; margin: 0 auto; padding: var(--space-6); }
-    .page-home h1 { font-size: var(--font-size-3xl); color: var(--accent); margin: 0 0 var(--space-2); }
-    .tagline { color: var(--text-dim); margin-bottom: var(--space-6); }
+    .page-home {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: var(--space-6);
+    }
+
+    .page-home h1 {
+        font-size: var(--font-size-3xl);
+        color: var(--accent);
+        margin: 0 0 var(--space-2);
+    }
+
+    .tagline {
+        color: var(--text-dim);
+        margin-bottom: var(--space-6);
+    }
+
     .quick-actions {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: var(--space-4);
         margin-bottom: var(--space-6);
     }
+
     .card {
         background: var(--bg-elevated);
         border: 1px solid var(--border);
@@ -56,10 +70,26 @@
         flex-direction: column;
         gap: var(--space-1);
     }
-    .card .card-icon { font-size: 28px; }
-    .card .card-title { font-weight: 700; color: var(--accent); }
-    .card .card-sub { color: var(--text-dim); font-size: var(--font-size-sm); }
-    .hint { color: var(--text-faint); font-size: var(--font-size-sm); }
+
+    .card .card-icon {
+        font-size: 28px;
+    }
+
+    .card .card-title {
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .card .card-sub {
+        color: var(--text-dim);
+        font-size: var(--font-size-sm);
+    }
+
+    .hint {
+        color: var(--text-faint);
+        font-size: var(--font-size-sm);
+    }
+
     kbd {
         background: var(--panel);
         padding: 2px 6px;
@@ -71,8 +101,8 @@
 </style>
 
 @code {
-    protected override async Task OnInitializedAsync()
-    {
-        await Toasts.InfoAsync("Welcome to Harbor Blazor", "Demo shell").ConfigureAwait(false);
-    }
+protected override async Task OnInitializedAsync()
+{
+    await Toasts.InfoAsync("Welcome to Harbor Blazor", "Demo shell").ConfigureAwait(false);
+}
 }

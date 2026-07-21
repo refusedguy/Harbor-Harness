@@ -12,6 +12,7 @@
         ## Args schema
 
         | Field | Type | Description |
+
 |-------|------|-------------|
 | `pattern` | string | Required. Regex pattern. |
 | `path` | string | Optional. Root directory. Defaults to cwd. |
@@ -21,7 +22,9 @@
         ## Example usage
 
         ```json
+
 {"pattern":"TODO\\([^)]+\\)","path":"src","include":"*.cs"}
+
 ```
 
         ## Dependencies

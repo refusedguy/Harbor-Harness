@@ -12,36 +12,36 @@
 // canonical allowed/forbidden ProjectReference matrix that these tests
 // enforce.
 
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Models;
-using Harbor.Core.Agents;        // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
-using Harbor.Core.Tools;        // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
+using Harbor.Core.Agents;
+using Harbor.Core.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Scripting.Abstractions;
-using Harbor.Scripting.Bridge;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
-using Harbor.Ui.Framework.State;
+using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Tui.RazorConsole;
 using Harbor.Tui.Spectre;
 using Harbor.Tui.Spectre.Fullscreen;
+using Harbor.Tui.Termina;
 using Harbor.Tui.TerminalGui;
+using Harbor.Ui.Framework.State;
+using NetArchTest.Rules;
+// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
+// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
 // Use a using-alias to disambiguate the two SpectreTuiRenderer types
 // (Harbor.Tui.Spectre.SpectreTuiRenderer vs Harbor.Tui.SpectreTui.SpectreTuiRenderer).
 using SpectreTuiProjectRenderer = Harbor.Tui.SpectreTui.SpectreTuiRenderer;
-using Harbor.Tui.Termina;
-using Harbor.Tools.Builtin;
-using NetArchTest.Rules;
+using TestResult = NetArchTest.Rules.TestResult;
 
 namespace Harbor.Architecture.Tests;
-
 /// <summary>
 ///     NetArchTest-based layer dependency rules — mirrors
 ///     <see cref="LayerDependencyTests" /> using the fluent
@@ -85,7 +85,7 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli",
+        "Harbor.Cli"
     ];
 
     // The full list of Harbor assemblies that are NOT in the Infrastructure
@@ -108,7 +108,29 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Jsonl",
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
+        "Harbor.Tools.Builtin"
+    ];
+
+    // The list of Harbor assemblies that the Presentation layer (Tui.*
+    // concrete renderers) must NOT reference (Application + Infrastructure +
+    // Cli). Harbor.Application and Harbor.Registries are Application-layer
+    // assemblies that Presentation must also not reach into.
+    private static readonly string[] ForbiddenForPresentation =
+    [
+        "Harbor.Core",
+        "Harbor.Application",
+        "Harbor.Registries",
+        "Harbor.Plugins.Runtime",
+        "Harbor.Scripting",
+        "Harbor.Providers.OpenAiCompatible",
+        "Harbor.Providers.Anthropic",
+        "Harbor.Providers.OpenAI",
+        "Harbor.Providers.Ollama",
+        "Harbor.Storage.Jsonl",
+        "Harbor.Storage.Memory",
+        "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
+        "Harbor.Cli"
     ];
 
     /// <summary>
@@ -259,9 +281,9 @@ public sealed class NetArchLayerRules
         // Load the Harbor.Core assembly explicitly via the helper.
         var assemblies = ArchitectureTestHelpers.LoadHarborAssemblies();
         var asm = assemblies["Harbor.Core"]
-            ?? throw new InvalidOperationException(
-                "Harbor.Core assembly was not loaded into the AppDomain; " +
-                "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
+                  ?? throw new InvalidOperationException(
+                      "Harbor.Core assembly was not loaded into the AppDomain; " +
+                      "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
         var types = Types.InAssembly(asm);
         var result = types
             .Should()
@@ -289,9 +311,9 @@ public sealed class NetArchLayerRules
     {
         var assemblies = ArchitectureTestHelpers.LoadHarborAssemblies();
         var asm = assemblies["Harbor.Core"]
-            ?? throw new InvalidOperationException(
-                "Harbor.Core assembly was not loaded into the AppDomain; " +
-                "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
+                  ?? throw new InvalidOperationException(
+                      "Harbor.Core assembly was not loaded into the AppDomain; " +
+                      "the test project's ProjectReference to Harbor.Core.csproj may be missing.");
         var types = Types.InAssembly(asm);
         var result = types
             .Should()
@@ -586,10 +608,10 @@ public sealed class NetArchLayerRules
         {
             typeof(Session).Assembly,
             typeof(UiStore).Assembly,
-            typeof(AgentLoop).Assembly,              // Harbor.Application.dll (post-split)
-            typeof(InMemoryMcpRegistry).Assembly,    // Harbor.Registries.dll (post-split)
+            typeof(AgentLoop).Assembly, // Harbor.Application.dll (post-split)
+            typeof(InMemoryMcpRegistry).Assembly, // Harbor.Registries.dll (post-split)
             ArchitectureTestHelpers.LoadHarborAssemblies()["Harbor.Core"]
-                ?? throw new InvalidOperationException("Harbor.Core assembly not loaded"),
+            ?? throw new InvalidOperationException("Harbor.Core assembly not loaded"),
             typeof(PluginHost).Assembly,
             typeof(ScriptGlobals).Assembly,
             typeof(OpenAiCompatibleLlmClient).Assembly,
@@ -606,38 +628,16 @@ public sealed class NetArchLayerRules
             typeof(FullscreenTuiRenderer).Assembly,
             typeof(TerminalGuiRenderer).Assembly,
             typeof(TerminaRenderer).Assembly,
-            typeof(RazorConsoleRenderer).Assembly,
+            typeof(RazorConsoleRenderer).Assembly
         };
         foreach (var asm in assemblies)
         {
-            var count = Types.InAssembly(asm).GetTypes().Count();
+            int count = Types.InAssembly(asm).GetTypes().Count();
             await Assert.That(count).IsGreaterThan(0);
         }
     }
 
-    // The list of Harbor assemblies that the Presentation layer (Tui.*
-    // concrete renderers) must NOT reference (Application + Infrastructure +
-    // Cli). Harbor.Application and Harbor.Registries are Application-layer
-    // assemblies that Presentation must also not reach into.
-    private static readonly string[] ForbiddenForPresentation =
-    [
-        "Harbor.Core",
-        "Harbor.Application",
-        "Harbor.Registries",
-        "Harbor.Plugins.Runtime",
-        "Harbor.Scripting",
-        "Harbor.Providers.OpenAiCompatible",
-        "Harbor.Providers.Anthropic",
-        "Harbor.Providers.OpenAI",
-        "Harbor.Providers.Ollama",
-        "Harbor.Storage.Jsonl",
-        "Harbor.Storage.Memory",
-        "Harbor.Storage.Sqlite",
-        "Harbor.Tools.Builtin",
-        "Harbor.Cli",
-    ];
-
-    private static NetArchTest.Rules.TestResult BuildNoDependencyResult(Types types, params string[] forbidden)
+    private static TestResult BuildNoDependencyResult(Types types, params string[] forbidden)
     {
         if (forbidden.Length == 0)
         {

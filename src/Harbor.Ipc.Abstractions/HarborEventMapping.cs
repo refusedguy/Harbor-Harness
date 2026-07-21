@@ -1,7 +1,6 @@
+using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
-
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Helpers for converting between the rich domain <see cref="HarborEvent" />
 ///     hierarchy and the MessagePack [Union] <see cref="HarborEventData" />
@@ -49,14 +48,14 @@ public static class HarborEventMapping
     {
         HarborEventAgentStarted e => new HarborEvent.AgentStarted(e.SessionId),
         HarborEventMessageUpdate e => new HarborEvent.MessageUpdate(
-            WireCodec.DeserializeDomain<Harbor.Abstractions.Models.AssistantMessage>(e.PartialBytes)!,
+            WireCodec.DeserializeDomain<AssistantMessage>(e.PartialBytes)!,
             e.Delta),
         HarborEventMessageEnd e => new HarborEvent.MessageEnd(
-            WireCodec.DeserializeDomain<Harbor.Abstractions.Models.AssistantMessage>(e.FinalBytes)!),
+            WireCodec.DeserializeDomain<AssistantMessage>(e.FinalBytes)!),
         HarborEventToolStart e => new HarborEvent.ToolStart(e.ToolCallId, e.ToolName),
         HarborEventToolEnd e => new HarborEvent.ToolEnd(
             e.ToolCallId,
-            WireCodec.DeserializeDomain<Harbor.Abstractions.Models.ToolResult>(e.ResultBytes)!),
+            WireCodec.DeserializeDomain<ToolResult>(e.ResultBytes)!),
         HarborEventTurnStart e => new HarborEvent.TurnStart(e.Turn),
         HarborEventTurnEnd e => new HarborEvent.TurnEnd(e.Turn),
         HarborEventAgentEnded e => new HarborEvent.AgentEnded(e.SessionId),

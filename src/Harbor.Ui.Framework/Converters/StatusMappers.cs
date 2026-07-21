@@ -1,5 +1,7 @@
+using System.Globalization;
+using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.ViewModels;
 namespace Harbor.Ui.Framework.Converters;
-
 /// <summary>
 ///     Platform-agnostic helpers that map view-model state to resource
 ///     keys / display strings. UI frameworks (Avalonia / WPF / MAUI /
@@ -17,7 +19,7 @@ namespace Harbor.Ui.Framework.Converters;
 ///         one-line change.
 ///     </para>
 ///     <para>
-///         <b>Convention:</b> every method returns a <see cref="string"/>
+///         <b>Convention:</b> every method returns a <see cref="string" />
 ///         that's either a resource key (suffix <c>BrushKey</c>) or a
 ///         human-readable label. Resource keys are resolved to actual
 ///         brushes by the framework's <c>BrushKeyConverter</c>-equivalent.
@@ -41,26 +43,26 @@ public static class StatusMappers
     };
 
     /// <summary>
-    ///     Map a <see cref="ViewModels.ToolCallStatus"/> to the resource
+    ///     Map a <see cref="ViewModels.ToolCallStatus" /> to the resource
     ///     key for the tool-call pill background brush.
     /// </summary>
-    public static string ToolCallStatusToBrushKey(ViewModels.ToolCallStatus status) => status switch
+    public static string ToolCallStatusToBrushKey(ToolCallStatus status) => status switch
     {
-        ViewModels.ToolCallStatus.Running => "MochaYellow",
-        ViewModels.ToolCallStatus.Success => "MochaGreen",
-        ViewModels.ToolCallStatus.Error => "MochaRed",
+        ToolCallStatus.Running => "MochaYellow",
+        ToolCallStatus.Success => "MochaGreen",
+        ToolCallStatus.Error => "MochaRed",
         _ => "MochaOverlay2"
     };
 
     /// <summary>
-    ///     Map a <see cref="ViewModels.ToolCallStatus"/> to a short pill
+    ///     Map a <see cref="ViewModels.ToolCallStatus" /> to a short pill
     ///     label ("running" / "ok" / "err").
     /// </summary>
-    public static string ToolCallStatusToPill(ViewModels.ToolCallStatus status) => status switch
+    public static string ToolCallStatusToPill(ToolCallStatus status) => status switch
     {
-        ViewModels.ToolCallStatus.Running => "running",
-        ViewModels.ToolCallStatus.Success => "ok",
-        ViewModels.ToolCallStatus.Error => "err",
+        ToolCallStatus.Running => "running",
+        ToolCallStatus.Success => "ok",
+        ToolCallStatus.Error => "err",
         _ => "?"
     };
 
@@ -68,12 +70,12 @@ public static class StatusMappers
     ///     Map a session <c>SessionStatus</c> enum (idle / working / done
     ///     / error / aborted) to a short display label.
     /// </summary>
-    public static string SessionStatusToText(Harbor.Abstractions.Models.SessionStatus status) => status switch
+    public static string SessionStatusToText(SessionStatus status) => status switch
     {
-        Harbor.Abstractions.Models.SessionStatus.Working => "working",
-        Harbor.Abstractions.Models.SessionStatus.Done => "done",
-        Harbor.Abstractions.Models.SessionStatus.Error => "error",
-        Harbor.Abstractions.Models.SessionStatus.Aborted => "aborted",
+        SessionStatus.Working => "working",
+        SessionStatus.Done => "done",
+        SessionStatus.Error => "error",
+        SessionStatus.Aborted => "aborted",
         _ => "idle"
     };
 
@@ -81,18 +83,18 @@ public static class StatusMappers
     ///     Map a session <c>SessionStatus</c> to the resource key for the
     ///     status-dot brush (used by the session list row).
     /// </summary>
-    public static string SessionStatusToBrushKey(Harbor.Abstractions.Models.SessionStatus status) => status switch
+    public static string SessionStatusToBrushKey(SessionStatus status) => status switch
     {
-        Harbor.Abstractions.Models.SessionStatus.Working => "MochaYellow",
-        Harbor.Abstractions.Models.SessionStatus.Done => "MochaGreen",
-        Harbor.Abstractions.Models.SessionStatus.Error => "MochaRed",
-        Harbor.Abstractions.Models.SessionStatus.Aborted => "MochaOverlay2",
+        SessionStatus.Working => "MochaYellow",
+        SessionStatus.Done => "MochaGreen",
+        SessionStatus.Error => "MochaRed",
+        SessionStatus.Aborted => "MochaOverlay2",
         _ => "MochaOverlay0"
     };
 
     /// <summary>
     ///     Format a duration as a compact ms/s string. Returns
-    ///     <see cref="string.Empty"/> for sub-millisecond values (so the
+    ///     <see cref="string.Empty" /> for sub-millisecond values (so the
     ///     duration column hides for instantaneous tool calls).
     /// </summary>
     public static string DurationToText(TimeSpan duration) => duration.TotalMilliseconds < 1
@@ -104,8 +106,8 @@ public static class StatusMappers
     /// <summary>
     ///     Format a UTC timestamp as a relative "time ago" string
     ///     ("just now" / "5m ago" / "2h ago" / "3d ago" / "Mar 5").
-    ///     Returns <see cref="string.Empty"/> if <paramref name="utc"/>
-    ///     is null or <see cref="DateTime.MinValue"/>.
+    ///     Returns <see cref="string.Empty" /> if <paramref name="utc" />
+    ///     is null or <see cref="DateTime.MinValue" />.
     /// </summary>
     public static string TimeAgo(DateTime? utc)
     {
@@ -136,6 +138,6 @@ public static class StatusMappers
     ///     "$0.0000" for zero/negative.
     /// </summary>
     public static string CostToUsd(decimal costUsd) =>
-        (costUsd < 0 ? 0m : costUsd).ToString("C4", System.Globalization.CultureInfo.InvariantCulture)
-            .Replace("¤", "$");
+        (costUsd < 0 ? 0m : costUsd).ToString("C4", CultureInfo.InvariantCulture)
+        .Replace("¤", "$");
 }

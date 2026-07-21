@@ -1,33 +1,26 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Avalonia.Media;
 using Harbor.App.Avalonia.Services;
-using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views.Controls;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
 using ToastNotification = Harbor.Ui.Framework.Services.ToastNotification;
 using ToastKind = Harbor.Ui.Framework.Services.ToastKind;
 
 namespace Harbor.App.Avalonia.Tests;
-
 /// <summary>
 ///     Unit tests for the Task R1 killer-feature controls. Covers:
 ///     <list type="bullet">
-///         <item><see cref="Sparkline"/> — empty / single / multi-point inputs.</item>
-///         <item><see cref="ToolCallViewModel"/> — status pill, duration text, brush.</item>
-///         <item><see cref="TypewriterStreamingText"/> — IsStreaming → cursor visibility.</item>
-///         <item><see cref="TokenUsageViewModel"/> — RecentOutputTokens capping.</item>
+///         <item><see cref="Sparkline" /> — empty / single / multi-point inputs.</item>
+///         <item><see cref="ToolCallViewModel" /> — status pill, duration text, brush.</item>
+///         <item><see cref="TypewriterStreamingText" /> — IsStreaming → cursor visibility.</item>
+///         <item><see cref="TokenUsageViewModel" /> — RecentOutputTokens capping.</item>
 ///     </list>
 /// </summary>
 /// <remarks>
 ///     These tests do NOT require a running Avalonia application — they
 ///     exercise pure view-model logic and dependency-property defaults.
-///     The <see cref="Sparkline"/> render path is covered by a smoke
+///     The <see cref="Sparkline" /> render path is covered by a smoke
 ///     test that ensures <c>Render</c> doesn't throw on edge-case inputs
 ///     (empty, single point, all-equal).
 /// </remarks>
@@ -78,7 +71,7 @@ public class KillerFeatureTests
         var vm = new ToolCallViewModel
         {
             ToolName = "read",
-            IconText = "📖",
+            IconText = "📖"
         };
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Running);
         await Assert.That(vm.StatusPill).IsEqualTo("running");
@@ -92,12 +85,12 @@ public class KillerFeatureTests
         var vm = new ToolCallViewModel
         {
             ToolName = "bash",
-            IconText = "🖥️",
+            IconText = "🖥️"
         };
         vm.Complete(
-            status: ToolCallStatus.Success,
-            resultPreview: "exit code 0",
-            duration: TimeSpan.FromMilliseconds(234));
+            ToolCallStatus.Success,
+            "exit code 0",
+            TimeSpan.FromMilliseconds(234));
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Success);
         await Assert.That(vm.StatusPill).IsEqualTo("ok");
         await Assert.That(vm.DurationText).IsEqualTo("234ms");
@@ -109,9 +102,9 @@ public class KillerFeatureTests
     {
         var vm = new ToolCallViewModel { ToolName = "edit" };
         vm.Complete(
-            status: ToolCallStatus.Error,
-            resultPreview: "permission denied",
-            duration: TimeSpan.FromSeconds(1.5));
+            ToolCallStatus.Error,
+            "permission denied",
+            TimeSpan.FromSeconds(1.5));
         await Assert.That(vm.Status).IsEqualTo(ToolCallStatus.Error);
         await Assert.That(vm.StatusPill).IsEqualTo("err");
         await Assert.That(vm.DurationText).IsEqualTo("1.5s");
@@ -183,14 +176,14 @@ public class KillerFeatureTests
     [Test]
     public async Task TokenUsageViewModel_RecentOutputTokens_StartsEmpty()
     {
-        var vm = new TokenUsageViewModel(Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenUsageViewModel>.Instance);
+        var vm = new TokenUsageViewModel(NullLogger<TokenUsageViewModel>.Instance);
         await Assert.That(vm.RecentOutputTokens.Count).IsEqualTo(0);
     }
 
     [Test]
     public async Task TokenUsageViewModel_RecentOutputTokens_CapsAt30()
     {
-        var vm = new TokenUsageViewModel(Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenUsageViewModel>.Instance);
+        var vm = new TokenUsageViewModel(NullLogger<TokenUsageViewModel>.Instance);
         // Simulate 50 turns — only the last 30 should remain.
         // Each turn increments TokensOut by 100, so the per-turn delta
         // (what the sparkline tracks) is always 100.
@@ -198,7 +191,7 @@ public class KillerFeatureTests
         {
             var state = new UiState
             {
-                Cost = new CostSnapshot(TokensIn: 0, TokensOut: i * 100, CostUsd: 0m),
+                Cost = new CostSnapshot(0, i * 100, 0m)
             };
             vm.RecordUsage(state);
         }
@@ -211,7 +204,7 @@ public class KillerFeatureTests
     [Test]
     public async Task TokenUsageViewModel_Clear_ResetsRecentOutputTokens()
     {
-        var vm = new TokenUsageViewModel(Microsoft.Extensions.Logging.Abstractions.NullLogger<TokenUsageViewModel>.Instance);
+        var vm = new TokenUsageViewModel(NullLogger<TokenUsageViewModel>.Instance);
         vm.RecordUsage(new UiState { Cost = new CostSnapshot(0, 100, 0m) });
         vm.ClearCommand.Execute(null);
         await Assert.That(vm.RecentOutputTokens.Count).IsEqualTo(0);
@@ -232,7 +225,7 @@ public class KillerFeatureTests
     public async Task ToastService_Show_RaisesToastAddedWithPayload()
     {
         var svc = new ToastService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<ToastService>.Instance);
+            NullLogger<ToastService>.Instance);
         ToastNotification? captured = null;
         svc.ToastAdded += (_, t) => captured = t;
 
@@ -249,7 +242,7 @@ public class KillerFeatureTests
     public async Task ToastService_Show_DefaultKind_IsInfo()
     {
         var svc = new ToastService(
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<ToastService>.Instance);
+            NullLogger<ToastService>.Instance);
         ToastNotification? captured = null;
         svc.ToastAdded += (_, t) => captured = t;
 

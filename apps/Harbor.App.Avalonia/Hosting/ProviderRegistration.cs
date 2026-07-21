@@ -1,20 +1,15 @@
 using Harbor.Abstractions.Providers;
-using Harbor.Core.Configuration;
-using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Hosting;
-
 /// <summary>
 ///     Provider registration — Ollama (native client, works offline) +
 ///     all OpenAI-compatible providers discovered from
 ///     <c>providers/*.json</c> (Kilocode, OpenRouter, DeepSeek, Groq,
 ///     Mistral, xAI, Together, Fireworks, Cerebras, OpenAI, vLLM). Also
-///     registers the <see cref="IAuthResolver"/> + <see cref="IModelCatalog"/>
+///     registers the <see cref="IAuthResolver" /> + <see cref="IModelCatalog" />
 ///     singletons that the providers + view-models depend on.
 /// </summary>
 /// <remarks>
@@ -25,14 +20,14 @@ namespace Harbor.App.Avalonia.Hosting;
 internal static class ProviderRegistration
 {
     /// <summary>
-    ///     Build the <see cref="ProviderRegistry"/> eagerly with the Ollama
+    ///     Build the <see cref="ProviderRegistry" /> eagerly with the Ollama
     ///     native client + every discovered OpenAI-compatible JSON provider.
     ///     The returned registry is registered as a singleton by the caller.
     /// </summary>
     /// <param name="loggerFactory">Bootstrap logger factory (must outlive the host build).</param>
     /// <param name="authResolver">The auth resolver (used by OpenAI-compatible clients).</param>
     /// <param name="modelCatalog">The model catalog (used by OpenAI-compatible clients).</param>
-    /// <returns>The constructed + frozen <see cref="ProviderRegistry"/>.</returns>
+    /// <returns>The constructed + frozen <see cref="ProviderRegistry" />.</returns>
     public static ProviderRegistry Build(
         ILoggerFactory loggerFactory,
         IAuthResolver authResolver,
@@ -48,7 +43,7 @@ internal static class ProviderRegistration
                 // Ollama isn't running. The ProviderBrowserViewModel adds its
                 // own 5s cancellation token on top, so a missing Ollama is
                 // surfaced as a quick "no models" rather than a 100s hang.
-                Timeout = TimeSpan.FromSeconds(10),
+                Timeout = TimeSpan.FromSeconds(10)
             },
             new OllamaConfig(),
             loggerFactory.CreateLogger<OllamaLlmClient>()));

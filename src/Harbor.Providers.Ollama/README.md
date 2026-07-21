@@ -11,7 +11,6 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 - `Harbor.Abstractions` (Domain)
 - `Microsoft.Extensions.Logging.Abstractions`
 
-
 ## Public API
 
 - `OllamaLlmClient` — implements `ILlmClient` from Harbor.Abstractions

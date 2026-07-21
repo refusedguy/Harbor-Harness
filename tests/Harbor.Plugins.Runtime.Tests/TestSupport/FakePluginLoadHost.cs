@@ -6,26 +6,24 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Terminal.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
-
 /// <summary>
 ///     In-memory <see cref="IPluginLoadHost" /> for tests. Captures all Register* calls
 ///     so tests can assert on them. Thread-safe via ConcurrentDictionary / locks.
 /// </summary>
 public sealed class FakePluginLoadHost : IPluginLoadHost
 {
-    private readonly ConcurrentDictionary<string, ITool> _tools = new();
-    private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
     private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
-    private readonly List<ITuiPlugin> _tuiPlugins = new();
     private readonly List<IPanelProvider> _panelProviders = new();
-    private readonly IEventBus _eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
+    private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
+    private readonly ConcurrentDictionary<string, ITool> _tools = new();
+    private readonly List<ITuiPlugin> _tuiPlugins = new();
 
     /// <summary>Initialize the fake host with empty registries.</summary>
     public FakePluginLoadHost()
@@ -34,18 +32,6 @@ public sealed class FakePluginLoadHost : IPluginLoadHost
         Configuration = new ConfigurationBuilder().Build();
         LoggerFactory = NullLoggerFactory.Instance;
     }
-
-    /// <inheritdoc />
-    public IServiceCollection Services { get; }
-
-    /// <inheritdoc />
-    public IConfiguration Configuration { get; }
-
-    /// <inheritdoc />
-    public ILoggerFactory LoggerFactory { get; }
-
-    /// <inheritdoc />
-    public IEventBus EventBus => _eventBus;
 
     /// <summary>All tools registered via <see cref="RegisterTool" />.</summary>
     public IReadOnlyList<ITool> RegisteredTools => _tools.Values.ToArray();
@@ -59,14 +45,35 @@ public sealed class FakePluginLoadHost : IPluginLoadHost
     /// <summary>All TUI plugins registered via <see cref="RegisterTuiPlugin" />.</summary>
     public IReadOnlyList<ITuiPlugin> RegisteredTuiPlugins
     {
-        get { lock (_tuiPlugins) { return _tuiPlugins.ToArray(); } }
+        get
+        {
+            lock (_tuiPlugins) { return _tuiPlugins.ToArray(); }
+        }
     }
 
     /// <summary>All panel providers registered via <see cref="RegisterPanelProvider" />.</summary>
     public IReadOnlyList<IPanelProvider> RegisteredPanelProviders
     {
-        get { lock (_panelProviders) { return _panelProviders.ToArray(); } }
+        get
+        {
+            lock (_panelProviders) { return _panelProviders.ToArray(); }
+        }
     }
+
+    /// <inheritdoc />
+    public IServiceCollection Services { get; }
+
+    /// <inheritdoc />
+    public IConfiguration Configuration { get; }
+
+    /// <inheritdoc />
+    public ILoggerFactory LoggerFactory { get; }
+
+    /// <inheritdoc />
+    public IEventBus EventBus
+    {
+        get;
+    } = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
     /// <inheritdoc />
     public Result RegisterTool(ITool tool)

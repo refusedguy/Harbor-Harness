@@ -7,7 +7,7 @@
     <ItemsControl ItemsSource="{Binding Toasts}">
         <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
-                <StackPanel Orientation="Vertical"/>
+                <StackPanel Orientation="Vertical" />
             </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
@@ -22,20 +22,20 @@
                         HorizontalAlignment="Right"
                         RenderTransformOrigin="1,0">
                     <Border.RenderTransform>
-                        <TranslateTransform X="0" Y="0"/>
+                        <TranslateTransform X="0" Y="0" />
                     </Border.RenderTransform>
                     <Border.Effect>
-                        <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="2" Opacity="0.5"/>
+                        <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="2" Opacity="0.5" />
                     </Border.Effect>
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}"
                                    Foreground="{Binding AccentBrush}"
                                    FontSize="16" FontWeight="Bold"
-                                   VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
                         <TextBlock Text="{Binding Message}"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource App.Text}"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center" />
                     </DockPanel>
                 </Border>
             </DataTemplate>

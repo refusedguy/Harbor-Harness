@@ -1,15 +1,27 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Provider + model browser view model. Lists known providers, their
 ///     models, and lets the user pick the active one.
 /// </summary>
 public sealed partial class ProviderBrowserViewModel : ObservableObject
 {
+
+    /// <summary>Chosen model id (set when the user confirms).</summary>
+    [ObservableProperty] private string? _chosenModelId;
+
+    /// <summary>Chosen provider id (set when the user confirms).</summary>
+    [ObservableProperty] private string? _chosenProviderId;
+
+    /// <summary>Selected model.</summary>
+    [ObservableProperty] private ModelEntryViewModel? _selectedModel;
+
+    /// <summary>Selected provider.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedProviderModels))]
+    private ProviderEntryViewModel? _selectedProvider;
     /// <summary>Construct a <see cref="ProviderBrowserViewModel" />.</summary>
     public ProviderBrowserViewModel()
     {
@@ -39,28 +51,11 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     /// <summary>Providers list.</summary>
     public ObservableCollection<ProviderEntryViewModel> Providers { get; }
 
-    /// <summary>Selected provider.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SelectedProviderModels))]
-    private ProviderEntryViewModel? _selectedProvider;
-
     /// <summary>Models for the selected provider.</summary>
     public IReadOnlyList<ModelEntryViewModel> SelectedProviderModels
         => SelectedProvider?.Models ?? Array.Empty<ModelEntryViewModel>();
 
-    /// <summary>Selected model.</summary>
-    [ObservableProperty] private ModelEntryViewModel? _selectedModel;
-
-    /// <summary>Chosen provider id (set when the user confirms).</summary>
-    [ObservableProperty] private string? _chosenProviderId;
-
-    /// <summary>Chosen model id (set when the user confirms).</summary>
-    [ObservableProperty] private string? _chosenModelId;
-
-    partial void OnSelectedProviderChanged(ProviderEntryViewModel? value)
-    {
-        SelectedModel = value is not null && value.Models.Count > 0 ? value.Models[0] : null;
-    }
+    partial void OnSelectedProviderChanged(ProviderEntryViewModel? value) => SelectedModel = value is not null && value.Models.Count > 0 ? value.Models[0] : null;
 
     /// <summary>Confirm the selection and close the dialog.</summary>
     [RelayCommand]

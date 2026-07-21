@@ -110,13 +110,21 @@ public sealed class BashTool : ITool
         process.OutputDataReceived += (_, e) =>
         {
             if (e.Data is null) return;
-            if (stdout.Builder.Length >= MaxOutputChars) { stdoutDropped += e.Data.Length + 1; return; }
+            if (stdout.Builder.Length >= MaxOutputChars)
+            {
+                stdoutDropped += e.Data.Length + 1;
+                return;
+            }
             stdout.Builder.Append(e.Data).Append('\n');
         };
         process.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null) return;
-            if (stderr.Builder.Length >= MaxOutputChars) { stderrDropped += e.Data.Length + 1; return; }
+            if (stderr.Builder.Length >= MaxOutputChars)
+            {
+                stderrDropped += e.Data.Length + 1;
+                return;
+            }
             stderr.Builder.Append(e.Data).Append('\n');
         };
 

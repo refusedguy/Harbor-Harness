@@ -1,8 +1,6 @@
 using System.Windows.Threading;
 using Harbor.Abstractions.Events;
-
 namespace Harbor.App.Wpf.Services;
-
 /// <summary>
 ///     Marshals agent-loop callbacks (which arrive on background threads) onto
 ///     the WPF UI thread via the <see cref="Dispatcher" />. Implements the
@@ -24,6 +22,9 @@ public sealed class WpfDispatcherAdapter : IDisposable
         _dispatcher = Dispatcher.CurrentDispatcher;
         _priority = priority;
     }
+
+    /// <inheritdoc />
+    public void Dispose() => _disposed = true;
 
     /// <summary>
     ///     Get whether the calling thread is the UI thread.
@@ -67,11 +68,5 @@ public sealed class WpfDispatcherAdapter : IDisposable
         if (_disposed) return Task.CompletedTask;
         _dispatcher.BeginInvoke(new Action(() => handler(@event)), _priority);
         return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _disposed = true;
     }
 }

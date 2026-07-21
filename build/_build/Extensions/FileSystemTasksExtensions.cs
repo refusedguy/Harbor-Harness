@@ -1,10 +1,7 @@
-using System.IO;
 using Nuke.Common.IO;
-
 namespace Harbor.Build.Extensions;
-
 /// <summary>
-///     Convenience extension methods for <see cref="AbsolutePath"/> and
+///     Convenience extension methods for <see cref="AbsolutePath" /> and
 ///     related NUKE filesystem tasks. Reduces call-site verbosity in target
 ///     definitions.
 /// </summary>
@@ -12,7 +9,7 @@ public static class FileSystemTasksExtensions
 {
     /// <summary>
     ///     Creates the directory (and any missing parents). No-op if it exists.
-    ///     Uses <see cref="System.IO.Directory.CreateDirectory(string)"/>
+    ///     Uses <see cref="System.IO.Directory.CreateDirectory(string)" />
     ///     directly to avoid the ambiguity with
     ///     <c>FileSystemAclExtensions.CreateDirectory(DirectorySecurity, string)</c>.
     /// </summary>
@@ -24,18 +21,22 @@ public static class FileSystemTasksExtensions
 
     /// <summary>
     ///     Returns the size in bytes of the directory tree rooted at
-    ///     <paramref name="path"/>. Used by the build log to report published
+    ///     <paramref name="path" />. Used by the build log to report published
     ///     artifact sizes.
     /// </summary>
     public static long GetDirectorySizeBytes(this AbsolutePath path)
     {
         if (!Directory.Exists(path)) return 0;
         long total = 0;
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        foreach (string file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
         {
             try { total += new FileInfo(file).Length; }
-            catch (IOException) { /* race — file disappeared */ }
-            catch (UnauthorizedAccessException) { /* skip */ }
+            catch (IOException)
+            { /* race — file disappeared */
+            }
+            catch (UnauthorizedAccessException)
+            { /* skip */
+            }
         }
         return total;
     }
@@ -46,7 +47,7 @@ public static class FileSystemTasksExtensions
     /// </summary>
     public static string GetHumanReadableSize(this AbsolutePath path)
     {
-        var bytes = path.GetDirectorySizeBytes();
+        long bytes = path.GetDirectorySizeBytes();
         return bytes switch
         {
             < 1024L => $"{bytes} B",

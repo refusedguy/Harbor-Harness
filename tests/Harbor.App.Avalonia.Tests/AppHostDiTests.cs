@@ -4,25 +4,17 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Core.Sessions;
-using Harbor.Core.Tools;
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Plugins.Abstractions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
-
 namespace Harbor.App.Avalonia.Tests;
-
 /// <summary>
-///     DI registration tests for <see cref="AppHost.BuildAsync"/>.
+///     DI registration tests for <see cref="AppHost.BuildAsync" />.
 ///     Mirrors Harbor.App.Cli.Tests/HostBuilderDiTests.cs but exercises the
 ///     Avalonia composition root (which wires a subset of services — no MCP,
 ///     no plugins, no Jsonl providers).
@@ -31,11 +23,11 @@ public class AppHostDiTests
 {
     private static readonly Lazy<Task<IHost>> _hostLazy = new(() => AppHost.BuildAsync(Array.Empty<string>()));
 
-    private static async Task<IHost> GetHostAsync() => await _hostLazy.Value;
-
     private static IServiceProvider Services => _hostLazy.Value.IsCompletedSuccessfully
         ? _hostLazy.Value.Result.Services
         : throw new InvalidOperationException("Host not yet built");
+
+    private static async Task<IHost> GetHostAsync() => await _hostLazy.Value;
 
     // NOTE: the previous [After(HookType.Class)] hook disposed the shared host
     // after EACH test (TUnit's HookType.Class runs per-test, not once-per-class
@@ -294,7 +286,7 @@ public class AppHostDiTests
             typeof(AvaloniaConfig),
             typeof(ICommonConfigStore),
             typeof(CommonConfig),
-            typeof(CompositeConfig<AvaloniaConfig>),
+            typeof(CompositeConfig<AvaloniaConfig>)
         };
 
         var missing = new List<Type>();

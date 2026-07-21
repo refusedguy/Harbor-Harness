@@ -6,38 +6,34 @@
 // Reads fall back to the supplied default config when the file is missing or
 // corrupt — never throws for expected IO failures.
 
-using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.Abstractions.Configuration;
-
 /// <summary>
-///     JSON-backed <see cref="IAppConfigStore{T}"/>. Reads and writes the
-///     per-app config file at <see cref="AppConfigBase.ConfigFilePath"/>.
+///     JSON-backed <see cref="IAppConfigStore{T}" />. Reads and writes the
+///     per-app config file at <see cref="AppConfigBase.ConfigFilePath" />.
 /// </summary>
 /// <typeparam name="T">The app-specific config record type.</typeparam>
 /// <remarks>
 ///     <para>
-///         <b>Atomic writes:</b> every <see cref="SaveAsync"/> writes to a
-///         sibling <c>&lt;file&gt;.tmp</c> file then <see cref="File.Move"/>
+///         <b>Atomic writes:</b> every <see cref="SaveAsync" /> writes to a
+///         sibling <c>&lt;file&gt;.tmp</c> file then <see cref="File.Move" />
 ///         (atomic on POSIX, atomic-replace on Windows) into place. A crash
 ///         mid-write leaves the previous file intact.
 ///     </para>
 ///     <para>
-///         <b>Thread safety:</b> a single <see cref="SemaphoreSlim"/> guards
+///         <b>Thread safety:</b> a single <see cref="SemaphoreSlim" /> guards
 ///         every Load/Save/Update, so concurrent calls are serialized.
 ///     </para>
 ///     <para>
-///         <b>Missing file:</b> <see cref="LoadAsync"/> returns the default
+///         <b>Missing file:</b> <see cref="LoadAsync" /> returns the default
 ///         instance passed at construction — apps boot with sane defaults
 ///         before the user has ever saved anything.
 ///     </para>
 ///     <para>
 ///         <b>Corrupt file:</b> if JSON deserialization fails, LoadAsync
-///         returns <see cref="Result.IsFailure"/> with the parser error. The
+///         returns <see cref="Result.IsFailure" /> with the parser error. The
 ///         caller (typically the composition root) decides whether to log +
 ///         fall back to defaults or surface the error to the user.
 ///     </para>
@@ -58,14 +54,14 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     };
 
     private readonly T _default;
-    private readonly ILogger<JsonAppConfigStore<T>> _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly ILogger<JsonAppConfigStore<T>> _logger;
 
     /// <summary>
     ///     Construct a JSON-backed store.
     /// </summary>
     /// <param name="defaultConfig">
-    ///     The default config returned by <see cref="LoadAsync"/> when the file
+    ///     The default config returned by <see cref="LoadAsync" /> when the file
     ///     is missing. Typically <c>new CliConfig()</c> / <c>new AvaloniaConfig()</c> / etc.
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
@@ -90,7 +86,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            T? config = JsonSerializer.Deserialize<T>(json, JsonOptions);
+            var config = JsonSerializer.Deserialize<T>(json, JsonOptions);
             if (config is null)
             {
                 _logger.LogWarning("App config at {Path} deserialized to null, using defaults", path);
@@ -166,16 +162,16 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             return loadResult;
         }
 
-        T updated = updater(loadResult.Value);
+        var updated = updater(loadResult.Value);
         return await SaveAsync(updated, ct).ConfigureAwait(false);
     }
 }
 
 /// <summary>
-///     Minimal System.Text.Json converter for <see cref="ImmutableList{T}"/>.
+///     Minimal System.Text.Json converter for <see cref="ImmutableList{T}" />.
 ///     System.Text.Json has no built-in immutable-collection support; this
-///     converter round-trips via a mutable <see cref="List{T}"/> and calls
-///     <see cref="ImmutableList.ToImmutableList{T}"/> / <see cref="ImmutableList{T}.Builder"/>.
+///     converter round-trips via a mutable <see cref="List{T}" /> and calls
+///     <see cref="ImmutableList.ToImmutableList{T}" /> / <see cref="ImmutableList{T}.Builder" />.
 /// </summary>
 /// <typeparam name="T">Element type.</typeparam>
 internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>>
@@ -204,7 +200,7 @@ internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>
             {
                 break;
             }
-            T? value = JsonSerializer.Deserialize<T>(ref reader, options);
+            var value = JsonSerializer.Deserialize<T>(ref reader, options);
             list.Add(value!);
         }
         return list.ToImmutableList();
@@ -219,7 +215,7 @@ internal sealed class ImmutableListConverter<T> : JsonConverter<ImmutableList<T>
             return;
         }
         writer.WriteStartArray();
-        foreach (T item in value)
+        foreach (var item in value)
         {
             JsonSerializer.Serialize(writer, item, options);
         }

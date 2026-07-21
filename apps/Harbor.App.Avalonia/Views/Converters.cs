@@ -1,14 +1,14 @@
 using System.Globalization;
+using Avalonia;
+using Avalonia.Data;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Converters;
-using Harbor.Ui.Framework.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Resolves a resource-key string (e.g. "ChatUserBrush") to the registered
-///     <see cref="IBrush"/>. Used by the chat template + status bar.
+///     <see cref="IBrush" />. Used by the chat template + status bar.
 /// </summary>
 public sealed class BrushKeyConverter : IValueConverter
 {
@@ -19,15 +19,15 @@ public sealed class BrushKeyConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string key) return null;
-        if (global::Avalonia.Application.Current is null) return null;
+        if (Application.Current is null) return null;
 
         // Avalonia 12: TryGetResource searches merged dictionaries too.
         // Direct indexer (Resources[key]) only checks the top-level dictionary.
-        if (global::Avalonia.Application.Current.TryGetResource(key, null, out var resource) && resource is IBrush)
+        if (Application.Current.TryGetResource(key, null, out object? resource) && resource is IBrush)
             return (IBrush)resource;
 
         // Fallback: direct indexer
-        return global::Avalonia.Application.Current.Resources[key] as IBrush;
+        return Application.Current.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />
@@ -45,10 +45,7 @@ public sealed class EqualityConverter : IValueConverter
     public static readonly EqualityConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return Equals(value?.ToString(), parameter?.ToString());
-    }
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => Equals(value?.ToString(), parameter?.ToString());
 
     /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -61,12 +58,12 @@ public sealed class EqualityConverter : IValueConverter
         {
             return parameter?.ToString();
         }
-        return global::Avalonia.Data.BindingOperations.DoNothing;
+        return BindingOperations.DoNothing;
     }
 }
 
 /// <summary>
-///     Inverse of <see cref="EqualityConverter"/>: returns true when the bound
+///     Inverse of <see cref="EqualityConverter" />: returns true when the bound
 ///     value does NOT equal the parameter. Used for "Back" button visibility
 ///     (visible when CurrentStep != 1).
 /// </summary>
@@ -76,10 +73,7 @@ public sealed class InequalityConverter : IValueConverter
     public static readonly InequalityConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return !Equals(value?.ToString(), parameter?.ToString());
-    }
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => !Equals(value?.ToString(), parameter?.ToString());
 
     /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
@@ -131,11 +125,11 @@ public sealed class StepToStepperBrushConverter : IValueConverter
 
         string key = currentStep switch
         {
-            _ when currentStep > dotStep  => "StepperDoneBrush",
+            _ when currentStep > dotStep => "StepperDoneBrush",
             _ when currentStep == dotStep => "StepperActiveBrush",
-            _                             => "StepperPendingBrush",
+            _ => "StepperPendingBrush"
         };
-        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
+        return Application.Current?.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />
@@ -144,9 +138,9 @@ public sealed class StepToStepperBrushConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.StatusToBrushKey"/> as an Avalonia
-///     <see cref="IValueConverter"/>. Resolves the returned resource key to
-///     an <see cref="IBrush"/> via <see cref="BrushKeyConverter"/> so the
+///     Wraps <see cref="StatusMappers.StatusToBrushKey" /> as an Avalonia
+///     <see cref="IValueConverter" />. Resolves the returned resource key to
+///     an <see cref="IBrush" /> via <see cref="BrushKeyConverter" /> so the
 ///     status-bar accent can be bound directly to a status string.
 /// </summary>
 public sealed class StatusTextToBrushConverter : IValueConverter
@@ -156,7 +150,7 @@ public sealed class StatusTextToBrushConverter : IValueConverter
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        var key = StatusMappers.StatusToBrushKey(value?.ToString());
+        string key = StatusMappers.StatusToBrushKey(value?.ToString());
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
 
@@ -166,10 +160,10 @@ public sealed class StatusTextToBrushConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.ToolCallStatusToBrushKey"/> as an
-///     Avalonia <see cref="IValueConverter"/>. Bound to a
-///     <see cref="ToolCallStatus"/> enum value, returns the matching
-///     <see cref="IBrush"/> from app resources.
+///     Wraps <see cref="StatusMappers.ToolCallStatusToBrushKey" /> as an
+///     Avalonia <see cref="IValueConverter" />. Bound to a
+///     <see cref="ToolCallStatus" /> enum value, returns the matching
+///     <see cref="IBrush" /> from app resources.
 /// </summary>
 public sealed class ToolCallStatusToBrushConverter : IValueConverter
 {
@@ -179,7 +173,7 @@ public sealed class ToolCallStatusToBrushConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not ToolCallStatus status) return null;
-        var key = StatusMappers.ToolCallStatusToBrushKey(status);
+        string key = StatusMappers.ToolCallStatusToBrushKey(status);
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
 
@@ -189,8 +183,8 @@ public sealed class ToolCallStatusToBrushConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.SessionStatusToText"/> as an Avalonia
-///     <see cref="IValueConverter"/>. Bound to a <c>SessionStatus</c> enum
+///     Wraps <see cref="StatusMappers.SessionStatusToText" /> as an Avalonia
+///     <see cref="IValueConverter" />. Bound to a <c>SessionStatus</c> enum
 ///     value, returns the short display label.
 /// </summary>
 public sealed class SessionStatusToTextConverter : IValueConverter
@@ -200,7 +194,7 @@ public sealed class SessionStatusToTextConverter : IValueConverter
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not Harbor.Abstractions.Models.SessionStatus status) return null;
+        if (value is not SessionStatus status) return null;
         return StatusMappers.SessionStatusToText(status);
     }
 
@@ -210,10 +204,10 @@ public sealed class SessionStatusToTextConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.SessionStatusToBrushKey"/> as an
-///     Avalonia <see cref="IValueConverter"/>. Bound to a
+///     Wraps <see cref="StatusMappers.SessionStatusToBrushKey" /> as an
+///     Avalonia <see cref="IValueConverter" />. Bound to a
 ///     <c>SessionStatus</c> enum value, returns the matching
-///     <see cref="IBrush"/> for the session list row's status dot.
+///     <see cref="IBrush" /> for the session list row's status dot.
 /// </summary>
 public sealed class SessionStatusToBrushConverter : IValueConverter
 {
@@ -222,8 +216,8 @@ public sealed class SessionStatusToBrushConverter : IValueConverter
     /// <inheritdoc />
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        if (value is not Harbor.Abstractions.Models.SessionStatus status) return null;
-        var key = StatusMappers.SessionStatusToBrushKey(status);
+        if (value is not SessionStatus status) return null;
+        string key = StatusMappers.SessionStatusToBrushKey(status);
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
 
@@ -233,8 +227,8 @@ public sealed class SessionStatusToBrushConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.TimeAgo"/> as an Avalonia
-///     <see cref="IValueConverter"/>. Bound to a UTC <c>DateTime</c>,
+///     Wraps <see cref="StatusMappers.TimeAgo" /> as an Avalonia
+///     <see cref="IValueConverter" />. Bound to a UTC <c>DateTime</c>,
 ///     returns "5m ago" / "2h ago" / "Mar 5".
 /// </summary>
 public sealed class TimeAgoConverter : IValueConverter
@@ -258,8 +252,8 @@ public sealed class TimeAgoConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.TokensToCompact"/> as an Avalonia
-///     <see cref="IValueConverter"/>. Bound to a long token count,
+///     Wraps <see cref="StatusMappers.TokensToCompact" /> as an Avalonia
+///     <see cref="IValueConverter" />. Bound to a long token count,
 ///     returns "1.2K" / "12K" / "1.4M".
 /// </summary>
 public sealed class TokensToCompactConverter : IValueConverter
@@ -283,8 +277,8 @@ public sealed class TokensToCompactConverter : IValueConverter
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.CostToUsd"/> as an Avalonia
-///     <see cref="IValueConverter"/>. Bound to a decimal cost,
+///     Wraps <see cref="StatusMappers.CostToUsd" /> as an Avalonia
+///     <see cref="IValueConverter" />. Bound to a decimal cost,
 ///     returns "$0.0123".
 /// </summary>
 public sealed class CostToUsdConverter : IValueConverter
@@ -316,16 +310,10 @@ public sealed class InverseBoolConverter : IValueConverter
     public static readonly InverseBoolConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return value is bool b ? !b : value;
-    }
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value is bool b ? !b : value;
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return value is bool b ? !b : value;
-    }
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => value is bool b ? !b : value;
 }
 
 /// <summary>
@@ -338,13 +326,9 @@ public sealed class StringNullOrEmptyToBoolConverter : IValueConverter
     public static readonly StringNullOrEmptyToBoolConverter Instance = new();
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return string.IsNullOrEmpty(value?.ToString());
-    }
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => string.IsNullOrEmpty(value?.ToString());
 
     /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
-

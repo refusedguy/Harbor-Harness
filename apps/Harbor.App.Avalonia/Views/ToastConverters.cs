@@ -2,12 +2,9 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
-using Harbor.App.Avalonia.Services;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
-///     Converts a <see cref="ToastKind"/> to an emoji icon glyph.
+///     Converts a <see cref="ToastKind" /> to an emoji icon glyph.
 /// </summary>
 public sealed class ToastIconConverter : IValueConverter
 {
@@ -23,8 +20,8 @@ public sealed class ToastIconConverter : IValueConverter
             {
                 ToastKind.Success => "✓",
                 ToastKind.Warning => "⚠",
-                ToastKind.Error   => "✕",
-                _                 => "ℹ"
+                ToastKind.Error => "✕",
+                _ => "ℹ"
             };
         }
         return "ℹ";
@@ -36,7 +33,7 @@ public sealed class ToastIconConverter : IValueConverter
 }
 
 /// <summary>
-///     Converts a <see cref="ToastKind"/> directly to an <see cref="IBrush"/> resolved from
+///     Converts a <see cref="ToastKind" /> directly to an <see cref="IBrush" /> resolved from
 ///     the application's resource dictionary.
 /// </summary>
 public sealed class ToastBrushConverter : IValueConverter
@@ -51,14 +48,13 @@ public sealed class ToastBrushConverter : IValueConverter
         {
             ToastKind.Success => "SuccessBrush",
             ToastKind.Warning => "WarningBrush",
-            ToastKind.Error   => "ErrorBrush",
-            _                 => "AccentBrush"
+            ToastKind.Error => "ErrorBrush",
+            _ => "AccentBrush"
         };
-        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
+        return Application.Current?.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
-

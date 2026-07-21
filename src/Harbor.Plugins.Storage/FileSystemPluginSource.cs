@@ -1,7 +1,7 @@
+using System.Runtime.CompilerServices;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Storage;
-
 /// <summary>
 ///     <see cref="IPluginSource" /> that discovers <c>.cs</c> files under one or more
 ///     filesystem directories. Each file is loaded into a <see cref="PluginScript" />
@@ -40,11 +40,11 @@ public sealed class FileSystemPluginSource : IPluginSource
 
     /// <inheritdoc />
     public async IAsyncEnumerable<PluginScript> GetScriptsAsync(
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var dir in _directories)
+        foreach (string dir in _directories)
         {
             ct.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
@@ -61,7 +61,7 @@ public sealed class FileSystemPluginSource : IPluginSource
                 continue;
             }
 
-            foreach (var file in files)
+            foreach (string file in files)
             {
                 ct.ThrowIfCancellationRequested();
                 if (!seen.Add(file))

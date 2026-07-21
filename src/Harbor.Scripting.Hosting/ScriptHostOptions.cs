@@ -5,7 +5,6 @@
 //   ScriptGlobals and orchestrates the load/evaluate pipeline. It does NOT
 //   implement any of those concerns itself — it just wires them.
 namespace Harbor.Scripting.Hosting;
-
 /// <summary>
 ///     Options for the <see cref="ScriptHost" />.
 /// </summary>

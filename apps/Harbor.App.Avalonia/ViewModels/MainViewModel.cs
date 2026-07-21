@@ -6,27 +6,92 @@ using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Shell view-model. Holds the active view tab, sidebar visibility, status bar,
-///     and the central <see cref="UiStore"/> subscription. Top-level keyboard shortcuts
+///     and the central <see cref="UiStore" /> subscription. Top-level keyboard shortcuts
 ///     (Ctrl+P, Ctrl+Shift+P, Ctrl+B, Ctrl+Shift+T) are wired in MainWindow.axaml.cs
 ///     and dispatch to commands here.
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly IServiceProvider _services;
-    private readonly ILogger<MainViewModel> _logger;
-    private readonly UiStore _store;
-    private readonly TuiEffectHost _effects;
     private readonly AvaloniaDispatcherAdapter _dispatcher;
+    private readonly TuiEffectHost _effects;
+    private readonly ILogger<MainViewModel> _logger;
+
+    private readonly EventHandler<UiState> _onStoreChanged;
+    private readonly IServiceProvider _services;
+    private readonly UiStore _store;
     private readonly ThemeService _theme;
     private readonly ToastService _toasts;
+
+    [ObservableProperty]
+    private int _activeSessionCount = 1;
+
+    [ObservableProperty]
+    private string _activeView = "chat";
+
+    [ObservableProperty]
+    private string _agentLabel = "code";
+
+    [ObservableProperty]
+    private decimal _costUsd;
     private bool _disposed;
 
-    private readonly EventHandler<Harbor.Ui.Framework.State.UiState> _onStoreChanged;
+    [ObservableProperty]
+    private bool _isCommandPaletteOpen;
+
+    [ObservableProperty]
+    private bool _isDiffOpen;
+
+    /// <summary>
+    ///     True when the provider/model picker flyout is open. Toggled by
+    ///     clicking the status-bar model label (wired in MainWindow.axaml) and
+    ///     auto-reset to false after a model is selected.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isModelPickerOpen;
+
+    [ObservableProperty]
+    private bool _isProviderBrowserOpen;
+
+    [ObservableProperty]
+    private bool _isRunning;
+
+    [ObservableProperty]
+    private bool _isSettingsOpen;
+
+    [ObservableProperty]
+    private bool _isSidebarVisible = true;
+
+    [ObservableProperty]
+    private bool _isTokenUsageOpen;
+
+    /// <summary>
+    ///     Live message count for the active chat (number of chat lines in
+    ///     the current <see cref="UiStore" /> state). Updated on every
+    ///     <see cref="OnStoreChanged" /> transition so the status bar's
+    ///     "N msgs" label tracks new messages immediately after the user
+    ///     sends a prompt (Task D2 / Problem 2: status bar message count
+    ///     was stale — only refreshed on full RefreshAsync cycles).
+    /// </summary>
+    [ObservableProperty]
+    private int _messageCount;
+
+    [ObservableProperty]
+    private string _modelLabel = "—";
+
+    [ObservableProperty]
+    private string _providerLabel = "ollama";
+
+    [ObservableProperty]
+    private string _statusText = "idle";
+
+    [ObservableProperty]
+    private long _tokensIn;
+
+    [ObservableProperty]
+    private long _tokensOut;
 
     /// <summary>Construct the shell view-model.</summary>
     public MainViewModel(
@@ -115,75 +180,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Toast notifications visible right now.</summary>
     public ObservableCollection<ToastNotification> Toasts { get; } = new();
 
-    [ObservableProperty]
-    private string _activeView = "chat";
-
-    [ObservableProperty]
-    private bool _isSidebarVisible = true;
-
-    [ObservableProperty]
-    private bool _isCommandPaletteOpen;
-
-    [ObservableProperty]
-    private bool _isSettingsOpen;
-
-    [ObservableProperty]
-    private bool _isProviderBrowserOpen;
-
-    /// <summary>
-    ///     True when the provider/model picker flyout is open. Toggled by
-    ///     clicking the status-bar model label (wired in MainWindow.axaml) and
-    ///     auto-reset to false after a model is selected.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isModelPickerOpen;
-
-    [ObservableProperty]
-    private bool _isDiffOpen;
-
-    [ObservableProperty]
-    private bool _isTokenUsageOpen;
-
-    [ObservableProperty]
-    private string _statusText = "idle";
-
-    [ObservableProperty]
-    private string _providerLabel = "ollama";
-
-    [ObservableProperty]
-    private string _modelLabel = "—";
-
-    [ObservableProperty]
-    private string _agentLabel = "code";
-
-    [ObservableProperty]
-    private long _tokensIn;
-
-    [ObservableProperty]
-    private long _tokensOut;
-
-    [ObservableProperty]
-    private decimal _costUsd;
-
-    [ObservableProperty]
-    private int _activeSessionCount = 1;
-
-    /// <summary>
-    ///     Live message count for the active chat (number of chat lines in
-    ///     the current <see cref="UiStore"/> state). Updated on every
-    ///     <see cref="OnStoreChanged"/> transition so the status bar's
-    ///     "N msgs" label tracks new messages immediately after the user
-    ///     sends a prompt (Task D2 / Problem 2: status bar message count
-    ///     was stale — only refreshed on full RefreshAsync cycles).
-    /// </summary>
-    [ObservableProperty]
-    private int _messageCount;
-
-    [ObservableProperty]
-    private bool _isRunning;
-
-    /// <summary>Status bar color key based on <see cref="StatusText"/>.</summary>
+    /// <summary>Status bar color key based on <see cref="StatusText" />.</summary>
     public string StatusBrushKey => StatusMappers.StatusToBrushKey(StatusText);
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _dispatcher.OnUiThread -= _onStoreChanged;
+    }
 
     private void OnStoreChanged(UiState state)
     {
@@ -206,7 +212,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // label updates immediately after the user sends a prompt
             // (Task D2 / Problem 2: status bar message count was stale).
             MessageCount = state.Lines.Length;
-            OnPropertyChanged(nameof(StatusBrushKey));
+            this.OnPropertyChanged(nameof(StatusBrushKey));
 
             // Track token-usage history for the chart.
             TokenUsage.RecordUsage(state);
@@ -215,38 +221,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Toggle sidebar visibility (Ctrl+B).</summary>
     [RelayCommand]
-    private void ToggleSidebar()
-    {
-        IsSidebarVisible = !IsSidebarVisible;
-    }
+    private void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
     /// <summary>Toggle theme (Ctrl+Shift+T).</summary>
     [RelayCommand]
-    private void ToggleTheme()
-    {
-        _theme.Toggle();
-    }
+    private void ToggleTheme() => _theme.Toggle();
 
     /// <summary>Open command palette (Ctrl+P / Ctrl+Shift+P).</summary>
     [RelayCommand]
-    private void OpenCommandPalette()
-    {
-        IsCommandPaletteOpen = true;
-    }
+    private void OpenCommandPalette() => IsCommandPaletteOpen = true;
 
     /// <summary>Open settings dialog.</summary>
     [RelayCommand]
-    private void OpenSettings()
-    {
-        IsSettingsOpen = true;
-    }
+    private void OpenSettings() => IsSettingsOpen = true;
 
     /// <summary>Open provider browser.</summary>
     [RelayCommand]
-    private void OpenProviderBrowser()
-    {
-        IsProviderBrowserOpen = true;
-    }
+    private void OpenProviderBrowser() => IsProviderBrowserOpen = true;
 
     /// <summary>
     ///     Open the provider/model picker flyout. Wired to a click handler on
@@ -254,32 +245,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     ///     models without leaving the chat view.
     /// </summary>
     [RelayCommand]
-    private void OpenModelPicker()
-    {
-        IsModelPickerOpen = true;
-    }
+    private void OpenModelPicker() => IsModelPickerOpen = true;
 
     /// <summary>Open diff view.</summary>
     [RelayCommand]
-    private void OpenDiff()
-    {
-        IsDiffOpen = true;
-    }
+    private void OpenDiff() => IsDiffOpen = true;
 
     /// <summary>Open token usage chart.</summary>
     [RelayCommand]
-    private void OpenTokenUsage()
-    {
-        IsTokenUsageOpen = true;
-    }
+    private void OpenTokenUsage() => IsTokenUsageOpen = true;
 
     /// <summary>Switch active main view to one of: chat, code, diff.</summary>
     /// <param name="view">View name.</param>
     [RelayCommand]
-    private void SwitchView(string view)
-    {
-        ActiveView = view;
-    }
+    private void SwitchView(string view) => ActiveView = view;
 
     /// <summary>Push a toast to the visible toast collection.</summary>
     /// <param name="toast">Toast notification.</param>
@@ -294,13 +273,5 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _dispatcher.Post(() => Toasts.Remove(toast));
             }, TaskScheduler.Default);
         });
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _dispatcher.OnUiThread -= _onStoreChanged;
     }
 }

@@ -1,8 +1,5 @@
 @* Sidebar — left navigation pane. Lists the main pages + recent sessions.
    Width: var(--sidebar-width) (240px). @*@
-
-@using Harbor.App.Blazor.Components.Shared
-@using Harbor.Ui.Framework.State
 @inject NavigationManager Nav
 @inject SessionBrowserService Sessions
 
@@ -64,18 +61,18 @@
 </div>
 
 @code {
-    private List<SessionSummary> _recent = new();
+private List<SessionSummary> _recent = new();
 
-    protected override async Task OnInitializedAsync()
+protected override async Task OnInitializedAsync()
+{
+    try
     {
-        try
-        {
-            var list = await Sessions.ListAsync().ConfigureAwait(false);
-            _recent = list.Take(5).ToList();
-        }
-        catch
-        {
-            _recent = new();
-        }
+        var list = await Sessions.ListAsync().ConfigureAwait(false);
+        _recent = list.Take(5).ToList();
     }
+    catch
+    {
+        _recent = new List<SessionSummary>();
+    }
+}
 }

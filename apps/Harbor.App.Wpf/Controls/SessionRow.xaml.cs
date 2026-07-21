@@ -1,8 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
-
 namespace Harbor.App.Wpf.Controls;
-
 /// <summary>
 ///     Reusable WPF sidebar row for a session. Mirrors the Avalonia
 ///     <c>Harbor.App.Avalonia.Views.Components.SessionRow</c> control so
@@ -38,50 +36,50 @@ public partial class SessionRow : UserControl
         DependencyProperty.Register(nameof(IsActive), typeof(bool), typeof(SessionRow),
             new PropertyMetadata(false));
 
+    public SessionRow()
+    {
+        InitializeComponent();
+    }
+
     public string Title
     {
-        get => (string)GetValue(TitleProperty);
-        set => SetValue(TitleProperty, value);
+        get => (string)this.GetValue(TitleProperty);
+        set => this.SetValue(TitleProperty, value);
     }
 
     public string Subtitle
     {
-        get => (string)GetValue(SubtitleProperty);
-        set => SetValue(SubtitleProperty, value);
+        get => (string)this.GetValue(SubtitleProperty);
+        set => this.SetValue(SubtitleProperty, value);
     }
 
     public string RelativeTime
     {
-        get => (string)GetValue(RelativeTimeProperty);
-        set => SetValue(RelativeTimeProperty, value);
+        get => (string)this.GetValue(RelativeTimeProperty);
+        set => this.SetValue(RelativeTimeProperty, value);
     }
 
     public int MessageCount
     {
-        get => (int)GetValue(MessageCountProperty);
-        set => SetValue(MessageCountProperty, value);
+        get => (int)this.GetValue(MessageCountProperty);
+        set => this.SetValue(MessageCountProperty, value);
     }
 
     public string StatusColorKey
     {
-        get => (string)GetValue(StatusColorKeyProperty);
-        set => SetValue(StatusColorKeyProperty, value);
+        get => (string)this.GetValue(StatusColorKeyProperty);
+        set => this.SetValue(StatusColorKeyProperty, value);
     }
 
     public bool IsDirty
     {
-        get => (bool)GetValue(IsDirtyProperty);
-        set => SetValue(IsDirtyProperty, value);
+        get => (bool)this.GetValue(IsDirtyProperty);
+        set => this.SetValue(IsDirtyProperty, value);
     }
 
     public bool IsActive
     {
-        get => (bool)GetValue(IsActiveProperty);
-        set => SetValue(IsActiveProperty, value);
-    }
-
-    public SessionRow()
-    {
-        InitializeComponent();
+        get => (bool)this.GetValue(IsActiveProperty);
+        set => this.SetValue(IsActiveProperty, value);
     }
 }

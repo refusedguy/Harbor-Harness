@@ -9,11 +9,11 @@
     <RootNamespace>Harbor.Logging</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Serilog" />
-    <PackageReference Include="Serilog.Extensions.Hosting" />
-    <PackageReference Include="Serilog.Sinks.File" />
-    <PackageReference Include="Serilog.Sinks.Console" />
-    <PackageReference Include="Serilog.Sinks.Async" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Serilog"/>
+    <PackageReference Include="Serilog.Extensions.Hosting"/>
+    <PackageReference Include="Serilog.Sinks.File"/>
+    <PackageReference Include="Serilog.Sinks.Console"/>
+    <PackageReference Include="Serilog.Sinks.Async"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 </Project>

@@ -1,7 +1,6 @@
-using Harbor.Plugins.Abstractions;
 using System.Runtime.CompilerServices;
+using Harbor.Plugins.Abstractions;
 namespace Harbor.Plugins.Storage;
-
 /// <summary>
 ///     <see cref="IPluginSource" /> that combines multiple underlying sources into a
 ///     single async stream. Sub-sources are enumerated sequentially in registration order;

@@ -25,7 +25,7 @@ internal static class ChatTableRenderer
         var grid = GfmTableFormatter.Format(table, maxWidth);
         var grey = new Style(Color.Grey);
         var body = new Style(baseColor);
-        foreach (var line in grid)
+        foreach (string line in grid)
             rows.Add(Plain(line, line[0] == '│' ? body : grey));
 
         return (rows, next);

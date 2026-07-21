@@ -1,6 +1,4 @@
 @page "/chat"
-@using Harbor.App.Blazor.ViewModels
-@using Harbor.Ui.Framework.State
 @inject ChatViewModel Vm
 @inject NavigationManager Nav
 
@@ -51,28 +49,38 @@
 </div>
 
 <style>
-    .empty-state { text-align: center; padding: var(--space-8); color: var(--text-dim); }
-    .empty-icon { font-size: 48px; margin-bottom: var(--space-3); }
-    .empty-state h2 { color: var(--accent); margin: 0 0 var(--space-2); }
+    .empty-state {
+        text-align: center;
+        padding: var(--space-8);
+        color: var(--text-dim);
+    }
+
+    .empty-icon {
+        font-size: 48px;
+        margin-bottom: var(--space-3);
+    }
+
+    .empty-state h2 {
+        color: var(--accent);
+        margin: 0 0 var(--space-2);
+    }
 </style>
 
 @code {
-    protected override Task OnAfterRenderAsync(bool firstRender)
-    {
-        // Auto-scroll to bottom whenever the history updates.
-        // The actual scrolling is handled by harborInterop.scrollToBottom
-        // in production; here we rely on the browser's default anchor
-        // behaviour (last child) which is good enough for the demo.
-        return Task.CompletedTask;
-    }
+protected override Task OnAfterRenderAsync(bool firstRender) =>
+    // Auto-scroll to bottom whenever the history updates.
+    // The actual scrolling is handled by harborInterop.scrollToBottom
+    // in production; here we rely on the browser's default anchor
+    // behaviour (last child) which is good enough for the demo.
+    Task.CompletedTask;
 
     private async Task OnKeyDownAsync(KeyboardEventArgs e)
+{
+    if (e.Key == "Enter" && !e.ShiftKey)
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
-        {
-            await Vm.SendAsync().ConfigureAwait(false);
-        }
+        await Vm.SendAsync().ConfigureAwait(false);
     }
+}
 
-    private void ClearLocal() => Vm.Clear();
+private void ClearLocal() => Vm.Clear();
 }

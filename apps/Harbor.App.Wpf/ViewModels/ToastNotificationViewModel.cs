@@ -2,9 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Toast notification queue. Toasts slide in from the top-right, auto-
 ///     dismiss after a timeout, and keep a bounded history.
@@ -12,8 +10,8 @@ namespace Harbor.App.Wpf.ViewModels;
 public sealed partial class ToastNotificationViewModel : ObservableObject
 {
     private const int MaxVisible = 4;
-    private readonly DispatcherTimer? _timer;
     private readonly object _lock = new();
+    private readonly DispatcherTimer? _timer;
 
     /// <summary>Construct a <see cref="ToastNotificationViewModel" />.</summary>
     public ToastNotificationViewModel()
@@ -106,17 +104,17 @@ public sealed partial class ToastNotificationViewModel : ObservableObject
 /// </summary>
 public sealed partial class ToastViewModel : ObservableObject
 {
+
+    /// <summary>Creation timestamp.</summary>
+    [ObservableProperty] private DateTimeOffset _createdAt;
     /// <summary>Unique id.</summary>
     [ObservableProperty] private string _id = string.Empty;
-
-    /// <summary>Body text.</summary>
-    [ObservableProperty] private string _message = string.Empty;
 
     /// <summary>Toast kind (controls accent color).</summary>
     [ObservableProperty] private ToastKind _kind = ToastKind.Info;
 
-    /// <summary>Creation timestamp.</summary>
-    [ObservableProperty] private DateTimeOffset _createdAt;
+    /// <summary>Body text.</summary>
+    [ObservableProperty] private string _message = string.Empty;
 
     /// <summary>How long the toast stays visible.</summary>
     [ObservableProperty] private TimeSpan _timeToLive = TimeSpan.FromSeconds(4);

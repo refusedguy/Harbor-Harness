@@ -1,13 +1,10 @@
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Tui.SpectreTui.View;
 using Microsoft.Extensions.Logging;
-using Spectre.Console;
 using Spectre.Tui;
-
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that surfaces live <c>ILogger</c> output inside the
 ///     SpectreTUI interactive renderer. Toggled with <c>F12</c>.

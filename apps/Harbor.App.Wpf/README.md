@@ -62,24 +62,24 @@ verification. To launch the window you need a Windows desktop with the
 
 ## Features
 
-| Feature                     | Notes |
-|----------------------------|-------|
-| **Streaming chat**          | Markdown transcript via `Markdig` → `FlowDocument`; auto-scroll |
-| **Session manager**         | Sidebar with search, new/fork/delete; sample data |
-| **Provider browser**        | Modal listing Anthropic / OpenAI / OpenRouter / Ollama / Groq |
-| **Code editor**             | `AvalonEdit` with syntax highlighting (C#, JSON, XML, HTML, JS) |
-| **Side-by-side diff**       | Hunks with color-coded added/removed lines |
-| **Token usage charts**      | Native WPF Shapes bar chart (no third-party chart lib) |
-| **Command palette**         | `Ctrl+P` fuzzy search popup |
-| **Toast notifications**     | Top-right slide-in overlay, auto-dismiss after 4–8 s |
-| **Dockable panels**         | `AvalonDock` `DockingManager` |
-| **Themes**                  | Catppuccin Mocha (default) + Latte, persisted to `~/.harbor/wpf-theme.txt` |
-| **Animations**              | WPF `Storyboard` (toast slide-in, page transition, spinner) |
-| **Status bar**              | Provider / model / token count / cost / activity dot |
+| Feature                 | Notes                                                                      |
+|-------------------------|----------------------------------------------------------------------------|
+| **Streaming chat**      | Markdown transcript via `Markdig` → `FlowDocument`; auto-scroll            |
+| **Session manager**     | Sidebar with search, new/fork/delete; sample data                          |
+| **Provider browser**    | Modal listing Anthropic / OpenAI / OpenRouter / Ollama / Groq              |
+| **Code editor**         | `AvalonEdit` with syntax highlighting (C#, JSON, XML, HTML, JS)            |
+| **Side-by-side diff**   | Hunks with color-coded added/removed lines                                 |
+| **Token usage charts**  | Native WPF Shapes bar chart (no third-party chart lib)                     |
+| **Command palette**     | `Ctrl+P` fuzzy search popup                                                |
+| **Toast notifications** | Top-right slide-in overlay, auto-dismiss after 4–8 s                       |
+| **Dockable panels**     | `AvalonDock` `DockingManager`                                              |
+| **Themes**              | Catppuccin Mocha (default) + Latte, persisted to `~/.harbor/wpf-theme.txt` |
+| **Animations**          | WPF `Storyboard` (toast slide-in, page transition, spinner)                |
+| **Status bar**          | Provider / model / token count / cost / activity dot                       |
 
 ## Keyboard shortcuts
 
-| Shortcut       | Action                  |
+| Shortcut      | Action                  |
 |---------------|-------------------------|
 | `Ctrl+Enter`  | Send chat prompt        |
 | `Ctrl+P`      | Open command palette    |

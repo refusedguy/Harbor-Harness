@@ -1,13 +1,8 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows the working directory's file tree. <c>j/k</c>
 ///     navigates, <c>Enter</c> opens the selected file by dispatching a
@@ -32,10 +27,10 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// </remarks>
 public sealed class FileTreePanel : IPanelProvider
 {
-    private int _cursor;
-    private List<Entry> _entries = new();
     private string _currentDir = string.Empty;
+    private int _cursor;
     private string _displayDir = string.Empty;
+    private List<Entry> _entries = new();
 
     /// <inheritdoc />
     public string Id => "file-tree";
@@ -157,30 +152,30 @@ public sealed class FileTreePanel : IPanelProvider
     {
         if (_entries.Count > 0) return;
 
-        var dir = string.IsNullOrEmpty(_currentDir) ? Environment.CurrentDirectory : _currentDir;
+        string dir = string.IsNullOrEmpty(_currentDir) ? Environment.CurrentDirectory : _currentDir;
         _currentDir = dir;
         _displayDir = dir;
 
         var entries = new List<Entry>(32);
         try
         {
-            foreach (var d in Directory.EnumerateDirectories(dir))
+            foreach (string d in Directory.EnumerateDirectories(dir))
             {
                 var info = new DirectoryInfo(d);
                 entries.Add(new Entry(
                     info.Name + Path.DirectorySeparatorChar,
                     info.FullName,
-                    IsDirectory: true,
-                    IsHidden: (info.Attributes & FileAttributes.Hidden) != 0));
+                    true,
+                    (info.Attributes & FileAttributes.Hidden) != 0));
             }
-            foreach (var f in Directory.EnumerateFiles(dir))
+            foreach (string f in Directory.EnumerateFiles(dir))
             {
                 var info = new FileInfo(f);
                 entries.Add(new Entry(
                     info.Name,
                     info.FullName,
-                    IsDirectory: false,
-                    IsHidden: (info.Attributes & FileAttributes.Hidden) != 0));
+                    false,
+                    (info.Attributes & FileAttributes.Hidden) != 0));
             }
         }
         catch (IOException)
@@ -196,7 +191,7 @@ public sealed class FileTreePanel : IPanelProvider
         {
             int cmp = a.IsDirectory.CompareTo(b.IsDirectory) * -1; // dirs first
             if (cmp != 0) return cmp;
-            return System.StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
+            return StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
         });
         _entries = entries;
         if (_cursor >= _entries.Count)

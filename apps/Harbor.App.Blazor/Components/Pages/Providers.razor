@@ -1,5 +1,4 @@
 @page "/providers"
-@using Harbor.App.Blazor.ViewModels
 @inject ProviderBrowserViewModel Vm
 
 <div class="page">
@@ -33,21 +32,36 @@
             }
             else
             {
-                <pre style="background:var(--ctp-crust);padding:16px;border-radius:8px;overflow:auto;font-family:var(--font-mono);font-size:13px;color:var(--text);">@Vm.SelectedJson</pre>
+                <pre
+                    style="background:var(--ctp-crust);padding:16px;border-radius:8px;overflow:auto;font-family:var(--font-mono);font-size:13px;color:var(--text);">@Vm.SelectedJson</pre>
             }
         </div>
     </div>
 </div>
 
 <style>
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-    .page-header h1 { margin: 0; color: var(--accent); }
-    .empty { padding: var(--space-3); color: var(--text-dim); font-size: var(--font-size-sm); }
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
+    .page-header h1 {
+        margin: 0;
+        color: var(--accent);
+    }
+
+    .empty {
+        padding: var(--space-3);
+        color: var(--text-dim);
+        font-size: var(--font-size-sm);
+    }
 </style>
 
 @code {
-    protected override async Task OnInitializedAsync()
-    {
-        await Vm.ReloadAsync().ConfigureAwait(false);
-    }
+protected override async Task OnInitializedAsync()
+{
+    await Vm.ReloadAsync().ConfigureAwait(false);
+}
 }

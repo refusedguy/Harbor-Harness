@@ -22,7 +22,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($env:TRACE -eq 'true') { Set-PSDebug -Trace 1 }
+if ($env:TRACE -eq 'true')
+{
+    Set-PSDebug -Trace 1
+}
 
 # ── Solution-relative paths ──────────────────────────────────────────────────
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -33,21 +36,38 @@ $SolutionFile = Join-Path $RootDir 'Harbor.slnx'
 # ── Artifacts / temp ─────────────────────────────────────────────────────────
 $NukeTempDir = Join-Path $RootDir '.nuke\temp'
 $NukeBinDir = Join-Path $RootDir '.nuke\bin'
-if (-not (Test-Path $NukeTempDir)) { New-Item -ItemType Directory -Path $NukeTempDir -Force | Out-Null }
+if (-not (Test-Path $NukeTempDir))
+{
+    New-Item -ItemType Directory -Path $NukeTempDir -Force | Out-Null
+}
 
 # ── .NET SDK bootstrap ───────────────────────────────────────────────────────
-$DotnetInstallDir = if ($env:DOTNET_INSTALL_DIR) { $env:DOTNET_INSTALL_DIR } else { Join-Path $env:USERPROFILE '.dotnet' }
-$DotnetExe = if ($IsWindows -or -not $IsCoreCLR) {
+$DotnetInstallDir = if ($env:DOTNET_INSTALL_DIR)
+{
+    $env:DOTNET_INSTALL_DIR
+}
+else
+{
+    Join-Path $env:USERPROFILE '.dotnet'
+}
+$DotnetExe = if ($IsWindows -or -not $IsCoreCLR)
+{
     Join-Path $DotnetInstallDir 'dotnet.exe'
-} else {
+}
+else
+{
     Join-Path $DotnetInstallDir 'dotnet'
 }
 
-if (-not (Test-Path $DotnetExe)) {
+if (-not (Test-Path $DotnetExe))
+{
     $dotnetOnPath = Get-Command dotnet -ErrorAction SilentlyContinue
-    if ($dotnetOnPath) {
+    if ($dotnetOnPath)
+    {
         $DotnetExe = $dotnetOnPath.Source
-    } else {
+    }
+    else
+    {
         Write-Error "ERROR: dotnet not found at $DotnetExe and not on PATH.`n       Install the .NET 10 SDK:  https://dot.net"
         exit 1
     }
@@ -69,16 +89,20 @@ $BuildProjectOutput = Join-Path $NukeBinDir $BuildProjectFramework
     -nologo `
     -clp:NoSummary
 
-if ($LASTEXITCODE -ne 0) {
+if ($LASTEXITCODE -ne 0)
+{
     Write-Error "Building _build.csproj failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
 
 # ── Invoke NUKE ──────────────────────────────────────────────────────────────
 $BuildDll = Join-Path $BuildProjectOutput '_build.dll'
-if ($Target) {
+if ($Target)
+{
     & $DotnetExe exec $BuildDll @Target
-} else {
+}
+else
+{
     & $DotnetExe exec $BuildDll
 }
 exit $LASTEXITCODE

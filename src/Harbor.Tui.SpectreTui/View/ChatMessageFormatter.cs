@@ -61,7 +61,7 @@ internal static class ChatMessageFormatter
         {
             if (blockMd && ChatTableRenderer.IsTableStart(lines, i))
             {
-                var (tableRows, next) = ChatTableRenderer.Render(lines, i, color, maxWidth);
+                (var tableRows, int next) = ChatTableRenderer.Render(lines, i, color, maxWidth);
                 foreach (var r in tableRows)
                     yield return r;
                 // Advance past the consumed table lines; the while loop increments.

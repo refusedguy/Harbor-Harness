@@ -1,14 +1,11 @@
-using System.Net.Http;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Harbor.E2E.Framework;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.App.Blazor;
-
 /// <summary>
 ///     End-to-end tests for the Harbor Blazor Server app. Starts Kestrel on a
 ///     random port (via CliDriver), then issues real HTTP requests with
-///     <see cref="HttpClient"/>. No browser automation — pure HTTP, which
+///     <see cref="HttpClient" />. No browser automation — pure HTTP, which
 ///     makes these tests fast and 100% reproducible on every OS.
 /// </summary>
 /// <remarks>
@@ -34,18 +31,18 @@ public class BlazorE2ETests : E2eTestBase
     private int PrepareBlazorConfig()
     {
         int port = Random.Shared.Next(50_100, 59_999);
-        string harborDir = Path.Combine(TempHome, ".harbor");
+        string harborDir = Path.Combine(this.TempHome, ".harbor");
         Directory.CreateDirectory(harborDir);
         string blazorConfigPath = Path.Combine(harborDir, "blazor.json");
         string config = $$"""
-            {
-              "appId": "blazor",
-              "configFileName": "blazor.json",
-              "listenPort": {{port}},
-              "autoOpenBrowser": false,
-              "enableHotReload": false
-            }
-            """;
+                          {
+                            "appId": "blazor",
+                            "configFileName": "blazor.json",
+                            "listenPort": {{port}},
+                            "autoOpenBrowser": false,
+                            "enableHotReload": false
+                          }
+                          """;
         File.WriteAllText(blazorConfigPath, config);
         return port;
     }
@@ -57,7 +54,7 @@ public class BlazorE2ETests : E2eTestBase
     /// </summary>
     private static async Task<int> WaitForListeningPortAsync(IE2eDriver driver, int expectedPort, CancellationToken ct = default)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(20))
         {
             ct.ThrowIfCancellationRequested();
@@ -80,9 +77,9 @@ public class BlazorE2ETests : E2eTestBase
     {
         int port = PrepareBlazorConfig();
         await using var driver = new CliDriver(BlazorProjectPath);
-        var env = GetEnv();
+        var env = this.GetEnv();
         // Suppress the auto browser-open at the CLI-flag layer too (belt + braces).
-        await driver.StartAsync(args: ["--no-open-browser"], env: env).ConfigureAwait(false);
+        await driver.StartAsync(["--no-open-browser"], env).ConfigureAwait(false);
 
         // Wait for Kestrel to print its banner. We don't need the actual port
         // (we asked for a fixed one) but the banner tells us Kestrel is ready.
@@ -108,7 +105,7 @@ public class BlazorE2ETests : E2eTestBase
     {
         int port = PrepareBlazorConfig();
         await using var driver = new CliDriver(BlazorProjectPath);
-        await driver.StartAsync(args: ["--no-open-browser"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["--no-open-browser"], this.GetEnv()).ConfigureAwait(false);
         bool listening = await driver.WaitForTextAsync("listening on", TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         await Assert.That(listening).IsTrue();
 
@@ -130,7 +127,7 @@ public class BlazorE2ETests : E2eTestBase
     {
         int port = PrepareBlazorConfig();
         await using var driver = new CliDriver(BlazorProjectPath);
-        await driver.StartAsync(args: ["--no-open-browser"], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync(["--no-open-browser"], this.GetEnv()).ConfigureAwait(false);
         await driver.WaitForTextAsync("listening on", TimeSpan.FromSeconds(20)).ConfigureAwait(false);
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };

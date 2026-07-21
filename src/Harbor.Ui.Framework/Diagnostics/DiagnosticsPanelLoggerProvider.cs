@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Diagnostics;
-
 /// <summary>
 ///     <see cref="ILoggerProvider" /> that bridges every <c>ILogger</c> created by
 ///     the host's <c>ILoggerFactory</c> into the shared <see cref="IDiagnosticsPanel" />
@@ -27,7 +25,6 @@ namespace Harbor.Ui.Framework.Diagnostics;
 /// </remarks>
 public sealed class DiagnosticsPanelLoggerProvider : ILoggerProvider
 {
-    private readonly IDiagnosticsPanel _panel;
     private int _disposed;
 
     /// <summary>
@@ -37,18 +34,21 @@ public sealed class DiagnosticsPanelLoggerProvider : ILoggerProvider
     /// <param name="panel">The shared diagnostics panel. Must not be <see langword="null" />.</param>
     public DiagnosticsPanelLoggerProvider(IDiagnosticsPanel panel)
     {
-        _panel = panel ?? throw new ArgumentNullException(nameof(panel));
+        Panel = panel ?? throw new ArgumentNullException(nameof(panel));
     }
 
     /// <summary>
     ///     The underlying panel. Exposed so renderers can resolve the same instance
     ///     via the provider (in addition to resolving it directly from DI).
     /// </summary>
-    public IDiagnosticsPanel Panel => _panel;
+    public IDiagnosticsPanel Panel
+    {
+        get;
+    }
 
     /// <inheritdoc />
     public ILogger CreateLogger(string categoryName) =>
-        new DiagnosticsPanelLogger(_panel, categoryName);
+        new DiagnosticsPanelLogger(Panel, categoryName);
 
     /// <inheritdoc />
     public void Dispose()
@@ -67,8 +67,8 @@ public sealed class DiagnosticsPanelLoggerProvider : ILoggerProvider
 /// </summary>
 public sealed class DiagnosticsPanelLogger : ILogger
 {
-    private readonly IDiagnosticsPanel _panel;
     private readonly string _category;
+    private readonly IDiagnosticsPanel _panel;
 
     /// <summary>
     ///     Construct a logger that tags every forwarded entry with

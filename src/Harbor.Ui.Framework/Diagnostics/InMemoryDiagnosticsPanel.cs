@@ -1,7 +1,5 @@
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ui.Framework.Diagnostics;
-
 /// <summary>
 ///     Default <see cref="IDiagnosticsPanel" /> implementation: a fixed-capacity
 ///     ring buffer that keeps the last <see cref="DefaultCapacity" /> log entries.
@@ -23,10 +21,9 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
 {
     /// <summary>Default ring-buffer capacity. Trade-off: enough history for post-mortem, bounded memory.</summary>
     public const int DefaultCapacity = 1000;
+    private readonly Queue<DiagnosticEntry> _entries = new(DefaultCapacity);
 
     private readonly object _gate = new();
-    private readonly Queue<DiagnosticEntry> _entries = new(DefaultCapacity);
-    private readonly int _capacity;
 
     /// <summary>
     ///     Construct a panel with the supplied capacity (defaults to
@@ -37,7 +34,25 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
     {
         if (capacity <= 0)
             capacity = DefaultCapacity;
-        _capacity = capacity;
+        Capacity = capacity;
+    }
+
+    /// <summary>Current entry count (mainly for diagnostics / tests).</summary>
+    public int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _entries.Count;
+            }
+        }
+    }
+
+    /// <summary>Maximum number of entries the buffer keeps.</summary>
+    public int Capacity
+    {
+        get;
     }
 
     /// <inheritdoc />
@@ -52,8 +67,10 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
         lock (_gate)
         {
             _entries.Enqueue(entry);
-            while (_entries.Count > _capacity)
+            while (_entries.Count > Capacity)
+            {
                 _entries.Dequeue();
+            }
         }
     }
 
@@ -85,18 +102,8 @@ public sealed class InMemoryDiagnosticsPanel : IDiagnosticsPanel
     public void Clear()
     {
         lock (_gate)
-            _entries.Clear();
-    }
-
-    /// <summary>Current entry count (mainly for diagnostics / tests).</summary>
-    public int Count
-    {
-        get
         {
-            lock (_gate) return _entries.Count;
+            _entries.Clear();
         }
     }
-
-    /// <summary>Maximum number of entries the buffer keeps.</summary>
-    public int Capacity => _capacity;
 }

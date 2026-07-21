@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
 using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Panels;
-
 /// <summary>
 ///     Read-only view over the panel registry plus <see cref="UiState" />. Use this
 ///     from renderers / layout shells to answer "which panels are visible right now?"
@@ -55,13 +53,17 @@ public readonly record struct PanelRegistryView(
 
     /// <summary>Current size override (rows or cols), or 0 = use provider's DefaultSize.</summary>
     public int GetSize(string id) =>
-        State.PanelSizes.TryGetValue(id, out var s) ? s : 0;
+        State.PanelSizes.TryGetValue(id, out int s) ? s : 0;
 }
 
 /// <summary>
 ///     Registration-only contract for <see cref="IPanelProvider" /> instances. Plugin
-///     authors and builtin loaders see this surface; <b>there is no state mutation
-///     here</b> — every visibility / focus / size transition flows through
+///     authors and builtin loaders see this surface;
+///     <b>
+///         there is no state mutation
+///         here
+///     </b>
+///     — every visibility / focus / size transition flows through
 ///     <see cref="UiStore" /> / <see cref="UiReducer" /> via
 ///     <see cref="UiMsg.TogglePanel" />, <see cref="UiMsg.FocusPanel" />,
 ///     <see cref="UiMsg.CyclePanelFocus" />, <see cref="UiMsg.ResizePanel" />. The
@@ -79,10 +81,16 @@ public readonly record struct PanelRegistryView(
 /// </remarks>
 public sealed class PanelRegistry : IPanelRegistry
 {
+
+    /// <summary>Default minimum size (rows or cols) clamped on resize by the reducer.</summary>
+    public const int MinSize = 2;
+
+    /// <summary>Default maximum size (rows or cols) clamped on resize by the reducer.</summary>
+    public const int MaxSize = 200;
     private readonly object _gate = new();
-    private readonly Dictionary<string, IPanelProvider> _providers = new(StringComparer.Ordinal);
-    private readonly List<IPanelProvider> _ordered = new();
     private readonly ILogger<PanelRegistry>? _logger;
+    private readonly List<IPanelProvider> _ordered = new();
+    private readonly Dictionary<string, IPanelProvider> _providers = new(StringComparer.Ordinal);
 
     /// <summary>Construct a registry with an optional logger.</summary>
     public PanelRegistry(ILogger<PanelRegistry>? logger = null)
@@ -139,14 +147,20 @@ public sealed class PanelRegistry : IPanelRegistry
     {
         get
         {
-            lock (_gate) return _ordered.ToArray();
+            lock (_gate)
+            {
+                return _ordered.ToArray();
+            }
         }
     }
 
     /// <inheritdoc />
     public IPanelProvider? Get(string id)
     {
-        lock (_gate) return _providers.TryGetValue(id, out var p) ? p : null;
+        lock (_gate)
+        {
+            return _providers.TryGetValue(id, out var p) ? p : null;
+        }
     }
 
     /// <summary>
@@ -157,15 +171,9 @@ public sealed class PanelRegistry : IPanelRegistry
     /// </summary>
     public PanelRegistryView View(UiState state)
     {
-        IReadOnlyList<IPanelProvider> snapshot = All;
+        var snapshot = All;
         return new PanelRegistryView(snapshot, state);
     }
-
-    /// <summary>Default minimum size (rows or cols) clamped on resize by the reducer.</summary>
-    public const int MinSize = 2;
-
-    /// <summary>Default maximum size (rows or cols) clamped on resize by the reducer.</summary>
-    public const int MaxSize = 200;
 }
 
 /// <summary>
@@ -176,15 +184,15 @@ public sealed class PanelRegistry : IPanelRegistry
 /// </summary>
 public interface IPanelRegistry
 {
-    /// <summary>Register a panel provider. Returns failure on empty id.</summary>
-    Result Register(IPanelProvider panel);
-
-    /// <summary>Unregister a panel by id.</summary>
-    Result Unregister(string id);
 
     /// <summary>All registered providers in registration order.</summary>
-    IReadOnlyList<IPanelProvider> All { get; }
+    public IReadOnlyList<IPanelProvider> All { get; }
+    /// <summary>Register a panel provider. Returns failure on empty id.</summary>
+    public Result Register(IPanelProvider panel);
+
+    /// <summary>Unregister a panel by id.</summary>
+    public Result Unregister(string id);
 
     /// <summary>Look up a provider by id.</summary>
-    IPanelProvider? Get(string id);
+    public IPanelProvider? Get(string id);
 }

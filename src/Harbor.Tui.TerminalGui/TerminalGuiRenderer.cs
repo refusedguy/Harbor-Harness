@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Tui.TerminalGui.Views;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Terminal.Gui.App;
@@ -26,9 +27,9 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
 {
     private readonly ILogger<TerminalGuiRenderer> _logger;
     private IApplication? _app;
+    private IDiagnosticsPanel? _diagnostics;
     private TerminalGuiScreen? _screen;
     private Func<string, Task>? _slashHandler;
-    private IDiagnosticsPanel? _diagnostics;
 
     public TerminalGuiRenderer(ILogger<TerminalGuiRenderer> logger) : base(logger)
     {
@@ -233,14 +234,14 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
     /// </summary>
     private sealed class TerminalGuiScreen
     {
-        private static readonly TimeSpan ThrottleInterval = TimeSpan.FromMilliseconds(50); // 20 FPS
         private const int DiagnosticsRows = 10;
+        private static readonly TimeSpan ThrottleInterval = TimeSpan.FromMilliseconds(50); // 20 FPS
 
         private readonly IAgent _agent;
         private readonly IApplication _app;
-        private readonly IDiagnosticsPanel? _diagnostics;
 
         private readonly List<(string Role, string Text)> _chat = new();
+        private readonly IDiagnosticsPanel? _diagnostics;
         private readonly StringBuilder _finalizedText = new();
         private readonly ILogger _logger;
 
@@ -253,11 +254,11 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
         private readonly StringBuilder _streamBuffer = new();
         private readonly StringBuilder _thinkBuffer = new();
         private decimal _cost;
+        private TextView? _diagnosticsView;
+        private bool _diagnosticsVisible;
         private volatile bool _isDirty;
 
         private TextView? _output;
-        private TextView? _diagnosticsView;
-        private bool _diagnosticsVisible;
         private int _spinnerIdx;
         private string _status = "idle";
         private Label? _statusBar;
@@ -486,8 +487,8 @@ public sealed class TerminalGuiRenderer : BaseTuiRenderer, IInteractiveTuiRender
             // Refresh the diagnostics overlay if it is visible.
             if (_diagnosticsVisible && _diagnosticsView is not null && _diagnostics is not null)
             {
-                var view = new Harbor.Tui.TerminalGui.Views.DiagnosticsView();
-                _diagnosticsView.Text = view.Render(_diagnostics, DiagnosticsRows);
+                var view = new DiagnosticsView();
+                _diagnosticsView.Text = view.Render(_diagnostics);
                 _diagnosticsView.MoveEnd();
             }
         }

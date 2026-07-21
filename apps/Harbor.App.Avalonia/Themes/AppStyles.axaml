@@ -17,70 +17,70 @@
 
     <!-- ════════════ Base Window ════════════ -->
     <Style Selector="Window">
-        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
 
     <!-- ════════════ Layout panels (Sidebar / StatusBar / Card host) ════════════ -->
     <Style Selector="Border.CodeEditorHost">
-        <Setter Property="Background" Value="{StaticResource MochaMantle}"/>
-        <Setter Property="CornerRadius" Value="8"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="{StaticResource MochaMantle}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
     </Style>
 
     <Style Selector="Border.Sidebar">
-        <Setter Property="Background" Value="{StaticResource SidebarBackgroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,0,1,0"/>
+        <Setter Property="Background" Value="{StaticResource SidebarBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
     </Style>
 
     <Style Selector="Border.StatusBar">
-        <Setter Property="Background" Value="{StaticResource StatusBarBackgroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="0,1,0,0"/>
-        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Background" Value="{StaticResource StatusBarBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="12,6" />
     </Style>
 
     <!-- Status-bar separator (vertical hairline between groups) -->
     <Style Selector="Border.StatusBarSeparator">
-        <Setter Property="Background" Value="{StaticResource SeparatorBrush}"/>
-        <Setter Property="Width" Value="1"/>
-        <Setter Property="Margin" Value="12,3"/>
-        <Setter Property="VerticalAlignment" Value="Stretch"/>
+        <Setter Property="Background" Value="{StaticResource SeparatorBrush}" />
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Margin" Value="12,3" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
     </Style>
 
     <!-- ════════════ Cards (ORCA card pattern) ════════════ -->
     <Style Selector="Border.Card">
-        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}"/>
-        <Setter Property="Padding" Value="16"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="BoxShadow" Value="0 2 8 0 #20000000"/>
+        <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BoxShadow" Value="0 2 8 0 #20000000" />
     </Style>
 
     <Style Selector="Border.CardElevated">
-        <Setter Property="Background" Value="{StaticResource CardElevatedBackgroundBrush}"/>
-        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}"/>
-        <Setter Property="Padding" Value="20"/>
-        <Setter Property="BoxShadow" Value="0 8 24 0 #40000000"/>
+        <Setter Property="Background" Value="{StaticResource CardElevatedBackgroundBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="BoxShadow" Value="0 8 24 0 #40000000" />
     </Style>
 
     <Style Selector="Border.CodeBlock">
-        <Setter Property="Background" Value="{StaticResource MochaCrust}"/>
-        <Setter Property="CornerRadius" Value="8"/>
-        <Setter Property="Padding" Value="12,10"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Background" Value="{StaticResource MochaCrust}" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
     </Style>
 
     <!-- ════════════ Streaming indicator ════════════ -->
     <Style Selector="Ellipse.StreamingDot">
-        <Setter Property="Fill" Value="{StaticResource MochaPeach}"/>
+        <Setter Property="Fill" Value="{StaticResource MochaPeach}" />
         <Setter Property="Transitions">
             <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.4"/>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.4" />
             </Transitions>
         </Setter>
     </Style>
@@ -98,10 +98,10 @@
         <Style.Animations>
             <Animation Duration="0:0:0.25" FillMode="Forward">
                 <KeyFrame Cue="0%">
-                    <Setter Property="Opacity" Value="0"/>
+                    <Setter Property="Opacity" Value="0" />
                 </KeyFrame>
                 <KeyFrame Cue="100%">
-                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Opacity" Value="1" />
                 </KeyFrame>
             </Animation>
         </Style.Animations>
@@ -114,10 +114,10 @@
         <Style.Animations>
             <Animation Duration="0:0:0.3" FillMode="Forward">
                 <KeyFrame Cue="0%">
-                    <Setter Property="Opacity" Value="0"/>
+                    <Setter Property="Opacity" Value="0" />
                 </KeyFrame>
                 <KeyFrame Cue="100%">
-                    <Setter Property="Opacity" Value="1"/>
+                    <Setter Property="Opacity" Value="1" />
                 </KeyFrame>
             </Animation>
         </Style.Animations>
@@ -127,50 +127,50 @@
     <Style Selector="TextBlock.BlinkingCursor">
         <Setter Property="Transitions">
             <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
             </Transitions>
         </Setter>
-        <Setter Property="Opacity" Value="1"/>
+        <Setter Property="Opacity" Value="1" />
     </Style>
 
     <!-- ════════════ Onboarding progress stepper ════════════ -->
     <Style Selector="Ellipse.StepperDot">
-        <Setter Property="Width" Value="10"/>
-        <Setter Property="Height" Value="10"/>
-        <Setter Property="Fill" Value="{StaticResource StepperPendingBrush}"/>
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Fill" Value="{StaticResource StepperPendingBrush}" />
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Fill" Duration="0:0:0.2"/>
-                <DoubleTransition Property="Width" Duration="0:0:0.2"/>
-                <DoubleTransition Property="Height" Duration="0:0:0.2"/>
+                <BrushTransition Property="Fill" Duration="0:0:0.2" />
+                <DoubleTransition Property="Width" Duration="0:0:0.2" />
+                <DoubleTransition Property="Height" Duration="0:0:0.2" />
             </Transitions>
         </Setter>
     </Style>
 
     <!-- ════════════ Headings / typography helpers (used inline) ════════════ -->
     <Style Selector="TextBlock.Heading1">
-        <Setter Property="FontSize" Value="28"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="FontSize" Value="28" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
     <Style Selector="TextBlock.Heading2">
-        <Setter Property="FontSize" Value="20"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
     <Style Selector="TextBlock.Heading3">
-        <Setter Property="FontSize" Value="16"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
     <Style Selector="TextBlock.Caption">
-        <Setter Property="FontSize" Value="11"/>
-        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
     </Style>
     <Style Selector="TextBlock.Label">
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextSubtleBrush}"/>
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextSubtleBrush}" />
     </Style>
 
     <!-- ════════════ TabButton (main-view tabs: Chat / Code) ════════════
@@ -179,38 +179,38 @@
          state, so the chat tab vs. code tab were visually identical and the
          user couldn't tell which view they were looking at). -->
     <Style Selector="RadioButton.TabButton">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding" Value="14,8"/>
-        <Setter Property="Margin" Value="0"/>
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
-        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.12"/>
-                <BrushTransition Property="Foreground" Duration="0:0:0.12"/>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+                <BrushTransition Property="Foreground" Duration="0:0:0.12" />
             </Transitions>
         </Setter>
     </Style>
 
     <!-- Hover (unchecked) → subtle surface tint. -->
     <Style Selector="RadioButton.TabButton:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}"/>
-        <Setter Property="TextElement.Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Background" Value="{StaticResource HoverBackgroundBrush}" />
+        <Setter Property="TextElement.Foreground" Value="{StaticResource TextBrush}" />
     </Style>
 
     <!-- Checked (active tab) → accent-tinted background + accent foreground. -->
     <Style Selector="RadioButton.TabButton:checked /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource SelectedBackgroundBrush}"/>
-        <Setter Property="TextElement.Foreground" Value="{StaticResource MochaBlue}"/>
-        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Background" Value="{StaticResource SelectedBackgroundBrush}" />
+        <Setter Property="TextElement.Foreground" Value="{StaticResource MochaBlue}" />
+        <Setter Property="FontWeight" Value="Bold" />
     </Style>
 
     <!-- Checked+hover → brighter accent. -->
     <Style Selector="RadioButton.TabButton:checked:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource HoverStrongBackgroundBrush}"/>
+        <Setter Property="Background" Value="{StaticResource HoverStrongBackgroundBrush}" />
     </Style>
 
     <!-- ════════════ Custom Windows caption buttons (Task U1) ════════════
@@ -224,44 +224,44 @@
          as plain text (acceptable since those platforms keep their native
          chrome anyway). -->
     <Style Selector="Button.WindowButton">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Width" Value="46"/>
-        <Setter Property="Height" Value="36"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="Margin" Value="0"/>
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
-        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="CornerRadius" Value="0" />
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.08"/>
+                <BrushTransition Property="Background" Duration="0:0:0.08" />
             </Transitions>
         </Setter>
     </Style>
 
     <!-- Hover on minimize / maximize → subtle gray. -->
     <Style Selector="Button.WindowButton:pointerover">
-        <Setter Property="Background" Value="#1f1f1f"/>
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="Background" Value="#1f1f1f" />
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
     </Style>
 
     <!-- Pressed feedback. -->
     <Style Selector="Button.WindowButton:pressed">
-        <Setter Property="Background" Value="#2a2a2a"/>
+        <Setter Property="Background" Value="#2a2a2a" />
     </Style>
 
     <!-- Close button hover → Win11-style red. -->
     <Style Selector="Button.WindowButtonClose:pointerover">
-        <Setter Property="Background" Value="#e81123"/>
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Background" Value="#e81123" />
+        <Setter Property="Foreground" Value="White" />
     </Style>
     <Style Selector="Button.WindowButtonClose:pressed">
-        <Setter Property="Background" Value="#c50f1f"/>
-        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="Background" Value="#c50f1f" />
+        <Setter Property="Foreground" Value="White" />
     </Style>
 
 </Styles>

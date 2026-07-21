@@ -1,11 +1,11 @@
 using System.Text.Json.Serialization;
 using MemoryPack;
 namespace Harbor.Abstractions.Models;
-
 /// <summary>
 ///     Status of a session — tracks agent activity state.
 /// </summary>
-public enum SessionStatus {
+public enum SessionStatus
+{
     /// <summary>No agent running, session is idle.</summary>
     Idle,
     /// <summary>Agent is actively working (LLM streaming or tool executing).</summary>

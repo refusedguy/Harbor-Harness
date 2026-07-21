@@ -1,8 +1,10 @@
 @page "/diff"
+@using System.Text
 @inject HarborJsInterop Js
 
 <h1>Diff Viewer</h1>
-<p>Paste two snippets and see them side-by-side. (Line-level diff — word-level diffing ships when the agent is wired up.)</p>
+<p>Paste two snippets and see them side-by-side. (Line-level diff — word-level diffing ships when the agent is wired
+    up.)</p>
 
 <div class="diff-shell">
     <div class="diff-pane">
@@ -26,7 +28,12 @@
 }
 
 <style>
-    .diff-actions { display: flex; gap: var(--space-2); margin: var(--space-3) 0; }
+    .diff-actions {
+        display: flex;
+        gap: var(--space-2);
+        margin: var(--space-3) 0;
+    }
+
     .diff-output {
         background: var(--ctp-crust);
         padding: var(--space-4);
@@ -40,38 +47,38 @@
 </style>
 
 @code {
-    private string _before = "Hello, world!\nThis is the original.";
-    private string _after = "Hello, Harbor!\nThis is the original.\nWith a new line.";
-    private string? _diff;
+private string _before = "Hello, world!\nThis is the original.";
+private string _after = "Hello, Harbor!\nThis is the original.\nWith a new line.";
+private string? _diff;
 
-    private void Compare()
+private void Compare()
+{
+    var beforeLines = _before.Split('\n');
+    var afterLines = _after.Split('\n');
+    var sb = new StringBuilder();
+    var max = Math.Max(beforeLines.Length, afterLines.Length);
+    for (var i = 0; i < max; i++)
     {
-        var beforeLines = _before.Split('\n');
-        var afterLines = _after.Split('\n');
-        var sb = new System.Text.StringBuilder();
-        int max = Math.Max(beforeLines.Length, afterLines.Length);
-        for (int i = 0; i < max; i++)
+        var b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
+        var a = i < afterLines.Length ? afterLines[i] : string.Empty;
+        if (b == a)
         {
-            string b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
-            string a = i < afterLines.Length ? afterLines[i] : string.Empty;
-            if (b == a)
-            {
-                sb.AppendLine("  " + a);
-            }
-            else
-            {
-                if (i < beforeLines.Length) sb.AppendLine("- " + b);
-                if (i < afterLines.Length) sb.AppendLine("+ " + a);
-            }
+            sb.AppendLine("  " + a);
         }
-        _diff = sb.ToString();
-    }
-
-    private async Task CopyDiff()
-    {
-        if (!string.IsNullOrEmpty(_diff))
+        else
         {
-            await Js.CopyToClipboardAsync(_diff).ConfigureAwait(false);
+            if (i < beforeLines.Length) sb.AppendLine("- " + b);
+            if (i < afterLines.Length) sb.AppendLine("+ " + a);
         }
     }
+    _diff = sb.ToString();
+}
+
+private async Task CopyDiff()
+{
+    if (!string.IsNullOrEmpty(_diff))
+    {
+        await Js.CopyToClipboardAsync(_diff).ConfigureAwait(false);
+    }
+}
 }

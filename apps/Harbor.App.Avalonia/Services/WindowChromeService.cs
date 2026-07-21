@@ -1,8 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
 ///     Encapsulates custom window-chrome behaviours for the main window —
 ///     drag-to-move, minimize, maximize/restore, and close. With
@@ -51,7 +49,7 @@ public sealed class WindowChromeService
             ? WindowState.Normal
             : WindowState.Maximized;
 
-    /// <summary>Close the window via the standard <see cref="Window.Close"/> path.</summary>
+    /// <summary>Close the window via the standard <see cref="Window.Close" /> path.</summary>
     /// <param name="window">The window to close.</param>
     public void Close(Window window) => window.Close();
 }

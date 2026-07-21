@@ -1,8 +1,6 @@
 @* MessageBubble — renders a single chat line with role-coloured left border.
    Used by Chat.razor for both committed lines and the active stream. @*@
 
-@using Harbor.Ui.Framework.State
-
 <div class="message-bubble @(Line.Role.ToString().ToLowerInvariant())">
     <div class="bubble-header">
         <span class="bubble-role">@Line.Role.ToString().ToLowerInvariant()</span>
@@ -13,7 +11,7 @@
 </div>
 
 @code {
-    /// <summary>The chat line to render.</summary>
-    [Parameter]
-    public ChatLine Line { get; set; }
+/// <summary>The chat line to render.</summary>
+[Parameter]
+public ChatLine Line { get; set; }
 }

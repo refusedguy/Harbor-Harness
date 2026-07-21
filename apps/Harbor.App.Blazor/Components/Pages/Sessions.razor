@@ -1,6 +1,4 @@
 @page "/sessions"
-@using Harbor.App.Blazor.Components.Shared
-@using Harbor.App.Blazor.ViewModels
 @using Harbor.Ui.Framework.Converters
 @inject SessionListViewModel Vm
 
@@ -12,7 +10,10 @@
 
     @if (Vm.IsLoading)
     {
-        <div class="loading"><div class="spinner"></div> Loading...</div>
+        <div class="loading">
+            <div class="spinner"></div>
+            Loading...
+        </div>
     }
     else if (Vm.Sessions.Count == 0)
     {
@@ -30,21 +31,35 @@
                     MessageCount="0"
                     StatusColorKey="MochaOverlay0"
                     IsDirty="false"
-                    IsActive="false" />
+                    IsActive="false"/>
             }
         </div>
     }
 </div>
 
 <style>
-    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); }
-    .page-header h1 { margin: 0; color: var(--accent); }
-    .loading, .empty { padding: var(--space-5); text-align: center; color: var(--text-dim); }
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
+    .page-header h1 {
+        margin: 0;
+        color: var(--accent);
+    }
+
+    .loading, .empty {
+        padding: var(--space-5);
+        text-align: center;
+        color: var(--text-dim);
+    }
 </style>
 
 @code {
-    protected override async Task OnInitializedAsync()
-    {
-        await Vm.ReloadAsync().ConfigureAwait(false);
-    }
+protected override async Task OnInitializedAsync()
+{
+    await Vm.ReloadAsync().ConfigureAwait(false);
+}
 }

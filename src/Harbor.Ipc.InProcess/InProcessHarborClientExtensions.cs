@@ -1,8 +1,5 @@
-using Harbor.Ipc;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.Ipc.InProcess;
-
 /// <summary>
 ///     DI extensions for registering <see cref="InProcessHarborClient" /> as
 ///     the active <see cref="IHarborClient" />.

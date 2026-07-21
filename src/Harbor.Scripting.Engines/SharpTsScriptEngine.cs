@@ -6,7 +6,6 @@
 //   temp directory (Process scratch space), but that is engine-internal — it
 //   never reads the user's script store.
 namespace Harbor.Scripting.Engines;
-
 /// <summary>
 ///     <see cref="IScriptEngine" /> backed by the SharpTS TypeScript
 ///     interpreter, invoked as a <c>sharpts</c> subprocess.
@@ -61,36 +60,36 @@ public sealed class SharpTsScriptEngine : IScriptEngine
     public const string ResultMarker = "__HARBOR_RESULT__";
 
     private const string BridgePreamble = """
-                                           const __harbor_events: any[] = [];
-                                           const Harbor = {
-                                             registerTool(def: any): any {
-                                               if (typeof def !== 'object' || def === null) throw new Error("registerTool requires an object");
-                                               if (typeof def.name !== 'string' || def.name.length === 0) throw new Error("registerTool: .name (non-empty string) required");
-                                               if (typeof def.execute !== 'function') throw new Error("registerTool: .execute (function) required");
-                                               __harbor_events.push({ kind: 'registerTool', def: {
-                                                 name: def.name,
-                                                 displayName: def.displayName || def.name,
-                                                 description: def.description || ('Script tool: ' + def.name),
-                                                 parameterSchema: def.parameterSchema || { type: 'object', properties: {} },
-                                                 executionMode: def.executionMode || 'Parallel',
-                                                 executeSource: def.execute.toString()
-                                               }});
-                                               return def;
-                                             },
-                                             log(msg: any): void { __harbor_events.push({ kind: 'log', msg: String(msg) }); },
-                                             tools:    { get: (_n: string) => undefined, list: () => [] },
-                                             providers:{ list: () => [] },
-                                             agents:   { list: () => [] }
-                                           };
-                                           """;
+                                          const __harbor_events: any[] = [];
+                                          const Harbor = {
+                                            registerTool(def: any): any {
+                                              if (typeof def !== 'object' || def === null) throw new Error("registerTool requires an object");
+                                              if (typeof def.name !== 'string' || def.name.length === 0) throw new Error("registerTool: .name (non-empty string) required");
+                                              if (typeof def.execute !== 'function') throw new Error("registerTool: .execute (function) required");
+                                              __harbor_events.push({ kind: 'registerTool', def: {
+                                                name: def.name,
+                                                displayName: def.displayName || def.name,
+                                                description: def.description || ('Script tool: ' + def.name),
+                                                parameterSchema: def.parameterSchema || { type: 'object', properties: {} },
+                                                executionMode: def.executionMode || 'Parallel',
+                                                executeSource: def.execute.toString()
+                                              }});
+                                              return def;
+                                            },
+                                            log(msg: any): void { __harbor_events.push({ kind: 'log', msg: String(msg) }); },
+                                            tools:    { get: (_n: string) => undefined, list: () => [] },
+                                            providers:{ list: () => [] },
+                                            agents:   { list: () => [] }
+                                          };
+                                          """;
 
     private const string BridgeEpilogue = """
-                                           console.error('__HARBOR_EVENTS__' + JSON.stringify(__harbor_events));
-                                           """;
+                                          console.error('__HARBOR_EVENTS__' + JSON.stringify(__harbor_events));
+                                          """;
+    private readonly Lazy<bool> _available;
 
     private readonly ILogger<SharpTsScriptEngine> _logger;
     private readonly string _toolName;
-    private readonly Lazy<bool> _available;
 
     /// <summary>
     ///     Construct a SharpTS-backed engine.
@@ -106,6 +105,10 @@ public sealed class SharpTsScriptEngine : IScriptEngine
 
     /// <summary>Returns <see langword="true" /> if the <c>sharpts</c> tool is available on PATH.</summary>
     public bool IsAvailable => _available.Value;
+
+    private static string NotInstalledMessage =>
+        "SharpTS is not available on PATH. Install with `dotnet tool install -g SharpTS` " +
+        "(ensure ~/.dotnet/tools is on PATH), or fall back to the Jint script engine.";
 
     /// <inheritdoc />
     public Result Evaluate(string code, ScriptEngineOptions options, ScriptGlobals globals)
@@ -175,15 +178,11 @@ public sealed class SharpTsScriptEngine : IScriptEngine
         }
     }
 
-    private static string NotInstalledMessage =>
-        "SharpTS is not available on PATH. Install with `dotnet tool install -g SharpTS` " +
-        "(ensure ~/.dotnet/tools is on PATH), or fall back to the Jint script engine.";
-
     private Result<(string Stdout, string Stderr)> RunSharpTs(string source, ScriptEngineOptions opts)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "harbor-sharpts-" + Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "harbor-sharpts-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
-        var scriptPath = Path.Combine(tempDir, "script.ts");
+        string scriptPath = Path.Combine(tempDir, "script.ts");
         try
         {
             File.WriteAllText(scriptPath, source);
@@ -209,7 +208,10 @@ public sealed class SharpTsScriptEngine : IScriptEngine
             linkedCts.CancelAfter(opts.Timeout);
             linkedCts.Token.Register(() =>
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* swallow */ }
+                try { p.Kill(entireProcessTree: true); }
+                catch
+                { /* swallow */
+                }
             });
 
             var stdoutTask = p.StandardOutput.ReadToEndAsync();
@@ -223,7 +225,10 @@ public sealed class SharpTsScriptEngine : IScriptEngine
             }
             catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException or AggregateException)
             {
-                try { p.Kill(entireProcessTree: true); } catch { /* swallow */ }
+                try { p.Kill(entireProcessTree: true); }
+                catch
+                { /* swallow */
+                }
                 return Result.Failure<(string, string)>($"Script timed out after {opts.Timeout.TotalSeconds:0.###}s.");
             }
 
@@ -244,7 +249,10 @@ public sealed class SharpTsScriptEngine : IScriptEngine
         }
         finally
         {
-            try { Directory.Delete(tempDir, recursive: true); } catch { /* swallow */ }
+            try { Directory.Delete(tempDir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
@@ -433,7 +441,10 @@ public sealed class SharpTsScriptEngine : IScriptEngine
             }
             if (!p.WaitForExit(3000))
             {
-                try { p.Kill(); } catch { /* swallow */ }
+                try { p.Kill(); }
+                catch
+                { /* swallow */
+                }
                 return false;
             }
             if (p.ExitCode != 0)

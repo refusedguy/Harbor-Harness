@@ -9,24 +9,24 @@
                 Padding="6,4" Margin="0,0,0,6" CornerRadius="4">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="Diff: " Foreground="{DynamicResource App.TextMuted}"/>
-                    <TextBlock Text="{Binding FilePath}" Foreground="{DynamicResource App.Text}"/>
-                    <TextBlock Text=" · " Foreground="{DynamicResource App.TextMuted}"/>
-                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource App.Accent}"/>
+                    <TextBlock Text="Diff: " Foreground="{DynamicResource App.TextMuted}" />
+                    <TextBlock Text="{Binding FilePath}" Foreground="{DynamicResource App.Text}" />
+                    <TextBlock Text=" · " Foreground="{DynamicResource App.TextMuted}" />
+                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource App.Accent}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Content="Refresh" Padding="10,4" Margin="0,0,4,0"
-                            Command="{Binding RefreshCommand}"/>
+                            Command="{Binding RefreshCommand}" />
                     <Button Content="Accept" Padding="10,4" Margin="0,0,4,0"
                             Background="{DynamicResource App.Success}" Foreground="Black"
-                            Command="{Binding AcceptAllCommand}"/>
+                            Command="{Binding AcceptAllCommand}" />
                     <Button Content="Reject" Padding="10,4"
                             Background="{DynamicResource App.Error}" Foreground="White"
-                            Command="{Binding RejectAllCommand}"/>
+                            Command="{Binding RejectAllCommand}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -40,7 +40,7 @@
                             <TextBlock Text="{Binding Header}"
                                        FontFamily="JetBrains Mono, Consolas, monospace"
                                        FontSize="11"
-                                       Foreground="{DynamicResource App.AccentSecondary}"/>
+                                       Foreground="{DynamicResource App.AccentSecondary}" />
                             <ItemsControl ItemsSource="{Binding Lines}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:DiffLineViewModel}">
@@ -49,7 +49,7 @@
                                             <TextBlock Text="{Binding Text}"
                                                        FontFamily="JetBrains Mono, Consolas, monospace"
                                                        FontSize="12"
-                                                       Foreground="{Binding LineForeground}"/>
+                                                       Foreground="{Binding LineForeground}" />
                                         </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

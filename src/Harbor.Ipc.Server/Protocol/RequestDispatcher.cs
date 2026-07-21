@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Server-side dispatcher: takes a <see cref="HarborRequest" /> and
 ///     produces a <see cref="HarborResponse" /> by calling the in-process

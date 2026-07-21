@@ -103,7 +103,7 @@ public sealed class RipGrepTool : ITool
         bool ignoreCase = args.TryGetProperty("ignoreCase", out var ic) && ic.ValueKind == JsonValueKind.True;
         // §ARCH-007: JsonValueKind has True/False (no Boolean). Treat either as "set".
         bool regex = !args.TryGetProperty("regex", out var rx)
-                     || (rx.ValueKind != JsonValueKind.True && rx.ValueKind != JsonValueKind.False)
+                     || rx.ValueKind != JsonValueKind.True && rx.ValueKind != JsonValueKind.False
                      || rx.GetBoolean();
         int maxResults = args.TryGetProperty("maxResults", out var m) && m.ValueKind == JsonValueKind.Number
             ? Math.Clamp(m.GetInt32(), 1, HardMaxResults)
@@ -190,12 +190,18 @@ public sealed class RipGrepTool : ITool
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            try { process.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
             return ToolResult.Error("ripgrep cancelled");
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            try { process.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
             return ToolResult.Error($"`rg` timed out after {TimeoutSeconds}s.");
         }
 
@@ -228,7 +234,8 @@ public sealed class RipGrepTool : ITool
         if (string.IsNullOrEmpty(s)) return 0;
         int count = 1;
         foreach (char c in s)
-            if (c == '\n') count++;
+            if (c == '\n')
+                count++;
         return count;
     }
 
@@ -241,7 +248,7 @@ public sealed class RipGrepTool : ITool
 
         string name = OperatingSystem.IsWindows() ? "rg.exe" : "rg";
         foreach (string dir in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-                                  .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+                 .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             try
             {
@@ -249,7 +256,9 @@ public sealed class RipGrepTool : ITool
                 if (File.Exists(candidate))
                     return candidate;
             }
-            catch { /* skip malformed PATH entries */ }
+            catch
+            { /* skip malformed PATH entries */
+            }
         }
         return string.Empty;
     }

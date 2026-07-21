@@ -1,8 +1,7 @@
 namespace Harbor.Desktop.DesignSystem;
-
 /// <summary>
 ///     Full 60-color Catppuccin palette as framework-agnostic
-///     <see cref="RgbColor"/> constants. Source: <see href="https://catppuccin.com/palette"/>.
+///     <see cref="RgbColor" /> constants. Source: <see href="https://catppuccin.com/palette" />.
 /// </summary>
 /// <remarks>
 ///     This file expands <c>Harbor.Desktop.Abstractions.DesignSystem.ColorPalette</c>

@@ -1,34 +1,33 @@
-using Harbor.Plugins.Abstractions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Instantiation;
-using Harbor.Ui.Framework.Panels;
 using Harbor.Terminal.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
-
 /// <summary>
 ///     Default <see cref="IPluginRegistrar" />. Builds a <see cref="PluginContext" />,
-/// calls <see cref="IPlugin.Initialize" />, then dispatches each <c>Register*</c>
-/// method based on which sub-interfaces the plugin implements. Tool / provider / agent /
-/// panel registration failures are routed through the host's <see cref="IPluginLoadHost" />
-/// <c>Register*</c> methods (which return <see cref="Result" />); the registrar logs but
-/// does not abort on per-item failures.
+///     calls <see cref="IPlugin.Initialize" />, then dispatches each <c>Register*</c>
+///     method based on which sub-interfaces the plugin implements. Tool / provider / agent /
+///     panel registration failures are routed through the host's <see cref="IPluginLoadHost" />
+///     <c>Register*</c> methods (which return <see cref="Result" />); the registrar logs but
+///     does not abort on per-item failures.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         The registrar takes a <c>pluginRoot</c> (e.g. <c>~/.harbor/plugins</c>) at
 ///         construction so it can derive
-/// <see cref="PluginContext.DataDirectory" /> = <c>{pluginRoot}/data/{plugin.Name}</c>.
+///         <see cref="PluginContext.DataDirectory" /> = <c>{pluginRoot}/data/{plugin.Name}</c>.
 ///     </para>
 /// </remarks>
 public sealed class PluginRegistrar : IPluginRegistrar
 {
-    private readonly string _pluginRoot;
     private readonly ILogger<PluginRegistrar> _logger;
+    private readonly string _pluginRoot;
 
     /// <summary>
     ///     Construct a new registrar.
@@ -157,7 +156,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
             // Eager invocation: needed to read ProviderId. Plugin authors
             // who know their provider id upfront should use the
             // AddProvider(ProviderId, Func<ILlmClient>) overload instead.
-            ILlmClient tempClient = factory();
+            var tempClient = factory();
             var r = _host.RegisterProvider(tempClient.ProviderId, factory);
             if (r.IsFailure)
                 _logger.LogWarning("Plugin provider registration failed for {Id}: {Error}", tempClient.ProviderId, r.Error);

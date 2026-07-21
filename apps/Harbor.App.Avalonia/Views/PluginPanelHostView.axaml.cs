@@ -1,7 +1,5 @@
 using Avalonia.Controls;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Plugin panel host view code-behind.
 /// </summary>

@@ -1,10 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Pipelines;
 using MessagePack;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     Length-prefixed MessagePack framing for a bidirectional pipe/socket
 ///     stream. Used by both <c>MessagePackRpcServer</c> and
@@ -123,7 +120,7 @@ public static class WireCodec
                 $"Frame payload {payload.Length} bytes exceeds cap {MaxFrameBytes}");
         }
 
-        var header = new byte[4];
+        byte[] header = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(header, (uint)payload.Length);
         await stream.WriteAsync(header, ct).ConfigureAwait(false);
         await stream.WriteAsync(payload, ct).ConfigureAwait(false);
@@ -132,7 +129,7 @@ public static class WireCodec
 
     private static async Task<byte[]?> ReadFrameAsync(Stream stream, CancellationToken ct)
     {
-        var header = new byte[4];
+        byte[] header = new byte[4];
         if (!await ReadExactAsync(stream, header, ct).ConfigureAwait(false))
         {
             return null;
@@ -146,7 +143,7 @@ public static class WireCodec
                 $"Incoming frame length {length} exceeds cap {MaxFrameBytes}");
         }
 
-        var payload = new byte[length];
+        byte[] payload = new byte[length];
         if (!await ReadExactAsync(stream, payload, ct).ConfigureAwait(false))
         {
             throw new EndOfStreamException(

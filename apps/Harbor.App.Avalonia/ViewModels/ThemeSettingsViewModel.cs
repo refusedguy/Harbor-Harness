@@ -1,16 +1,14 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     Theme selection + preview view-model. Owns the active theme string
 ///     (dark / light / system) and the live preview command. Extracted
 ///     from <c>SettingsViewModel</c> so the theme-switch code path is
 ///     unit-testable in isolation (construct a
-///     <see cref="ThemeSettingsViewModel"/> with a fake
-///     <see cref="ThemeService"/> and assert that <c>ApplyTheme</c>
+///     <see cref="ThemeSettingsViewModel" /> with a fake
+///     <see cref="ThemeService" /> and assert that <c>ApplyTheme</c>
 ///     forwards the right theme string).
 /// </summary>
 /// <remarks>
@@ -23,12 +21,13 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
 {
     private readonly ThemeService _themeService;
 
-    /// <summary>Construct a <see cref="ThemeSettingsViewModel"/>.</summary>
-    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
-    public ThemeSettingsViewModel(ThemeService themeService)
-    {
-        _themeService = themeService;
-    }
+    /// <summary>
+    ///     True when the resolved (applied) theme is dark. Updated by
+    ///     <see cref="ApplyTheme" />. Bound to the Settings UI to drive
+    ///     theme-aware preview elements.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDarkTheme = true;
 
     /// <summary>
     ///     The selected theme string — <c>"dark"</c>, <c>"light"</c>, or
@@ -38,13 +37,12 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _theme = "system";
 
-    /// <summary>
-    ///     True when the resolved (applied) theme is dark. Updated by
-    ///     <see cref="ApplyTheme"/>. Bound to the Settings UI to drive
-    ///     theme-aware preview elements.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isDarkTheme = true;
+    /// <summary>Construct a <see cref="ThemeSettingsViewModel" />.</summary>
+    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
+    public ThemeSettingsViewModel(ThemeService themeService)
+    {
+        _themeService = themeService;
+    }
 
     /// <summary>
     ///     Apply the current theme immediately (without saving). Used by

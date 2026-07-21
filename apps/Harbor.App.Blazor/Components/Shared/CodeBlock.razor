@@ -14,33 +14,33 @@
 </div>
 
 @code {
-    /// <summary>Raw code text to render.</summary>
-    [Parameter]
-    public string Code { get; set; } = string.Empty;
+/// <summary>Raw code text to render.</summary>
+[Parameter]
+public string Code { get; set; } = string.Empty;
 
-    /// <summary>Language label shown in the header.</summary>
-    [Parameter]
-    public string Language { get; set; } = "text";
+/// <summary>Language label shown in the header.</summary>
+[Parameter]
+public string Language { get; set; } = "text";
 
-    private bool Copied { get; set; }
+private bool Copied { get; set; }
 
-    private async Task CopyAsync()
+private async Task CopyAsync()
+{
+    try
     {
-        try
+        await Js.CopyToClipboardAsync(Code).ConfigureAwait(false);
+        Copied = true;
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        _ = Task.Delay(1500).ContinueWith(t =>
         {
-            await Js.CopyToClipboardAsync(Code).ConfigureAwait(false);
-            Copied = true;
-            await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-            _ = Task.Delay(1500).ContinueWith(t =>
-            {
-                _ = t; // discard completed task
-                Copied = false;
-                _ = InvokeAsync(StateHasChanged);
-            });
-        }
-        catch (Exception)
-        {
-            // Best-effort — clipboard may be blocked in non-secure contexts.
-        }
+            _ = t; // discard completed task
+            Copied = false;
+            _ = InvokeAsync(StateHasChanged);
+        });
     }
+    catch (Exception)
+    {
+        // Best-effort — clipboard may be blocked in non-secure contexts.
+    }
+}
 }

@@ -2,9 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Token usage charts. Plots cumulative input/output tokens over the
 ///     last N turns using native WPF Shapes (no third-party chart library
@@ -12,6 +10,15 @@ namespace Harbor.App.Wpf.ViewModels;
 /// </summary>
 public sealed partial class TokenUsageViewModel : ObservableObject
 {
+
+    /// <summary>Estimated total cost in USD.</summary>
+    [ObservableProperty] private decimal _totalCost;
+
+    /// <summary>Cumulative input tokens across the session.</summary>
+    [ObservableProperty] private int _totalInputTokens;
+
+    /// <summary>Cumulative output tokens across the session.</summary>
+    [ObservableProperty] private int _totalOutputTokens;
     /// <summary>Construct a <see cref="TokenUsageViewModel" />.</summary>
     public TokenUsageViewModel()
     {
@@ -24,15 +31,6 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 
     /// <summary>Bar chart series.</summary>
     public ObservableCollection<TokenBarViewModel> Bars { get; }
-
-    /// <summary>Cumulative input tokens across the session.</summary>
-    [ObservableProperty] private int _totalInputTokens;
-
-    /// <summary>Cumulative output tokens across the session.</summary>
-    [ObservableProperty] private int _totalOutputTokens;
-
-    /// <summary>Estimated total cost in USD.</summary>
-    [ObservableProperty] private decimal _totalCost;
 
     /// <summary>Formatted input token count for display.</summary>
     public string TotalInputTokensDisplay => TotalInputTokens.ToString("N0");
@@ -53,14 +51,14 @@ public sealed partial class TokenUsageViewModel : ObservableObject
         TotalCost = 0m;
     }
 
-    partial void OnTotalInputTokensChanged(int value) => OnPropertyChanged(nameof(TotalInputTokensDisplay));
-    partial void OnTotalOutputTokensChanged(int value) => OnPropertyChanged(nameof(TotalOutputTokensDisplay));
-    partial void OnTotalCostChanged(decimal value) => OnPropertyChanged(nameof(TotalCostDisplay));
+    partial void OnTotalInputTokensChanged(int value) => this.OnPropertyChanged(nameof(TotalInputTokensDisplay));
+    partial void OnTotalOutputTokensChanged(int value) => this.OnPropertyChanged(nameof(TotalOutputTokensDisplay));
+    partial void OnTotalCostChanged(decimal value) => this.OnPropertyChanged(nameof(TotalCostDisplay));
 
     private void SeedSampleBars()
     {
-        var input = new[] { 120, 480, 950, 1300, 1620, 1850, 2100, 2480 };
-        var output = new[] { 80, 220, 380, 540, 720, 880, 1020, 1180 };
+        int[] input = new[] { 120, 480, 950, 1300, 1620, 1850, 2100, 2480 };
+        int[] output = new[] { 80, 220, 380, 540, 720, 880, 1020, 1180 };
         int maxInput = input[^1];
         int maxOutput = output[^1];
         for (int i = 0; i < input.Length; i++)
@@ -80,20 +78,20 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 /// </summary>
 public sealed partial class TokenBarViewModel : ObservableObject
 {
-    /// <summary>X-axis label (turn number).</summary>
-    [ObservableProperty] private string _label = string.Empty;
-
-    /// <summary>Input-bar height in pixels.</summary>
-    [ObservableProperty] private double _inputHeight;
-
-    /// <summary>Output-bar height in pixels.</summary>
-    [ObservableProperty] private double _outputHeight;
 
     /// <summary>Input-bar fill brush.</summary>
     [ObservableProperty] private Brush _inputBrush = Brushes.CornflowerBlue;
 
+    /// <summary>Input-bar height in pixels.</summary>
+    [ObservableProperty] private double _inputHeight;
+    /// <summary>X-axis label (turn number).</summary>
+    [ObservableProperty] private string _label = string.Empty;
+
     /// <summary>Output-bar fill brush.</summary>
     [ObservableProperty] private Brush _outputBrush = Brushes.MediumSeaGreen;
+
+    /// <summary>Output-bar height in pixels.</summary>
+    [ObservableProperty] private double _outputHeight;
 
     /// <summary>Construct a <see cref="TokenBarViewModel" />.</summary>
     public TokenBarViewModel(string label, double inputHeight, double outputHeight, Brush inputBrush, Brush outputBrush)

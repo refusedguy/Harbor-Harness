@@ -1,5 +1,4 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     <see cref="IE2eDriver" /> implementation for interactive TUI renderers.
 ///     Allocates a pseudo-terminal (PTY) via Python's <c>pty.openpty()</c> and
@@ -53,7 +52,7 @@ namespace Harbor.E2E.Framework;
 ///         <b>Windows:</b> the proper approach is ConPTY (<c>CreatePseudoConsole</c>
 ///         + thread-pool pumping). That's a meaningful chunk of P/Invoke code;
 ///         the Windows-specific implementation throws
-///         <see cref="PlatformNotSupportedException"/>. When the project is
+///         <see cref="PlatformNotSupportedException" />. When the project is
 ///         built on Windows, callers should swap in a ConPTY-backed driver.
 ///     </para>
 /// </remarks>
@@ -63,7 +62,7 @@ public sealed class TuiDriver : IE2eDriver
     ///     The embedded Python PTY-wrapper script. Runs the child (.NET host)
     ///     in a freshly-allocated PTY and bridges stdin/stdout between the
     ///     C# test process and the child. Installs SIGTERM/SIGINT handlers so
-    ///     that <see cref="Process.Kill(bool)"/> cascades to the child even
+    ///     that <see cref="Process.Kill(bool)" /> cascades to the child even
     ///     though the child is in its own session (post-<c>setsid</c>).
     /// </summary>
     /// <remarks>
@@ -73,114 +72,123 @@ public sealed class TuiDriver : IE2eDriver
     ///     child argv (no shell involved — <c>execvp</c> is called directly).
     /// </remarks>
     private const string PythonPtyScript = """
-import atexit, fcntl, os, pty, select, signal, struct, sys, termios, threading, time
+                                           import atexit, fcntl, os, pty, select, signal, struct, sys, termios, threading, time
 
-def set_size(fd, rows=50, cols=120):
-    winsize = struct.pack('HHHH', rows, cols, 0, 0)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+                                           def set_size(fd, rows=50, cols=120):
+                                               winsize = struct.pack('HHHH', rows, cols, 0, 0)
+                                               fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
 
-master, slave = pty.openpty()
-set_size(master)
-set_size(slave)
+                                           master, slave = pty.openpty()
+                                           set_size(master)
+                                           set_size(slave)
 
-child_args = sys.argv[1:]
-if not child_args:
-    sys.stderr.write('tui-driver: missing child argv\n')
-    sys.exit(2)
+                                           child_args = sys.argv[1:]
+                                           if not child_args:
+                                               sys.stderr.write('tui-driver: missing child argv\n')
+                                               sys.exit(2)
 
-pid = os.fork()
-if pid == 0:
-    # Child: take over the slave end as its controlling tty + stdio.
-    os.close(master)
-    os.setsid()
-    try:
-        fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
-    except OSError:
-        pass
-    os.dup2(slave, 0)
-    os.dup2(slave, 1)
-    os.dup2(slave, 2)
-    if slave > 2:
-        os.close(slave)
-    try:
-        os.execvp(child_args[0], child_args)
-    except OSError as e:
-        sys.stderr.write('tui-driver: execvp failed: ' + str(e) + '\n')
-        os._exit(127)
-else:
-    # Parent (Python): bridge C# stdin → master, and master → C# stdout.
-    os.close(slave)
+                                           pid = os.fork()
+                                           if pid == 0:
+                                               # Child: take over the slave end as its controlling tty + stdio.
+                                               os.close(master)
+                                               os.setsid()
+                                               try:
+                                                   fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+                                               except OSError:
+                                                   pass
+                                               os.dup2(slave, 0)
+                                               os.dup2(slave, 1)
+                                               os.dup2(slave, 2)
+                                               if slave > 2:
+                                                   os.close(slave)
+                                               try:
+                                                   os.execvp(child_args[0], child_args)
+                                               except OSError as e:
+                                                   sys.stderr.write('tui-driver: execvp failed: ' + str(e) + '\n')
+                                                   os._exit(127)
+                                           else:
+                                               # Parent (Python): bridge C# stdin → master, and master → C# stdout.
+                                               os.close(slave)
 
-    def kill_child(signum=None, frame=None):
-        try:
-            os.kill(pid, signal.SIGTERM)
-            for _ in range(20):
-                try:
-                    wpid, _ = os.waitpid(pid, os.WNOHANG)
-                    if wpid != 0:
-                        break
-                except ChildProcessError:
-                    break
-                time.sleep(0.025)
-            else:
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                    os.waitpid(pid, 0)
-                except OSError:
-                    pass
-        except OSError:
-            pass
-        if signum is not None:
-            sys.exit(0)
+                                               def kill_child(signum=None, frame=None):
+                                                   try:
+                                                       os.kill(pid, signal.SIGTERM)
+                                                       for _ in range(20):
+                                                           try:
+                                                               wpid, _ = os.waitpid(pid, os.WNOHANG)
+                                                               if wpid != 0:
+                                                                   break
+                                                           except ChildProcessError:
+                                                               break
+                                                           time.sleep(0.025)
+                                                       else:
+                                                           try:
+                                                               os.kill(pid, signal.SIGKILL)
+                                                               os.waitpid(pid, 0)
+                                                           except OSError:
+                                                               pass
+                                                   except OSError:
+                                                       pass
+                                                   if signum is not None:
+                                                       sys.exit(0)
 
-    signal.signal(signal.SIGTERM, kill_child)
-    signal.signal(signal.SIGINT, kill_child)
-    atexit.register(kill_child)
+                                               signal.signal(signal.SIGTERM, kill_child)
+                                               signal.signal(signal.SIGINT, kill_child)
+                                               atexit.register(kill_child)
 
-    def forward_stdin():
-        while True:
-            try:
-                data = os.read(sys.stdin.fileno(), 4096)
-            except OSError:
-                break
-            if not data:
-                break
-            try:
-                os.write(master, data)
-            except OSError:
-                break
+                                               def forward_stdin():
+                                                   while True:
+                                                       try:
+                                                           data = os.read(sys.stdin.fileno(), 4096)
+                                                       except OSError:
+                                                           break
+                                                       if not data:
+                                                           break
+                                                       try:
+                                                           os.write(master, data)
+                                                       except OSError:
+                                                           break
 
-    threading.Thread(target=forward_stdin, daemon=True).start()
+                                               threading.Thread(target=forward_stdin, daemon=True).start()
 
-    while True:
-        try:
-            data = os.read(master, 65536)
-        except OSError:
-            break
-        if not data:
-            break
-        sys.stdout.buffer.write(data)
-        sys.stdout.buffer.flush()
+                                               while True:
+                                                   try:
+                                                       data = os.read(master, 65536)
+                                                   except OSError:
+                                                       break
+                                                   if not data:
+                                                       break
+                                                   sys.stdout.buffer.write(data)
+                                                   sys.stdout.buffer.flush()
 
-    try:
-        _, status = os.waitpid(pid, 0)
-        if os.WIFEXITED(status):
-            sys.exit(os.WEXITSTATUS(status))
-        if os.WIFSIGNALED(status):
-            sys.exit(128 + os.WTERMSIG(status))
-    except ChildProcessError:
-        pass
-    sys.exit(0)
-""";
+                                               try:
+                                                   _, status = os.waitpid(pid, 0)
+                                                   if os.WIFEXITED(status):
+                                                       sys.exit(os.WEXITSTATUS(status))
+                                                   if os.WIFSIGNALED(status):
+                                                       sys.exit(128 + os.WTERMSIG(status))
+                                               except ChildProcessError:
+                                                   pass
+                                               sys.exit(0)
+                                           """;
+
+    /// <summary>
+    ///     Skip reason string for tests that need a PTY but the current sandbox
+    ///     doesn't allow one. Tests can pass this verbatim to <c>[Skip(...)]</c>.
+    /// </summary>
+    public const string NoPtySkipReason =
+        "PTY allocation is blocked on this OS/sandbox (python3 pty.openpty fails). " +
+        "TUI E2E tests require a real PTY — run on a Linux/macOS host with " +
+        "python3 and unrestricted openpty. See docs/E2E_TESTING.md.";
 
     private readonly string _projectRelativePath;
     private readonly string _tuiName;
     private Process? _process;
+    private CancellationTokenSource? _readerCts;
     private StringBuilder _screen = new();
-    private StreamReader? _stdoutReader;
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
-    private CancellationTokenSource? _readerCts;
+    private StreamReader? _stdoutReader;
 
     /// <summary>
     ///     Create a TUI driver.
@@ -198,55 +206,6 @@ else:
         _projectRelativePath = projectRelativePath;
         _tuiName = tuiName;
     }
-
-    /// <summary>
-    ///     Whether the current OS + sandbox supports PTY allocation. TUI tests
-    ///     that need a real PTY (SpectreTui, Termina, Terminal.Gui, RazorConsole)
-    ///     should call this in a <c>[Skip]</c> guard so they no-op gracefully on
-    ///     sandboxes that block <c>openpty</c>/<c>forkpty</c>.
-    /// </summary>
-    /// <remarks>
-    ///     The check spawns <c>python3 -c "import pty, fcntl, termios, struct;
-    ///     pty.openpty(); print('pty-ok')"</c> and verifies it prints the
-    ///     expected output within 3 seconds. <c>pty.openpty</c> uses
-    ///     <c>openpty(3)</c> internally; if the sandbox blocks that call (or
-    ///     <c>python3</c> is missing), the check returns <see langword="false"/>.
-    /// </remarks>
-    public static bool IsPtyAvailable()
-    {
-        if (OperatingSystem.IsWindows()) return false;
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "python3",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            psi.ArgumentList.Add("-u");
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add("import fcntl, pty, struct, sys, termios; m, s = pty.openpty(); fcntl.ioctl(m, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 120, 0, 0)); sys.stdout.write('pty-ok\\n')");
-            using var p = new Process { StartInfo = psi };
-            if (!p.Start()) return false;
-            string stdout = p.StandardOutput.ReadToEnd();
-            if (!p.WaitForExit(3000)) { try { p.Kill(); } catch { /* ignore */ } return false; }
-            return stdout.Contains("pty-ok", StringComparison.Ordinal);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
-    ///     Skip reason string for tests that need a PTY but the current sandbox
-    ///     doesn't allow one. Tests can pass this verbatim to <c>[Skip(...)]</c>.
-    /// </summary>
-    public const string NoPtySkipReason =
-        "PTY allocation is blocked on this OS/sandbox (python3 pty.openpty fails). " +
-        "TUI E2E tests require a real PTY — run on a Linux/macOS host with " +
-        "python3 and unrestricted openpty. See docs/E2E_TESTING.md.";
 
     /// <inheritdoc />
     public bool IsRunning => _process is { HasExited: false };
@@ -286,7 +245,7 @@ else:
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
         // -u   unbuffered stdout/stderr so the test sees TUI output immediately.
         // -c <script>  read the program from this argument string (no temp file).
@@ -329,17 +288,19 @@ else:
         // Drain stdout (the PTY master's output) into the rolling screen buffer.
         // ANSI escape sequences are stripped as we go so WaitForTextAsync can do
         // a plain substring search instead of dealing with cursor-move sequences.
-        CancellationToken readerToken = _readerCts.Token;
+        var readerToken = _readerCts.Token;
         _ = Task.Run(async () =>
         {
             char[] buf = new char[4096];
             int n;
             while ((n = await _stdoutReader.ReadAsync(buf, readerToken).ConfigureAwait(false)) > 0)
             {
-                string chunk = new string(buf, 0, n);
+                string chunk = new(buf, 0, n);
                 string clean = AnsiStripper.Strip(chunk);
                 lock (_screen)
+                {
                     _screen.Append(clean);
+                }
             }
         }, readerToken);
         _ = Task.Run(async () =>
@@ -350,10 +311,12 @@ else:
             {
                 // Stderr is informational only — append to screen so error
                 // messages from the TUI are visible to WaitForTextAsync.
-                string chunk = new string(buf, 0, n);
+                string chunk = new(buf, 0, n);
                 string clean = AnsiStripper.Strip(chunk);
                 lock (_screen)
+                {
                     _screen.Append(clean);
+                }
             }
         }, readerToken);
 
@@ -380,13 +343,15 @@ else:
     public Task<string> ReadScreenAsync(CancellationToken ct = default)
     {
         lock (_screen)
+        {
             return Task.FromResult(_screen.ToString());
+        }
     }
 
     /// <inheritdoc />
     public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
     {
-        TimeSpan deadline = TimeSpan.FromSeconds(10);
+        var deadline = TimeSpan.FromSeconds(10);
         if (timeout is { } t) deadline = t;
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < deadline)
@@ -405,7 +370,7 @@ else:
     {
         if (_process is null)
             throw new InvalidOperationException("TuiDriver not started.");
-        TimeSpan deadline = TimeSpan.FromSeconds(30);
+        var deadline = TimeSpan.FromSeconds(30);
         if (timeout is { } t) deadline = t;
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -417,8 +382,14 @@ else:
         }
         catch (OperationCanceledException)
         {
-            try { _process.Kill(entireProcessTree: true); } catch { /* ignore */ }
-            try { _process.WaitForExit(2000); } catch { /* ignore */ }
+            try { _process.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { _process.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
             return -1;
         }
     }
@@ -428,8 +399,14 @@ else:
     {
         if (_process is { HasExited: false } p)
         {
-            try { p.Kill(entireProcessTree: true); } catch { /* ignore */ }
-            try { p.WaitForExit(2000); } catch { /* ignore */ }
+            try { p.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { p.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
         }
         return Task.CompletedTask;
     }
@@ -443,15 +420,75 @@ else:
         // was killed mid-write (sandbox SIGKILL of the wrapper), the pipe may
         // be broken; swallowing the IOException keeps teardown from masking
         // the real test failure.
-        try { _stdinWriter?.Dispose(); } catch { /* pipe broken — ignore */ }
-        try { _stdoutReader?.Dispose(); } catch { /* pipe broken — ignore */ }
-        try { _stderrReader?.Dispose(); } catch { /* pipe broken — ignore */ }
+        try { _stdinWriter?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
+        try { _stdoutReader?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
+        try { _stderrReader?.Dispose(); }
+        catch
+        { /* pipe broken — ignore */
+        }
         _process?.Dispose();
         return ValueTask.CompletedTask;
     }
 
     /// <summary>
-    ///     Map a <see cref="ConsoleKey"/> + modifiers to the ANSI byte sequence
+    ///     Whether the current OS + sandbox supports PTY allocation. TUI tests
+    ///     that need a real PTY (SpectreTui, Termina, Terminal.Gui, RazorConsole)
+    ///     should call this in a <c>[Skip]</c> guard so they no-op gracefully on
+    ///     sandboxes that block <c>openpty</c>/<c>forkpty</c>.
+    /// </summary>
+    /// <remarks>
+    ///     The check spawns
+    ///     <c>
+    ///         python3 -c "import pty, fcntl, termios, struct;
+    ///         pty.openpty(); print('pty-ok')"
+    ///     </c>
+    ///     and verifies it prints the
+    ///     expected output within 3 seconds. <c>pty.openpty</c> uses
+    ///     <c>openpty(3)</c> internally; if the sandbox blocks that call (or
+    ///     <c>python3</c> is missing), the check returns <see langword="false" />.
+    /// </remarks>
+    public static bool IsPtyAvailable()
+    {
+        if (OperatingSystem.IsWindows()) return false;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "python3",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            psi.ArgumentList.Add("-u");
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("import fcntl, pty, struct, sys, termios; m, s = pty.openpty(); fcntl.ioctl(m, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 120, 0, 0)); sys.stdout.write('pty-ok\\n')");
+            using var p = new Process { StartInfo = psi };
+            if (!p.Start()) return false;
+            string stdout = p.StandardOutput.ReadToEnd();
+            if (!p.WaitForExit(3000))
+            {
+                try { p.Kill(); }
+                catch
+                { /* ignore */
+                }
+                return false;
+            }
+            return stdout.Contains("pty-ok", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Map a <see cref="ConsoleKey" /> + modifiers to the ANSI byte sequence
     ///     a typical TUI expects. Covers the keys used by Harbor TUI tests:
     ///     Enter, Escape, Ctrl-C, Ctrl-P, F12, arrow keys. Unknown keys fall
     ///     back to the Unicode character of the key.
@@ -494,7 +531,7 @@ else:
             ConsoleKey.F2 => "\u001b[12~",
             ConsoleKey.F1 => "\u001b[11~",
             ConsoleKey.Spacebar => " ",
-            _ => char.ToString((char)key),
+            _ => char.ToString((char)key)
         };
     }
 }

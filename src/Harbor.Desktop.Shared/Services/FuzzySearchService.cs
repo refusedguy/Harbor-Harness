@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.Shared.Services;
-
 /// <summary>
 ///     Lightweight fuzzy-search service for the command palette. Uses a
 ///     simplified subsequence-match score (à la Sublime Text / VS Code
@@ -9,8 +8,8 @@ namespace Harbor.Desktop.Shared.Services;
 public sealed class FuzzySearchService
 {
     /// <summary>
-    ///     Score <paramref name="candidate"/> against <paramref name="query"/>.
-    /// Higher score = better match; <c>0</c> = no match.
+    ///     Score <paramref name="candidate" /> against <paramref name="query" />.
+    ///     Higher score = better match; <c>0</c> = no match.
     /// </summary>
     /// <param name="candidate">Haystack text (e.g. command title).</param>
     /// <param name="query">Needle text (user-typed query).</param>
@@ -55,8 +54,8 @@ public sealed class FuzzySearchService
     }
 
     /// <summary>
-    ///     Rank <paramref name="items"/> by fuzzy-match score against
-    ///     <paramref name="query"/>. Returns only items with score > 0,
+    ///     Rank <paramref name="items" /> by fuzzy-match score against
+    ///     <paramref name="query" />. Returns only items with score > 0,
     ///     sorted descending.
     /// </summary>
     /// <typeparam name="T">Item type.</typeparam>
@@ -75,8 +74,8 @@ public sealed class FuzzySearchService
         var results = new List<(T Item, int Score)>();
         foreach (var item in items)
         {
-            var text = textSelector(item);
-            var s = Score(text, query);
+            string text = textSelector(item);
+            int s = Score(text, query);
             if (s > 0) results.Add((item, s));
         }
         results.Sort(static (a, b) => b.Score.CompareTo(a.Score));

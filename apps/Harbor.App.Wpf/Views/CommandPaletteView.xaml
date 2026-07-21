@@ -13,8 +13,8 @@
         KeyDown="Window_KeyDown">
     <Grid Margin="6">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBox Grid.Row="0"
@@ -26,7 +26,7 @@
                  Padding="10,8"
                  FontSize="14"
                  Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                 Loaded="QueryBox_Loaded"/>
+                 Loaded="QueryBox_Loaded" />
 
         <ListBox Grid.Row="1"
                  Background="Transparent"
@@ -39,16 +39,16 @@
                 <DataTemplate DataType="{x:Type vm:CommandEntry}">
                     <Grid Margin="0,2">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="100"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="{Binding Category}"
                                    Foreground="{DynamicResource App.TextMuted}"
-                                   FontSize="11" VerticalAlignment="Center"/>
+                                   FontSize="11" VerticalAlignment="Center" />
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource App.Text}"/>
+                            <TextBlock Text="{Binding Title}" Foreground="{DynamicResource App.Text}" />
                             <TextBlock Text="{Binding Description}"
-                                       Foreground="{DynamicResource App.TextMuted}" FontSize="11"/>
+                                       Foreground="{DynamicResource App.TextMuted}" FontSize="11" />
                         </StackPanel>
                     </Grid>
                 </DataTemplate>

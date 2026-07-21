@@ -5,6 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Cli.Configuration;
+using Harbor.Cli.Logging;
 using Harbor.Core.Agents;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
@@ -12,10 +13,21 @@ using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
 using Harbor.Desktop.Abstractions.Configuration;
-using System.Reflection;
+using Harbor.Ipc.Client;
+using Harbor.Ipc.InProcess;
+using Harbor.Ipc.Server;
+using Harbor.Providers.Ollama;
+using Harbor.Storage.Jsonl;
+using Harbor.Storage.Memory;
+using Harbor.Terminal.Abstractions;
+using Harbor.Tools.Builtin;
+using Harbor.Tui.Plain;
+using Harbor.Ui.Framework.Diagnostics;
+using Harbor.Ui.Framework.Panels;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_PLUGINS
-using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Runtime;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
@@ -35,22 +47,6 @@ using Harbor.Tui.Spectre.Fullscreen;
 using Harbor.Tui.Termina;
 using Harbor.Tui.TerminalGui;
 #endif
-using Harbor.Providers.Ollama;
-using Harbor.Storage.Jsonl;
-using Harbor.Storage.Memory;
-using Harbor.Tools.Builtin;
-using Harbor.Terminal.Abstractions;
-using Harbor.Ui.Framework.Panels;
-using Harbor.Ui.Framework.Diagnostics;
-using Harbor.Cli.Logging;
-using Harbor.Tui.Plain;
-using Harbor.Ipc;
-using Harbor.Ipc.Client;
-using Harbor.Ipc.InProcess;
-using Harbor.Ipc.Server;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 // A3 (DI analyzers) added Excubo.Analyzers.DependencyInjection rules
 // DI014 (BuildServiceProvider should be disposed) and DI016 (don't call
 // BuildServiceProvider during composition). The HostBuilder pattern
@@ -149,7 +145,7 @@ internal static class HostBuilder
 
         _logger.LogInformation("Building host");
         _logger.LogInformation("Feature flags: plugins={Plugins}, scripting={Scripting}, " +
-            "spectre-tui={SpectreTui}, all-providers={AllProviders}",
+                               "spectre-tui={SpectreTui}, all-providers={AllProviders}",
             IsAssemblyLoaded("Harbor.Plugins.Runtime"),
             IsAssemblyLoaded("Harbor.Scripting.Hosting"),
             IsAssemblyLoaded("Harbor.Tui.Spectre"),
@@ -380,14 +376,14 @@ internal static class HostBuilder
         // is removed from the project reference graph, so the plugin host can't be
         // constructed. See apps/Harbor.App.Cli/Harbor.App.Cli.csproj.
         var pluginHost = new PluginLoadHost(
-            services: builder.Services,
-            configuration: builder.Configuration,
-            loggerFactory: loggerFactory,
-            eventBus: eventBus,
-            tools: toolRegistry,
-            providers: providerRegistry,
-            agents: agentRegistry,
-            panels: panelRegistry);
+            builder.Services,
+            builder.Configuration,
+            loggerFactory,
+            eventBus,
+            toolRegistry,
+            providerRegistry,
+            agentRegistry,
+            panelRegistry);
 
         string globalPluginsDir = Path.Combine(harborDir, "plugins");
         string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
@@ -596,7 +592,7 @@ internal static class HostBuilder
 #if HARBOR_WITH_SPECTRE_TUI
             return tui.ToLowerInvariant() switch
             {
-                "plain" => (ITuiRenderer)new PlainTuiRenderer(),
+                "plain" => new PlainTuiRenderer(),
                 "spectre" => new SpectreTuiRenderer(sp.GetRequiredService<ILogger<SpectreTuiRenderer>>()),
                 "fullscreen" => new FullscreenTuiRenderer(sp.GetRequiredService<ILogger<FullscreenTuiRenderer>>()),
                 "spectre-tui" => new Tui.SpectreTui.SpectreTuiRenderer(

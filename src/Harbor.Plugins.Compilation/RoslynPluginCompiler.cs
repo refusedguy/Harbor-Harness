@@ -1,19 +1,19 @@
+using System.Reflection;
 using Harbor.Plugins.Abstractions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 namespace Harbor.Plugins.Compilation;
-
 /// <summary>
 ///     <see cref="IPluginCompiler" /> that compiles CS source via
-/// <see cref="CSharpCompilation" /> in-memory. The compiled assembly bytes are loaded
-/// via <see cref="System.Reflection.Assembly.Load(byte[])" /> — no file is written to
-/// disk by this class (caching is the responsibility of <see cref="CachingCompiler" />).
+///     <see cref="CSharpCompilation" /> in-memory. The compiled assembly bytes are loaded
+///     via <see cref="System.Reflection.Assembly.Load(byte[])" /> — no file is written to
+///     disk by this class (caching is the responsibility of <see cref="CachingCompiler" />).
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Metadata references are gathered once at construction time from
-/// <see cref="PluginAssemblyReferences" />. Plugin authors can therefore reference any
+///         <see cref="PluginAssemblyReferences" />. Plugin authors can therefore reference any
 ///         type already loaded in the host's <see cref="AppDomain" />.
 ///     </para>
 ///     <para>
@@ -46,15 +46,15 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
             throw new ArgumentNullException(nameof(script));
         ct.ThrowIfCancellationRequested();
 
-        SourceText sourceText = SourceText.From(script.Source);
+        var sourceText = SourceText.From(script.Source);
         var syntaxTree = CSharpSyntaxTree.ParseText(sourceText, path: script.Path);
 
         var compilation = CSharpCompilation.Create(
-            assemblyName: $"Harbor.Plugin.Dynamic.{script.Hash}",
-            syntaxTrees: new[] { syntaxTree },
-            references: _references.References,
-            options: new CSharpCompilationOptions(
-                outputKind: OutputKind.DynamicallyLinkedLibrary,
+            $"Harbor.Plugin.Dynamic.{script.Hash}",
+            new[] { syntaxTree },
+            _references.References,
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
                 optimizationLevel: OptimizationLevel.Release,
                 assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default));
 
@@ -71,8 +71,8 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
         }
 
         byte[] assemblyBytes = ms.ToArray();
-        var asm = System.Reflection.Assembly.Load(assemblyBytes);
-        var compiled = new CompiledPluginAssembly(asm, script.Hash, script.Path, assemblyBytes, FromCache: false);
+        var asm = Assembly.Load(assemblyBytes);
+        var compiled = new CompiledPluginAssembly(asm, script.Hash, script.Path, assemblyBytes);
         return Task.FromResult(CompilationResult.Fresh(compiled));
     }
 

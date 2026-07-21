@@ -4,19 +4,17 @@ using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Blazor.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Blazor.ViewModels;
-
 /// <summary>
 ///     View-model for the chat page. Owns the local demo transcript and
-///     bridges to the singleton <see cref="UiStore"/> (TEA pattern) so
+///     bridges to the singleton <see cref="UiStore" /> (TEA pattern) so
 ///     the StatusBar + TopBar reflect chat activity.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Architecture:</b> the VM is a thin projector. It does not own
-///         the canonical chat state — that lives in <see cref="UiStore"/>
-///         (driven by <see cref="AgentEvent"/> values from the real agent).
+///         the canonical chat state — that lives in <see cref="UiStore" />
+///         (driven by <see cref="AgentEvent" /> values from the real agent).
 ///         For the demo shell without a wired-up agent, the VM keeps a local
 ///         transcript so the chat UI is usable end-to-end. When the
 ///         <c>HostBuilder</c> from <c>Harbor.Cli</c> injects an
@@ -27,9 +25,9 @@ namespace Harbor.App.Blazor.ViewModels;
 /// </remarks>
 public sealed partial class ChatViewModel : ObservableObject
 {
-    private readonly UiStore _store;
     private readonly BlazorDispatcherAdapter _dispatcher;
     private readonly ILogger<ChatViewModel> _logger;
+    private readonly UiStore _store;
     private string _input = string.Empty;
 
     /// <summary>Construct the VM.</summary>
@@ -45,7 +43,7 @@ public sealed partial class ChatViewModel : ObservableObject
     public string Input
     {
         get => _input;
-        set => SetProperty(ref _input, value);
+        set => this.SetProperty(ref _input, value);
     }
 
     /// <summary>Immutable snapshot of the current UI state (for the status / top bars).</summary>
@@ -62,7 +60,7 @@ public sealed partial class ChatViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(text)) return;
 
         _input = string.Empty;
-        OnPropertyChanged(nameof(Input));
+        this.OnPropertyChanged(nameof(Input));
 
         // Add to local demo transcript.
         await _dispatcher.InvokeAsync(() =>
@@ -89,33 +87,35 @@ public sealed partial class ChatViewModel : ObservableObject
 
     /// <summary>Cancel the current agent run (stub — wires through to TuiEffectHost when agent is configured).</summary>
     [RelayCommand]
-    public Task CancelAsync()
-    {
-        return Task.CompletedTask;
-    }
+    public Task CancelAsync() => Task.CompletedTask;
 
     /// <summary>Clear the local transcript (does not delete the session on disk).</summary>
     [RelayCommand]
-    public void Clear()
-    {
-        LocalLines.Clear();
-    }
+    public void Clear() => LocalLines.Clear();
 
     private async void OnStoreChanged(object? _, UiStateChangedEventArgs __)
     {
         // Re-publish State so bound controls refresh on the render thread.
-        await _dispatcher.InvokeAsync(() => OnPropertyChanged(nameof(State))).ConfigureAwait(false);
+        await _dispatcher.InvokeAsync(() => this.OnPropertyChanged(nameof(State))).ConfigureAwait(false);
     }
 }
 
 /// <summary>
 ///     View-model for the Sessions page. Loads the list of saved sessions
-///     from <see cref="SessionBrowserService"/> and exposes them for binding.
+///     from <see cref="SessionBrowserService" /> and exposes them for binding.
 /// </summary>
 public sealed partial class SessionListViewModel : ObservableObject
 {
     private readonly SessionBrowserService _browser;
     private readonly BlazorDispatcherAdapter _dispatcher;
+
+    /// <summary>Whether the list is currently loading.</summary>
+    [ObservableProperty]
+    private bool _isLoading;
+
+    /// <summary>Currently loaded sessions.</summary>
+    [ObservableProperty]
+    private ObservableCollection<SessionSummary> _sessions = new();
 
     /// <summary>Construct the VM.</summary>
     public SessionListViewModel(SessionBrowserService browser, BlazorDispatcherAdapter dispatcher)
@@ -123,14 +123,6 @@ public sealed partial class SessionListViewModel : ObservableObject
         _browser = browser;
         _dispatcher = dispatcher;
     }
-
-    /// <summary>Currently loaded sessions.</summary>
-    [ObservableProperty]
-    private ObservableCollection<SessionSummary> _sessions = new();
-
-    /// <summary>Whether the list is currently loading.</summary>
-    [ObservableProperty]
-    private bool _isLoading;
 
     /// <summary>Reload the list from the configured directory.</summary>
     [RelayCommand]
@@ -154,19 +146,12 @@ public sealed partial class SessionListViewModel : ObservableObject
 
 /// <summary>
 ///     View-model for the Providers page. Loads the list of configured LLM
-///     providers from <see cref="ProviderBrowserService"/>.
+///     providers from <see cref="ProviderBrowserService" />.
 /// </summary>
 public sealed partial class ProviderBrowserViewModel : ObservableObject
 {
     private readonly ProviderBrowserService _browser;
     private readonly BlazorDispatcherAdapter _dispatcher;
-
-    /// <summary>Construct the VM.</summary>
-    public ProviderBrowserViewModel(ProviderBrowserService browser, BlazorDispatcherAdapter dispatcher)
-    {
-        _browser = browser;
-        _dispatcher = dispatcher;
-    }
 
     /// <summary>Currently loaded providers.</summary>
     [ObservableProperty]
@@ -175,6 +160,13 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
     /// <summary>Currently selected provider JSON, displayed in the editor.</summary>
     [ObservableProperty]
     private string? _selectedJson;
+
+    /// <summary>Construct the VM.</summary>
+    public ProviderBrowserViewModel(ProviderBrowserService browser, BlazorDispatcherAdapter dispatcher)
+    {
+        _browser = browser;
+        _dispatcher = dispatcher;
+    }
 
     /// <summary>Reload the list of providers.</summary>
     [RelayCommand]
@@ -189,10 +181,7 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
 
     /// <summary>Select a provider to view its raw JSON.</summary>
     [RelayCommand]
-    public void Select(ProviderSummary summary)
-    {
-        SelectedJson = summary.RawJson;
-    }
+    public void Select(ProviderSummary summary) => SelectedJson = summary.RawJson;
 }
 
 /// <summary>
@@ -201,9 +190,13 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject
 {
-    private readonly ThemeService _theme;
     private readonly SessionBrowserService _sessions;
+    private readonly ThemeService _theme;
     private readonly ToastService _toasts;
+
+    /// <summary>Directory to scan for saved JSONL sessions.</summary>
+    [ObservableProperty]
+    private string _sessionsDirectory = string.Empty;
 
     /// <summary>Construct the VM.</summary>
     public SettingsViewModel(ThemeService theme, SessionBrowserService sessions, ToastService toasts)
@@ -212,11 +205,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         _sessions = sessions;
         _toasts = toasts;
         _theme.ThemeChanged += OnThemeChanged;
-    }
-
-    private void OnThemeChanged(object? _, ThemeChangedEventArgs __)
-    {
-        OnPropertyChanged(nameof(SelectedTheme));
     }
 
     /// <summary>The currently selected Catppuccin theme.</summary>
@@ -230,9 +218,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>Directory to scan for saved JSONL sessions.</summary>
-    [ObservableProperty]
-    private string _sessionsDirectory = string.Empty;
+    private void OnThemeChanged(object? _, ThemeChangedEventArgs __) => this.OnPropertyChanged(nameof(SelectedTheme));
 
     /// <summary>Apply the sessions directory to the browser service.</summary>
     [RelayCommand]
@@ -281,7 +267,7 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     }
 
     /// <summary>Estimated cost in USD (sample pricing — replace with real usage from sessions).</summary>
-    public decimal EstimatedCostUsd => (TotalIn * 0.000001m) + (TotalOut * 0.000002m);
+    public decimal EstimatedCostUsd => TotalIn * 0.000001m + TotalOut * 0.000002m;
 
     private static IEnumerable<TokenPoint> Seed()
     {
@@ -289,9 +275,9 @@ public sealed partial class TokenUsageViewModel : ObservableObject
         for (int i = 0; i < 12; i++)
         {
             yield return new TokenPoint(
-                Label: $"T{i + 1}",
-                InputTokens: rng.Next(120, 1800),
-                OutputTokens: rng.Next(40, 900));
+                $"T{i + 1}",
+                rng.Next(120, 1800),
+                rng.Next(40, 900));
         }
     }
 
@@ -301,9 +287,9 @@ public sealed partial class TokenUsageViewModel : ObservableObject
     {
         var rng = new Random();
         Series.Add(new TokenPoint($"T{Series.Count + 1}", rng.Next(120, 1800), rng.Next(40, 900)));
-        OnPropertyChanged(nameof(TotalIn));
-        OnPropertyChanged(nameof(TotalOut));
-        OnPropertyChanged(nameof(EstimatedCostUsd));
+        this.OnPropertyChanged(nameof(TotalIn));
+        this.OnPropertyChanged(nameof(TotalOut));
+        this.OnPropertyChanged(nameof(EstimatedCostUsd));
     }
 }
 

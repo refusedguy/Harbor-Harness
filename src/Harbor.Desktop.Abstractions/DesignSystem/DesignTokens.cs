@@ -1,5 +1,4 @@
 namespace Harbor.Desktop.Abstractions.DesignSystem;
-
 /// <summary>
 ///     Spacing, corner-radius, and font-size design tokens. Matched to the
 ///     4/8/12/16/24/32/48/64 px scale used by every Harbor desktop app.

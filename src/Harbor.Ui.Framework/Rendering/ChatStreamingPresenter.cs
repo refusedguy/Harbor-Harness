@@ -1,17 +1,15 @@
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
-
 namespace Harbor.Ui.Framework.Rendering;
-
 /// <summary>
 ///     Owns the streaming-buffer presentation state derived from a
-///     <see cref="UiState"/> snapshot: <see cref="IsStreaming"/>,
-///     <see cref="IsThinking"/>, <see cref="IsAgentRunning"/>,
-///     <see cref="StatusMessage"/>, and <see cref="StreamingBuffer"/>.
+///     <see cref="UiState" /> snapshot: <see cref="IsStreaming" />,
+///     <see cref="IsThinking" />, <see cref="IsAgentRunning" />,
+///     <see cref="StatusMessage" />, and <see cref="StreamingBuffer" />.
 /// </summary>
 /// <remarks>
 ///     Extracted from <c>ChatViewModel</c> so the streaming-state
-///     derivation (a pure function of <see cref="UiState"/>) can be
+///     derivation (a pure function of <see cref="UiState" />) can be
 ///     unit-tested without spinning up an Avalonia dispatcher or
 ///     observable object. Registered as a singleton in <c>AppHost</c>.
 /// </remarks>
@@ -19,7 +17,7 @@ public sealed class ChatStreamingPresenter
 {
     /// <summary>
     ///     Compute the streaming-presentation state from a
-    ///     <see cref="UiState"/> snapshot and push it into the
+    ///     <see cref="UiState" /> snapshot and push it into the
     ///     supplied setters.
     /// </summary>
     /// <param name="state">The current UiState.</param>
@@ -41,27 +39,27 @@ public sealed class ChatStreamingPresenter
         setAgentRunning(state.IsAgentRunning);
 
         setStatusMessage(state.IsAgentRunning
-            ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
+            ? state.IsStreaming ? "Streaming response…" : "Agent is running…"
             : string.Empty);
         setStreamingBuffer(state.Active.TextBuffer ?? string.Empty);
     }
 
     /// <summary>
-    ///     Derive the session status from a <see cref="UiState"/>
+    ///     Derive the session status from a <see cref="UiState" />
     ///     snapshot. Used by <c>ChatViewModel</c> (and tests) to push
     ///     the active session's status dot to the sidebar.
     ///     <para>
     ///         <b>Rules:</b>
     ///         <list type="bullet">
-    ///             <item><c>IsAgentRunning</c> → <see cref="SessionStatus.Working"/>.</item>
-    ///             <item>Status=="error" → <see cref="SessionStatus.Error"/>.</item>
-    ///             <item>Last line is assistant → <see cref="SessionStatus.Done"/>.</item>
-    ///             <item>Otherwise → <see cref="SessionStatus.Idle"/>.</item>
+    ///             <item><c>IsAgentRunning</c> → <see cref="SessionStatus.Working" />.</item>
+    ///             <item>Status=="error" → <see cref="SessionStatus.Error" />.</item>
+    ///             <item>Last line is assistant → <see cref="SessionStatus.Done" />.</item>
+    ///             <item>Otherwise → <see cref="SessionStatus.Idle" />.</item>
     ///         </list>
     ///     </para>
     /// </summary>
     /// <param name="state">The current UiState.</param>
-    /// <returns>The derived <see cref="SessionStatus"/>.</returns>
+    /// <returns>The derived <see cref="SessionStatus" />.</returns>
     public SessionStatus DeriveStatus(UiState state)
     {
         if (state.IsAgentRunning) return SessionStatus.Working;

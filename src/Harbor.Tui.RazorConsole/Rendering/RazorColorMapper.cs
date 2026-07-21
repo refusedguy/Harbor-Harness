@@ -2,12 +2,11 @@ using Harbor.Ui.Framework.State;
 using SpectreColor = Spectre.Console.Color;
 
 namespace Harbor.Tui.RazorConsole.Rendering;
-
 /// <summary>
 ///     Maps a <see cref="ChatRole" /> to a Spectre.Console <see cref="SpectreColor" />
-/// + label, matching the SpectreTui ChatMessageFormatter palette so all four
-/// renderers paint the same role with the same hue. RazorConsole layers on
-/// top of Spectre for its markup pipeline.
+///     + label, matching the SpectreTui ChatMessageFormatter palette so all four
+///     renderers paint the same role with the same hue. RazorConsole layers on
+///     top of Spectre for its markup pipeline.
 /// </summary>
 public static class RazorColorMapper
 {

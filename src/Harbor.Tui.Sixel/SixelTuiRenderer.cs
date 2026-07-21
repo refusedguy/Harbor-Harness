@@ -1,26 +1,22 @@
 using System.Text;
 using Harbor.Abstractions.Events;
-using Harbor.Terminal.Abstractions;
-using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Tui.Ansi;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
 namespace Harbor.Tui.Sixel;
-
 /// <summary>
 ///     ANSI streaming renderer with Sixel image support. Extends
-/// <see cref="AnsiTuiRenderer" /> so the standard chat feed streams exactly
-/// like the default renderer; additionally, when the <c>read</c> tool returns
-/// image bytes (PNG/JPEG/GIF), the renderer emits a Sixel escape sequence so
-/// Sixel-capable terminals (xterm + vt_sixel, wezterm, foot, mlterm, mintty)
-/// draw the image inline instead of dumping binary.
+///     <see cref="AnsiTuiRenderer" /> so the standard chat feed streams exactly
+///     like the default renderer; additionally, when the <c>read</c> tool returns
+///     image bytes (PNG/JPEG/GIF), the renderer emits a Sixel escape sequence so
+///     Sixel-capable terminals (xterm + vt_sixel, wezterm, foot, mlterm, mintty)
+///     draw the image inline instead of dumping binary.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>When to use:</b> you live in a Sixel-capable terminal and want
-/// images (screenshots, diagrams, photos) rendered inline in the chat history.
-/// Falls back to a textual placeholder on terminals that do not support Sixel.
+///         images (screenshots, diagrams, photos) rendered inline in the chat history.
+///         Falls back to a textual placeholder on terminals that do not support Sixel.
 ///     </para>
 ///     <para>
 ///         Select with <c>HARBOR_TUI=sixel</c>.
@@ -28,8 +24,8 @@ namespace Harbor.Tui.Sixel;
 /// </remarks>
 public sealed class SixelTuiRenderer : AnsiTuiRenderer
 {
-    private readonly ILogger<SixelTuiRenderer> _logger;
     private readonly SixelEncoder _encoder = new();
+    private readonly ILogger<SixelTuiRenderer> _logger;
 
     /// <summary>Construct a <see cref="SixelTuiRenderer" />.</summary>
     /// <param name="logger">Logger.</param>
@@ -64,7 +60,6 @@ public sealed class SixelTuiRenderer : AnsiTuiRenderer
             {
                 byte[] bytes = File.ReadAllBytes(imagePath);
                 EmitSixel(bytes, imagePath);
-                return;
             }
             catch (Exception ex)
             {
@@ -76,9 +71,9 @@ public sealed class SixelTuiRenderer : AnsiTuiRenderer
     private static string? TryExtractImagePath(string output)
     {
         // Look for the first line that ends with a known image extension.
-        foreach (var raw in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string raw in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
-            var line = raw.Trim();
+            string line = raw.Trim();
             if (line.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                 line.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
                 line.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
@@ -94,7 +89,7 @@ public sealed class SixelTuiRenderer : AnsiTuiRenderer
     {
         // Sixel intro: ESC P ; q ; <S=1> ; <W=0> ; <H=0> q
         // The DCS sequence is: \x1bP0;q0;0q ... \x1b\
-        string sixel = _encoder.Encode(imageBytes, maxColors: 256, maxCols: 80);
+        string sixel = _encoder.Encode(imageBytes);
         if (string.IsNullOrEmpty(sixel))
         {
             _logger.LogDebug("Sixel encoder returned empty for {Path}", sourcePath);
@@ -111,9 +106,9 @@ public sealed class SixelTuiRenderer : AnsiTuiRenderer
 
 /// <summary>
 ///     Minimal PNG/JPEG → Sixel encoder. This is a teaching skeleton — it
-/// produces a valid (but unoptimized) Sixel data stream by sampling every
-/// Nth pixel and quantizing colors to a fixed palette. For production use,
-/// swap in <c>SixelSharp</c> or <c>libsixel</c> bindings.
+///     produces a valid (but unoptimized) Sixel data stream by sampling every
+///     Nth pixel and quantizing colors to a fixed palette. For production use,
+///     swap in <c>SixelSharp</c> or <c>libsixel</c> bindings.
 /// </summary>
 public sealed class SixelEncoder
 {
@@ -142,19 +137,19 @@ public sealed class SixelEncoder
         sb.Append("\"1;1;16;6");
 
         // Define a 4-color palette (R/G/B at 0/255 each).
-        AppendColorRegister(sb, 0, 0, 0, 0);          // black
-        AppendColorRegister(sb, 1, 255, 0, 0);        // red
-        AppendColorRegister(sb, 2, 0, 255, 0);        // green
-        AppendColorRegister(sb, 3, 255, 255, 255);    // white
+        AppendColorRegister(sb, 0, 0, 0, 0); // black
+        AppendColorRegister(sb, 1, 255, 0, 0); // red
+        AppendColorRegister(sb, 2, 0, 255, 0); // green
+        AppendColorRegister(sb, 3, 255, 255, 255); // white
 
         // Emit 6 Sixel rows (one band). Each character is a 6-pixel column.
         // !n?  repeats ? (color n+1 selected) n+1 times.
-        sb.Append("#0!16?");  // color 0 (black) × 16
+        sb.Append("#0!16?"); // color 0 (black) × 16
         sb.Append("#1!16?");
         sb.Append("#2!16?");
         sb.Append("#3!16?");
         sb.Append("#0!16?");
-        sb.Append("#0!16?");  // last row empty
+        sb.Append("#0!16?"); // last row empty
 
         // ST — String Terminator
         sb.Append("\x1b\\");

@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-
 namespace Harbor.App.Wpf.ViewModels;
-
 /// <summary>
 ///     Sidebar session list. Supports search, fork/branch, and switching the
 ///     active session. Backed by an in-memory collection; in a real wiring
@@ -12,6 +10,12 @@ namespace Harbor.App.Wpf.ViewModels;
 public sealed partial class SessionListViewModel : ObservableObject
 {
     private readonly List<SessionEntryViewModel> _allSessions;
+
+    /// <summary>Search text. Filters the list as the user types.</summary>
+    [ObservableProperty] private string _searchText = string.Empty;
+
+    /// <summary>The currently selected session id, or <see langword="null" />.</summary>
+    [ObservableProperty] private string? _selectedSessionId;
 
     /// <summary>Construct a <see cref="SessionListViewModel" />.</summary>
     public SessionListViewModel()
@@ -32,22 +36,16 @@ public sealed partial class SessionListViewModel : ObservableObject
     /// <summary>Visible sessions (after filtering).</summary>
     public ObservableCollection<SessionEntryViewModel> Sessions { get; }
 
-    /// <summary>Search text. Filters the list as the user types.</summary>
-    [ObservableProperty] private string _searchText = string.Empty;
-
-    /// <summary>The currently selected session id, or <see langword="null" />.</summary>
-    [ObservableProperty] private string? _selectedSessionId;
-
     /// <summary>Create a new session.</summary>
     [RelayCommand]
     private void NewSession()
     {
         var entry = new SessionEntryViewModel(
-            Id: Guid.NewGuid().ToString("N"),
-            Title: $"Session {DateTime.Now:yyyy-MM-dd HH:mm}",
-            AgentName: "code",
-            UpdatedAt: DateTimeOffset.UtcNow,
-            ParentId: null);
+            Guid.NewGuid().ToString("N"),
+            $"Session {DateTime.Now:yyyy-MM-dd HH:mm}",
+            "code",
+            DateTimeOffset.UtcNow,
+            null);
         _allSessions.Add(entry);
         ReapplyFilter();
         SelectedSessionId = entry.Id;
@@ -95,7 +93,7 @@ public sealed partial class SessionListViewModel : ObservableObject
 
     private void ReapplyFilter()
     {
-        var needle = (SearchText ?? string.Empty).Trim();
+        string needle = (SearchText ?? string.Empty).Trim();
         Sessions.Clear();
         foreach (var s in _allSessions)
         {
@@ -109,11 +107,11 @@ public sealed partial class SessionListViewModel : ObservableObject
     private void AddSample(DateTimeOffset updatedAt, string title, string agent)
     {
         _allSessions.Add(new SessionEntryViewModel(
-            Id: Guid.NewGuid().ToString("N"),
-            Title: title,
-            AgentName: agent,
-            UpdatedAt: updatedAt,
-            ParentId: null));
+            Guid.NewGuid().ToString("N"),
+            title,
+            agent,
+            updatedAt,
+            null));
     }
 }
 

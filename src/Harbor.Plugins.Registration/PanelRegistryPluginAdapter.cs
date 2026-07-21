@@ -2,7 +2,6 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
-
 /// <summary>
 ///     Adapter that lets an <see cref="ITuiPanelPlugin" /> register panels through the
 ///     host's <see cref="IPluginLoadHost.RegisterPanelProvider" /> sink while only

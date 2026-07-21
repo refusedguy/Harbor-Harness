@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Providers;
@@ -8,24 +7,22 @@ using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     View-model behind the <c>ProviderModelPicker</c> control. Lists every
-///     registered provider (from <see cref="IProviderRegistry"/>) with its
+///     registered provider (from <see cref="IProviderRegistry" />) with its
 ///     authentication status (✓ key resolved, ✗ no key) and lazily fetches the
 ///     models each provider exposes — grouped by provider in expandable rows.
 ///     A search box filters by provider display name OR model id / display
 ///     name. Selecting a model persists it as the session's
 ///     <c>DefaultProvider</c>/<c>DefaultModel</c> and rebinds the active
-///     session to it via <see cref="SessionManager"/>.
+///     session to it via <see cref="SessionManager" />.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Auth resolution</b> uses <see cref="IAuthResolver"/> (the same
+///         <b>Auth resolution</b> uses <see cref="IAuthResolver" /> (the same
 ///         path the agent uses) so the picker's status matches what the agent
-///         actually sees at request time. <see cref="ProviderPresets"/> is also
+///         actually sees at request time. <see cref="ProviderPresets" /> is also
 ///         consulted so the control can show a friendly display name even when
 ///         no preset env var is set.
 ///     </para>
@@ -50,14 +47,26 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
     ///     provider (Ollama, vLLM) isn't running.
     /// </summary>
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
-
-    private readonly IProviderRegistry _providers;
     private readonly IAuthResolver _authResolver;
     private readonly ICommonConfigStore _configStore;
+    private readonly ILogger<ProviderModelPickerViewModel> _logger;
+
+    private readonly IProviderRegistry _providers;
     private readonly SessionManager _sessions;
     private readonly ToastService _toasts;
-    private readonly ILogger<ProviderModelPickerViewModel> _logger;
+
+    [ObservableProperty]
+    private string _currentModelLabel = string.Empty;
+
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isLoading;
     private CancellationTokenSource? _loadCts;
+
+    [ObservableProperty]
+    private string _searchText = string.Empty;
 
     /// <summary>Construct the picker view-model.</summary>
     public ProviderModelPickerViewModel(
@@ -78,24 +87,12 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
 
     /// <summary>
     ///     All providers + their models, before search filtering. The
-    ///     <see cref="FilteredProviders"/> view is what the UI binds to.
+    ///     <see cref="FilteredProviders" /> view is what the UI binds to.
     /// </summary>
     public ObservableCollection<ProviderGroupViewModel> AllProviders { get; } = new();
 
-    /// <summary>Providers + models filtered by the current <see cref="SearchText"/>.</summary>
+    /// <summary>Providers + models filtered by the current <see cref="SearchText" />.</summary>
     public ObservableCollection<ProviderGroupViewModel> FilteredProviders { get; } = new();
-
-    [ObservableProperty]
-    private string _searchText = string.Empty;
-
-    [ObservableProperty]
-    private bool _isLoading;
-
-    [ObservableProperty]
-    private string _errorMessage = string.Empty;
-
-    [ObservableProperty]
-    private string _currentModelLabel = string.Empty;
 
     /// <summary>
     ///     Raised (without payload) after a model is selected so hosts can
@@ -190,10 +187,10 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
 
     /// <summary>
     ///     Select a model and apply it to the active session. Persists the
-    ///     choice to <see cref="CommonConfig.DefaultProvider"/> /
-    ///     <see cref="CommonConfig.DefaultModel"/> (so it survives a restart)
+    ///     choice to <see cref="CommonConfig.DefaultProvider" /> /
+    ///     <see cref="CommonConfig.DefaultModel" /> (so it survives a restart)
     ///     and immediately rebinds the agent via
-    ///     <see cref="SessionManager.RebindFromCommonConfigAsync"/>.
+    ///     <see cref="SessionManager.RebindFromCommonConfigAsync" />.
     /// </summary>
     /// <param name="model">The model row the user clicked.</param>
     [RelayCommand]
@@ -206,7 +203,7 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
             var updateResult = await _configStore.UpdateAsync(cfg => cfg with
             {
                 DefaultProvider = model.ProviderId,
-                DefaultModel = model.Id,
+                DefaultModel = model.Id
             }).ConfigureAwait(true);
 
             if (updateResult.IsFailure)
@@ -228,7 +225,7 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Refresh <see cref="CurrentModelLabel"/> from the active session.</summary>
+    /// <summary>Refresh <see cref="CurrentModelLabel" /> from the active session.</summary>
     private async Task RefreshCurrentModelLabelAsync()
     {
         if (_sessions.Active is { } active)
@@ -244,7 +241,7 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Build a <see cref="ProviderGroupViewModel"/> with auth status resolved.</summary>
+    /// <summary>Build a <see cref="ProviderGroupViewModel" /> with auth status resolved.</summary>
     private async Task<ProviderGroupViewModel> BuildProviderGroupAsync(string providerId, CancellationToken ct)
     {
         var preset = ProviderPresets.Find(providerId);
@@ -290,15 +287,15 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
 
         return new ProviderGroupViewModel(providerId, displayName, icon, text, brushKey, authenticated, requiresKey)
         {
-            SetupHint = preset?.SetupHint,
+            SetupHint = preset?.SetupHint
         };
     }
 
-    /// <summary>Apply <see cref="SearchText"/> to <see cref="AllProviders"/> → <see cref="FilteredProviders"/>.</summary>
+    /// <summary>Apply <see cref="SearchText" /> to <see cref="AllProviders" /> → <see cref="FilteredProviders" />.</summary>
     private void ApplyFilter()
     {
         FilteredProviders.Clear();
-        var needle = (SearchText ?? string.Empty).Trim();
+        string needle = (SearchText ?? string.Empty).Trim();
         if (needle.Length == 0)
         {
             foreach (var p in AllProviders) FilteredProviders.Add(p);
@@ -323,7 +320,7 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
             // if at least one model matches, and surface only the matches.
             var matchingModels = p.Models
                 .Where(m => m.Id.Contains(needle, StringComparison.OrdinalIgnoreCase)
-                         || m.DisplayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                            || m.DisplayName.Contains(needle, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (matchingModels.Count > 0)
             {
@@ -332,7 +329,7 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
                     p.AuthStatusBrushKey, p.IsAuthenticated, p.RequiresApiKey)
                 {
                     SetupHint = p.SetupHint,
-                    IsExpanded = true,
+                    IsExpanded = true
                 };
                 foreach (var m in matchingModels) filtered.Models.Add(m);
                 filtered.HasModels = true;

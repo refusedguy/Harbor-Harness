@@ -14,8 +14,8 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class PermissionRulesetBenchmark
 {
-    private PermissionRuleset _defaultRuleset = null!;
     private PermissionRuleset _customRuleset = null!;
+    private PermissionRuleset _defaultRuleset = null!;
     private ToolName _readTool = null!;
 
     [Params(4, 16, 64)]

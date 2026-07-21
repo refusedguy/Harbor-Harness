@@ -13,9 +13,7 @@
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
-
 namespace Harbor.Cli.Configuration;
-
 /// <summary>
 ///     Per-app configuration for the Harbor CLI. Stored at
 ///     <c>~/.harbor/cli.json</c>. Non-overlapping with desktop app configs
@@ -27,7 +25,7 @@ namespace Harbor.Cli.Configuration;
 ///         the same across every Harbor app (API keys, default provider /
 ///         model / agent, storage backend, log level, permission mode, plugin
 ///         enablement, HTTP proxy, compaction tuning) live in
-///         <see cref="CommonConfig"/>. CliConfig owns ONLY the CLI's UX
+///         <see cref="CommonConfig" />. CliConfig owns ONLY the CLI's UX
 ///         preferences (TUI renderer, onboarding flag, slash-command enable,
 ///         input history).
 ///     </para>

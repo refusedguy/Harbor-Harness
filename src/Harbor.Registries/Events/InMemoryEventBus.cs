@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
@@ -29,16 +27,22 @@ namespace Harbor.Abstractions.Events;
 ///     <para>
 ///         Performance characteristics:
 ///         <list type="bullet">
-///             <item><see cref="PublishAsync" />: lock-free snapshot read
+///             <item>
+///                 <see cref="PublishAsync" />: lock-free snapshot read
 ///                 (zero alloc on the common path), pooled buffer for
 ///                 dead-subscriber collection. Scrollback append is a CAS retry
 ///                 on an <see cref="ImmutableArray{T}" />; in the steady state
-///                 (under capacity) there is no allocation.</item>
-///             <item>Subscribe/Unsubscribe: lock-free atomic update of an
-///                 <see cref="ImmutableArray{T}" />.</item>
-///             <item>Scrollback: <see cref="GetScrollback" /> is a single
+///                 (under capacity) there is no allocation.
+///             </item>
+///             <item>
+///                 Subscribe/Unsubscribe: lock-free atomic update of an
+///                 <see cref="ImmutableArray{T}" />.
+///             </item>
+///             <item>
+///                 Scrollback: <see cref="GetScrollback" /> is a single
 ///                 volatile snapshot read + a slice; zero state mutation, no
-///                 blocking.</item>
+///                 blocking.
+///             </item>
 ///         </list>
 ///     </para>
 /// </remarks>
@@ -50,7 +54,8 @@ public sealed class InMemoryEventBus : IEventBus
     /// <summary>
     ///     Scrollback ring buffer. Holds the most recent
     ///     <see cref="_maxScrollback" /> events in publication order. Updated
-    ///     via <see cref="ImmutableInterlocked.Update{T}(ref ImmutableArray{T}, Func{ImmutableArray{T}, ImmutableArray{T}})" />
+    ///     via
+    ///     <see cref="ImmutableInterlocked.Update{T}(ref ImmutableArray{T}, Func{ImmutableArray{T}, ImmutableArray{T}})" />
     ///     so concurrent publishers never corrupt the buffer. Reads take a
     ///     single volatile snapshot (no copy, no blocking).
     /// </summary>
@@ -205,7 +210,8 @@ public sealed class InMemoryEventBus : IEventBus
     /// <summary>
     ///     Append an event to the scrollback ring buffer atomically. When the
     ///     buffer is at capacity, the oldest entry is dropped. The update uses
-    ///     <see cref="ImmutableInterlocked.Update{T, TState}(ref ImmutableArray{T}, Func{ImmutableArray{T}, TState, ImmutableArray{T}}, TState)" />
+    ///     <see
+    ///         cref="ImmutableInterlocked.Update{T, TState}(ref ImmutableArray{T}, Func{ImmutableArray{T}, TState, ImmutableArray{T}}, TState)" />
     ///     so concurrent publishers never lose an event to a stale read.
     /// </summary>
     private void AppendScrollback(AgentEvent @event)

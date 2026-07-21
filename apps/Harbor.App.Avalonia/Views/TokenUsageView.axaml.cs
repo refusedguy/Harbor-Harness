@@ -2,9 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Token usage view code-behind. Closes itself via the parent MainViewModel.
 /// </summary>
@@ -16,10 +14,7 @@ public partial class TokenUsageView : UserControl
         InitializeComponent();
     }
 
-    private void Close_Click(object? sender, RoutedEventArgs e)
-    {
-        CloseModal();
-    }
+    private void Close_Click(object? sender, RoutedEventArgs e) => CloseModal();
 
     /// <summary>
     ///     Click on the backdrop (the dark scrim outside the card) closes the

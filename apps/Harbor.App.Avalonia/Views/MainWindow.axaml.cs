@@ -7,29 +7,33 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views.Shell;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Main window code-behind. Hosts the shell layout and forwards every
 ///     global input event (title-bar drag, caption buttons, keyboard
 ///     shortcuts) to dedicated services resolved from DI
-///     (<see cref="WindowChromeService"/> and
-///     <see cref="KeyboardShortcutService"/>). The code-behind itself only
+///     (<see cref="WindowChromeService" /> and
+///     <see cref="KeyboardShortcutService" />). The code-behind itself only
 ///     wires up services — no behaviour lives here. Disposes the bound
-///     <see cref="MainViewModel"/> on close so the UiStore subscription
+///     <see cref="MainViewModel" /> on close so the UiStore subscription
 ///     and toast continuations are torn down cleanly.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Experimental shell-mode switch (Task F2):</b> when
-///         <see cref="App.IsOrcaShell"/> is <c>true</c> the classic
+///         <see cref="App.IsOrcaShell" /> is <c>true</c> the classic
 ///         Catppuccin-Mocha XAML body is replaced with an
-///         <see cref="OrcaShellView"/>; classic mode is unaffected.
+///         <see cref="OrcaShellView" />; classic mode is unaffected.
 ///     </para>
 /// </remarks>
 public partial class MainWindow : Window
 {
+
+    /// <summary>Resolve <see cref="WindowChromeService" /> from DI (cached on first use).</summary>
+    private WindowChromeService? _chrome;
+
+    /// <summary>Resolve <see cref="KeyboardShortcutService" /> from DI (cached on first use).</summary>
+    private KeyboardShortcutService? _keyboard;
     /// <summary>Construct the main window. Avalonia's generated InitializeComponent runs first.</summary>
     public MainWindow()
     {
@@ -44,15 +48,15 @@ public partial class MainWindow : Window
         // ── Experimental Orca shell swap (Task F2) ──────────────────────────
         if (App.IsOrcaShell)
         {
-            Content = new OrcaShellView();
+            this.Content = new OrcaShellView();
         }
 
         // Defensive: ensure Chat is the active view and NO modal is open when the
         // shell first appears. Fires after every binding has been applied so it's
         // the LAST word on the initial UI state.
-        Loaded += (_, _) =>
+        this.Loaded += (_, _) =>
         {
-            if (DataContext is MainViewModel vm)
+            if (this.DataContext is MainViewModel vm)
             {
                 vm.ActiveView = "chat";
                 vm.IsDiffOpen = false;
@@ -62,7 +66,7 @@ public partial class MainWindow : Window
                 vm.IsProviderBrowserOpen = false;
                 vm.IsModelPickerOpen = false;
             }
-            else if (DataContext is OrcaShellViewModel orcaVm)
+            else if (this.DataContext is OrcaShellViewModel orcaVm)
             {
                 // Orca shell initial state: chat mode, no right panel.
                 orcaVm.SwitchModeCommand.Execute("Chat");
@@ -72,20 +76,14 @@ public partial class MainWindow : Window
         // Dispose the MainViewModel when the window closes — this unsubscribes
         // the UiStore → dispatcher bridge and prevents background toast
         // continuations from racing the window teardown.
-        Closing += (_, _) =>
+        this.Closing += (_, _) =>
         {
-            if (DataContext is IDisposable disposable)
+            if (this.DataContext is IDisposable disposable)
             {
                 disposable.Dispose();
             }
         };
     }
-
-    /// <summary>Resolve <see cref="WindowChromeService"/> from DI (cached on first use).</summary>
-    private WindowChromeService? _chrome;
-
-    /// <summary>Resolve <see cref="KeyboardShortcutService"/> from DI (cached on first use).</summary>
-    private KeyboardShortcutService? _keyboard;
 
     private WindowChromeService Chrome =>
         _chrome ??= App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
@@ -93,10 +91,17 @@ public partial class MainWindow : Window
     private KeyboardShortcutService Keyboard =>
         _keyboard ??= App.Services?.GetService<KeyboardShortcutService>() ?? new KeyboardShortcutService();
 
+    private MainViewModel? Vm => this.DataContext switch
+    {
+        MainViewModel vm => vm,
+        OrcaShellViewModel orca => orca.Main,
+        _ => null
+    };
+
     /// <summary>
-    ///     Read <see cref="AvaloniaConfig.WindowWidth"/> / <see cref="AvaloniaConfig.WindowHeight"/>
-    ///     / <see cref="AvaloniaConfig.WindowMaximized"/> from DI and apply them to this
-    ///     window. No-op when <see cref="App.Services"/> is null (design-time).
+    ///     Read <see cref="AvaloniaConfig.WindowWidth" /> / <see cref="AvaloniaConfig.WindowHeight" />
+    ///     / <see cref="AvaloniaConfig.WindowMaximized" /> from DI and apply them to this
+    ///     window. No-op when <see cref="App.Services" /> is null (design-time).
     /// </summary>
     private void ApplyConfiguredGeometry()
     {
@@ -105,20 +110,15 @@ public partial class MainWindow : Window
         var config = services.GetService<AvaloniaConfig>();
         if (config is null) return;
 
-        if (config.WindowWidth > 0) Width = config.WindowWidth;
-        if (config.WindowHeight > 0) Height = config.WindowHeight;
+        if (config.WindowWidth > 0)
+            this.Width = config.WindowWidth;
+        if (config.WindowHeight > 0)
+            this.Height = config.WindowHeight;
         if (config.WindowMaximized)
         {
-            WindowState = WindowState.Maximized;
+            this.WindowState = WindowState.Maximized;
         }
     }
-
-    private MainViewModel? Vm => DataContext switch
-    {
-        MainViewModel vm => vm,
-        Harbor.App.Avalonia.ViewModels.Shell.OrcaShellViewModel orca => orca.Main,
-        _ => null,
-    };
 
     /// <inheritdoc />
     protected override void OnKeyDown(KeyEventArgs e)
@@ -147,20 +147,20 @@ public partial class MainWindow : Window
 
     /// <summary>
     ///     Title-bar drag / double-click maximize — delegates to
-    ///     <see cref="WindowChromeService.HandleTitleBarPointerPressed"/>.
+    ///     <see cref="WindowChromeService.HandleTitleBarPointerPressed" />.
     /// </summary>
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e) =>
         Chrome.HandleTitleBarPointerPressed(this, e);
 
-    /// <summary>Minimize button — delegates to <see cref="WindowChromeService.Minimize"/>.</summary>
+    /// <summary>Minimize button — delegates to <see cref="WindowChromeService.Minimize" />.</summary>
     private void Minimize_Click(object? sender, RoutedEventArgs e) =>
         Chrome.Minimize(this);
 
-    /// <summary>Maximize / restore button — delegates to <see cref="WindowChromeService.MaximizeOrRestore"/>.</summary>
+    /// <summary>Maximize / restore button — delegates to <see cref="WindowChromeService.MaximizeOrRestore" />.</summary>
     private void Maximize_Click(object? sender, RoutedEventArgs e) =>
         Chrome.MaximizeOrRestore(this);
 
-    /// <summary>Close button — delegates to <see cref="WindowChromeService.Close"/>.</summary>
+    /// <summary>Close button — delegates to <see cref="WindowChromeService.Close" />.</summary>
     private void Close_Click(object? sender, RoutedEventArgs e) =>
         Chrome.Close(this);
 

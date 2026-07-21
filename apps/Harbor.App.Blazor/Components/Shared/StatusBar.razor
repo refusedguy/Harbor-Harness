@@ -2,10 +2,8 @@
    Reads from UiStore and uses the platform-agnostic StatusMappers helpers
    so the label / brush-key format stays identical across Blazor, Avalonia,
    WPF, MAUI, and the TUI renderers. *@
-
-@using Harbor.Ui.Framework.State
-@using Harbor.Ui.Framework.Converters
 @inject UiStore Store
+@using Harbor.Ui.Framework.Converters
 @implements IDisposable
 
 <div class="statusbar">
@@ -23,18 +21,18 @@
 </div>
 
 @code {
-    protected override void OnInitialized()
-    {
-        Store.Changed += OnChanged;
-    }
+protected override void OnInitialized()
+{
+    Store.Changed += OnChanged;
+}
 
-    private async void OnChanged(object? _, UiStateChangedEventArgs __)
-    {
-        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-    }
+private async void OnChanged(object? _, UiStateChangedEventArgs __)
+{
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
 
-    public void Dispose()
-    {
-        Store.Changed -= OnChanged;
-    }
+public void Dispose()
+{
+    Store.Changed -= OnChanged;
+}
 }

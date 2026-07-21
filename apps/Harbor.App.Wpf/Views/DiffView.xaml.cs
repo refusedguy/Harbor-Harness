@@ -1,8 +1,5 @@
 using System.Windows.Controls;
-using System.Windows.Media;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     Side-by-side diff view.
 /// </summary>

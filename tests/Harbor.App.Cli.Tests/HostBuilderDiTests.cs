@@ -4,14 +4,11 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.Cli.Configuration;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Sessions;
-using Harbor.Core.Tools;
-using Harbor.Cli.Configuration;
-using Harbor.Cli.Hosting;
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Plugins.Abstractions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,9 +17,6 @@ using Microsoft.Extensions.Hosting;
 // one we want to call) and Microsoft.Extensions.Hosting.HostBuilder (the
 // generic host builder class pulled in by the Microsoft.Extensions.Hosting using).
 using HostBuilder = Harbor.Cli.Hosting.HostBuilder;
-using TUnit.Core;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 
 // DI006 (do not cache IServiceProvider in static fields) is intentionally
 // violated by this test fixture: the whole point of the file is to build the
@@ -34,9 +28,8 @@ using TUnit.Assertions.Extensions;
 #pragma warning disable DI006
 
 namespace Harbor.App.Cli.Tests;
-
 /// <summary>
-///     DI registration tests for <see cref="HostBuilder.Build"/>.
+///     DI registration tests for <see cref="HostBuilder.Build" />.
 ///     Each [Test] resolves one (or a related group) of the services declared
 ///     with [Exposes(typeof(T))] on HostBuilder.Build. A failure here means
 ///     either (a) a service registration was removed accidentally, or
@@ -44,7 +37,7 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Test isolation:</b> <see cref="HostBuilder.Build"/> creates the
+///         <b>Test isolation:</b> <see cref="HostBuilder.Build" /> creates the
 ///         <c>~/.harbor</c> directory tree on first run and reads
 ///         <c>~/.harbor/config.json</c>. Tests use the real user home so they
 ///         exercise the same path the production CLI uses. The JsonConfigStore
@@ -86,132 +79,71 @@ public class HostBuilderDiTests
     // [After(HookType.Class)] — intentionally omitted; see summary above.
 
     // ── Core services ─────────────────────────────────────────────────────
+    [Test]
+    public async Task Build_Registers_IConfigStore() => await Assert.That(Services.GetService<IConfigStore>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IConfigStore()
-    {
-        await Assert.That(Services.GetService<IConfigStore>()).IsNotNull();
-    }
+    public async Task Build_Registers_AuthStore() => await Assert.That(Services.GetService<AuthStore>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_AuthStore()
-    {
-        await Assert.That(Services.GetService<AuthStore>()).IsNotNull();
-    }
+    public async Task Build_Registers_OnboardingWizard() => await Assert.That(Services.GetService<OnboardingWizard>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_OnboardingWizard()
-    {
-        await Assert.That(Services.GetService<OnboardingWizard>()).IsNotNull();
-    }
+    public async Task Build_Registers_ITokenEstimator() => await Assert.That(Services.GetService<ITokenEstimator>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ITokenEstimator()
-    {
-        await Assert.That(Services.GetService<ITokenEstimator>()).IsNotNull();
-    }
+    public async Task Build_Registers_IEventBus() => await Assert.That(Services.GetService<IEventBus>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IEventBus()
-    {
-        await Assert.That(Services.GetService<IEventBus>()).IsNotNull();
-    }
+    public async Task Build_Registers_ISystemPromptBuilder() => await Assert.That(Services.GetService<ISystemPromptBuilder>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ISystemPromptBuilder()
-    {
-        await Assert.That(Services.GetService<ISystemPromptBuilder>()).IsNotNull();
-    }
+    public async Task Build_Registers_MessageConverter() => await Assert.That(Services.GetService<MessageConverter>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_MessageConverter()
-    {
-        await Assert.That(Services.GetService<MessageConverter>()).IsNotNull();
-    }
+    public async Task Build_Registers_IAgentLoop() => await Assert.That(Services.GetService<IAgentLoop>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IAgentLoop()
-    {
-        await Assert.That(Services.GetService<IAgentLoop>()).IsNotNull();
-    }
-
-    [Test]
-    public async Task Build_Registers_IAgent()
-    {
-        await Assert.That(Services.GetService<IAgent>()).IsNotNull();
-    }
+    public async Task Build_Registers_IAgent() => await Assert.That(Services.GetService<IAgent>()).IsNotNull();
 
     // ── Registries ────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Build_Registers_IAgentRegistry()
-    {
-        await Assert.That(Services.GetService<IAgentRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_IAgentRegistry() => await Assert.That(Services.GetService<IAgentRegistry>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IToolRegistry()
-    {
-        await Assert.That(Services.GetService<IToolRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_IToolRegistry() => await Assert.That(Services.GetService<IToolRegistry>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IProviderRegistry()
-    {
-        await Assert.That(Services.GetService<IProviderRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_IProviderRegistry() => await Assert.That(Services.GetService<IProviderRegistry>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IMcpRegistry()
-    {
-        await Assert.That(Services.GetService<IMcpRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_IMcpRegistry() => await Assert.That(Services.GetService<IMcpRegistry>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_PanelRegistry_Concrete()
-    {
-        await Assert.That(Services.GetService<PanelRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_PanelRegistry_Concrete() => await Assert.That(Services.GetService<PanelRegistry>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IPanelRegistry()
-    {
-        await Assert.That(Services.GetService<IPanelRegistry>()).IsNotNull();
-    }
+    public async Task Build_Registers_IPanelRegistry() => await Assert.That(Services.GetService<IPanelRegistry>()).IsNotNull();
 
     // ── Services with deps ────────────────────────────────────────────────
 
     [Test]
-    public async Task Build_Registers_ICompactionService()
-    {
-        await Assert.That(Services.GetService<ICompactionService>()).IsNotNull();
-    }
+    public async Task Build_Registers_ICompactionService() => await Assert.That(Services.GetService<ICompactionService>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_IPermissionService()
-    {
-        await Assert.That(Services.GetService<IPermissionService>()).IsNotNull();
-    }
+    public async Task Build_Registers_IPermissionService() => await Assert.That(Services.GetService<IPermissionService>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ISessionStore()
-    {
-        await Assert.That(Services.GetService<ISessionStore>()).IsNotNull();
-    }
+    public async Task Build_Registers_ISessionStore() => await Assert.That(Services.GetService<ISessionStore>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ITuiRenderer()
-    {
-        await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();
-    }
+    public async Task Build_Registers_ITuiRenderer() => await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();
 
     // ── Per-app config (~/.harbor/cli.json) ───────────────────────────────
 
     [Test]
-    public async Task Build_Registers_IAppConfigStore_CliConfig()
-    {
-        await Assert.That(Services.GetService<IAppConfigStore<CliConfig>>()).IsNotNull();
-    }
+    public async Task Build_Registers_IAppConfigStore_CliConfig() => await Assert.That(Services.GetService<IAppConfigStore<CliConfig>>()).IsNotNull();
 
     [Test]
     public async Task Build_Registers_CliConfig()
@@ -225,10 +157,7 @@ public class HostBuilderDiTests
     // ── Shared common config (~/.harbor/config.json) ──────────────────────
 
     [Test]
-    public async Task Build_Registers_ICommonConfigStore()
-    {
-        await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
-    }
+    public async Task Build_Registers_ICommonConfigStore() => await Assert.That(Services.GetService<ICommonConfigStore>()).IsNotNull();
 
     [Test]
     public async Task Build_Registers_CommonConfig()
@@ -287,13 +216,13 @@ public class HostBuilderDiTests
             typeof(CliConfig),
             typeof(ICommonConfigStore),
             typeof(CommonConfig),
-            typeof(CompositeConfig<CliConfig>),
+            typeof(CompositeConfig<CliConfig>)
         };
 
         var missing = new List<Type>();
         foreach (var t in required)
         {
-            var svc = sp.GetService(t);
+            object? svc = sp.GetService(t);
             if (svc is null)
             {
                 missing.Add(t);
@@ -315,7 +244,7 @@ public class HostBuilderDiTests
         var factory = Services.GetService<IHttpClientFactory>();
         await Assert.That(factory).IsNotNull();
 
-        foreach (var name in new[] { "anthropic", "openai", "ollama", "providers", "default" })
+        foreach (string name in new[] { "anthropic", "openai", "ollama", "providers", "default" })
         {
             var client = factory!.CreateClient(name);
             await Assert.That(client).IsNotNull();

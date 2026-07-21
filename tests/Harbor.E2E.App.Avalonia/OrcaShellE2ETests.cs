@@ -1,22 +1,17 @@
+using System.Globalization;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Threading;
-using Avalonia.VisualTree;
-using Harbor.App.Avalonia.ViewModels;
+using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views.Shell;
 using Microsoft.Extensions.DependencyInjection;
-using TUnit.Assertions;
-using TUnit.Core.Enums;
-
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
 // so we alias the production App class to 'HarborApp'.
-using HarborApp = global::Harbor.App.Avalonia.App;
+using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia;
-
 /// <summary>
 ///     E2E tests for the experimental Orca-inspired shell (Task S2).
 /// </summary>
@@ -30,12 +25,12 @@ namespace Harbor.E2E.App.Avalonia;
 ///     </para>
 ///     <para>
 ///         <b>Test isolation:</b> the Orca shell is toggled on by setting
-///         <see cref="HarborApp.ShellMode"/> = <c>"orca"</c> and swapping the
+///         <see cref="HarborApp.ShellMode" /> = <c>"orca"</c> and swapping the
 ///         MainWindow's <c>Content</c> + <c>DataContext</c> to
-///         <see cref="OrcaShellView"/> + <see cref="OrcaShellViewModel"/>.
+///         <see cref="OrcaShellView" /> + <see cref="OrcaShellViewModel" />.
 ///         The original classic-mode state is saved before each test and
 ///         restored in a <c>finally</c> block so subsequent classic tests
-///         (in <see cref="AvaloniaUiTests"/>) are unaffected regardless of
+///         (in <see cref="AvaloniaUiTests" />) are unaffected regardless of
 ///         run order.
 ///     </para>
 ///     <para>
@@ -53,9 +48,12 @@ public sealed class OrcaShellE2ETests
 
     private static readonly string TempHome = Path.Combine(
         Path.GetTempPath(),
-        "harbor-avalonia-orca-" + Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture));
+        "harbor-avalonia-orca-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture));
 
     private static HeadlessAvaloniaDriver? _driver;
+
+    private static HeadlessAvaloniaDriver Driver
+        => _driver ?? throw new InvalidOperationException("SetupTestAsync did not run.");
 
     /// <summary>
     ///     Per-test setup. Initializes the shared driver on first run; subsequent
@@ -64,7 +62,7 @@ public sealed class OrcaShellE2ETests
     ///     AppDomain). Also writes a fresh <c>~/.harbor/config.json</c> marking
     ///     onboarding done so the main window (not the wizard) shows.
     /// </summary>
-    [Before(HookType.Test)]
+    [Before(Test)]
     public async Task SetupTestAsync()
     {
         if (_driver is null)
@@ -77,23 +75,23 @@ public sealed class OrcaShellE2ETests
 
             if (Directory.Exists(TempHome))
             {
-                Directory.Delete(TempHome, recursive: true);
+                Directory.Delete(TempHome, true);
             }
             Directory.CreateDirectory(TempHome);
-            var harborDir = Path.Combine(TempHome, ".harbor");
+            string harborDir = Path.Combine(TempHome, ".harbor");
             Directory.CreateDirectory(harborDir);
             await File.WriteAllTextAsync(
-                Path.Combine(harborDir, "config.json"),
-                JsonSerializer.Serialize(new
-                {
-                    configVersion = "1",
-                    onboardingCompleted = true,
-                    storageBackend = "memory",
-                    logLevel = "warning",
-                    defaultProvider = "ollama",
-                    defaultModel = "qwen2.5-coder:7b",
-                    defaultAgent = "code",
-                }, new JsonSerializerOptions { WriteIndented = true }))
+                    Path.Combine(harborDir, "config.json"),
+                    JsonSerializer.Serialize(new
+                    {
+                        configVersion = "1",
+                        onboardingCompleted = true,
+                        storageBackend = "memory",
+                        logLevel = "warning",
+                        defaultProvider = "ollama",
+                        defaultModel = "qwen2.5-coder:7b",
+                        defaultAgent = "code"
+                    }, new JsonSerializerOptions { WriteIndented = true }))
                 .ConfigureAwait(false);
 
             _driver = new HeadlessAvaloniaDriver(ScreenshotDir, TempHome);
@@ -101,12 +99,9 @@ public sealed class OrcaShellE2ETests
         }
     }
 
-    private static HeadlessAvaloniaDriver Driver
-        => _driver ?? throw new InvalidOperationException("SetupTestAsync did not run.");
-
     /// <summary>
     ///     Swap the MainWindow to the Orca shell. Captures the original classic
-    ///     state so <see cref="RestoreClassic"/> can put it back. No-op if the
+    ///     state so <see cref="RestoreClassic" /> can put it back. No-op if the
     ///     window is already in Orca mode (e.g. a previous test in this class
     ///     already swapped).
     /// </summary>
@@ -140,8 +135,8 @@ public sealed class OrcaShellE2ETests
         return (origContent, origDataContext, origShellMode);
     }
 
-    /// <summary>Restore the classic shell state captured by <see cref="SwapToOrca"/>.</summary>
-    /// <param name="state">The tuple returned by <see cref="SwapToOrca"/>.</param>
+    /// <summary>Restore the classic shell state captured by <see cref="SwapToOrca" />.</summary>
+    /// <param name="state">The tuple returned by <see cref="SwapToOrca" />.</param>
     private void RestoreClassic((Control? Content, object? DataContext, string ShellMode) state)
     {
         HarborApp.ShellMode = state.ShellMode;
@@ -173,9 +168,9 @@ public sealed class OrcaShellE2ETests
                 .ConfigureAwait(false);
             await Assert.That(hasHarbor).IsTrue();
 
-            var screenshot = await Driver.ScreenshotAsync("orca-01-default").ConfigureAwait(false);
+            string screenshot = await Driver.ScreenshotAsync("orca-01-default").ConfigureAwait(false);
             await Assert.That(File.Exists(screenshot)).IsTrue();
-            var size = new FileInfo(screenshot).Length;
+            long size = new FileInfo(screenshot).Length;
             await Assert.That(size).IsGreaterThan(5_000);
         }
         finally
@@ -307,7 +302,7 @@ public sealed class OrcaShellE2ETests
 
             await Driver.TypeAsync(input!, "Hello from Orca shell!").ConfigureAwait(false);
 
-            var typedText = Driver.OnUIThread(() => input!.Text);
+            string? typedText = Driver.OnUIThread(() => input!.Text);
             await Assert.That(typedText).IsEqualTo("Hello from Orca shell!");
 
             await Driver.ScreenshotAsync("orca-05-input-typed").ConfigureAwait(false);
@@ -531,19 +526,19 @@ public sealed class OrcaShellE2ETests
             // MergedDictionaries entry (HarborDark.axaml), which Resources[key]
             // doesn't recurse into.
             bool hasAccent = Driver.OnUIThread(() =>
-                global::Avalonia.Application.Current?.FindResource("AccentPrimaryBrush") is not null);
+                Application.Current?.FindResource("AccentPrimaryBrush") is not null);
             await Assert.That(hasAccent).IsTrue();
 
             bool hasBgApp = Driver.OnUIThread(() =>
-                global::Avalonia.Application.Current?.FindResource("BgAppBrush") is not null);
+                Application.Current?.FindResource("BgAppBrush") is not null);
             await Assert.That(hasBgApp).IsTrue();
 
             bool hasBgRail = Driver.OnUIThread(() =>
-                global::Avalonia.Application.Current?.FindResource("BgRailBrush") is not null);
+                Application.Current?.FindResource("BgRailBrush") is not null);
             await Assert.That(hasBgRail).IsTrue();
 
             bool hasStateRunning = Driver.OnUIThread(() =>
-                global::Avalonia.Application.Current?.FindResource("StateRunningBrush") is not null);
+                Application.Current?.FindResource("StateRunningBrush") is not null);
             await Assert.That(hasStateRunning).IsTrue();
 
             await Driver.ScreenshotAsync("orca-10-theme-dark").ConfigureAwait(false);
@@ -612,7 +607,7 @@ public sealed class OrcaShellE2ETests
 
     /// <summary>
     ///     The Ctrl+P keyboard shortcut opens the command palette in Orca shell
-    ///     mode — verifies <see cref="MainWindow.OnKeyDown"/> extracts the
+    ///     mode — verifies <see cref="MainWindow.OnKeyDown" /> extracts the
     ///     MainViewModel from the OrcaShellViewModel wrapper.
     /// </summary>
     [Test]
@@ -631,11 +626,11 @@ public sealed class OrcaShellE2ETests
             {
                 var mw = Driver.MainWindow;
                 mw.Focus();
-                var args = new global::Avalonia.Input.KeyEventArgs
+                var args = new KeyEventArgs
                 {
-                    RoutedEvent = global::Avalonia.Input.InputElement.KeyDownEvent,
-                    Key = global::Avalonia.Input.Key.P,
-                    KeyModifiers = global::Avalonia.Input.KeyModifiers.Control,
+                    RoutedEvent = InputElement.KeyDownEvent,
+                    Key = Key.P,
+                    KeyModifiers = KeyModifiers.Control
                 };
                 mw.RaiseEvent(args);
             });

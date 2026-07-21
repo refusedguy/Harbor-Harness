@@ -1,18 +1,16 @@
+@using Harbor.Ui.Framework.ViewModels
 @* ChatBubble - renders a single chat line with role-coloured left border.
    Driven entirely by ChatLine properties (Role, Text) and uses the
    platform-agnostic ChatLineViewModel helpers (RoleLabel, RoleBrushKey)
    for the role pill, so the same look is shared across Blazor, Avalonia,
    WPF, MAUI. *@
 
-@using Harbor.Ui.Framework.State
-@using Harbor.Ui.Framework.ViewModels
-
 @{
-    // Project the ChatLine through ChatLineViewModel to reuse the
-    // RoleLabel / RoleBrushKey derivation. This keeps the projection
-    // logic in one place (the record) instead of duplicating the switch
-    // expressions in every platform's chat template.
-    var vm = new ChatLineViewModel(Line.Role, Line.Text);
+// Project the ChatLine through ChatLineViewModel to reuse the
+// RoleLabel / RoleBrushKey derivation. This keeps the projection
+// logic in one place (the record) instead of duplicating the switch
+// expressions in every platform's chat template.
+var vm = new ChatLineViewModel(Line.Role, Line.Text);
 }
 
 <div class="message-bubble role-@vm.RoleLabel">
@@ -25,7 +23,7 @@
 </div>
 
 @code {
-    /// <summary>The chat line to render.</summary>
-    [Parameter]
-    public ChatLine Line { get; set; }
+/// <summary>The chat line to render.</summary>
+[Parameter]
+public ChatLine Line { get; set; }
 }

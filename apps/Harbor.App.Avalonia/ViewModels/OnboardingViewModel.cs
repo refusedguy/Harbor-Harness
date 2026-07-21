@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Collections.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
@@ -8,12 +7,11 @@ using Microsoft.Extensions.Logging;
 
 // ReSharper disable once CheckNamespace
 namespace Harbor.App.Avalonia.ViewModels;
-
 /// <summary>
 ///     First-launch onboarding wizard view-model. Walks the user through
 ///     provider selection → API key entry → default model → theme → done,
-///     then persists the result to <see cref="ICommonConfigStore"/> and
-///     raises <see cref="Completed"/> so <c>App.axaml.cs</c> can swap to the
+///     then persists the result to <see cref="ICommonConfigStore" /> and
+///     raises <see cref="Completed" /> so <c>App.axaml.cs</c> can swap to the
 ///     main window. Non-blocking: every network call is async with a 5-second
 ///     timeout and is cancellable when the user closes the wizard.
 /// </summary>
@@ -23,10 +21,44 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
     public const int TotalSteps = 5;
 
     private readonly ICommonConfigStore _configStore;
+    private readonly ILogger<OnboardingViewModel> _logger;
     private readonly ThemeService _theme;
     private readonly ToastService _toasts;
-    private readonly ILogger<OnboardingViewModel> _logger;
     private readonly CancellationTokenSource _wizardCts = new();
+
+    /// <summary>API key currently being entered for the provider on step 3.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdvance))]
+    private string _apiKey = string.Empty;
+
+    /// <summary>The current step (1..TotalSteps).</summary>
+    [ObservableProperty]
+    private int _currentStep = 1;
+
+    /// <summary>Default model id typed/selected on step 4.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAdvance))]
+    private string _defaultModel = string.Empty;
+
+    /// <summary>True while a background operation (save/test) is running.</summary>
+    [ObservableProperty]
+    private bool _isBusy;
+
+    /// <summary>True when the wizard has finished and the view should close.</summary>
+    [ObservableProperty]
+    private bool _isCompleted;
+
+    /// <summary>Selected provider for the "default model" dropdown on step 4.</summary>
+    [ObservableProperty]
+    private OnboardingProviderOption? _selectedProvider;
+
+    /// <summary>Status text shown while testing/saving (e.g. "Saving…").</summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
+    /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
+    [ObservableProperty]
+    private string _themeChoice = "dark";
 
     /// <summary>Construct the onboarding wizard view-model.</summary>
     public OnboardingViewModel(
@@ -46,18 +78,18 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         // wizard then collects keys + a default model + theme.
         Providers =
         [
-            new OnboardingProviderOption("anthropic",  "Anthropic",   "ANTHROPIC_API_KEY",   requiresKey: true,  defaultModel: "claude-sonnet-4-20250514", icon: "🤖"),
-            new OnboardingProviderOption("openai",     "OpenAI",      "OPENAI_API_KEY",      requiresKey: true,  defaultModel: "gpt-4o",                   icon: "🌐"),
-            new OnboardingProviderOption("openrouter", "OpenRouter",  "OPENROUTER_API_KEY",  requiresKey: true,  defaultModel: "anthropic/claude-sonnet-4", icon: "🛰️"),
-            new OnboardingProviderOption("deepseek",   "DeepSeek",    "DEEPSEEK_API_KEY",    requiresKey: true,  defaultModel: "deepseek-chat",            icon: "🐋"),
-            new OnboardingProviderOption("groq",       "Groq",        "GROQ_API_KEY",        requiresKey: true,  defaultModel: "llama-3.3-70b-versatile",  icon: "⚡"),
-            new OnboardingProviderOption("mistral",    "Mistral",     "MISTRAL_API_KEY",     requiresKey: true,  defaultModel: "mistral-large-latest",     icon: "🌬️"),
-            new OnboardingProviderOption("xai",        "xAI",         "XAI_API_KEY",         requiresKey: true,  defaultModel: "grok-3",                   icon: "✖️"),
-            new OnboardingProviderOption("together",   "Together AI", "TOGETHER_API_KEY",    requiresKey: true,  defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo", icon: "🤝"),
-            new OnboardingProviderOption("fireworks",  "Fireworks",   "FIREWORKS_API_KEY",   requiresKey: true,  defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct", icon: "🎆"),
-            new OnboardingProviderOption("cerebras",   "Cerebras",    "CEREBRAS_API_KEY",    requiresKey: true,  defaultModel: "llama-3.3-70b",            icon: "🧠"),
-            new OnboardingProviderOption("kilocode",   "Kilo Code",   "KILO_API_KEY",        requiresKey: true,  defaultModel: "tencent/hy3:free",         icon: "⌨️"),
-            new OnboardingProviderOption("ollama",     "Ollama (local)", null,               requiresKey: false, defaultModel: "qwen2.5-coder:7b",         icon: "🦙"),
+            new OnboardingProviderOption("anthropic", "Anthropic", "ANTHROPIC_API_KEY", true, "claude-sonnet-4-20250514", "🤖"),
+            new OnboardingProviderOption("openai", "OpenAI", "OPENAI_API_KEY", true, "gpt-4o", "🌐"),
+            new OnboardingProviderOption("openrouter", "OpenRouter", "OPENROUTER_API_KEY", true, "anthropic/claude-sonnet-4", "🛰️"),
+            new OnboardingProviderOption("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", true, "deepseek-chat", "🐋"),
+            new OnboardingProviderOption("groq", "Groq", "GROQ_API_KEY", true, "llama-3.3-70b-versatile", "⚡"),
+            new OnboardingProviderOption("mistral", "Mistral", "MISTRAL_API_KEY", true, "mistral-large-latest", "🌬️"),
+            new OnboardingProviderOption("xai", "xAI", "XAI_API_KEY", true, "grok-3", "✖️"),
+            new OnboardingProviderOption("together", "Together AI", "TOGETHER_API_KEY", true, "meta-llama/Llama-3.3-70B-Instruct-Turbo", "🤝"),
+            new OnboardingProviderOption("fireworks", "Fireworks", "FIREWORKS_API_KEY", true, "accounts/fireworks/models/llama-v3p1-70b-instruct", "🎆"),
+            new OnboardingProviderOption("cerebras", "Cerebras", "CEREBRAS_API_KEY", true, "llama-3.3-70b", "🧠"),
+            new OnboardingProviderOption("kilocode", "Kilo Code", "KILO_API_KEY", true, "tencent/hy3:free", "⌨️"),
+            new OnboardingProviderOption("ollama", "Ollama (local)", null, false, "qwen2.5-coder:7b", "🦙")
         ];
 
         // Default-select Ollama (works offline, no key needed) so the user
@@ -66,56 +98,8 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         RefreshSelectedProvider();
     }
 
-    /// <summary>
-    ///     Dispose the wizard's cancellation token source. Called by the
-    ///     <see cref="OnboardingWindow"/> when it closes — prevents the CTS
-    ///     from leaking across re-runs of the wizard.
-    /// </summary>
-    public void Dispose()
-    {
-        _wizardCts.Cancel();
-        _wizardCts.Dispose();
-    }
-
     /// <summary>Provider catalogue shown on step 2.</summary>
     public ObservableCollection<OnboardingProviderOption> Providers { get; }
-
-    /// <summary>Selected provider for the "default model" dropdown on step 4.</summary>
-    [ObservableProperty]
-    private OnboardingProviderOption? _selectedProvider;
-
-    /// <summary>The current step (1..TotalSteps).</summary>
-    [ObservableProperty]
-    private int _currentStep = 1;
-
-    /// <summary>API key currently being entered for the provider on step 3.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanAdvance))]
-    private string _apiKey = string.Empty;
-
-    /// <summary>Default model id typed/selected on step 4.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanAdvance))]
-    private string _defaultModel = string.Empty;
-
-    /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
-    [ObservableProperty]
-    private string _themeChoice = "dark";
-
-    /// <summary>Status text shown while testing/saving (e.g. "Saving…").</summary>
-    [ObservableProperty]
-    private string _statusText = string.Empty;
-
-    /// <summary>True while a background operation (save/test) is running.</summary>
-    [ObservableProperty]
-    private bool _isBusy;
-
-    /// <summary>True when the wizard has finished and the view should close.</summary>
-    [ObservableProperty]
-    private bool _isCompleted;
-
-    /// <summary>Raised when the user completes onboarding. App.axaml.cs swaps to MainWindow.</summary>
-    public event EventHandler? Completed;
 
     /// <summary>Human-readable title for the current step.</summary>
     public string StepTitle => CurrentStep switch
@@ -125,7 +109,7 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         3 => "Enter API key",
         4 => "Default model",
         5 => "Theme",
-        _ => "Onboarding",
+        _ => "Onboarding"
     };
 
     /// <summary>True when the user can advance to the next step.</summary>
@@ -142,20 +126,34 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         2 => Providers.Any(p => p.IsSelected),
         3 => true, // API key is optional — Ollama needs none, others can be added later in Settings.
         4 => !string.IsNullOrWhiteSpace(DefaultModel),
-        _ => true,
+        _ => true
     };
 
     /// <summary>
-    ///     Re-raise <see cref="CanAdvance"/> when any of the inputs that affect
+    ///     Dispose the wizard's cancellation token source. Called by the
+    ///     <see cref="OnboardingWindow" /> when it closes — prevents the CTS
+    ///     from leaking across re-runs of the wizard.
+    /// </summary>
+    public void Dispose()
+    {
+        _wizardCts.Cancel();
+        _wizardCts.Dispose();
+    }
+
+    /// <summary>Raised when the user completes onboarding. App.axaml.cs swaps to MainWindow.</summary>
+    public event EventHandler? Completed;
+
+    /// <summary>
+    ///     Re-raise <see cref="CanAdvance" /> when any of the inputs that affect
     ///     it change. Without these, the Next button's <c>IsEnabled</c> binding
     ///     never refreshes after the user types in the API-key / model field,
     ///     so the button appears stuck (the bug: "в wizard не работает next
     ///     если ключ ввести").
     /// </summary>
-    partial void OnApiKeyChanged(string value) => OnPropertyChanged(nameof(CanAdvance));
-    partial void OnDefaultModelChanged(string value) => OnPropertyChanged(nameof(CanAdvance));
-    partial void OnSelectedProviderChanged(OnboardingProviderOption? value) => OnPropertyChanged(nameof(CanAdvance));
-    partial void OnCurrentStepChanged(int value) => OnPropertyChanged(nameof(CanAdvance));
+    partial void OnApiKeyChanged(string value) => this.OnPropertyChanged(nameof(CanAdvance));
+    partial void OnDefaultModelChanged(string value) => this.OnPropertyChanged(nameof(CanAdvance));
+    partial void OnSelectedProviderChanged(OnboardingProviderOption? value) => this.OnPropertyChanged(nameof(CanAdvance));
+    partial void OnCurrentStepChanged(int value) => this.OnPropertyChanged(nameof(CanAdvance));
 
     /// <summary>Advance to the next step (or complete on step 5).</summary>
     [RelayCommand]
@@ -176,7 +174,7 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         }
 
         CurrentStep++;
-        OnPropertyChanged(nameof(CanAdvance));
+        this.OnPropertyChanged(nameof(CanAdvance));
     }
 
     /// <summary>Go back to the previous step (no-op on step 1).</summary>
@@ -185,7 +183,7 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
     {
         if (CurrentStep <= 1) return;
         CurrentStep--;
-        OnPropertyChanged(nameof(CanAdvance));
+        this.OnPropertyChanged(nameof(CanAdvance));
     }
 
     /// <summary>Skip onboarding entirely — closes the wizard without saving.</summary>
@@ -197,22 +195,22 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         Completed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Recompute <see cref="SelectedProvider"/> + CanAdvance after step-2 checkbox toggles.</summary>
+    /// <summary>Recompute <see cref="SelectedProvider" /> + CanAdvance after step-2 checkbox toggles.</summary>
     [RelayCommand]
     private void RefreshSelectedProvider()
     {
         SelectedProvider = Providers.FirstOrDefault(p => p.IsSelected)
-            ?? Providers.FirstOrDefault();
+                           ?? Providers.FirstOrDefault();
         if (SelectedProvider is not null && string.IsNullOrEmpty(DefaultModel))
         {
             DefaultModel = SelectedProvider.DefaultModel;
         }
-        OnPropertyChanged(nameof(CanAdvance));
+        this.OnPropertyChanged(nameof(CanAdvance));
     }
 
     /// <summary>
     ///     Persist the onboarding result to <c>~/.harbor/config.json</c> and
-    ///     raise <see cref="Completed"/>. Non-blocking: returns immediately
+    ///     raise <see cref="Completed" />. Non-blocking: returns immediately
     ///     on the UI thread; the await chain is fire-and-forget.
     /// </summary>
     private async Task FinishAsync()
@@ -228,13 +226,13 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
             // user can fill them in later via Settings. We MERGE with the
             // existing ApiKeys dictionary (not replace) so re-running the
             // wizard for a second provider doesn't wipe the first one's key.
-            var provider = SelectedProvider?.Id ?? "ollama";
-            var model = string.IsNullOrWhiteSpace(DefaultModel)
-                ? (SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b")
+            string provider = SelectedProvider?.Id ?? "ollama";
+            string model = string.IsNullOrWhiteSpace(DefaultModel)
+                ? SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b"
                 : DefaultModel.Trim();
-            var newKey = (SelectedProvider is not null
-                          && SelectedProvider.RequiresKey
-                          && !string.IsNullOrWhiteSpace(ApiKey))
+            string? newKey = SelectedProvider is not null
+                             && SelectedProvider.RequiresKey
+                             && !string.IsNullOrWhiteSpace(ApiKey)
                 ? ApiKey.Trim()
                 : null;
 
@@ -251,7 +249,7 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
                     ApiKeys = mergedKeys.ToImmutable(),
                     DefaultProvider = provider,
                     DefaultModel = model,
-                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend,
+                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
                 };
             }, _wizardCts.Token).ConfigureAwait(true);
 

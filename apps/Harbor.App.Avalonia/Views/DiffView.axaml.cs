@@ -2,9 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Views;
-
 /// <summary>
 ///     Diff view code-behind. Closes itself via the parent MainViewModel.
 /// </summary>
@@ -16,10 +14,7 @@ public partial class DiffView : UserControl
         InitializeComponent();
     }
 
-    private void Close_Click(object? sender, RoutedEventArgs e)
-    {
-        CloseModal();
-    }
+    private void Close_Click(object? sender, RoutedEventArgs e) => CloseModal();
 
     /// <summary>
     ///     Click on the backdrop (the dark scrim outside the card) closes the
@@ -38,7 +33,7 @@ public partial class DiffView : UserControl
 
     private void CloseModal()
     {
-        if (DataContext is DiffViewModel)
+        if (this.DataContext is DiffViewModel)
         {
             // Walk up to the MainWindow's MainViewModel.
             var window = this.VisualRoot as Window;

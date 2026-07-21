@@ -1,9 +1,12 @@
-using Harbor.Plugins.Abstractions;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Plugins;
+using Harbor.Terminal.Abstractions.Plugins;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Compilation;
-
 /// <summary>
 ///     Collects <see cref="MetadataReference" />s for the Roslyn compilation by snapshotting
 ///     the assemblies already loaded into the current <see cref="AppDomain" /> plus a small
@@ -22,7 +25,26 @@ namespace Harbor.Plugins.Compilation;
 /// </remarks>
 public sealed class PluginAssemblyReferences
 {
-    private readonly IReadOnlyList<MetadataReference> _references;
+
+    /// <summary>
+    ///     BCL contract assemblies that the Roslyn compiler needs to resolve
+    ///     type-forwarded primitive types (Version, Task, CancellationToken,
+    ///     IReadOnlyList&lt;&gt;, Array, …). Without these, plugin sources that
+    ///     <c>using System.Threading.Tasks;</c> fail to compile with CS0246.
+    /// </summary>
+    private static readonly string[] WellKnownRuntimeAssemblies =
+    {
+        "System.Runtime.dll",
+        "System.Collections.dll",
+        "System.Threading.Tasks.dll",
+        "System.Threading.dll",
+        "System.Resources.ResourceManager.dll",
+        "System.Runtime.InteropServices.dll",
+        "System.Private.Uri.dll",
+        "System.Text.Json.dll",
+        "System.Linq.dll",
+        "System.Console.dll"
+    };
     private readonly ILogger<PluginAssemblyReferences> _logger;
 
     /// <summary>
@@ -33,18 +55,23 @@ public sealed class PluginAssemblyReferences
     public PluginAssemblyReferences(ILogger<PluginAssemblyReferences> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _references = BuildReferences();
+        References = BuildReferences();
     }
 
     /// <summary>The collected <see cref="MetadataReference" />s.</summary>
-    public IReadOnlyList<MetadataReference> References => _references;
+    public IReadOnlyList<MetadataReference> References
+    {
+        get;
+    }
 
     /// <summary>
     ///     Build the metadata-reference list. Includes:
     ///     <list type="bullet">
     ///         <item>All non-dynamic, on-disk assemblies in <see cref="AppDomain.CurrentDomain" />.</item>
-    ///         <item>Explicit fallbacks for Harbor.Abstractions and System.Runtime in case
-    ///         they were trimmed from the AppDomain snapshot.</item>
+    ///         <item>
+    ///             Explicit fallbacks for Harbor.Abstractions and System.Runtime in case
+    ///             they were trimmed from the AppDomain snapshot.
+    ///         </item>
     ///     </list>
     /// </summary>
     private IReadOnlyList<MetadataReference> BuildReferences()
@@ -54,7 +81,7 @@ public sealed class PluginAssemblyReferences
 
         // 1. Snapshot the AppDomain — covers Harbor.Abstractions, System.Runtime, etc.
         //    Plus any assemblies already loaded via DI (logging, configuration, …).
-        Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
         foreach (var asm in assemblies)
         {
             if (asm.IsDynamic)
@@ -82,16 +109,16 @@ public sealed class PluginAssemblyReferences
         // 2. Explicit fallbacks — guarantees Harbor.Abstractions is referenced even if
         //    (somehow) the AppDomain snapshot doesn't include it yet. typeof() forces the
         //    assembly to load.
-        EnsureReference(refs, seen, typeof(Harbor.Abstractions.Plugins.IPlugin).Assembly);
+        EnsureReference(refs, seen, typeof(IPlugin).Assembly);
         EnsureReference(refs, seen, typeof(object).Assembly);
-        EnsureReference(refs, seen, typeof(System.Text.Json.JsonDocument).Assembly);
-        EnsureReference(refs, seen, typeof(Microsoft.Extensions.Logging.ILogger).Assembly);
-        EnsureReference(refs, seen, typeof(System.Linq.Enumerable).Assembly);
-        EnsureReference(refs, seen, typeof(System.Collections.Generic.Dictionary<,>).Assembly);
-        EnsureReference(refs, seen, typeof(Harbor.Terminal.Abstractions.Plugins.ITuiPlugin).Assembly);
-        EnsureReference(refs, seen, typeof(CSharpFunctionalExtensions.Result).Assembly);
-        EnsureReference(refs, seen, typeof(System.Threading.Tasks.Task).Assembly);
-        EnsureReference(refs, seen, typeof(System.Threading.CancellationToken).Assembly);
+        EnsureReference(refs, seen, typeof(JsonDocument).Assembly);
+        EnsureReference(refs, seen, typeof(ILogger).Assembly);
+        EnsureReference(refs, seen, typeof(Enumerable).Assembly);
+        EnsureReference(refs, seen, typeof(Dictionary<,>).Assembly);
+        EnsureReference(refs, seen, typeof(ITuiPlugin).Assembly);
+        EnsureReference(refs, seen, typeof(Result).Assembly);
+        EnsureReference(refs, seen, typeof(Task).Assembly);
+        EnsureReference(refs, seen, typeof(CancellationToken).Assembly);
 
         // 2b. Harbor.Domain — holds the Harbor.Abstractions.Models.* types
         //     (Session, ContentPart, ToolResult, etc.). They declare
@@ -104,7 +131,7 @@ public sealed class PluginAssemblyReferences
         //     split landed. typeof() forces Harbor.Domain to load if it wasn't
         //     already (it usually is, via the Abstractions reference, but the
         //     AppDomain snapshot may have been taken before that).
-        EnsureReference(refs, seen, typeof(Harbor.Abstractions.Models.Session).Assembly);
+        EnsureReference(refs, seen, typeof(Session).Assembly);
 
         // 3. Scan the .NET runtime directory for System.Runtime / System.Collections /
         //    etc. — these contract assemblies are needed by the compiler to resolve
@@ -116,42 +143,24 @@ public sealed class PluginAssemblyReferences
         //    RuntimeEnvironment.GetRuntimeDirectory() is the documented way to find the
         //    runtime directory and works even when Assembly.Location returns empty (e.g.
         //    single-file publish or some test hosts).
-        string runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
+        string runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
         if (!string.IsNullOrEmpty(runtimeDir) && Directory.Exists(runtimeDir))
         {
-            foreach (var wellKnown in WellKnownRuntimeAssemblies)
+            foreach (string wellKnown in WellKnownRuntimeAssemblies)
             {
                 string path = Path.Combine(runtimeDir, wellKnown);
                 if (File.Exists(path) && seen.Add(path))
                 {
                     try { refs.Add(MetadataReference.CreateFromFile(path)); }
-                    catch (IOException) { /* best-effort */ }
+                    catch (IOException)
+                    { /* best-effort */
+                    }
                 }
             }
         }
 
         return refs;
     }
-
-    /// <summary>
-    ///     BCL contract assemblies that the Roslyn compiler needs to resolve
-    ///    type-forwarded primitive types (Version, Task, CancellationToken,
-    ///    IReadOnlyList&lt;&gt;, Array, …). Without these, plugin sources that
-    ///    <c>using System.Threading.Tasks;</c> fail to compile with CS0246.
-    /// </summary>
-    private static readonly string[] WellKnownRuntimeAssemblies =
-    {
-        "System.Runtime.dll",
-        "System.Collections.dll",
-        "System.Threading.Tasks.dll",
-        "System.Threading.dll",
-        "System.Resources.ResourceManager.dll",
-        "System.Runtime.InteropServices.dll",
-        "System.Private.Uri.dll",
-        "System.Text.Json.dll",
-        "System.Linq.dll",
-        "System.Console.dll",
-    };
 
     private static void EnsureReference(
         List<MetadataReference> refs,

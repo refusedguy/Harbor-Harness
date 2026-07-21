@@ -17,12 +17,10 @@ using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
-///     <see cref="IAuthResolver"/> backed by the shared
-///     <see cref="CommonConfig.ApiKeys"/> dictionary. Used by the Avalonia
+///     <see cref="IAuthResolver" /> backed by the shared
+///     <see cref="CommonConfig.ApiKeys" /> dictionary. Used by the Avalonia
 ///     desktop app so providers registered via <c>providers/*.json</c> can
 ///     resolve API keys the user entered in the onboarding wizard or Settings
 ///     without pulling in the CLI's <c>AuthStore</c> (which reads a different
@@ -40,7 +38,7 @@ namespace Harbor.App.Avalonia.Services;
 ///     <para>
 ///         The config is reloaded on every call so keys the user saves via
 ///         the wizard are immediately visible to in-flight requests (the
-///         <see cref="CommonConfig"/> DI singleton is a startup snapshot and
+///         <see cref="CommonConfig" /> DI singleton is a startup snapshot and
 ///         does not see post-startup writes).
 ///     </para>
 /// </remarks>
@@ -50,7 +48,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
     private readonly ILogger<CommonConfigAuthResolver> _logger;
 
     /// <summary>
-    ///     Construct a <see cref="CommonConfigAuthResolver"/>.
+    ///     Construct a <see cref="CommonConfigAuthResolver" />.
     /// </summary>
     /// <param name="configStore">The shared config store (reads ~/.harbor/config.json).</param>
     /// <param name="logger">Logger for diagnostics.</param>
@@ -74,7 +72,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
         var loadResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
         if (loadResult.IsSuccess)
         {
-            if (loadResult.Value.ApiKeys.TryGetValue(providerId, out var key) && !string.IsNullOrEmpty(key))
+            if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             {
                 _logger.LogDebug("Resolved API key for {Provider} from CommonConfig.ApiKeys", providerId);
                 return Result.Success(key);
@@ -89,7 +87,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
         var preset = ProviderPresets.Find(providerId);
         if (preset?.EnvVarName is not null)
         {
-            var presetEnv = Environment.GetEnvironmentVariable(preset.EnvVarName);
+            string? presetEnv = Environment.GetEnvironmentVariable(preset.EnvVarName);
             if (!string.IsNullOrEmpty(presetEnv))
             {
                 _logger.LogDebug("Resolved API key for {Provider} from preset env var {Name}", providerId, preset.EnvVarName);
@@ -99,7 +97,7 @@ public sealed class CommonConfigAuthResolver : IAuthResolver
 
         // 3. Conventional fallback: {PROVIDERID}_API_KEY.
         string conventional = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
-        var envValue = Environment.GetEnvironmentVariable(conventional);
+        string? envValue = Environment.GetEnvironmentVariable(conventional);
         if (!string.IsNullOrEmpty(envValue))
         {
             _logger.LogDebug("Resolved API key for {Provider} from conventional env var {Name}", providerId, conventional);

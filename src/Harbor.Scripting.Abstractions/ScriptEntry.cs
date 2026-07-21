@@ -5,7 +5,6 @@
 //   It only knows: "list / read / write / delete script files in some store."
 //   Implementations may target filesystems, in-memory dicts, ZIP archives, etc.
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     A discovered script entry: its name, location, content, and metadata.
 /// </summary>

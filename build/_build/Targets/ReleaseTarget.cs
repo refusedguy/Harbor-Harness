@@ -1,21 +1,18 @@
 using Harbor.Build.Components;
-using Harbor.Build.Configuration;
 using Nuke.Common.IO;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     Release target — publishes multiple variants, archives each, and
 ///     uploads the archives to a GitHub release identified by a tag.
 ///     Requires <c>GH_TOKEN</c> environment variable (see
-///     <see cref="GitHubReleaseUploader"/>).
+///     <see cref="GitHubReleaseUploader" />).
 /// </summary>
 public static class ReleaseTarget
 {
     /// <summary>
     ///     Executes the full release pipeline for the named app:
     ///     <c>Publish → Archive → Upload</c> for each variant in
-    ///     <paramref name="variants"/>.
+    ///     <paramref name="variants" />.
     /// </summary>
     public static async Task ExecuteAsync(
         ArtifactPathResolver resolver,
@@ -61,7 +58,7 @@ public static class ReleaseTarget
     /// <summary>
     ///     Returns the standard release variant matrix: FrameworkDependent,
     ///     SelfContained, SingleFileSelfContained, AOT. AOT requires
-    ///     <see cref="FeatureFlags.Minimal"/> or equivalent AOT-compatible flags.
+    ///     <see cref="FeatureFlags.Minimal" /> or equivalent AOT-compatible flags.
     /// </summary>
     public static IReadOnlyList<PublishVariant> DefaultReleaseVariants(FeatureFlags flags)
     {

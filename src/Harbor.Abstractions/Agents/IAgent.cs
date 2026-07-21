@@ -34,7 +34,7 @@ public interface IAgentRunner
     ///     <see cref="CancellationTokenSource.Cancel" /> to interrupt the agent at the
     ///     next safe boundary (between turns or during a streaming await).
     /// </summary>
-    CancellationTokenSource AbortSource { get; }
+    public CancellationTokenSource AbortSource { get; }
 
     /// <summary>
     ///     Submit a user prompt as plain text and run the agent loop to completion.
@@ -42,14 +42,14 @@ public interface IAgentRunner
     /// <param name="text">The user's prompt text.</param>
     /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
     /// <returns>Success on completion, or failure with an error message.</returns>
-    Task<Result> PromptAsync(string text, CancellationToken ct = default);
+    public Task<Result> PromptAsync(string text, CancellationToken ct = default);
 
     /// <summary>
     ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> call in flight).
     /// </summary>
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A task that completes when the agent is idle.</returns>
-    Task WaitForIdleAsync(CancellationToken ct = default);
+    public Task WaitForIdleAsync(CancellationToken ct = default);
 
     /// <summary>
     ///     Recreate the internal <see cref="AbortSource" /> so the agent is ready
@@ -71,7 +71,7 @@ public interface IAgentRunner
     ///         first prompt isn't dead on arrival.
     ///     </para>
     /// </remarks>
-    void ResetAbortSource();
+    public void ResetAbortSource();
 }
 
 /// <summary>

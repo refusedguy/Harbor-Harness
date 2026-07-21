@@ -10,9 +10,7 @@
 // WPF-specific UX preferences.
 
 using Harbor.Desktop.Abstractions.Configuration;
-
 namespace Harbor.App.Wpf.Configuration;
-
 /// <summary>
 ///     Per-app configuration for the Harbor WPF desktop app. Stored at
 ///     <c>~/.harbor/wpf.json</c>. Non-overlapping with CLI/Avalonia/MAUI/Blazor

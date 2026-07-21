@@ -1,13 +1,15 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Block = System.Windows.Documents.Block;
+using Inline = System.Windows.Documents.Inline;
 using MDInline = Markdig.Syntax.Inlines.Inline;
 
 namespace Harbor.App.Wpf.Services;
-
 /// <summary>
 ///     Renders Markdig-parsed markdown into a WPF <see cref="FlowDocument" />
 ///     suitable for display in a <c>RichTextBox</c> or
@@ -65,7 +67,7 @@ public sealed class MarkdownFlowDocumentRenderer
         return doc;
     }
 
-    private static System.Windows.Documents.Block? RenderBlock(Markdig.Syntax.Block block)
+    private static Block? RenderBlock(Markdig.Syntax.Block block)
     {
         switch (block)
         {
@@ -93,7 +95,7 @@ public sealed class MarkdownFlowDocumentRenderer
         }
     }
 
-    private static System.Windows.Documents.Block RenderHeading(HeadingBlock heading)
+    private static Block RenderHeading(HeadingBlock heading)
     {
         double size = heading.Level switch
         {
@@ -113,14 +115,14 @@ public sealed class MarkdownFlowDocumentRenderer
         return p;
     }
 
-    private static System.Windows.Documents.Block RenderParagraph(ParagraphBlock paragraph)
+    private static Block RenderParagraph(ParagraphBlock paragraph)
     {
         var p = new Paragraph { Margin = new Thickness(0, 2, 0, 2) };
         if (paragraph.Inline is not null) AddInlines(p, paragraph.Inline);
         return p;
     }
 
-    private static System.Windows.Documents.Block RenderList(ListBlock list)
+    private static Block RenderList(ListBlock list)
     {
         var wpfList = new List
         {
@@ -144,9 +146,9 @@ public sealed class MarkdownFlowDocumentRenderer
         return wpfList;
     }
 
-    private static System.Windows.Documents.Block RenderCodeBlock(string code)
+    private static Block RenderCodeBlock(string code)
     {
-        var text = code.Replace("\r\n", "\n").TrimEnd('\n');
+        string text = code.Replace("\r\n", "\n").TrimEnd('\n');
         var para = new Paragraph
         {
             FontFamily = new FontFamily("JetBrains Mono, Cascadia Code, Consolas, monospace"),
@@ -160,7 +162,7 @@ public sealed class MarkdownFlowDocumentRenderer
         return para;
     }
 
-    private static System.Windows.Documents.Block RenderQuote(QuoteBlock quote)
+    private static Block RenderQuote(QuoteBlock quote)
     {
         var section = new Section
         {
@@ -193,52 +195,52 @@ public sealed class MarkdownFlowDocumentRenderer
                 paragraph.Inlines.Add(new Run(literal.Content.ToString()));
                 break;
             case EmphasisInline emphasis:
-                {
-                    var span = new Span();
-                    if (emphasis.DelimiterCount == 2) span.FontWeight = FontWeights.Bold;
-                    else span.FontStyle = FontStyles.Italic;
-                    foreach (var child in emphasis) span.Inlines.Add(InlineFromContainer(child));
-                    paragraph.Inlines.Add(span);
-                    break;
-                }
+            {
+                var span = new Span();
+                if (emphasis.DelimiterCount == 2) span.FontWeight = FontWeights.Bold;
+                else span.FontStyle = FontStyles.Italic;
+                foreach (var child in emphasis) span.Inlines.Add(InlineFromContainer(child));
+                paragraph.Inlines.Add(span);
+                break;
+            }
             case CodeInline code:
+            {
+                var run = new Run(code.Content)
                 {
-                    var run = new Run(code.Content)
-                    {
-                        FontFamily = new FontFamily("JetBrains Mono, Consolas, monospace"),
-                        Background = new SolidColorBrush(Color.FromRgb(0x31, 0x32, 0x44)),
-                        Foreground = new SolidColorBrush(Color.FromRgb(0xF9, 0xE2, 0xAF))
-                    };
-                    paragraph.Inlines.Add(run);
-                    break;
-                }
+                    FontFamily = new FontFamily("JetBrains Mono, Consolas, monospace"),
+                    Background = new SolidColorBrush(Color.FromRgb(0x31, 0x32, 0x44)),
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xF9, 0xE2, 0xAF))
+                };
+                paragraph.Inlines.Add(run);
+                break;
+            }
             case LinkInline link:
+            {
+                // Markdig 1.x LinkInline has no .Text field — fall back to
+                // the label (which holds the visible text for inline links)
+                // or iterate children to recover the rendered text.
+                string? text = link.Label;
+                if (string.IsNullOrEmpty(text) && link.FirstChild is not null)
                 {
-                    // Markdig 1.x LinkInline has no .Text field — fall back to
-                    // the label (which holds the visible text for inline links)
-                    // or iterate children to recover the rendered text.
-                    string? text = link.Label;
-                    if (string.IsNullOrEmpty(text) && link.FirstChild is not null)
+                    var sb = new StringBuilder();
+                    for (var child = link.FirstChild; child is not null; child = child.NextSibling)
                     {
-                        var sb = new System.Text.StringBuilder();
-                        for (var child = link.FirstChild; child is not null; child = child.NextSibling)
-                        {
-                            if (child is LiteralInline lit) sb.Append(lit.Content.ToString());
-                            else if (child is CodeInline code) sb.Append(code.Content);
-                            else sb.Append(child.ToString());
-                        }
-                        text = sb.ToString();
+                        if (child is LiteralInline lit) sb.Append(lit.Content.ToString());
+                        else if (child is CodeInline code) sb.Append(code.Content);
+                        else sb.Append(child);
                     }
-                    text = string.IsNullOrEmpty(text) ? (link.Url ?? "(link)") : text;
-                    var hyperlink = new Hyperlink(new Run(text))
-                    {
-                        NavigateUri = string.IsNullOrEmpty(link.Url) ? null : new Uri(link.Url, UriKind.RelativeOrAbsolute),
-                        Foreground = new SolidColorBrush(Color.FromRgb(0x89, 0xB4, 0xFA)),
-                        TextDecorations = System.Windows.TextDecorations.Underline
-                    };
-                    paragraph.Inlines.Add(hyperlink);
-                    break;
+                    text = sb.ToString();
                 }
+                text = string.IsNullOrEmpty(text) ? link.Url ?? "(link)" : text;
+                var hyperlink = new Hyperlink(new Run(text))
+                {
+                    NavigateUri = string.IsNullOrEmpty(link.Url) ? null : new Uri(link.Url, UriKind.RelativeOrAbsolute),
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x89, 0xB4, 0xFA)),
+                    TextDecorations = TextDecorations.Underline
+                };
+                paragraph.Inlines.Add(hyperlink);
+                break;
+            }
             case LineBreakInline:
                 paragraph.Inlines.Add(new LineBreak());
                 break;
@@ -251,7 +253,7 @@ public sealed class MarkdownFlowDocumentRenderer
         }
     }
 
-    private static System.Windows.Documents.Inline InlineFromContainer(MDInline inline)
+    private static Inline InlineFromContainer(MDInline inline)
     {
         if (inline is LiteralInline lit) return new Run(lit.Content.ToString());
         if (inline is CodeInline code) return new Run(code.Content);

@@ -9,9 +9,6 @@
    │             │  StatusBar (state / tokens)      │
    └─────────────┴──────────────────────────────────┘
    The CommandPalette overlays the whole shell when Ctrl+P is pressed. @*@
-
-@using Harbor.App.Blazor.Components.Shared
-@using Harbor.Ui.Framework.State
 @inherits LayoutComponentBase
 @inject UiStore Store
 @inject BlazorDispatcherAdapter Dispatcher
@@ -33,42 +30,45 @@
 </div>
 
 @code {
-    protected override void OnInitialized()
-    {
-        Store.Changed += OnStoreChanged;
-        // Bind the adapter to the layout's render context so background
-        // threads (VMs, services) can call InvokeAsync(StateHasChanged)
-        // through it. InvokeAsync here is ComponentBase.InvokeAsync which
-        // marshals to the render thread.
-        Dispatcher.Bind(action => InvokeAsync(action));
-    }
+protected override void OnInitialized()
+{
+    Store.Changed += OnStoreChanged;
+    // Bind the adapter to the layout's render context so background
+    // threads (VMs, services) can call InvokeAsync(StateHasChanged)
+    // through it. InvokeAsync here is ComponentBase.InvokeAsync which
+    // marshals to the render thread.
+    Dispatcher.Bind(action => InvokeAsync(action));
+}
 
-    private async void OnStoreChanged(object? _, UiStateChangedEventArgs __)
-    {
-        // Re-render on the render thread (InvokeAsync marshals to the
-        // render thread; no-op when already on it).
-        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-    }
+private async void OnStoreChanged(object? _, UiStateChangedEventArgs __)
+{
+    // Re-render on the render thread (InvokeAsync marshals to the
+    // render thread; no-op when already on it).
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
 
-    /// <summary>
+///     Global keydown handler — opens the command palette on Ctrl+P,
+///     closes it on Escape when open. Other keys fall through to
+///     the focused control.
+/// <summary>
     ///     Global keydown handler — opens the command palette on Ctrl+P,
     ///     closes it on Escape when open. Other keys fall through to
     ///     the focused control.
     /// </summary>
-    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+private async Task OnKeyDownAsync(KeyboardEventArgs e)
+{
+    if (e is { Key: "p", CtrlKey: true })
     {
-        if (e is { Key: "p", CtrlKey: true })
-        {
-            await Palette.ToggleAsync().ConfigureAwait(false);
-        }
-        else if (e is { Key: "Escape" } && Palette.IsOpen)
-        {
-            await Palette.CloseAsync().ConfigureAwait(false);
-        }
+        await Palette.ToggleAsync().ConfigureAwait(false);
     }
+    else if (e is { Key: "Escape" } && Palette.IsOpen)
+    {
+        await Palette.CloseAsync().ConfigureAwait(false);
+    }
+}
 
-    public void Dispose()
-    {
-        Store.Changed -= OnStoreChanged;
-    }
+public void Dispose()
+{
+    Store.Changed -= OnStoreChanged;
+}
 }

@@ -1,7 +1,5 @@
 using Harbor.Desktop.Abstractions.Models;
-
 namespace Harbor.Desktop.DesignSystem.Themes;
-
 /// <summary>
 ///     Catppuccin-Mocha (dark) theme as a flat <c>Dictionary&lt;string,string&gt;</c>
 ///     of hex strings. Each platform app consumes this to populate its own
@@ -9,8 +7,6 @@ namespace Harbor.Desktop.DesignSystem.Themes;
 /// </summary>
 public static class DarkTheme
 {
-    /// <summary>The theme kind — always <see cref="ThemeKind.Dark"/>.</summary>
-    public static ThemeKind Kind => ThemeKind.Dark;
 
     /// <summary>The flat token map. Keys are semantic names ("AppBackground", "Accent", etc.).</summary>
     public static readonly IReadOnlyDictionary<string, string> Tokens = new Dictionary<string, string>
@@ -45,6 +41,8 @@ public static class DarkTheme
         ["StatusIdle"] = "#A6ADC8",
         ["StatusRunning"] = "#89B4FA",
         ["StatusCompact"] = "#F9E2AF",
-        ["StatusError"] = "#F38BA8",
+        ["StatusError"] = "#F38BA8"
     };
+    /// <summary>The theme kind — always <see cref="ThemeKind.Dark" />.</summary>
+    public static ThemeKind Kind => ThemeKind.Dark;
 }

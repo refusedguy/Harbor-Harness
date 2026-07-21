@@ -1,5 +1,4 @@
 namespace Harbor.Ipc.Protocol;
-
 /// <summary>
 ///     MessagePack RPC server. Accepts client streams from the
 ///     <see cref="ServerPipeTransport" />, reads length-prefixed frames of
@@ -26,10 +25,10 @@ namespace Harbor.Ipc.Protocol;
 public sealed class MessagePackRpcServer : IAsyncDisposable
 {
     private readonly EventBroadcaster _broadcaster;
+    private readonly CancellationTokenSource _cts = new();
     private readonly RequestDispatcher _dispatcher;
     private readonly ILogger<MessagePackRpcServer> _logger;
     private readonly ServerPipeTransport _transport;
-    private readonly CancellationTokenSource _cts = new();
     private Task? _acceptTask;
     private int _disposed;
 
@@ -48,13 +47,16 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         _logger = logger;
     }
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync() => await StopAsync().ConfigureAwait(false);
+
     /// <summary>
     ///     Begin accepting client connections. Returns once the transport is
     ///     bound; the accept loop runs in the background.
     /// </summary>
     public async Task RunAsync(CancellationToken ct = default)
     {
-        ChannelReader<Stream> acceptReader = await _transport.BindAsync(ct).ConfigureAwait(false);
+        var acceptReader = await _transport.BindAsync(ct).ConfigureAwait(false);
         _broadcaster.Start();
         _acceptTask = AcceptLoopAsync(acceptReader, _cts.Token);
     }
@@ -71,19 +73,15 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         if (_acceptTask is not null)
         {
             try { await _acceptTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) { /* expected on shutdown */ }
+            catch (OperationCanceledException)
+            { /* expected on shutdown */
+            }
             catch (Exception ex) { _logger.LogWarning(ex, "Accept loop ended with error"); }
         }
 
         await _transport.UnbindAsync(ct).ConfigureAwait(false);
         await _broadcaster.DisposeAsync().ConfigureAwait(false);
         _cts.Dispose();
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync().ConfigureAwait(false);
     }
 
     // ── Accept loop ────────────────────────────────────────────────────────
@@ -128,10 +126,10 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 // per-client write lock so the broadcaster can push
                 // out-of-band frames to this client without interleaving
                 // with our direct response frames.
-                Stream? replyStream = request is SubscribeToEventsRequest ? stream : null;
-                SemaphoreSlim? replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
+                var replyStream = request is SubscribeToEventsRequest ? stream : null;
+                var replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
 
-                HarborResponse response = await _dispatcher
+                var response = await _dispatcher
                     .DispatchAsync(request, replyStream, replyWriteLock, ct)
                     .ConfigureAwait(false);
 

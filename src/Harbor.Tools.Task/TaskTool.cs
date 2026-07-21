@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
-
 /// <summary>
 ///     Delegates work to a sub-agent (Command). Long-running: fully async, cancel via context.Abort.
 ///     Sequential so it doesn't race side-effect tools in the same turn.

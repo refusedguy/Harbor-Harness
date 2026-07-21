@@ -1,6 +1,5 @@
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
-using Markdig.Syntax.Inlines;
 using MdInline = Markdig.Syntax.Inlines.Inline;
 using MdContainerInline = Markdig.Syntax.Inlines.ContainerInline;
 using MdLiteralInline = Markdig.Syntax.Inlines.LiteralInline;
@@ -11,9 +10,8 @@ using MdLineBreakInline = Markdig.Syntax.Inlines.LineBreakInline;
 using AvalonInline = Avalonia.Controls.Documents.Inline;
 
 namespace Harbor.App.Avalonia.Views.Controls.Markdown;
-
 /// <summary>
-///     Renders Markdig inlines into Avalonia <see cref="Inline"/> objects
+///     Renders Markdig inlines into Avalonia <see cref="Inline" /> objects
 ///     (Run / LineBreak) that can be added to a TextBlock's Inlines
 ///     collection. Extracted from <c>MarkdownRenderer.axaml.cs</c>
 ///     (Task R31 god-object decomposition) so the block renderer doesn't
@@ -27,14 +25,14 @@ namespace Harbor.App.Avalonia.Views.Controls.Markdown;
 ///     </para>
 ///     <para>
 ///         All brush / font lookups go through
-///         <see cref="MarkdownResourceResolver"/> so theme-variant changes
+///         <see cref="MarkdownResourceResolver" /> so theme-variant changes
 ///         are picked up automatically.
 ///     </para>
 /// </remarks>
 internal static class MarkdownInlineRenderer
 {
     /// <summary>
-    ///     Build a list of <see cref="Inline"/> objects from a Markdig
+    ///     Build a list of <see cref="Inline" /> objects from a Markdig
     ///     container. Returns an empty list for null containers.
     /// </summary>
     public static List<AvalonInline> BuildInlines(MdContainerInline? container)
@@ -44,7 +42,7 @@ internal static class MarkdownInlineRenderer
         {
             return list;
         }
-        foreach (MdInline inline in container)
+        foreach (var inline in container)
         {
             EmitInline(inline, list);
         }
@@ -53,7 +51,7 @@ internal static class MarkdownInlineRenderer
 
     /// <summary>
     ///     Emit a single Markdig inline (and its children, recursively)
-    ///     into <paramref name="sink"/>.
+    ///     into <paramref name="sink" />.
     /// </summary>
     public static void EmitInline(MdInline inline, List<AvalonInline> sink)
     {
@@ -63,83 +61,79 @@ internal static class MarkdownInlineRenderer
                 sink.Add(new Run(lit.Content.ToString()));
                 break;
             case MdEmphasisInline em:
+            {
+                var childRuns = new List<AvalonInline>();
+                CollectRuns(em, childRuns);
+                bool isBold = em.DelimiterCount == 2;
+                foreach (var r in childRuns)
                 {
-                    var childRuns = new List<AvalonInline>();
-                    CollectRuns(em, childRuns);
-                    bool isBold = em.DelimiterCount == 2;
-                    foreach (var r in childRuns)
+                    if (r is Run run)
                     {
-                        if (r is Run run)
+                        if (isBold)
                         {
-                            if (isBold)
-                            {
-                                run.FontWeight = FontWeight.Bold;
-                            }
-                            else
-                            {
-                                run.FontStyle = FontStyle.Italic;
-                            }
+                            run.FontWeight = FontWeight.Bold;
+                        }
+                        else
+                        {
+                            run.FontStyle = FontStyle.Italic;
                         }
                     }
-                    sink.AddRange(childRuns);
-                    break;
                 }
+                sink.AddRange(childRuns);
+                break;
+            }
             case MdCodeInline code:
                 sink.Add(new Run(code.Content)
                 {
                     FontFamily = MarkdownResourceResolver.TryFindFont("CodeFont", FontFamily.Default),
                     FontSize = 12,
                     Background = MarkdownResourceResolver.TryFindBrush("MochaSurface0", Brushes.DarkGray),
-                    Foreground = MarkdownResourceResolver.TryFindBrush("MochaPeach", Brushes.Orange),
+                    Foreground = MarkdownResourceResolver.TryFindBrush("MochaPeach", Brushes.Orange)
                 });
                 break;
             case MdLinkInline link:
+            {
+                var labelRuns = new List<AvalonInline>();
+                if (link.FirstChild is { } first)
                 {
-                    var labelRuns = new List<AvalonInline>();
-                    if (link.FirstChild is { } first)
-                    {
-                        CollectRunsFromInline(first, labelRuns);
-                    }
-                    if (labelRuns.Count == 0)
-                    {
-                        labelRuns.Add(new Run(link.Url ?? "link"));
-                    }
-                    foreach (var r in labelRuns)
-                    {
-                        if (r is Run run)
-                        {
-                            run.Foreground = MarkdownResourceResolver.TryFindBrush("MochaSapphire", Brushes.SkyBlue);
-                            run.TextDecorations = TextDecorations.Underline;
-                        }
-                    }
-                    sink.AddRange(labelRuns);
-                    break;
+                    CollectRunsFromInline(first, labelRuns);
                 }
+                if (labelRuns.Count == 0)
+                {
+                    labelRuns.Add(new Run(link.Url ?? "link"));
+                }
+                foreach (var r in labelRuns)
+                {
+                    if (r is Run run)
+                    {
+                        run.Foreground = MarkdownResourceResolver.TryFindBrush("MochaSapphire", Brushes.SkyBlue);
+                        run.TextDecorations = TextDecorations.Underline;
+                    }
+                }
+                sink.AddRange(labelRuns);
+                break;
+            }
             case MdLineBreakInline:
                 sink.Add(new LineBreak());
                 break;
             case MdContainerInline ci:
-                foreach (MdInline child in ci)
+                foreach (var child in ci)
                 {
                     EmitInline(child, sink);
                 }
-                break;
-            default:
-                // Unhandled inline type (DelimiterInline, HtmlInline, …) —
-                // silently skip rather than throw.
                 break;
         }
     }
 
     /// <summary>
-    ///     Collect all <see cref="Inline"/> children of a container
+    ///     Collect all <see cref="Inline" /> children of a container
     ///     (recursively) without applying emphasis styling. Used by
-    ///     <see cref="EmitInline"/> to gather child runs before applying
+    ///     <see cref="EmitInline" /> to gather child runs before applying
     ///     bold/italic at the parent level.
     /// </summary>
     public static void CollectRuns(MdContainerInline container, List<AvalonInline> sink)
     {
-        foreach (MdInline inline in container)
+        foreach (var inline in container)
         {
             CollectRunsFromInline(inline, sink);
         }
@@ -162,7 +156,7 @@ internal static class MarkdownInlineRenderer
                     FontFamily = MarkdownResourceResolver.TryFindFont("CodeFont", FontFamily.Default),
                     FontSize = 12,
                     Background = MarkdownResourceResolver.TryFindStaticBrush("MochaSurface0"),
-                    Foreground = MarkdownResourceResolver.TryFindStaticBrush("MochaPeach"),
+                    Foreground = MarkdownResourceResolver.TryFindStaticBrush("MochaPeach")
                 });
                 break;
             case MdContainerInline ci:

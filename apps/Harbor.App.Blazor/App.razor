@@ -1,12 +1,9 @@
+@using Harbor.App.Blazor.Components
+@using Microsoft.AspNetCore.Components.Web
 @* Root Razor component — the full HTML document. Routes the path to a Page
    inside the default _Layout. Loaded scripts: Blazor SignalR, Monaco loader,
    and the Harbor JS interop shim. Theme is set on the <html> element so CSS
    variables can switch themes via the ThemeService. @*@
-
-@using Harbor.App.Blazor.Components
-@using Microsoft.AspNetCore.Components.Forms
-@using Microsoft.AspNetCore.Components.Routing
-@using Microsoft.AspNetCore.Components.Web
 
 <!DOCTYPE html>
 <html lang="en" data-theme="mocha">
@@ -19,9 +16,9 @@
     <HeadOutlet/>
 </head>
 <body class="harbor-shell">
-    <Routes/>
-    <script src="_framework/blazor.web.js" autostart="true"></script>
-    <script src="js/monaco-loader.js" defer></script>
-    <script src="js/interop.js" defer></script>
+<Routes/>
+<script src="_framework/blazor.web.js" autostart="true"></script>
+<script src="js/monaco-loader.js" defer></script>
+<script src="js/interop.js" defer></script>
 </body>
 </html>

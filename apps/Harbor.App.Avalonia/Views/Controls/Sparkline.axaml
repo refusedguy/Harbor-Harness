@@ -14,5 +14,5 @@
 
     <Canvas x:Name="SparkCanvas"
             Background="Transparent"
-            ClipToBounds="True"/>
+            ClipToBounds="True" />
 </UserControl>

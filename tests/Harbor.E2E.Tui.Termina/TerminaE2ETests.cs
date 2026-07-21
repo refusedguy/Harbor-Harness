@@ -1,13 +1,10 @@
 using Harbor.E2E.Framework;
-using TUnit.Core.Enums;
-
 namespace Harbor.E2E.Tui.Termina;
-
 /// <summary>
 ///     End-to-end tests for the Termina-based interactive TUI renderer
-/// (<c>HARBOR_TUI=termina</c>). Drives the CLI inside a PTY and asserts on the
-/// ANSI-stripped screen buffer. See <c>docs/E2E_TESTING.md</c> for the
-/// platform matrix.
+///     (<c>HARBOR_TUI=termina</c>). Drives the CLI inside a PTY and asserts on the
+///     ANSI-stripped screen buffer. See <c>docs/E2E_TESTING.md</c> for the
+///     platform matrix.
 /// </summary>
 [Category("E2E")]
 [NotInParallel]
@@ -44,7 +41,7 @@ public class TerminaE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
 
         bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
@@ -62,7 +59,7 @@ public class TerminaE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
@@ -81,7 +78,7 @@ public class TerminaE2ETests : E2eTestBase
         if (!EnsurePtyAvailable()) return;
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync(args: [], env: GetEnv()).ConfigureAwait(false);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);

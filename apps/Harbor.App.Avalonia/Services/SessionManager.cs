@@ -5,36 +5,37 @@ using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
 ///     Facade that owns the active session and delegates creation, switching,
 ///     git-tracking, and status-tracking to dedicated services. The sidebar
-///     (<see cref="SessionListViewModel"/>) drives this — New / Open / Branch /
+///     (<see cref="SessionListViewModel" />) drives this — New / Open / Branch /
 ///     Delete operations flow through here so the agent + UiStore stay in sync.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Per-session UiStore (concurrent agents):</b> each open session
-///         has its own <see cref="SessionContext"/> / <see cref="UiStore"/>
-///         held in <see cref="_contexts"/>. When the user switches sessions,
+///         has its own <see cref="SessionContext" /> / <see cref="UiStore" />
+///         held in <see cref="_contexts" />. When the user switches sessions,
 ///         the agent in the previous session is <b>not</b> aborted — its
 ///         events keep flowing into the OLD session's UiStore (routed by
 ///         <c>AppHost</c>'s EventBus subscriber using
-///         <see cref="AgentStartEvent.SessionId"/>). The UI rebinds to the
-///         NEW session's UiStore via <see cref="ChatViewModel.RebindToStore"/>.
+///         <see cref="AgentStartEvent.SessionId" />). The UI rebinds to the
+///         NEW session's UiStore via <see cref="ChatViewModel.RebindToStore" />.
 ///         This is the user-visible fix for
-///         <c>"я хочу чтобы агенты не останавливались а я мог их в разных
-///         сессиях останавливать работающими"</c>.
+///         <c>
+///             "я хочу чтобы агенты не останавливались а я мог их в разных
+///             сессиях останавливать работающими"
+///         </c>
+///         .
 ///     </para>
 ///     <para>
 ///         <b>Decomposition:</b>
 ///         <list type="bullet">
-///             <item><see cref="SessionFactory"/> — creates sessions.</item>
-///             <item><see cref="SessionSwitcher"/> — bind agent + replay history into the per-session UiStore.</item>
-///             <item><see cref="SessionGitTracker"/> — per-session git status cache.</item>
-///             <item><see cref="SessionStatusTracker"/> — per-session status + event sink.</item>
+///             <item><see cref="SessionFactory" /> — creates sessions.</item>
+///             <item><see cref="SessionSwitcher" /> — bind agent + replay history into the per-session UiStore.</item>
+///             <item><see cref="SessionGitTracker" /> — per-session git status cache.</item>
+///             <item><see cref="SessionStatusTracker" /> — per-session status + event sink.</item>
 ///         </list>
 ///         Each subordinate service is DI-registered so it can be mocked in
 ///         tests; this facade is just orchestration.
@@ -42,91 +43,27 @@ namespace Harbor.App.Avalonia.Services;
 /// </remarks>
 public sealed class SessionManager
 {
-    private readonly IServiceProvider _services;
     private readonly IAgent _agent;
-    private readonly ISessionStore _sessionStore;
-    private readonly UiStore _store;
-    private readonly SessionFactory _factory;
-    private readonly SessionSwitcher _switcher;
-    private readonly SessionGitTracker _gitTracker;
     private readonly IChatViewBinder _chatViewBinder;
-    private readonly SessionStatusTracker _statusTracker;
-    private readonly ILogger<SessionManager> _logger;
 
     /// <summary>
-    ///     Per-session contexts — one <see cref="SessionContext"/> per open
-    ///     session, each with its own <see cref="UiStore"/>. Keyed by session
+    ///     Per-session contexts — one <see cref="SessionContext" /> per open
+    ///     session, each with its own <see cref="UiStore" />. Keyed by session
     ///     id. Used by <c>AppHost</c>'s EventBus subscriber to route agent
     ///     events to the correct store so a background agent in session A
     ///     doesn't leak messages into session B's chat transcript.
     /// </summary>
     private readonly Dictionary<string, SessionContext> _contexts = new();
+    private readonly SessionFactory _factory;
+    private readonly SessionGitTracker _gitTracker;
+    private readonly ILogger<SessionManager> _logger;
+    private readonly IServiceProvider _services;
+    private readonly ISessionStore _sessionStore;
+    private readonly SessionStatusTracker _statusTracker;
+    private readonly UiStore _store;
+    private readonly SessionSwitcher _switcher;
 
-    /// <summary>
-    ///     Raised whenever a session's status changes. Forwards from
-    ///     <see cref="SessionStatusTracker.StatusChanged"/> so subscribers
-    ///     don't need to know about the tracker decomposition.
-    /// </summary>
-    public event Action<string, SessionStatus>? StatusChanged
-    {
-        add => _statusTracker.StatusChanged += value;
-        remove => _statusTracker.StatusChanged -= value;
-    }
-
-    /// <summary>
-    ///     Raised whenever a session's message count is pushed. Forwards from
-    ///     <see cref="SessionStatusTracker.MessageCountChanged"/>.
-    /// </summary>
-    public event Action<string, int>? MessageCountChanged
-    {
-        add => _statusTracker.MessageCountChanged += value;
-        remove => _statusTracker.MessageCountChanged -= value;
-    }
-
-    /// <summary>The active session, or null if none.</summary>
-    public Session? Active => ActiveContext?.Session;
-
-    /// <summary>
-    ///     The active <see cref="SessionContext"/> (holds the active session
-    ///     + its UiStore + status + git info), or null if none. The ChatViewModel
-    ///     is bound to <see cref="SessionContext.Store"/> of this context.
-    /// </summary>
-    public SessionContext? ActiveContext { get; private set; }
-
-    /// <summary>
-    ///     Look up a <see cref="SessionContext"/> by session id. Returns null
-    ///     if no context has been created for this session (e.g. the session
-    ///     exists in the store but has never been opened in this app run).
-    ///     Used by <c>AppHost</c>'s EventBus subscriber to route agent events
-    ///     to the correct per-session UiStore.
-    /// </summary>
-    /// <param name="sessionId">The session id to look up.</param>
-    /// <returns>The <see cref="SessionContext"/>, or null.</returns>
-    public SessionContext? GetContext(string sessionId) =>
-        _contexts.TryGetValue(sessionId, out var ctx) ? ctx : null;
-
-    /// <summary>Get the status of a session.</summary>
-    public SessionStatus GetStatus(string sessionId) => _statusTracker.Get(sessionId);
-
-    /// <summary>Set the status of a session (forwards to <see cref="SessionStatusTracker"/>).</summary>
-    public void SetStatus(string sessionId, SessionStatus status) =>
-        _statusTracker.Set(sessionId, status);
-
-    /// <summary>Push a fresh message count for a session (forwards to <see cref="SessionStatusTracker"/>).</summary>
-    /// <param name="sessionId">The session id.</param>
-    /// <param name="count">The new message count.</param>
-    public void NotifyMessageCount(string sessionId, int count) =>
-        _statusTracker.NotifyMessageCount(sessionId, count);
-
-    /// <summary>Get git info for a session's working directory (forwards to <see cref="SessionGitTracker"/>).</summary>
-    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId) =>
-        _gitTracker.Get(sessionId);
-
-    /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker"/>).</summary>
-    public void RefreshGitInfo(string sessionId, string directory) =>
-        _gitTracker.Refresh(sessionId, directory, _services.GetService<GitService>());
-
-    /// <summary>Construct a <see cref="SessionManager"/> facade.</summary>
+    /// <summary>Construct a <see cref="SessionManager" /> facade.</summary>
     public SessionManager(
         IServiceProvider services,
         IAgent agent,
@@ -151,9 +88,73 @@ public sealed class SessionManager
         _logger = logger;
     }
 
+    /// <summary>The active session, or null if none.</summary>
+    public Session? Active => ActiveContext?.Session;
+
+    /// <summary>
+    ///     The active <see cref="SessionContext" /> (holds the active session
+    ///     + its UiStore + status + git info), or null if none. The ChatViewModel
+    ///     is bound to <see cref="SessionContext.Store" /> of this context.
+    /// </summary>
+    public SessionContext? ActiveContext { get; private set; }
+
+    /// <summary>
+    ///     Raised whenever a session's status changes. Forwards from
+    ///     <see cref="SessionStatusTracker.StatusChanged" /> so subscribers
+    ///     don't need to know about the tracker decomposition.
+    /// </summary>
+    public event Action<string, SessionStatus>? StatusChanged
+    {
+        add => _statusTracker.StatusChanged += value;
+        remove => _statusTracker.StatusChanged -= value;
+    }
+
+    /// <summary>
+    ///     Raised whenever a session's message count is pushed. Forwards from
+    ///     <see cref="SessionStatusTracker.MessageCountChanged" />.
+    /// </summary>
+    public event Action<string, int>? MessageCountChanged
+    {
+        add => _statusTracker.MessageCountChanged += value;
+        remove => _statusTracker.MessageCountChanged -= value;
+    }
+
+    /// <summary>
+    ///     Look up a <see cref="SessionContext" /> by session id. Returns null
+    ///     if no context has been created for this session (e.g. the session
+    ///     exists in the store but has never been opened in this app run).
+    ///     Used by <c>AppHost</c>'s EventBus subscriber to route agent events
+    ///     to the correct per-session UiStore.
+    /// </summary>
+    /// <param name="sessionId">The session id to look up.</param>
+    /// <returns>The <see cref="SessionContext" />, or null.</returns>
+    public SessionContext? GetContext(string sessionId) =>
+        _contexts.TryGetValue(sessionId, out var ctx) ? ctx : null;
+
+    /// <summary>Get the status of a session.</summary>
+    public SessionStatus GetStatus(string sessionId) => _statusTracker.Get(sessionId);
+
+    /// <summary>Set the status of a session (forwards to <see cref="SessionStatusTracker" />).</summary>
+    public void SetStatus(string sessionId, SessionStatus status) =>
+        _statusTracker.Set(sessionId, status);
+
+    /// <summary>Push a fresh message count for a session (forwards to <see cref="SessionStatusTracker" />).</summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="count">The new message count.</param>
+    public void NotifyMessageCount(string sessionId, int count) =>
+        _statusTracker.NotifyMessageCount(sessionId, count);
+
+    /// <summary>Get git info for a session's working directory (forwards to <see cref="SessionGitTracker" />).</summary>
+    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId) =>
+        _gitTracker.Get(sessionId);
+
+    /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker" />).</summary>
+    public void RefreshGitInfo(string sessionId, string directory) =>
+        _gitTracker.Refresh(sessionId, directory, _services.GetService<GitService>());
+
     /// <summary>
     ///     Create a default session if none exists yet and bind it to the agent.
-    ///     Called once at app startup. Reads the fresh <see cref="CommonConfig"/>
+    ///     Called once at app startup. Reads the fresh <see cref="CommonConfig" />
     ///     from disk so the wizard's saved provider/model take effect.
     /// </summary>
     public async Task EnsureDefaultSessionAsync()
@@ -177,12 +178,12 @@ public sealed class SessionManager
         // session this rebinds from the DI-singleton UiStore (which the
         // dispatcher was bound to in AppHost.BuildAsync) to the per-session
         // UiStore. For subsequent sessions it rebinds to the new per-session store.
-        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
+        RebindChatViewModel(ctx, ctx.RenderedLineCount);
     }
 
     /// <summary>
     ///     Rebind the active session to the freshly-loaded
-    ///     <see cref="CommonConfig"/> values. Called by <c>App.axaml.cs</c>
+    ///     <see cref="CommonConfig" /> values. Called by <c>App.axaml.cs</c>
     ///     after the onboarding wizard saves a new config.
     /// </summary>
     public async Task RebindFromCommonConfigAsync()
@@ -198,12 +199,12 @@ public sealed class SessionManager
         // provider's tokens into the new binding.
         await AbortRunningAgentAsync().ConfigureAwait(false);
 
-        var agents = _services.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>();
+        var agents = _services.GetRequiredService<IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == "code")
-            ?? agents.GetAllAgents().FirstOrDefault()
-            ?? throw new InvalidOperationException("No agents registered.");
+                       ?? agents.GetAllAgents().FirstOrDefault()
+                       ?? throw new InvalidOperationException("No agents registered.");
 
-        var (providerId, modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
+        (string? providerId, string? modelId) = await _factory.ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(modelId))
         {
             _logger.LogInformation("RebindFromCommonConfig: no provider/model in config, keeping current agent");
@@ -254,7 +255,7 @@ public sealed class SessionManager
         SaveActiveRenderedLineCount();
         ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
+        RebindChatViewModel(ctx, ctx.RenderedLineCount);
         return session;
     }
 
@@ -296,7 +297,7 @@ public sealed class SessionManager
         SaveActiveRenderedLineCount();
         ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx, savedRenderedLineCount: ctx.RenderedLineCount);
+        RebindChatViewModel(ctx, ctx.RenderedLineCount);
         return true;
     }
 
@@ -317,7 +318,7 @@ public sealed class SessionManager
     /// <summary>
     ///     Delete the given session. If it is the active session, switches to
     ///     any remaining session (or creates a fresh default). Also removes
-    ///     the per-session <see cref="SessionContext"/> from <see cref="_contexts"/>.
+    ///     the per-session <see cref="SessionContext" /> from <see cref="_contexts" />.
     /// </summary>
     /// <param name="sessionId">The session id to delete.</param>
     /// <returns>True on success.</returns>
@@ -352,7 +353,7 @@ public sealed class SessionManager
 
     /// <summary>
     ///     Rename a session. <b>NOT YET SUPPORTED</b> — the underlying
-    ///     <see cref="ISessionStore"/> has no metadata-update API. Logs a
+    ///     <see cref="ISessionStore" /> has no metadata-update API. Logs a
     ///     warning and returns <c>false</c>.
     /// </summary>
     /// <param name="sessionId">The session id to rename.</param>
@@ -367,24 +368,21 @@ public sealed class SessionManager
     }
 
     /// <summary>
-    ///     Resolve the singleton <see cref="TokenUsageViewModel"/> from the
+    ///     Resolve the singleton <see cref="TokenUsageViewModel" /> from the
     ///     DI container and clear its bars + sparkline + baseline. Called
     ///     on every session switch (open + new) so the chart tracks only
     ///     the active session's tokens.
     /// </summary>
-    private void ClearTokenUsageForActiveSession()
-    {
-        _services.GetService<TokenUsageViewModel>()?.Clear();
-    }
+    private void ClearTokenUsageForActiveSession() => _services.GetService<TokenUsageViewModel>()?.Clear();
 
     /// <summary>
-    ///     Get-or-create the <see cref="SessionContext"/> for a session.
+    ///     Get-or-create the <see cref="SessionContext" /> for a session.
     ///     On first sight of a session id, creates a fresh context with
-    ///     a fresh UiStore and caches it in <see cref="_contexts"/> so the
+    ///     a fresh UiStore and caches it in <see cref="_contexts" /> so the
     ///     EventBus subscriber can find it for event routing.
     /// </summary>
     /// <param name="session">The session to get-or-create a context for.</param>
-    /// <returns>The <see cref="SessionContext"/> (never null).</returns>
+    /// <returns>The <see cref="SessionContext" /> (never null).</returns>
     private SessionContext GetOrCreateContext(Session session)
     {
         if (_contexts.TryGetValue(session.Id, out var existing)) return existing;
@@ -395,7 +393,7 @@ public sealed class SessionManager
 
     /// <summary>
     ///     Persist the ChatViewModel's <c>_renderedLineCount</c> into the
-    ///     currently-active <see cref="SessionContext.RenderedLineCount"/>
+    ///     currently-active <see cref="SessionContext.RenderedLineCount" />
     ///     so switching back to it later resumes rendering at the correct
     ///     offset (otherwise the renderer would re-append every line in
     ///     the transcript on each switch).
@@ -408,14 +406,14 @@ public sealed class SessionManager
 
     /// <summary>
     ///     Rebind the singleton chat view-model to a different session's
-    ///     <see cref="UiStore"/>. Delegates to <see cref="IChatViewBinder"/>,
+    ///     <see cref="UiStore" />. Delegates to <see cref="IChatViewBinder" />,
     ///     which marshals the call onto the UI thread and resolves the
     ///     platform-specific chat VM. No-op when no binder is registered
     ///     (e.g. headless test mode).
     /// </summary>
     /// <param name="ctx">The target session context.</param>
     /// <param name="savedRenderedLineCount">
-    ///     The <see cref="SessionContext.RenderedLineCount"/> snapshot to
+    ///     The <see cref="SessionContext.RenderedLineCount" /> snapshot to
     ///     resume rendering at.
     /// </param>
     private void RebindChatViewModel(SessionContext ctx, int savedRenderedLineCount)
@@ -427,9 +425,9 @@ public sealed class SessionManager
     }
 
     /// <summary>
-    ///     Abort any in-flight <see cref="IAgent.PromptAsync"/> call and wait
+    ///     Abort any in-flight <see cref="IAgent.PromptAsync" /> call and wait
     ///     (bounded) for the agent to return to idle. Currently used ONLY by
-    ///     <see cref="RebindFromCommonConfigAsync"/> (wizard-driven rebind)
+    ///     <see cref="RebindFromCommonConfigAsync" /> (wizard-driven rebind)
     ///     — NOT by session switching, because the user wants agents to keep
     ///     running in the background when switching sessions.
     /// </summary>
@@ -443,7 +441,7 @@ public sealed class SessionManager
     ///         <c>catch (OperationCanceledException)</c> branch.
     ///     </para>
     ///     <para>
-    ///         After the wait, <see cref="IAgentRunner.ResetAbortSource"/>
+    ///         After the wait, <see cref="IAgentRunner.ResetAbortSource" />
     ///         recreates the underlying <c>CancellationTokenSource</c> so the
     ///         new session's first prompt isn't dead-on-arrival — a single
     ///         <c>CancellationTokenSource</c> can only transition to cancelled

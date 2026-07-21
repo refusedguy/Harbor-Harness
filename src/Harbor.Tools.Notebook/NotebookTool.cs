@@ -1,6 +1,4 @@
-using System.Buffers;
 using System.Text;
-using System.Text.Json;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -255,9 +253,9 @@ public sealed class NotebookTool : ITool
             string c = prop.Value.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String
                 ? cEl.GetString() ?? string.Empty
                 : string.Empty;
-            DateTimeOffset updated = prop.Value.TryGetProperty("updatedAt", out var uEl)
-                                     && uEl.ValueKind == JsonValueKind.String
-                                     && DateTimeOffset.TryParse(uEl.GetString(), out var dto)
+            var updated = prop.Value.TryGetProperty("updatedAt", out var uEl)
+                          && uEl.ValueKind == JsonValueKind.String
+                          && DateTimeOffset.TryParse(uEl.GetString(), out var dto)
                 ? dto
                 : DateTimeOffset.UtcNow;
             dict[prop.Name] = new NoteEntry(c, updated);
@@ -292,7 +290,7 @@ public sealed class NotebookTool : ITool
             await w.FlushAsync(ct).ConfigureAwait(false);
         }
 
-        File.Move(tempPath, path, overwrite: true);
+        File.Move(tempPath, path, true);
     }
 
     private static string SanitizeSessionId(string sessionId)

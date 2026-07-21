@@ -1,8 +1,5 @@
 using Harbor.Desktop.Abstractions.Models;
-using Harbor.Ui.Framework.Services;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
-
 /// <summary>
 ///     Base for the settings view-model. Holds the user-editable settings
 ///     fields (theme, default provider, font size) and exposes Save / Reset
@@ -10,26 +7,14 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public abstract partial class SettingsViewModelBase : ViewModelBase
 {
-    /// <summary>Construct a <see cref="SettingsViewModelBase"/>.</summary>
-    protected SettingsViewModelBase(ILogger logger) : base(logger)
-    {
-    }
-
-    /// <summary>Selected theme kind. Persisted via <see cref="IThemeService"/>.</summary>
-    [ObservableProperty]
-    private ThemeKind _theme;
-
-    /// <summary>Default provider id (e.g. "openai", "anthropic").</summary>
-    [ObservableProperty]
-    private string _defaultProviderId = string.Empty;
-
-    /// <summary>UI font size in px. Default 13.</summary>
-    [ObservableProperty]
-    private int _uiFontSize = 13;
 
     /// <summary>Code font size in px. Default 13.</summary>
     [ObservableProperty]
     private int _codeFontSize = 13;
+
+    /// <summary>Default provider id (e.g. "openai", "anthropic").</summary>
+    [ObservableProperty]
+    private string _defaultProviderId = string.Empty;
 
     /// <summary>True if there are unsaved changes.</summary>
     [ObservableProperty]
@@ -38,6 +23,18 @@ public abstract partial class SettingsViewModelBase : ViewModelBase
     /// <summary>True while saving.</summary>
     [ObservableProperty]
     private bool _isSaving;
+
+    /// <summary>Selected theme kind. Persisted via <see cref="IThemeService" />.</summary>
+    [ObservableProperty]
+    private ThemeKind _theme;
+
+    /// <summary>UI font size in px. Default 13.</summary>
+    [ObservableProperty]
+    private int _uiFontSize = 13;
+    /// <summary>Construct a <see cref="SettingsViewModelBase" />.</summary>
+    protected SettingsViewModelBase(ILogger logger) : base(logger)
+    {
+    }
 
     /// <summary>Mark the VM dirty when a property changes.</summary>
     /// <param name="e">Event args.</param>

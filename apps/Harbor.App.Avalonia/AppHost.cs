@@ -1,26 +1,22 @@
-using Harbor.App.Avalonia.Configuration;
-using Harbor.App.Avalonia.Hosting;
-using Harbor.App.Avalonia.Services;
-using Harbor.App.Avalonia.ViewModels.Shell;
+using System.Diagnostics;
+using Excubo.Analyzers.DependencyInjection;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Configuration;
+using Harbor.App.Avalonia.Configuration;
+using Harbor.App.Avalonia.Hosting;
+using Harbor.App.Avalonia.Services;
+using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.Core.Sessions;
-using Harbor.Core.Tools;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ipc;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Excubo.Analyzers.DependencyInjection;
-
 namespace Harbor.App.Avalonia;
-
 /// <summary>
 ///     Composition root for the standalone Harbor Avalonia app. Mirrors the wiring
 ///     in <c>Harbor.Cli/Hosting/HostBuilder.cs</c> but trimmed to a desktop-app subset
@@ -34,18 +30,24 @@ namespace Harbor.App.Avalonia;
 ///         calls them in dependency order:
 ///     </para>
 ///     <list type="number">
-///         <item><see cref="LoggingConfiguration"/> — Serilog setup.</item>
-///         <item><see cref="ConfigRegistration"/> — load + register CommonConfig / AvaloniaConfig / auth resolver.</item>
-///         <item><see cref="StorageRegistration"/> — pick jsonl / memory backend.</item>
-///         <item><see cref="ToolRegistration"/> / <see cref="ProviderRegistration"/> / <see cref="AgentRegistration"/> — eager registry construction.</item>
-///         <item><see cref="ServiceRegistration"/> — core services + eager registries + app-local services + IHarborClient.</item>
-///         <item><see cref="ViewModelRegistration"/> — all view-models with appropriate lifetimes.</item>
+///         <item><see cref="LoggingConfiguration" /> — Serilog setup.</item>
+///         <item><see cref="ConfigRegistration" /> — load + register CommonConfig / AvaloniaConfig / auth resolver.</item>
+///         <item><see cref="StorageRegistration" /> — pick jsonl / memory backend.</item>
+///         <item>
+///             <see cref="ToolRegistration" /> / <see cref="ProviderRegistration" /> / <see cref="AgentRegistration" />
+///             — eager registry construction.
+///         </item>
+///         <item>
+///             <see cref="ServiceRegistration" /> — core services + eager registries + app-local services +
+///             IHarborClient.
+///         </item>
+///         <item><see cref="ViewModelRegistration" /> — all view-models with appropriate lifetimes.</item>
 ///     </list>
 ///     <para>
-///         Post-<see cref="HostApplicationBuilder.Build"/>, the orchestrator also
+///         Post-<see cref="HostApplicationBuilder.Build" />, the orchestrator also
 ///         performs the two cross-wirings that need a built service provider:
-///         binding <see cref="UiStore"/> → <see cref="AvaloniaDispatcherAdapter"/>
-///         and subscribing <see cref="IEventBus"/> → <see cref="UiStore"/>.
+///         binding <see cref="UiStore" /> → <see cref="AvaloniaDispatcherAdapter" />
+///         and subscribing <see cref="IEventBus" /> → <see cref="UiStore" />.
 ///     </para>
 /// </remarks>
 internal static class AppHost
@@ -53,8 +55,8 @@ internal static class AppHost
     /// <summary>
     ///     Build the DI host. Safe to call from Main before the Avalonia lifetime starts.
     /// </summary>
-    /// <param name="args">Command-line args (forwarded to <see cref="Host.CreateApplicationBuilder"/>).</param>
-    /// <returns>A started <see cref="IHost"/>. Dispose on shutdown.</returns>
+    /// <param name="args">Command-line args (forwarded to <see cref="Host.CreateApplicationBuilder" />).</param>
+    /// <returns>A started <see cref="IHost" />. Dispose on shutdown.</returns>
     // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
     // (EDI01–EDI04) and exercised at runtime by Harbor.App.Avalonia.Tests/AppHostDiTests.cs.
     [Exposes(typeof(ITokenEstimator))]
@@ -161,22 +163,22 @@ internal static class AppHost
         {
             try
             {
-                var sessionId = ExtractSessionId(evt, ref currentAgentSessionId);
+                string? sessionId = ExtractSessionId(evt, ref currentAgentSessionId);
                 UiStore? targetStore = null;
                 if (sessionId is not null)
                 {
                     targetStore = sessionManager.GetContext(sessionId)?.Store;
                 }
                 targetStore ??= sessionManager.ActiveContext?.Store
-                    ?? dispatcherAdapter.BoundStore
-                    ?? uiStore;
+                                ?? dispatcherAdapter.BoundStore
+                                ?? uiStore;
                 targetStore.Dispatch(evt);
             }
             catch (Exception ex)
             {
                 // Defensive: never let a subscriber exception crash the
                 // event bus (which would silently drop all subsequent events).
-                System.Diagnostics.Debug.WriteLine($"EventBus subscriber crashed: {ex}");
+                Debug.WriteLine($"EventBus subscriber crashed: {ex}");
             }
             await Task.CompletedTask;
         });
@@ -191,14 +193,16 @@ internal static class AppHost
     ///     Extract the session id from an agent event. For events that
     ///     carry an explicit SessionId (AgentStartEvent, CompactionStartedEvent,
     ///     CompactionCompletedEvent, SessionStatsEvent), returns that id and
-    ///     (for AgentStartEvent) updates <paramref name="currentAgentSessionId"/>.
+    ///     (for AgentStartEvent) updates <paramref name="currentAgentSessionId" />.
     ///     For other events, returns the last-seen AgentStartEvent session id
     ///     so streaming events (MessageUpdate, ToolExecution*, etc.) route to
     ///     the same store as the run they belong to.
     /// </summary>
     /// <param name="evt">The agent event.</param>
-    /// <param name="currentAgentSessionId">Ref to the tracked current
-    /// running-session id (set by AgentStartEvent).</param>
+    /// <param name="currentAgentSessionId">
+    ///     Ref to the tracked current
+    ///     running-session id (set by AgentStartEvent).
+    /// </param>
     /// <returns>The session id for routing, or null if unknown.</returns>
     private static string? ExtractSessionId(AgentEvent evt, ref string? currentAgentSessionId)
     {

@@ -1,7 +1,5 @@
 using Harbor.Ipc.Protocol;
-
 namespace Harbor.Ipc;
-
 /// <summary>
 ///     Bidirectional transport abstraction for the IPC layer. One
 ///     implementation lives in <c>Harbor.Ipc.Server</c> (accepts inbound
@@ -35,8 +33,8 @@ namespace Harbor.Ipc;
 public interface IPipeTransport : IAsyncDisposable
 {
     /// <summary>The human-readable endpoint (pipe path / socket path / port).</summary>
-    string Endpoint { get; }
+    public string Endpoint { get; }
 
     /// <summary>True when the transport is currently bound and accepting connections.</summary>
-    bool IsBound { get; }
+    public bool IsBound { get; }
 }

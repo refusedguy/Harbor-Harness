@@ -1,11 +1,8 @@
 using Harbor.Build.Components;
-using Harbor.Build.Configuration;
 using Harbor.Build.Extensions;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
-
 namespace Harbor.Build.Targets;
-
 /// <summary>
 ///     IPC publish targets — produce two thin CLI variants for the
 ///     two-process Harbor deployment:
@@ -35,10 +32,7 @@ public static class IpcPublishTarget
     public static AbsolutePath ExecuteIpcServer(
         ArtifactPathResolver resolver,
         BuildSettings settings,
-        FeatureFlags flags)
-    {
-        return PublishIpcVariant(resolver, settings, flags, mode: "ipc-server");
-    }
+        FeatureFlags flags) => PublishIpcVariant(resolver, settings, flags, "ipc-server");
 
     /// <summary>
     ///     Publish the <c>ipc-client</c> variant. The resulting binary is a
@@ -48,10 +42,7 @@ public static class IpcPublishTarget
     public static AbsolutePath ExecuteIpcClient(
         ArtifactPathResolver resolver,
         BuildSettings settings,
-        FeatureFlags flags)
-    {
-        return PublishIpcVariant(resolver, settings, flags, mode: "ipc-client");
-    }
+        FeatureFlags flags) => PublishIpcVariant(resolver, settings, flags, "ipc-client");
 
     private static AbsolutePath PublishIpcVariant(
         ArtifactPathResolver resolver,
@@ -78,7 +69,7 @@ public static class IpcPublishTarget
 
         DotNetTasks.DotNetPublish(publishSettings);
 
-        var size = outputDir.GetHumanReadableSize();
+        string size = outputDir.GetHumanReadableSize();
         Console.WriteLine($"==> PublishIpc: done — {outputDir} ({size})");
         return outputDir;
     }

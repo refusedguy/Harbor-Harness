@@ -1,9 +1,5 @@
-using System.Collections;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Core.Configuration;
-
 /// <summary>
 ///     Harbor application configuration.
 ///     Stored at ~/.harbor/config.json. No env vars required.
@@ -213,7 +209,7 @@ public sealed class HarborConfig
             .AsValueEnumerable()
             .Concat(Providers.Values.AsValueEnumerable().Select(static e => (Result)e.Validate()));
 
-        var errors = results
+        string[] errors = results
             .Where(static r => r.IsFailure)
             .Select(static r => r.Error)
             .ToArray();
@@ -268,7 +264,7 @@ public static class ConfigNormalizer
 
         // ── Identity: canonical "provider"/"model"/"agent" win; legacy
         // "defaultProvider"/"defaultModel" are only used as fallback. ──
-        var providerStr = !string.IsNullOrEmpty(raw.Provider)
+        string? providerStr = !string.IsNullOrEmpty(raw.Provider)
             ? raw.Provider
             : raw.DefaultProvider;
         if (!string.IsNullOrEmpty(providerStr))
@@ -278,7 +274,7 @@ public static class ConfigNormalizer
             config.Identity = config.Identity with { Provider = pr.Value };
         }
 
-        var modelStr = !string.IsNullOrEmpty(raw.Model)
+        string? modelStr = !string.IsNullOrEmpty(raw.Model)
             ? raw.Model
             : raw.DefaultModel;
         if (!string.IsNullOrEmpty(modelStr))

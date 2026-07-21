@@ -1,6 +1,5 @@
 // Compilation layer — tsc-subprocess TypeScript→JavaScript compiler. See IScriptCompiler.cs for layering rules.
 namespace Harbor.Scripting.Compilation;
-
 /// <summary>
 ///     <see cref="IScriptCompiler" /> that transpiles TypeScript to JavaScript
 ///     by shelling out to the <c>tsc</c> CLI tool.
@@ -21,9 +20,9 @@ namespace Harbor.Scripting.Compilation;
 /// </remarks>
 public sealed class TscCompiler : IScriptCompiler
 {
+    private readonly ConcurrentDictionary<string, string> _cache = new();
     private readonly ILogger<TscCompiler> _logger;
     private readonly Lazy<bool> _tscAvailable;
-    private readonly ConcurrentDictionary<string, string> _cache = new();
 
     /// <summary>
     ///     Construct a tsc-backed compiler.
@@ -59,7 +58,7 @@ public sealed class TscCompiler : IScriptCompiler
         }
 
         string key = HashSource(source);
-        if (_cache.TryGetValue(key, out var cached))
+        if (_cache.TryGetValue(key, out string? cached))
         {
             return Result.Success(cached);
         }
@@ -75,8 +74,8 @@ public sealed class TscCompiler : IScriptCompiler
 
     private static string HashSource(string source)
     {
-        var bytes = Encoding.UTF8.GetBytes(source);
-        var hash = SHA256.HashData(bytes);
+        byte[] bytes = Encoding.UTF8.GetBytes(source);
+        byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
     }
 
@@ -100,7 +99,10 @@ public sealed class TscCompiler : IScriptCompiler
             }
             if (!p.WaitForExit(3000))
             {
-                try { p.Kill(); } catch { /* swallow */ }
+                try { p.Kill(); }
+                catch
+                { /* swallow */
+                }
                 return false;
             }
             if (p.ExitCode != 0)
@@ -119,10 +121,10 @@ public sealed class TscCompiler : IScriptCompiler
 
     private Result<string> RunTsc(string source, string? sourceName)
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "harbor-tsc-" + Guid.NewGuid().ToString("N"));
+        string tempDir = Path.Combine(Path.GetTempPath(), "harbor-tsc-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
-        var inPath = Path.Combine(tempDir, "input.ts");
-        var outPath = Path.Combine(tempDir, "input.js");
+        string inPath = Path.Combine(tempDir, "input.ts");
+        string outPath = Path.Combine(tempDir, "input.js");
         try
         {
             File.WriteAllText(inPath, source);
@@ -142,13 +144,16 @@ public sealed class TscCompiler : IScriptCompiler
             }
             if (!p.WaitForExit(15000))
             {
-                try { p.Kill(); } catch { /* swallow */ }
+                try { p.Kill(); }
+                catch
+                { /* swallow */
+                }
                 return Result.Failure<string>("tsc timed out (>15s).");
             }
             if (p.ExitCode != 0)
             {
-                var stderr = p.StandardError.ReadToEnd().Trim();
-                var stdout = p.StandardOutput.ReadToEnd().Trim();
+                string stderr = p.StandardError.ReadToEnd().Trim();
+                string stdout = p.StandardOutput.ReadToEnd().Trim();
                 return Result.Failure<string>($"tsc failed for {sourceName ?? "input.ts"}: {stderr}{(stderr.Length > 0 && stdout.Length > 0 ? "\n" : "")}{stdout}");
             }
             if (!File.Exists(outPath))
@@ -159,7 +164,10 @@ public sealed class TscCompiler : IScriptCompiler
         }
         finally
         {
-            try { Directory.Delete(tempDir, recursive: true); } catch { /* swallow */ }
+            try { Directory.Delete(tempDir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 }

@@ -1,11 +1,8 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Compression;
-using Harbor.Build.Configuration;
-using Nuke.Common;
 using Nuke.Common.IO;
-
 namespace Harbor.Build.Components;
-
 /// <summary>
 ///     Creates <c>.tar.gz</c> or <c>.zip</c> archives from a publish output
 ///     directory. Uses the system <c>tar</c> binary (must be on <c>PATH</c>)
@@ -15,8 +12,8 @@ namespace Harbor.Build.Components;
 public sealed class ArchiveBuilder
 {
     /// <summary>
-    ///     Creates a <c>.tar.gz</c> archive of <paramref name="sourceDir"/>
-    ///     in <paramref name="outputDir"/> with the given base name.
+    ///     Creates a <c>.tar.gz</c> archive of <paramref name="sourceDir" />
+    ///     in <paramref name="outputDir" /> with the given base name.
     ///     Returns the path to the created archive.
     /// </summary>
     /// <exception cref="FileNotFoundException">
@@ -41,16 +38,16 @@ public sealed class ArchiveBuilder
         try
         {
             using var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start 'tar' process.");
+                                ?? throw new InvalidOperationException("Failed to start 'tar' process.");
             process.WaitForExit();
             if (process.ExitCode != 0)
             {
-                var stderr = process.StandardError.ReadToEnd();
+                string stderr = process.StandardError.ReadToEnd();
                 throw new InvalidOperationException(
                     $"tar exited with code {process.ExitCode}: {stderr}");
             }
         }
-        catch (System.ComponentModel.Win32Exception ex)
+        catch (Win32Exception ex)
         {
             throw new FileNotFoundException(
                 "tar binary not found on PATH. Install it (e.g. 'apt install tar') " +
@@ -61,8 +58,8 @@ public sealed class ArchiveBuilder
     }
 
     /// <summary>
-    ///     Creates a <c>.zip</c> archive of <paramref name="sourceDir"/>
-    ///     in <paramref name="outputDir"/> with the given base name.
+    ///     Creates a <c>.zip</c> archive of <paramref name="sourceDir" />
+    ///     in <paramref name="outputDir" /> with the given base name.
     ///     Returns the path to the created archive. Uses
     ///     <c>System.IO.Compression.ZipFile</c> (no external binary required).
     /// </summary>
@@ -70,26 +67,26 @@ public sealed class ArchiveBuilder
     {
         outputDir.CreateDirectory();
         var outputFile = outputDir / $"{name}.zip";
-        ZipFile.CreateFromDirectory(sourceDir, outputFile, CompressionLevel.Optimal, includeBaseDirectory: false);
+        ZipFile.CreateFromDirectory(sourceDir, outputFile, CompressionLevel.Optimal, false);
         return outputFile;
     }
 
     /// <summary>
-    ///     Dispatches to <see cref="CreateTarGz"/> or <see cref="CreateZip"/>
-    ///     based on <paramref name="format"/>. Returns the archive path, or
-    ///     <c>null</c> if <paramref name="format"/> is <see cref="ArchiveFormat.None"/>.
+    ///     Dispatches to <see cref="CreateTarGz" /> or <see cref="CreateZip" />
+    ///     based on <paramref name="format" />. Returns the archive path, or
+    ///     <c>null</c> if <paramref name="format" /> is <see cref="ArchiveFormat.None" />.
     /// </summary>
     public AbsolutePath? Create(
         AbsolutePath sourceDir,
         AbsolutePath outputDir,
         string name,
         ArchiveFormat format) => format switch
-        {
-            ArchiveFormat.None => null,
-            ArchiveFormat.TarGz => CreateTarGz(sourceDir, outputDir, name),
-            ArchiveFormat.Zip => CreateZip(sourceDir, outputDir, name),
-            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown archive format")
-        };
+    {
+        ArchiveFormat.None => null,
+        ArchiveFormat.TarGz => CreateTarGz(sourceDir, outputDir, name),
+        ArchiveFormat.Zip => CreateZip(sourceDir, outputDir, name),
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown archive format")
+    };
 
     private static string Quote(AbsolutePath path) => $"\"{path}\"";
 }

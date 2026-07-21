@@ -1,8 +1,6 @@
 using Harbor.Ui.Framework.State;
 using Termina.Terminal;
-
 namespace Harbor.Tui.Termina.Rendering;
-
 /// <summary>
 ///     Maps a <see cref="ChatRole" /> to its Termina <see cref="Color" /> and
 ///     human-readable label, matching the SpectreTui ChatMessageFormatter palette

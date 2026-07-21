@@ -71,58 +71,58 @@
     <Color x:Key="InfoColor">#89DCEB</Color>
 
     <!-- ════════════ Chat role colors (semantic per role) ════════════ -->
-    <SolidColorBrush x:Key="ChatUserBrush"        Color="{StaticResource MochaSky}"/>
-    <SolidColorBrush x:Key="ChatAssistantBrush"   Color="{StaticResource MochaText}"/>
-    <SolidColorBrush x:Key="ChatThinkingBrush"    Color="{StaticResource MochaOverlay2}"/>
-    <SolidColorBrush x:Key="ChatToolBrush"        Color="{StaticResource MochaBlue}"/>
-    <SolidColorBrush x:Key="ChatToolResultBrush"  Color="{StaticResource MochaGreen}"/>
-    <SolidColorBrush x:Key="ChatSystemBrush"      Color="{StaticResource MochaYellow}"/>
-    <SolidColorBrush x:Key="ChatErrorBrush"       Color="{StaticResource MochaRed}"/>
+    <SolidColorBrush x:Key="ChatUserBrush" Color="{StaticResource MochaSky}" />
+    <SolidColorBrush x:Key="ChatAssistantBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="ChatThinkingBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="ChatToolBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="ChatToolResultBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="ChatSystemBrush" Color="{StaticResource MochaYellow}" />
+    <SolidColorBrush x:Key="ChatErrorBrush" Color="{StaticResource MochaRed}" />
 
     <!-- ════════════ Background brushes (depth hierarchy) ════════════ -->
-    <SolidColorBrush x:Key="AppBackgroundBrush"        Color="{StaticResource MochaBase}"/>
-    <SolidColorBrush x:Key="PanelBackgroundBrush"      Color="{StaticResource MochaMantle}"/>
-    <SolidColorBrush x:Key="SidebarBackgroundBrush"    Color="{StaticResource MochaCrust}"/>
-    <SolidColorBrush x:Key="StatusBarBackgroundBrush"  Color="{StaticResource MochaMantle}"/>
-    <SolidColorBrush x:Key="CardBackgroundBrush"       Color="{StaticResource MochaSurface0}"/>
-    <SolidColorBrush x:Key="CardElevatedBackgroundBrush" Color="{StaticResource MochaSurface1}"/>
-    <SolidColorBrush x:Key="HoverBackgroundBrush"      Color="{StaticResource MochaSurface0}"/>
-    <SolidColorBrush x:Key="HoverStrongBackgroundBrush" Color="{StaticResource MochaSurface1}"/>
-    <SolidColorBrush x:Key="SelectedBackgroundBrush"   Color="{StaticResource MochaSurface1}"/>
-    <SolidColorBrush x:Key="BorderBrush"               Color="{StaticResource MochaSurface0}"/>
-    <SolidColorBrush x:Key="BorderSubtleBrush"         Color="{StaticResource MochaSurface0}"/>
-    <SolidColorBrush x:Key="BorderStrongBrush"         Color="{StaticResource MochaSurface1}"/>
-    <SolidColorBrush x:Key="SeparatorBrush"            Color="{StaticResource MochaSurface0}"/>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource MochaBase}" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{StaticResource MochaCrust}" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="CardElevatedBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="HoverBackgroundBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="HoverStrongBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="SelectedBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="SeparatorBrush" Color="{StaticResource MochaSurface0}" />
 
     <!-- ════════════ Accent + semantic brushes ════════════ -->
-    <SolidColorBrush x:Key="AccentBrush"               Color="{StaticResource MochaBlue}"/>
-    <SolidColorBrush x:Key="AccentHoverBrush"          Color="{StaticResource MochaSapphire}"/>
-    <SolidColorBrush x:Key="AccentPressedBrush"        Color="{StaticResource MochaLavender}"/>
-    <SolidColorBrush x:Key="AccentForegroundBrush"     Color="#11111B"/>
-    <SolidColorBrush x:Key="SuccessBrush"              Color="{StaticResource MochaGreen}"/>
-    <SolidColorBrush x:Key="WarningBrush"              Color="{StaticResource MochaPeach}"/>
-    <SolidColorBrush x:Key="ErrorBrush"                Color="{StaticResource MochaRed}"/>
-    <SolidColorBrush x:Key="InfoBrush"                 Color="{StaticResource MochaSky}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource MochaSapphire}" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource MochaLavender}" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#11111B" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource MochaPeach}" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="InfoBrush" Color="{StaticResource MochaSky}" />
 
     <!-- ════════════ Text brushes (hierarchy) ════════════ -->
-    <SolidColorBrush x:Key="TextBrush"                 Color="{StaticResource MochaText}"/>
-    <SolidColorBrush x:Key="TextSubtleBrush"           Color="{StaticResource MochaSubtext0}"/>
-    <SolidColorBrush x:Key="TextMutedBrush"            Color="{StaticResource MochaOverlay2}"/>
-    <SolidColorBrush x:Key="TextDisabledBrush"         Color="{StaticResource MochaOverlay1}"/>
-    <SolidColorBrush x:Key="TextOnAccentBrush"         Color="#11111B"/>
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="{StaticResource MochaSubtext0}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="{StaticResource MochaOverlay1}" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#11111B" />
 
     <!-- ════════════ Status bar state colors ════════════ -->
-    <SolidColorBrush x:Key="StatusIdleBrush"     Color="{StaticResource MochaSubtext0}"/>
-    <SolidColorBrush x:Key="StatusRunningBrush"  Color="{StaticResource MochaBlue}"/>
-    <SolidColorBrush x:Key="StatusCompactBrush"  Color="{StaticResource MochaYellow}"/>
-    <SolidColorBrush x:Key="StatusErrorBrush"    Color="{StaticResource MochaRed}"/>
-    <SolidColorBrush x:Key="StatusSuccessBrush"  Color="{StaticResource MochaGreen}"/>
+    <SolidColorBrush x:Key="StatusIdleBrush" Color="{StaticResource MochaSubtext0}" />
+    <SolidColorBrush x:Key="StatusRunningBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StatusCompactBrush" Color="{StaticResource MochaYellow}" />
+    <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="StatusSuccessBrush" Color="{StaticResource MochaGreen}" />
 
     <!-- ════════════ Onboarding progress-stepper colors ════════════ -->
-    <SolidColorBrush x:Key="StepperActiveBrush"   Color="{StaticResource MochaBlue}"/>
-    <SolidColorBrush x:Key="StepperDoneBrush"     Color="{StaticResource MochaBlue}"/>
-    <SolidColorBrush x:Key="StepperPendingBrush"  Color="{StaticResource MochaSurface1}"/>
-    <SolidColorBrush x:Key="StepperConnectorBrush" Color="{StaticResource MochaSurface1}"/>
+    <SolidColorBrush x:Key="StepperActiveBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StepperDoneBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StepperPendingBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="StepperConnectorBrush" Color="{StaticResource MochaSurface1}" />
 
     <!-- ════════════ Shadows (ORCA cards use soft 4–12px shadow) ════════════ -->
     <!-- BoxShadow format: "offsetX offsetY blur spread color" -->

@@ -16,38 +16,38 @@
           - IsActive       (bool)
     -->
     <UserControl.Resources>
-        <conv:BrushKeyConverter x:Key="BrushKey"/>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:BrushKeyConverter x:Key="BrushKey" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
     <Grid Margin="2,4">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="0">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis"/>
+                           TextTrimming="CharacterEllipsis" />
                 <TextBlock Text="*"
                            FontSize="11"
                            FontWeight="Bold"
                            Foreground="Goldenrod"
-                           Visibility="{Binding IsDirty, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}"/>
+                           Visibility="{Binding IsDirty, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
             <TextBlock Text="{Binding Subtitle, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontSize="11"
                        Foreground="{DynamicResource App.TextMuted}"
-                       TextTrimming="CharacterEllipsis"/>
+                       TextTrimming="CharacterEllipsis" />
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontSize="10"
-                           Foreground="{DynamicResource App.TextMuted}"/>
+                           Foreground="{DynamicResource App.TextMuted}" />
                 <TextBlock FontSize="10"
                            Foreground="{DynamicResource App.TextMuted}">
-                    <Run Text="{Binding MessageCount, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                    <Run Text=" msgs"/>
+                    <Run Text="{Binding MessageCount, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    <Run Text=" msgs" />
                 </TextBlock>
             </StackPanel>
         </StackPanel>
@@ -56,6 +56,6 @@
                  Width="8"
                  Height="8"
                  VerticalAlignment="Center"
-                 Fill="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}"/>
+                 Fill="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}" />
     </Grid>
 </UserControl>

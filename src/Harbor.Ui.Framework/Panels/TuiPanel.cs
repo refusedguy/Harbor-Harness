@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.Panels;
-
 /// <summary>
 ///     Where a <see cref="TuiPanel" /> docks inside the host renderer's layout tree.
 ///     Renderers translate this to their own geometry (rows/columns/splits).

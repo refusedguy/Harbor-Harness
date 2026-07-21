@@ -1,11 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:shellVm="clr-namespace:Harbor.App.Avalonia.ViewModels.Shell"
              xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.Shell.SessionRowView">
 
     <UserControl.Resources>
-        <conv:BrushKeyConverter x:Key="BrushKeyConv"/>
     </UserControl.Resources>
 
     <!--
@@ -32,7 +30,7 @@
                      Width="6" Height="6"
                      Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"
                      VerticalAlignment="Top"
-                     Margin="0,4,4,0"/>
+                     Margin="0,4,4,0" />
 
             <!-- Title -->
             <TextBlock Grid.Row="0" Grid.Column="1"
@@ -40,13 +38,13 @@
                        FontWeight="Medium" FontSize="13"
                        TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TextPrimaryBrush}"
-                       VerticalAlignment="Center"/>
+                       VerticalAlignment="Center" />
 
             <!-- Time -->
             <TextBlock Grid.Row="0" Grid.Column="2"
                        Text="{Binding RelativeTime}" FontSize="11"
                        Foreground="{DynamicResource TextTertiaryBrush}"
-                       VerticalAlignment="Top"/>
+                       VerticalAlignment="Top" />
 
             <!-- Meta line: model · mode -->
             <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
@@ -54,14 +52,14 @@
                        FontFamily="{DynamicResource FontMono}"
                        Foreground="{DynamicResource TextSecondaryBrush}"
                        TextTrimming="CharacterEllipsis"
-                       Margin="0,2,0,0"/>
+                       Margin="0,2,0,0" />
 
             <!-- Status line (only when present) -->
             <TextBlock Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
                        Text="{Binding StatusLine}" FontSize="11"
                        Foreground="{DynamicResource TextDangerBrush}"
                        IsVisible="{Binding HasStatusLine}"
-                       Margin="0,2,0,0"/>
+                       Margin="0,2,0,0" />
         </Grid>
     </Border>
 </UserControl>

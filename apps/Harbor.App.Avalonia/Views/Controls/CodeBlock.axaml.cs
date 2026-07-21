@@ -1,14 +1,11 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-
 namespace Harbor.App.Avalonia.Views.Controls;
-
 /// <summary>
 ///     Fenced code-block card with language label + copy button + basic
 ///     syntax highlighting — ORCA feature steal #3.
@@ -26,8 +23,8 @@ namespace Harbor.App.Avalonia.Views.Controls;
 ///         chat code.
 ///     </para>
 ///     <para>
-///         <b>Streaming-friendly:</b> setting <see cref="Code"/> rebuilds
-///         the <see cref="TextBlock.Inlines"/> collection synchronously —
+///         <b>Streaming-friendly:</b> setting <see cref="Code" /> rebuilds
+///         the <see cref="TextBlock.Inlines" /> collection synchronously —
 ///         safe to call from the UI thread on every token.
 ///     </para>
 /// </remarks>
@@ -35,31 +32,31 @@ public sealed partial class CodeBlock : UserControl
 {
     /// <summary>Styled property for the raw code text.</summary>
     public static readonly StyledProperty<string> CodeProperty =
-        AvaloniaProperty.Register<CodeBlock, string>(nameof(Code), defaultValue: string.Empty);
+        AvaloniaProperty.Register<CodeBlock, string>(nameof(Code), string.Empty);
 
     /// <summary>Styled property for the language identifier (e.g. "csharp", "js").</summary>
     public static readonly StyledProperty<string> LanguageProperty =
-        AvaloniaProperty.Register<CodeBlock, string>(nameof(Language), defaultValue: string.Empty);
+        AvaloniaProperty.Register<CodeBlock, string>(nameof(Language), string.Empty);
 
     /// <summary>Construct the code block.</summary>
     public CodeBlock()
     {
         InitializeComponent();
-        PropertyChanged += OnPropertyChangedHandler;
+        this.PropertyChanged += OnPropertyChangedHandler;
     }
 
     /// <summary>The raw code text to render.</summary>
     public string Code
     {
-        get => GetValue(CodeProperty);
-        set => SetValue(CodeProperty, value);
+        get => this.GetValue(CodeProperty);
+        set => this.SetValue(CodeProperty, value);
     }
 
     /// <summary>The language identifier (used to pick the keyword set).</summary>
     public string Language
     {
-        get => GetValue(LanguageProperty);
-        set => SetValue(LanguageProperty, value);
+        get => this.GetValue(LanguageProperty);
+        set => this.SetValue(LanguageProperty, value);
     }
 
     private void OnPropertyChangedHandler(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -78,7 +75,7 @@ public sealed partial class CodeBlock : UserControl
             return;
         }
         CodeText.Inlines?.Clear();
-        var src = Code ?? string.Empty;
+        string src = Code ?? string.Empty;
         if (src.Length == 0)
         {
             return;
@@ -123,13 +120,16 @@ public sealed partial class CodeBlock : UserControl
             char c = code[i];
 
             // Line comment: // or #
-            if ((c == '/' && i + 1 < n && code[i + 1] == '/') || (c == '#' && !IsShebang(code, i)))
+            if (c == '/' && i + 1 < n && code[i + 1] == '/' || c == '#' && !IsShebang(code, i))
             {
                 FlushDefault();
                 foreach (var pending in pendingEmit) yield return pending;
                 pendingEmit.Clear();
                 int start = i;
-                while (i < n && code[i] != '\n' && code[i] != '\r') i++;
+                while (i < n && code[i] != '\n' && code[i] != '\r')
+                {
+                    i++;
+                }
                 yield return new Run(code.Substring(start, i - start)) { Foreground = commentBrush, FontFamily = codeFont };
                 continue;
             }
@@ -142,7 +142,10 @@ public sealed partial class CodeBlock : UserControl
                 pendingEmit.Clear();
                 int start = i;
                 i += 2;
-                while (i + 1 < n && !(code[i] == '*' && code[i + 1] == '/')) i++;
+                while (i + 1 < n && !(code[i] == '*' && code[i + 1] == '/'))
+                {
+                    i++;
+                }
                 i = Math.Min(i + 2, n);
                 yield return new Run(code.Substring(start, i - start)) { Foreground = commentBrush, FontFamily = codeFont };
                 continue;
@@ -175,7 +178,7 @@ public sealed partial class CodeBlock : UserControl
                 pendingEmit.Clear();
                 int start = i;
                 while (i < n && (char.IsDigit(code[i]) || code[i] == '.' || code[i] == 'x' || code[i] == 'X'
-                    || (code[i] >= 'a' && code[i] <= 'f') || (code[i] >= 'A' && code[i] <= 'F')))
+                                 || code[i] >= 'a' && code[i] <= 'f' || code[i] >= 'A' && code[i] <= 'F'))
                 {
                     i++;
                 }
@@ -187,7 +190,10 @@ public sealed partial class CodeBlock : UserControl
             if (char.IsLetter(c) || c == '_')
             {
                 int start = i;
-                while (i < n && (char.IsLetterOrDigit(code[i]) || code[i] == '_')) i++;
+                while (i < n && (char.IsLetterOrDigit(code[i]) || code[i] == '_'))
+                {
+                    i++;
+                }
                 string word = code.Substring(start, i - start);
                 if (keywords.Contains(word))
                 {
@@ -225,34 +231,38 @@ public sealed partial class CodeBlock : UserControl
     {
         "cs" or "csharp" or "c#" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "abstract","as","base","bool","break","byte","case","catch","char","checked","class","const","continue","decimal","default","delegate","do","double","else","enum","event","explicit","extern","false","finally","fixed","float","for","foreach","goto","if","implicit","in","int","interface","internal","is","lock","long","namespace","new","null","object","operator","out","override","params","private","protected","public","readonly","ref","return","sbyte","sealed","short","sizeof","stackalloc","static","string","struct","switch","this","throw","true","try","typeof","uint","ulong","unchecked","unsafe","ushort","using","var","virtual","void","volatile","while","async","await","yield","record","partial",
+            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", "checked", "class", "const", "continue", "decimal", "default", "delegate", "do", "double", "else", "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is",
+            "lock", "long", "namespace", "new", "null", "object", "operator", "out", "override", "params", "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort",
+            "using", "var", "virtual", "void", "volatile", "while", "async", "await", "yield", "record", "partial"
         },
         "js" or "javascript" or "ts" or "typescript" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "var","let","const","function","return","if","else","for","while","do","switch","case","break","continue","new","this","typeof","instanceof","in","of","class","extends","super","import","export","from","default","try","catch","finally","throw","async","await","yield","delete","void","null","undefined","true","false","interface","type","enum","public","private","protected","readonly","static","get","set","implements","namespace","as","is","satisfies",
+            "var", "let", "const", "function", "return", "if", "else", "for", "while", "do", "switch", "case", "break", "continue", "new", "this", "typeof", "instanceof", "in", "of", "class", "extends", "super", "import", "export", "from", "default", "try", "catch", "finally", "throw", "async", "await", "yield", "delete", "void", "null", "undefined",
+            "true", "false", "interface", "type", "enum", "public", "private", "protected", "readonly", "static", "get", "set", "implements", "namespace", "as", "is", "satisfies"
         },
         "py" or "python" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "def","return","if","elif","else","for","while","break","continue","in","not","and","or","is","None","True","False","class","import","from","as","try","except","finally","raise","with","lambda","yield","global","nonlocal","pass","assert","del","print","self","cls","async","await",
+            "def", "return", "if", "elif", "else", "for", "while", "break", "continue", "in", "not", "and", "or", "is", "None", "True", "False", "class", "import", "from", "as", "try", "except", "finally", "raise", "with", "lambda", "yield", "global", "nonlocal", "pass", "assert", "del", "print", "self", "cls", "async", "await"
         },
         "go" or "golang" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "func","return","if","else","for","range","switch","case","default","break","continue","package","import","type","struct","interface","var","const","go","defer","select","chan","map","nil","true","false","make","new","len","cap","append",
+            "func", "return", "if", "else", "for", "range", "switch", "case", "default", "break", "continue", "package", "import", "type", "struct", "interface", "var", "const", "go", "defer", "select", "chan", "map", "nil", "true", "false", "make", "new", "len", "cap", "append"
         },
         "rust" or "rs" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "fn","let","mut","const","static","if","else","for","while","loop","match","return","break","continue","struct","enum","trait","impl","pub","use","mod","as","in","ref","move","async","await","self","Self","super","crate","where","dyn","unsafe","extern","type","true","false",
+            "fn", "let", "mut", "const", "static", "if", "else", "for", "while", "loop", "match", "return", "break", "continue", "struct", "enum", "trait", "impl", "pub", "use", "mod", "as", "in", "ref", "move", "async", "await", "self", "Self", "super", "crate", "where", "dyn", "unsafe", "extern", "type", "true", "false"
         },
         "sql" => new HashSet<string>(StringComparer.Ordinal)
         {
-            "SELECT","select","FROM","from","WHERE","where","INSERT","insert","UPDATE","update","DELETE","delete","CREATE","create","TABLE","table","INDEX","index","DROP","drop","ALTER","alter","INTO","into","VALUES","values","SET","set","JOIN","join","INNER","inner","LEFT","left","RIGHT","right","OUTER","outer","ON","on","GROUP","group","BY","by","ORDER","order","HAVING","having","LIMIT","limit","OFFSET","offset","AS","as","AND","and","OR","or","NOT","not","NULL","null","PRIMARY","primary","KEY","key","FOREIGN","foreign","REFERENCES","references","UNIQUE","unique","DEFAULT","default","CASCADE","cascade",
+            "SELECT", "select", "FROM", "from", "WHERE", "where", "INSERT", "insert", "UPDATE", "update", "DELETE", "delete", "CREATE", "create", "TABLE", "table", "INDEX", "index", "DROP", "drop", "ALTER", "alter", "INTO", "into", "VALUES", "values", "SET", "set", "JOIN", "join", "INNER", "inner", "LEFT", "left", "RIGHT", "right", "OUTER", "outer",
+            "ON", "on", "GROUP", "group", "BY", "by", "ORDER", "order", "HAVING", "having", "LIMIT", "limit", "OFFSET", "offset", "AS", "as", "AND", "and", "OR", "or", "NOT", "not", "NULL", "null", "PRIMARY", "primary", "KEY", "key", "FOREIGN", "foreign", "REFERENCES", "references", "UNIQUE", "unique", "DEFAULT", "default", "CASCADE", "cascade"
         },
-        _ => new HashSet<string>(StringComparer.Ordinal),
+        _ => new HashSet<string>(StringComparer.Ordinal)
     };
 
     private static IBrush TryFindBrush(string key, IBrush fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out var r) == true && r is IBrush b)
+        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
         {
             return b;
         }
@@ -261,7 +271,7 @@ public sealed partial class CodeBlock : UserControl
 
     private static FontFamily TryFindFont()
     {
-        if (Application.Current?.Resources.TryGetResource("CodeFont", null, out var r) == true && r is FontFamily f)
+        if (Application.Current?.Resources.TryGetResource("CodeFont", null, out object? r) == true && r is FontFamily f)
         {
             return f;
         }
@@ -270,7 +280,7 @@ public sealed partial class CodeBlock : UserControl
 
     private async void CopyButton_Click(object? sender, RoutedEventArgs e)
     {
-        var text = Code ?? string.Empty;
+        string text = Code ?? string.Empty;
         if (string.IsNullOrEmpty(text)) return;
         try
         {
@@ -284,8 +294,8 @@ public sealed partial class CodeBlock : UserControl
             {
                 return;
             }
-            var transfer = new global::Avalonia.Input.DataTransfer();
-            var item = new global::Avalonia.Input.DataTransferItem();
+            var transfer = new DataTransfer();
+            var item = new DataTransferItem();
             item.SetText(text);
             transfer.Add(item);
             await clipboard.SetDataAsync(transfer).ConfigureAwait(true);

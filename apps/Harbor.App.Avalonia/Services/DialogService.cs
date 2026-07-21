@@ -1,24 +1,24 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Microsoft.Extensions.Logging;
-using HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment;
-using Orientation = global::Avalonia.Layout.Orientation;
-using Thickness = global::Avalonia.Thickness;
-using TextWrapping = global::Avalonia.Media.TextWrapping;
+using HorizontalAlignment = Avalonia.Layout.HorizontalAlignment;
+using Orientation = Avalonia.Layout.Orientation;
+using Thickness = Avalonia.Thickness;
+using TextWrapping = Avalonia.Media.TextWrapping;
 
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
 ///     Modal dialog helpers — open file, save file, confirm, prompt.
-///     Wraps Avalonia's <see cref="IStorageProvider"/> behind a synchronous-friendly API.
+///     Wraps Avalonia's <see cref="IStorageProvider" /> behind a synchronous-friendly API.
 /// </summary>
 public sealed class AvaloniaFilePicker
 {
     private readonly ILogger<AvaloniaFilePicker> _logger;
 
-    /// <summary>Construct a <see cref="AvaloniaFilePicker"/>.</summary>
+    /// <summary>Construct a <see cref="AvaloniaFilePicker" />.</summary>
     public AvaloniaFilePicker(ILogger<AvaloniaFilePicker> logger)
     {
         _logger = logger;
@@ -46,7 +46,7 @@ public sealed class AvaloniaFilePicker
             FileTypeFilter = new[]
             {
                 new FilePickerFileType("All files") { Patterns = new[] { "*" } },
-                new FilePickerFileType("Code") { Patterns = new[] { "*.cs", "*.ts", "*.js", "*.json", "*.md", "*.py", "*.go", "*.rs" } },
+                new FilePickerFileType("Code") { Patterns = new[] { "*.cs", "*.ts", "*.js", "*.json", "*.md", "*.py", "*.go", "*.rs" } }
             }
         }).ConfigureAwait(false);
         if (files is null || files.Count == 0) return null;
@@ -68,7 +68,7 @@ public sealed class AvaloniaFilePicker
         {
             Title = title,
             SuggestedFileName = defaultFileName,
-            DefaultExtension = "txt",
+            DefaultExtension = "txt"
         }).ConfigureAwait(false);
         return file?.Path.LocalPath;
     }
@@ -82,7 +82,7 @@ public sealed class AvaloniaFilePicker
         var folders = await provider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = title,
-            AllowMultiple = false,
+            AllowMultiple = false
         }).ConfigureAwait(false);
         return folders.Count > 0 ? folders[0].Path.LocalPath : null;
     }
@@ -95,7 +95,7 @@ public sealed class DialogService
 {
     private readonly ILogger<DialogService> _logger;
 
-    /// <summary>Construct a <see cref="DialogService"/>.</summary>
+    /// <summary>Construct a <see cref="DialogService" />.</summary>
     public DialogService(ILogger<DialogService> logger)
     {
         _logger = logger;
@@ -119,18 +119,26 @@ public sealed class DialogService
             Height = 180,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
-            ShowInTaskbar = false,
+            ShowInTaskbar = false
         };
-        var result = false;
+        bool result = false;
         var ok = new Button { Content = okLabel, Classes = { "Primary" }, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(20, 6) };
         var cancel = new Button { Content = cancelLabel, HorizontalAlignment = HorizontalAlignment.Right, Padding = new Thickness(20, 6) };
-        ok.Click += (_, _) => { result = true; dialog.Close(); };
-        cancel.Click += (_, _) => { result = false; dialog.Close(); };
+        ok.Click += (_, _) =>
+        {
+            result = true;
+            dialog.Close();
+        };
+        cancel.Click += (_, _) =>
+        {
+            result = false;
+            dialog.Close();
+        };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
         buttons.Children.Add(cancel);
         buttons.Children.Add(ok);
         var panel = new StackPanel { Margin = new Thickness(16), Spacing = 12 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = global::Avalonia.Media.Brushes.White });
+        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White });
         panel.Children.Add(buttons);
         dialog.Content = panel;
         // ShowDialog must run on the UI thread (it pumps the Avalonia message loop
@@ -156,7 +164,7 @@ public sealed class DialogService
             Height = 200,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
-            ShowInTaskbar = false,
+            ShowInTaskbar = false
         };
         var box = new TextBox { Text = defaultValue, PlaceholderText = message };
         var ok = new Button { Content = "OK", Classes = { "Primary" }, Padding = new Thickness(20, 6) };
@@ -174,28 +182,28 @@ public sealed class DialogService
         // ShowDialog must run on the UI thread (see ConfirmAsync comment). Stay on
         // the UI thread — the continuation only reads the local result string and
         // logs, but we keep the await UI-bound to stay safe under future edits.
-        var result = await dialog.ShowDialog<string?>(window);
+        string? result = await dialog.ShowDialog<string?>(window);
         _logger.LogDebug("Prompt '{Title}' → '{Result}'", title, result);
         return result;
     }
 }
 
 /// <summary>
-///     Toast notification service. Other ViewModels push toasts via <see cref="Show"/>
+///     Toast notification service. Other ViewModels push toasts via <see cref="Show" />
 ///     and the ToastNotificationsView renders them in the bottom-right corner.
 /// </summary>
 public sealed class ToastService
 {
     private readonly ILogger<ToastService> _logger;
 
-    /// <summary>Raised when a new toast arrives. The toast container view subscribes.</summary>
-    public event EventHandler<ToastNotification>? ToastAdded;
-
-    /// <summary>Construct a <see cref="ToastService"/>.</summary>
+    /// <summary>Construct a <see cref="ToastService" />.</summary>
     public ToastService(ILogger<ToastService> logger)
     {
         _logger = logger;
     }
+
+    /// <summary>Raised when a new toast arrives. The toast container view subscribes.</summary>
+    public event EventHandler<ToastNotification>? ToastAdded;
 
     /// <summary>Queue an informational toast.</summary>
     /// <param name="message">Toast body.</param>
@@ -211,5 +219,3 @@ public sealed class ToastService
         ToastAdded?.Invoke(this, toast);
     }
 }
-
-

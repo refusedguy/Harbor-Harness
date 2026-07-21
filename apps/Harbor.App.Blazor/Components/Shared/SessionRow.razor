@@ -26,31 +26,31 @@
 </div>
 
 @code {
-    /// <summary>Session title.</summary>
-    [Parameter]
-    public string Title { get; set; } = string.Empty;
+/// <summary>Session title.</summary>
+[Parameter]
+public string Title { get; set; } = string.Empty;
 
-    /// <summary>Subtitle — usually agent + model.</summary>
-    [Parameter]
-    public string Subtitle { get; set; } = string.Empty;
+/// <summary>Subtitle — usually agent + model.</summary>
+[Parameter]
+public string Subtitle { get; set; } = string.Empty;
 
-    /// <summary>Pre-formatted relative time ("5m ago").</summary>
-    [Parameter]
-    public string RelativeTime { get; set; } = string.Empty;
+/// <summary>Pre-formatted relative time ("5m ago").</summary>
+[Parameter]
+public string RelativeTime { get; set; } = string.Empty;
 
-    /// <summary>Live message count for this session.</summary>
-    [Parameter]
-    public int MessageCount { get; set; }
+/// <summary>Live message count for this session.</summary>
+[Parameter]
+public int MessageCount { get; set; }
 
-    /// <summary>Resource key for the status dot color.</summary>
-    [Parameter]
-    public string StatusColorKey { get; set; } = "MochaOverlay0";
+/// <summary>Resource key for the status dot color.</summary>
+[Parameter]
+public string StatusColorKey { get; set; } = "MochaOverlay0";
 
-    /// <summary>True when git working tree has uncommitted changes.</summary>
-    [Parameter]
-    public bool IsDirty { get; set; }
+/// <summary>True when git working tree has uncommitted changes.</summary>
+[Parameter]
+public bool IsDirty { get; set; }
 
-    /// <summary>True when this row is the currently-active session.</summary>
-    [Parameter]
-    public bool IsActive { get; set; }
+/// <summary>True when this row is the currently-active session.</summary>
+[Parameter]
+public bool IsActive { get; set; }
 }

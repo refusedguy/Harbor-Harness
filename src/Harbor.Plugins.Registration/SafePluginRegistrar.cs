@@ -1,14 +1,12 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Instantiation;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Registration;
-
 /// <summary>
 ///     <see cref="IPluginRegistrar" /> decorator that isolates failures per plugin.
 ///     <see cref="Register" /> never throws — every exception from the inner registrar
-/// is caught, logged at <c>LogLevel.Error</c>, and returned as a failure result. This
-/// lets the host continue loading subsequent plugins even when one throws during
-/// <c>Initialize</c> or <c>Register*</c>.
+///     is caught, logged at <c>LogLevel.Error</c>, and returned as a failure result. This
+///     lets the host continue loading subsequent plugins even when one throws during
+///     <c>Initialize</c> or <c>Register*</c>.
 /// </summary>
 public sealed class SafePluginRegistrar : IPluginRegistrar
 {

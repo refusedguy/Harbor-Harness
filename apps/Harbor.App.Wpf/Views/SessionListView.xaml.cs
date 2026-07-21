@@ -1,7 +1,5 @@
 using System.Windows.Controls;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     Sidebar session list — search, branch, switch.
 /// </summary>

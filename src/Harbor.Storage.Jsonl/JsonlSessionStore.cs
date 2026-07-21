@@ -46,8 +46,6 @@ public sealed class JsonlSessionStore : ISessionStore
     private readonly object _lock = new();
     private readonly ILogger<JsonlSessionStore> _logger;
 
-    private readonly string _rootDirectory;
-
     /// <summary>
     ///     Parsed-message cache. Architecture audit v2 §3.3: keyed by session id,
     ///     value is an immutable <see cref="SessionCacheEntry" /> recording the
@@ -61,12 +59,14 @@ public sealed class JsonlSessionStore : ISessionStore
     ///         The cache is unbounded; a long-running process with many sessions
     ///         would accumulate entries. In practice the typical session count is
     ///         1-5 per process, so an LRU cap is deferred until measured. The
-    ///         <see cref="ConcurrentDictionary{TKey, TValue}" /> is safe for
+    ///         <see cref="ConcurrentDictionary{TKey,TValue}" /> is safe for
     ///         concurrent readers — the value is an immutable record, so a
     ///         half-published update is impossible.
     ///     </para>
     /// </remarks>
     private readonly ConcurrentDictionary<string, SessionCacheEntry> _messageCache = new();
+
+    private readonly string _rootDirectory;
 
     public JsonlSessionStore(string rootDirectory, ILogger<JsonlSessionStore> logger)
     {
@@ -331,64 +331,6 @@ public sealed class JsonlSessionStore : ISessionStore
     }
 
     /// <summary>
-    ///     Parse the JSONL session file from disk into a chronological message
-    ///     list. Per-line JSON parse errors are aggregated into a
-    ///     <c>List&lt;string&gt;</c> and surfaced via <see cref="ILogger.LogWarning" />,
-    ///     while still returning the successfully deserialized messages
-    ///     (§ROP-001 resolved).
-    /// </summary>
-    /// <param name="sessionFile">Absolute path to the .jsonl file.</param>
-    /// <param name="sessionId">The session id (passed through to <see cref="DeserializeMessage" />).</param>
-    /// <param name="ct">Cancellation token observed by <c>StreamReader.ReadLineAsync</c>.</param>
-    /// <returns>The chronological message list, or failure with the first error.</returns>
-    private async Task<Result<IReadOnlyList<AgentMessage>>> ParseMessagesFromDiskAsync(
-        string sessionFile,
-        string sessionId,
-        CancellationToken ct)
-    {
-        var messages = new Dictionary<string, AgentMessage>();
-        var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
-
-        using var reader = new StreamReader(sessionFile);
-        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                string? type = doc.RootElement.GetProperty("type").GetString();
-
-                if (type == "message")
-                {
-                    var msgResult = JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
-                    if (msgResult.IsSuccess)
-                        messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
-                    else
-                        errors.Add(msgResult.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
-                // and logged at Warning level. Previously the caller silently
-                // swallowed these, leaving the user with a truncated session
-                // transcript and no diagnostic.
-                errors.Add($"Line parse failed: {ex.Message}");
-            }
-        }
-
-        if (errors.Count > 0)
-        {
-            _logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
-                errors.Count, sessionId, string.Join("; ", errors));
-        }
-
-        var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
-        return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
-    }
-
-    /// <summary>
     ///     Delete a session JSONL file. The parsed-message cache entry for this
     ///     session is also removed (§3.3 cache).
     /// </summary>
@@ -477,6 +419,64 @@ public sealed class JsonlSessionStore : ISessionStore
         return Result.Success();
     }
 
+    /// <summary>
+    ///     Parse the JSONL session file from disk into a chronological message
+    ///     list. Per-line JSON parse errors are aggregated into a
+    ///     <c>List&lt;string&gt;</c> and surfaced via <see cref="ILogger.LogWarning" />,
+    ///     while still returning the successfully deserialized messages
+    ///     (§ROP-001 resolved).
+    /// </summary>
+    /// <param name="sessionFile">Absolute path to the .jsonl file.</param>
+    /// <param name="sessionId">The session id (passed through to <see cref="DeserializeMessage" />).</param>
+    /// <param name="ct">Cancellation token observed by <c>StreamReader.ReadLineAsync</c>.</param>
+    /// <returns>The chronological message list, or failure with the first error.</returns>
+    private async Task<Result<IReadOnlyList<AgentMessage>>> ParseMessagesFromDiskAsync(
+        string sessionFile,
+        string sessionId,
+        CancellationToken ct)
+    {
+        var messages = new Dictionary<string, AgentMessage>();
+        var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
+
+        using var reader = new StreamReader(sessionFile);
+        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                string? type = doc.RootElement.GetProperty("type").GetString();
+
+                if (type == "message")
+                {
+                    var msgResult = JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
+                    if (msgResult.IsSuccess)
+                        messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
+                    else
+                        errors.Add(msgResult.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
+                // and logged at Warning level. Previously the caller silently
+                // swallowed these, leaving the user with a truncated session
+                // transcript and no diagnostic.
+                errors.Add($"Line parse failed: {ex.Message}");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            _logger.LogWarning("Encountered {ErrorCount} malformed line(s) reading session {SessionId}: {Errors}",
+                errors.Count, sessionId, string.Join("; ", errors));
+        }
+
+        var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
+        return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
+    }
+
     private string GetSessionFilePath(string sessionId) =>
         Path.Combine(_rootDirectory, $"{sessionId}.jsonl");
 
@@ -495,13 +495,12 @@ public sealed class JsonlSessionStore : ISessionStore
             return null;
         }
     }
-
 }
 
 /// <summary>
 ///     Parsed-message cache entry (§3.3). Records the file's last-write-time
-/// at the moment of the parse so subsequent reads can detect freshness via
-/// a single <c>File.GetLastWriteTimeUtc</c> call.
+///     at the moment of the parse so subsequent reads can detect freshness via
+///     a single <c>File.GetLastWriteTimeUtc</c> call.
 /// </summary>
 internal sealed record SessionCacheEntry(
     DateTimeOffset FileLastWriteUtc,

@@ -8,13 +8,13 @@ the concrete impl.
 
 ## What's in here
 
-| File | Interface | Responsibility |
-| --- | --- | --- |
-| `Agents/AgentRegistry.cs` | `IAgentRegistry` | Thread-safe agent-definition registry. Backed by `NonBlocking.ConcurrentDictionary` for lock-free scaling. Also exposes `AgentRegistryBuilder` for fluent registration. |
-| `Tools/ToolRegistry.cs` | `IToolRegistry` | Thread-safe tool registry with a `FrozenDictionary` fast-lookup snapshot taken after startup. Also exposes `ToolRegistryBuilder`. |
-| `Tools/InMemoryMcpRegistry.cs` | `IMcpRegistry` | In-memory MCP server registry. Tracks registrations but cannot actually invoke — production hosts swap in a real stdio JSON-RPC client. |
-| `Providers/ProviderRegistry.cs` | `IProviderRegistry` | Thread-safe provider registry with lazy `ILlmClient` instantiation and a frozen lookup table. Also exposes `ProviderRegistryBuilder`. |
-| `Events/InMemoryEventBus.cs` | `IEventBus` | In-memory pub/sub event bus. Bounded scrollback buffer (DropOldest `Channel<T>`), lock-free snapshot reads, pooled dead-subscriber collection. |
+| File                            | Interface           | Responsibility                                                                                                                                                          |
+|---------------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Agents/AgentRegistry.cs`       | `IAgentRegistry`    | Thread-safe agent-definition registry. Backed by `NonBlocking.ConcurrentDictionary` for lock-free scaling. Also exposes `AgentRegistryBuilder` for fluent registration. |
+| `Tools/ToolRegistry.cs`         | `IToolRegistry`     | Thread-safe tool registry with a `FrozenDictionary` fast-lookup snapshot taken after startup. Also exposes `ToolRegistryBuilder`.                                       |
+| `Tools/InMemoryMcpRegistry.cs`  | `IMcpRegistry`      | In-memory MCP server registry. Tracks registrations but cannot actually invoke — production hosts swap in a real stdio JSON-RPC client.                                 |
+| `Providers/ProviderRegistry.cs` | `IProviderRegistry` | Thread-safe provider registry with lazy `ILlmClient` instantiation and a frozen lookup table. Also exposes `ProviderRegistryBuilder`.                                   |
+| `Events/InMemoryEventBus.cs`    | `IEventBus`         | In-memory pub/sub event bus. Bounded scrollback buffer (DropOldest `Channel<T>`), lock-free snapshot reads, pooled dead-subscriber collection.                          |
 
 ## Why this project exists
 

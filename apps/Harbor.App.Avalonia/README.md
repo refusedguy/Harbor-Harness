@@ -21,16 +21,17 @@ dotnet run --project apps/Harbor.App.Avalonia
 
 Environment variables (all optional):
 
-| Variable        | Default                       | Notes                                              |
-|-----------------|-------------------------------|----------------------------------------------------|
-| `HARBOR_MODEL`  | `ollama/qwen2.5-coder:7b`     | `provider/model` — picked up at startup.           |
-| `HARBOR_STORAGE`| `memory`                      | `memory` (ephemeral) or `jsonl` (~/.harbor/sessions). |
-| `HARBOR_LOGLEVEL`| `Warning`                    | `Trace`/`Debug`/`Information`/`Warning`/`Error`.   |
-| `OLLAMA_HOST`   | `http://localhost:11434`      | Ollama server URL.                                 |
+| Variable          | Default                   | Notes                                                 |
+|-------------------|---------------------------|-------------------------------------------------------|
+| `HARBOR_MODEL`    | `ollama/qwen2.5-coder:7b` | `provider/model` — picked up at startup.              |
+| `HARBOR_STORAGE`  | `memory`                  | `memory` (ephemeral) or `jsonl` (~/.harbor/sessions). |
+| `HARBOR_LOGLEVEL` | `Warning`                 | `Trace`/`Debug`/`Information`/`Warning`/`Error`.      |
+| `OLLAMA_HOST`     | `http://localhost:11434`  | Ollama server URL.                                    |
 
 ## What's implemented
 
 ### Shell
+
 - **1280×800 main window** with top menu bar (File / Edit / View / Settings / Help),
   left sidebar, central view tab strip, status bar.
 - **Catppuccin-Mocha dark theme** by default + Catppuccin-Latte light theme
@@ -40,6 +41,7 @@ Environment variables (all optional):
 - **Sidebar collapse** (`Ctrl+B`) with smooth transition.
 
 ### Chat
+
 - Streaming chat with role-colored lines (user / assistant / tool / tool_result /
   thinking / error / system). Color set from Catppuccin-Mocha.
 - "● streaming" indicator with live text buffer preview when the assistant is generating.
@@ -49,6 +51,7 @@ Environment variables (all optional):
 - Clear chat (`Ctrl+L`).
 
 ### Session manager (sidebar)
+
 - List of sessions (title, agent, relative time, message count).
 - Fuzzy search filter.
 - New session, Branch active (creates a child session with copied messages),
@@ -56,6 +59,7 @@ Environment variables (all optional):
 - Active session highlighted with a green dot.
 
 ### Code editor (AvaloniaEdit)
+
 - Multi-tab editor with file open (`Ctrl+O`) and save (`Ctrl+S`).
 - Syntax highlighting for **C#, JavaScript/TypeScript, JSON, Markdown, Python, Go,
   Rust, Java, C++, XML/AXAML/XAML, HTML, CSS, SQL, Bash** — 15+ languages via
@@ -65,38 +69,45 @@ Environment variables (all optional):
 - Each tab tracks its own file path, name, extension, content.
 
 ### Command palette (`Ctrl+P`)
+
 - cmdk-style fuzzy search popup.
 - Searches across: 14 view/agent commands + 12 slash commands.
 - Keyboard navigation: ↑/↓ to move, `Enter` to invoke, `Esc` to close.
 - Subsequence-match scoring (label matches ranked higher than hint matches).
 
 ### Diff view
+
 - Side-by-side line-by-line diff with before/after text inputs.
 - Row coloring: added (green), removed (red), modified (blue), unchanged (dim).
 - "Compute" button to recompute the diff.
 
 ### Token usage chart
+
 - Per-turn bar chart (input tokens in cyan, output tokens in peach).
 - Summary tiles: total input, total output, cumulative cost in USD.
 - Capped at last 50 turns.
 - "Clear" button resets the chart.
 
 ### Provider browser
+
 - Modal dialog listing registered providers (default: `ollama`).
 - Select a provider to see its models with metadata: display name, id, features
   (tools/vision/reasoning), pricing per 1M tokens.
 
 ### Settings
+
 - Modal dialog with Model / Storage / LogLevel / OllamaHost / Theme controls.
 - Save persists to the in-process env vars (restart to apply model changes).
 - Theme toggle takes effect immediately.
 
 ### Toast notifications
+
 - Bottom-right toast container with 4-second auto-dismiss.
 - 4 kinds: Info (blue), Success (green), Warning (peach), Error (red).
 - Pushed by ViewModels via `ToastService.Show(message, kind)`.
 
 ### Plugin panel host
+
 - Reserved right-dock slot for `IPanelProvider` contributions (placeholder in v0.4;
   full integration with `IPanelRegistry` planned for v0.5).
 
@@ -181,24 +192,24 @@ them on the UI thread via `Dispatcher.UIThread.Post`. The ViewModels subscribe t
 
 ## Quality bar — ORCA-level
 
-| Feature                | Status                                  |
-|------------------------|-----------------------------------------|
-| Code editor            | ✅ AvaloniaEdit, 15+ syntaxes, tabs     |
-| Streaming chat         | ✅ Role colors, thinking, stop, clear   |
-| Session manager        | ✅ Search, new, branch, open, delete    |
-| Command palette        | ✅ Fuzzy search, keyboard nav           |
-| Token usage chart      | ✅ Per-turn bars + summary tiles        |
-| Diff view              | ✅ Side-by-side, color-coded rows       |
-| Provider browser       | ✅ Lists providers + models             |
-| Settings dialog        | ✅ Model/storage/loglevel/theme         |
-| Toasts                 | ✅ 4-second auto-dismiss, 4 kinds       |
-| Dark/light themes      | ✅ Catppuccin-Mocha + Latte             |
-| Status bar             | ✅ Agent/model/cost/state/session count |
-| Standalone runnable    | ✅ `dotnet run` — no Harbor.Cli needed  |
-| Plugin panel host      | ⚠️ Placeholder (v0.5 will wire IPanelRegistry) |
-| Markdown rendering     | ⚠️ Markdig dependency is wired; full AST→Avalonia projection is v0.5 |
-| Drag-drop session reorder | ⚠️ v0.5                              |
-| Multi-select (Ctrl+click) | ⚠️ v0.5                              |
+| Feature                   | Status                                                               |
+|---------------------------|----------------------------------------------------------------------|
+| Code editor               | ✅ AvaloniaEdit, 15+ syntaxes, tabs                                   |
+| Streaming chat            | ✅ Role colors, thinking, stop, clear                                 |
+| Session manager           | ✅ Search, new, branch, open, delete                                  |
+| Command palette           | ✅ Fuzzy search, keyboard nav                                         |
+| Token usage chart         | ✅ Per-turn bars + summary tiles                                      |
+| Diff view                 | ✅ Side-by-side, color-coded rows                                     |
+| Provider browser          | ✅ Lists providers + models                                           |
+| Settings dialog           | ✅ Model/storage/loglevel/theme                                       |
+| Toasts                    | ✅ 4-second auto-dismiss, 4 kinds                                     |
+| Dark/light themes         | ✅ Catppuccin-Mocha + Latte                                           |
+| Status bar                | ✅ Agent/model/cost/state/session count                               |
+| Standalone runnable       | ✅ `dotnet run` — no Harbor.Cli needed                                |
+| Plugin panel host         | ⚠️ Placeholder (v0.5 will wire IPanelRegistry)                       |
+| Markdown rendering        | ⚠️ Markdig dependency is wired; full AST→Avalonia projection is v0.5 |
+| Drag-drop session reorder | ⚠️ v0.5                                                              |
+| Multi-select (Ctrl+click) | ⚠️ v0.5                                                              |
 
 ## Build
 

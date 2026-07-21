@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.Services;
-
 /// <summary>
 ///     Abstraction for toast notifications. Each desktop app implements this
 ///     to show toasts in its own UI framework.
@@ -7,10 +6,10 @@ namespace Harbor.Ui.Framework.Services;
 public interface IToastService
 {
     /// <summary>Show a toast notification.</summary>
-    void Show(string message, ToastKind kind = ToastKind.Info);
+    public void Show(string message, ToastKind kind = ToastKind.Info);
 
     /// <summary>Raised when a toast is added (for VMs that need to track toasts).</summary>
-    event EventHandler<ToastNotification>? ToastAdded;
+    public event EventHandler<ToastNotification>? ToastAdded;
 }
 
 /// <summary>Toast notification kind.</summary>
@@ -31,5 +30,7 @@ public sealed record ToastNotification(
 {
     /// <summary>Convenience constructor that generates a new id + timestamp.</summary>
     public ToastNotification(string message, ToastKind kind)
-        : this(Guid.NewGuid(), message, kind, DateTimeOffset.UtcNow) { }
+        : this(Guid.NewGuid(), message, kind, DateTimeOffset.UtcNow)
+    {
+    }
 }

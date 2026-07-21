@@ -8,18 +8,18 @@
         WindowStartupLocation="CenterScreen">
     <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280"/>
-            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Pick a provider and model"
                    FontSize="16" FontWeight="SemiBold"
-                   Foreground="{DynamicResource App.Text}" Margin="0,0,0,12"/>
+                   Foreground="{DynamicResource App.Text}" Margin="0,0,0,12" />
 
         <!-- Provider list -->
         <ListBox Grid.Row="1" Grid.Column="0"
@@ -32,8 +32,10 @@
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ProviderEntryViewModel}">
                     <StackPanel Margin="0,2">
-                        <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource App.Text}" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding Description}" Foreground="{DynamicResource App.TextMuted}" FontSize="11"/>
+                        <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource App.Text}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Description}" Foreground="{DynamicResource App.TextMuted}"
+                                   FontSize="11" />
                     </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
@@ -50,8 +52,9 @@
             <ListBox.ItemTemplate>
                 <DataTemplate DataType="{x:Type vm:ModelEntryViewModel}">
                     <StackPanel Margin="0,2">
-                        <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource App.Text}" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource App.TextMuted}" FontSize="11"/>
+                        <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource App.Text}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource App.TextMuted}" FontSize="11" />
                     </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
@@ -60,10 +63,10 @@
         <!-- Footer buttons -->
         <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="Cancel" Padding="14,6" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Content="Cancel" Padding="14,6" Margin="0,0,8,0" IsCancel="True" />
             <Button Content="Apply" Padding="14,6"
                     Background="{DynamicResource App.Accent}" Foreground="Black"
-                    Command="{Binding ConfirmCommand}" Click="Apply_Click"/>
+                    Command="{Binding ConfirmCommand}" Click="Apply_Click" />
         </StackPanel>
     </Grid>
 </Window>

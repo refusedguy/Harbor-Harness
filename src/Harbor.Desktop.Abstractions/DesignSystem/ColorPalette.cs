@@ -1,13 +1,12 @@
 namespace Harbor.Desktop.Abstractions.DesignSystem;
-
 /// <summary>
 ///     Catppuccin-Mocha (dark) and Catppuccin-Latte (light) palette as
-///     framework-agnostic <see cref="RgbColor"/> constants. Source:
-///     <see href="https://catppuccin.com/palette"/>.
+///     framework-agnostic <see cref="RgbColor" /> constants. Source:
+///     <see href="https://catppuccin.com/palette" />.
 /// </summary>
 /// <remarks>
-///     The <see cref="Harbor.Desktop.DesignSystem"/> package mirrors these as
-///     a flat <see cref="Dictionary{TKey, TValue}"/> for theme switching;
+///     The <see cref="Harbor.Desktop.DesignSystem" /> package mirrors these as
+///     a flat <see cref="Dictionary{TKey, TValue}" /> for theme switching;
 ///     this static class is the canonical reference for inline use in
 ///     base VMs and shared services.
 /// </remarks>

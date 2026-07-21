@@ -1,52 +1,57 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     In-process HTTP server that emulates an OpenAI-compatible LLM provider
 ///     for E2E tests. Returns canned chat-completion responses (SSE-streamed)
 ///     and a static model list. Thread-safe: multiple concurrent requests are
-///     served independently from a single <see cref="HttpListener"/>.
+///     served independently from a single <see cref="HttpListener" />.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         <b>Wire shape:</b>
 ///         <list type="bullet">
-///             <item><c>POST {BaseUri}/chat/completions</c> — OpenAI streaming
-///                   chat-completions endpoint. Returns <c>text/event-stream</c>
-///                   with one <c>data: {...}\n\n</c> line per token, ending with
-///                   <c>data: [DONE]\n\n</c>.</item>
-///             <item><c>POST {BaseUri}/v1/chat/completions</c> — same, for the
-///                   <c>/v1</c>-prefixed form (some clients prepend it).</item>
-///             <item><c>GET {BaseUri}/models</c> — static OpenAI-shaped
-///                   <c>{ "object": "list", "data": [...] }</c> response.</item>
+///             <item>
+///                 <c>POST {BaseUri}/chat/completions</c> — OpenAI streaming
+///                 chat-completions endpoint. Returns <c>text/event-stream</c>
+///                 with one <c>data: {...}\n\n</c> line per token, ending with
+///                 <c>data: [DONE]\n\n</c>.
+///             </item>
+///             <item>
+///                 <c>POST {BaseUri}/v1/chat/completions</c> — same, for the
+///                 <c>/v1</c>-prefixed form (some clients prepend it).
+///             </item>
+///             <item>
+///                 <c>GET {BaseUri}/models</c> — static OpenAI-shaped
+///                 <c>{ "object": "list", "data": [...] }</c> response.
+///             </item>
 ///         </list>
 ///     </para>
 ///     <para>
-///         <b>Threading:</b> <see cref="HttpListener.GetContextAsync"/> is
+///         <b>Threading:</b> <see cref="HttpListener.GetContextAsync" /> is
 ///         awaited on the listener loop; each accepted request is dispatched to
 ///         the thread pool via <c>Task.Run</c> so the loop continues. The
-///         <see cref="ReceivedRequests"/> list is guarded by a lock; reads from
+///         <see cref="ReceivedRequests" /> list is guarded by a lock; reads from
 ///         test code are safe.
 ///     </para>
 ///     <para>
 ///         <b>Response selection:</b> a per-model response is configured via
-///         <see cref="SetResponse"/>. If no response is configured for the
+///         <see cref="SetResponse" />. If no response is configured for the
 ///         requested model, the server returns a single-token fallback so the
 ///         test fails loudly rather than hanging.
 ///     </para>
 /// </remarks>
 public sealed class MockLlmServer : IAsyncDisposable
 {
-    private HttpListener _listener = new();
-    private readonly Dictionary<string, CannedResponse> _responses = new(StringComparer.Ordinal);
-    private readonly object _responsesLock = new();
     private readonly List<ChatCompletionRequest> _received = new();
     private readonly object _receivedLock = new();
+    private readonly Dictionary<string, CannedResponse> _responses = new(StringComparer.Ordinal);
+    private readonly object _responsesLock = new();
     private CancellationTokenSource? _cts;
+    private HttpListener _listener = new();
     private Task? _loopTask;
     private int _requestCount;
 
     /// <summary>
-    ///     The base URI clients should target. Populated after <see cref="StartAsync"/>.
+    ///     The base URI clients should target. Populated after <see cref="StartAsync" />.
     ///     Always <c>http://localhost:&lt;port&gt;</c> with no trailing slash — the
     ///     Harbor OpenAI-compatible client appends <c>/chat/completions</c>.
     /// </summary>
@@ -62,16 +67,25 @@ public sealed class MockLlmServer : IAsyncDisposable
         get
         {
             lock (_receivedLock)
+            {
                 return _received.ToList();
+            }
         }
     }
 
     /// <summary>Total number of requests served (any endpoint). For diagnostics.</summary>
     public int RequestCount => Volatile.Read(ref _requestCount);
 
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync().ConfigureAwait(false);
+        _cts?.Dispose();
+    }
+
     /// <summary>
     ///     Start listening on a random localhost port. Returns the resolved
-    ///     <see cref="BaseUri"/>. Idempotent — calling twice is a no-op.
+    ///     <see cref="BaseUri" />. Idempotent — calling twice is a no-op.
     /// </summary>
     public Task StartAsync(CancellationToken ct = default)
     {
@@ -99,7 +113,10 @@ public sealed class MockLlmServer : IAsyncDisposable
             catch (HttpListenerException ex)
             {
                 lastError = ex;
-                try { _listener.Stop(); } catch { /* ignore */ }
+                try { _listener.Stop(); }
+                catch
+                { /* ignore */
+                }
                 _listener = new HttpListener();
             }
         }
@@ -108,41 +125,51 @@ public sealed class MockLlmServer : IAsyncDisposable
 
     /// <summary>
     ///     Stop the listener and abandon in-flight requests. Safe to call from
-    /// <see cref="IAsyncDisposable.DisposeAsync"/>.
+    ///     <see cref="IAsyncDisposable.DisposeAsync" />.
     /// </summary>
     public Task StopAsync(CancellationToken ct = default)
     {
         if (_cts is null)
             return Task.CompletedTask;
         _cts.Cancel();
-        try { _listener.Stop(); } catch { /* ignore */ }
-        try { _listener.Close(); } catch { /* ignore */ }
+        try { _listener.Stop(); }
+        catch
+        { /* ignore */
+        }
+        try { _listener.Close(); }
+        catch
+        { /* ignore */
+        }
         return Task.CompletedTask;
     }
 
     /// <summary>
     ///     Configure the canned response for a given model id. Subsequent
     ///     <c>chat/completions</c> requests for that model will stream the
-    ///     <paramref name="responseText"/> token-by-token.
+    ///     <paramref name="responseText" /> token-by-token.
     /// </summary>
     public void SetResponse(string model, string responseText)
     {
-        var canned = new CannedResponse(responseText, IsToolCall: false, ToolName: null, ToolArgs: null);
+        var canned = new CannedResponse(responseText, false, null, null);
         lock (_responsesLock)
+        {
             _responses[model] = canned;
+        }
     }
 
     /// <summary>
     ///     Configure a canned tool-call response: instead of text, the server
-    ///     will emit a single tool-call chunk requesting <paramref name="toolName"/>
-    ///     with the given JSON-encoded <paramref name="args"/>.
+    ///     will emit a single tool-call chunk requesting <paramref name="toolName" />
+    ///     with the given JSON-encoded <paramref name="args" />.
     /// </summary>
     public void SetToolCallResponse(string model, string toolName, object args)
     {
         string argsJson = JsonSerializer.Serialize(args);
-        var canned = new CannedResponse(null, IsToolCall: true, toolName, argsJson);
+        var canned = new CannedResponse(null, true, toolName, argsJson);
         lock (_responsesLock)
+        {
             _responses[model] = canned;
+        }
     }
 
     private async Task ListenerLoop(CancellationToken ct)
@@ -173,8 +200,8 @@ public sealed class MockLlmServer : IAsyncDisposable
     private async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         Interlocked.Increment(ref _requestCount);
-        HttpListenerRequest req = ctx.Request;
-        HttpListenerResponse resp = ctx.Response;
+        var req = ctx.Request;
+        var resp = ctx.Response;
         try
         {
             string path = (req.Url?.AbsolutePath ?? "/").TrimEnd('/');
@@ -205,11 +232,16 @@ public sealed class MockLlmServer : IAsyncDisposable
                 resp.ContentLength64 = body.Length;
                 await resp.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
             }
-            catch { /* swallow secondary */ }
+            catch
+            { /* swallow secondary */
+            }
         }
         finally
         {
-            try { resp.Close(); } catch { /* ignore */ }
+            try { resp.Close(); }
+            catch
+            { /* ignore */
+            }
         }
     }
 
@@ -223,7 +255,7 @@ public sealed class MockLlmServer : IAsyncDisposable
             data = new object[]
             {
                 new { id = "mock/test-model", @object = "model", created = 0, owned_by = "mock" },
-                new { id = "mock/other-model", @object = "model", created = 0, owned_by = "mock" },
+                new { id = "mock/other-model", @object = "model", created = 0, owned_by = "mock" }
             }
         };
         string json = JsonSerializer.Serialize(payload);
@@ -247,23 +279,27 @@ public sealed class MockLlmServer : IAsyncDisposable
             if (doc.RootElement.TryGetProperty("model", out var m) && m.ValueKind == JsonValueKind.String)
                 model = m.GetString();
         }
-        catch { /* malformed; record raw body */ }
+        catch
+        { /* malformed; record raw body */
+        }
 
         lock (_receivedLock)
+        {
             _received.Add(new ChatCompletionRequest(model ?? "", requestBody));
+        }
 
         CannedResponse canned;
         lock (_responsesLock)
         {
-            canned = (model is not null && _responses.TryGetValue(model, out var r))
+            canned = model is not null && _responses.TryGetValue(model, out var r)
                 ? r
                 : new CannedResponse("(no mock response configured for model '" + model + "')",
-                                     IsToolCall: false, ToolName: null, ToolArgs: null);
+                    false, null, null);
         }
 
         resp.ContentType = "text/event-stream";
         resp.ContentEncoding = Encoding.UTF8;
-        Stream outStream = resp.OutputStream;
+        var outStream = resp.OutputStream;
 
         if (canned.IsToolCall)
         {
@@ -390,13 +426,6 @@ public sealed class MockLlmServer : IAsyncDisposable
         return JsonSerializer.Serialize(chunk);
     }
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await StopAsync().ConfigureAwait(false);
-        _cts?.Dispose();
-    }
-
     private readonly record struct CannedResponse(
         string? Text,
         bool IsToolCall,
@@ -406,7 +435,7 @@ public sealed class MockLlmServer : IAsyncDisposable
 
 /// <summary>
 ///     Recorded copy of a chat-completion request received by
-///     <see cref="MockLlmServer"/>. The raw JSON body is preserved verbatim so
+///     <see cref="MockLlmServer" />. The raw JSON body is preserved verbatim so
 ///     tests can assert on any field without the mock having to model the
 ///     entire request schema.
 /// </summary>

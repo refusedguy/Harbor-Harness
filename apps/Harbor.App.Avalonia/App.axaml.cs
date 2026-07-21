@@ -7,26 +7,25 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views;
-using Harbor.App.Avalonia.Views.Shell;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using ShutdownMode = global::Avalonia.Controls.ShutdownMode;
+using ShutdownMode = Avalonia.Controls.ShutdownMode;
 
 namespace Harbor.App.Avalonia;
-
 /// <summary>
-///     Avalonia <see cref="Application"/> subclass. The composition root for the
-///     UI layer: receives the DI container from <see cref="AppHost.BuildAsync"/>
-///     (set on <see cref="Services"/> by <c>Program.cs</c>'s AfterSetup callback),
-///     constructs the <see cref="MainViewModel"/>, and shows the
-///     <see cref="MainWindow"/>.
+///     Avalonia <see cref="Application" /> subclass. The composition root for the
+///     UI layer: receives the DI container from <see cref="AppHost.BuildAsync" />
+///     (set on <see cref="Services" /> by <c>Program.cs</c>'s AfterSetup callback),
+///     constructs the <see cref="MainViewModel" />, and shows the
+///     <see cref="MainWindow" />.
 /// </summary>
 public class App : Application
 {
     /// <summary>
     ///     The DI container. Set by <c>Program.cs</c> in the Avalonia
-    ///     <c>AfterSetup</c> callback before <see cref="OnFrameworkInitializationCompleted"/>
+    ///     <c>AfterSetup</c> callback before <see cref="OnFrameworkInitializationCompleted" />
     ///     runs.
     /// </summary>
     public static IServiceProvider Services { get; set; } = null!;
@@ -36,7 +35,7 @@ public class App : Application
     ///     cleanly on app exit (cancels the agent loop, flushes the session
     ///     store, disposes the DI container). Set by <c>Program.cs</c>.
     /// </summary>
-    public static Microsoft.Extensions.Hosting.IHost? Host { get; set; }
+    public static IHost? Host { get; set; }
 
     /// <summary>
     ///     Shell layout mode — <c>"classic"</c> (default) or <c>"orca"</c>
@@ -59,21 +58,18 @@ public class App : Application
     public static string ShellMode { get; set; } = "classic";
 
     /// <summary>
-    ///     Convenience flag: <c>true</c> when <see cref="ShellMode"/> is
+    ///     Convenience flag: <c>true</c> when <see cref="ShellMode" /> is
     ///     <c>"orca"</c>.
     /// </summary>
     public static bool IsOrcaShell => string.Equals(ShellMode, "orca", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc />
-    public override void Initialize()
-    {
-        AvaloniaXamlLoader.Load(this);
-    }
+    public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
 
@@ -144,7 +140,7 @@ public class App : Application
         var mainWindow = new MainWindow
         {
             DataContext = windowDataContext,
-            IsVisible = false, // hidden until onboarding completes
+            IsVisible = false // hidden until onboarding completes
         };
         desktop.MainWindow = mainWindow;
 
@@ -177,7 +173,7 @@ public class App : Application
                     // RebindFromCommonConfigAsync will create a new session if none exists
                     // (using the fresh CommonConfig from disk with the wizard's selections).
                     await sessionManager.RebindFromCommonConfigAsync();
-                    
+
                     // Refresh the session list so the sidebar shows existing sessions.
                     var mainVm = Services.GetRequiredService<MainViewModel>();
                     mainVm.Sessions.RefreshCommand.Execute(null);
@@ -214,7 +210,7 @@ public class App : Application
 
         var mainWindow = new MainWindow
         {
-            DataContext = windowDataContext,
+            DataContext = windowDataContext
         };
         desktop.MainWindow = mainWindow;
 

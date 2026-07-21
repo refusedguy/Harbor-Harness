@@ -2,9 +2,7 @@ using System.Windows;
 using Harbor.App.Wpf.ViewModels;
 using Harbor.App.Wpf.Views;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace Harbor.App.Wpf.Services;
-
 /// <summary>
 ///     Mediator for opening modal / non-modal dialogs from view-models.
 ///     Keeps the VMs decoupled from <see cref="Window" /> creation logic.
@@ -29,7 +27,7 @@ public sealed class DialogService
         var vm = _services.GetRequiredService<ProviderBrowserViewModel>();
         var view = _services.GetRequiredService<ProviderBrowserView>();
         view.DataContext = vm;
-        return ShowModal(view, width: 900, height: 620);
+        return ShowModal(view, 900, 620);
     }
 
     /// <summary>
@@ -41,7 +39,7 @@ public sealed class DialogService
         var vm = _services.GetRequiredService<SettingsViewModel>();
         var view = _services.GetRequiredService<SettingsView>();
         view.DataContext = vm;
-        return ShowModal(view, width: 760, height: 560);
+        return ShowModal(view, 760, 560);
     }
 
     /// <summary>
@@ -66,10 +64,7 @@ public sealed class DialogService
     /// <param name="title">Dialog title.</param>
     /// <param name="message">Body text.</param>
     /// <param name="kind">Message box kind (info, warning, error).</param>
-    public void ShowMessage(string title, string message, MessageBoxImage kind = MessageBoxImage.Information)
-    {
-        MessageBox.Show(message, title, MessageBoxButton.OK, kind);
-    }
+    public void ShowMessage(string title, string message, MessageBoxImage kind = MessageBoxImage.Information) => MessageBox.Show(message, title, MessageBoxButton.OK, kind);
 
     /// <summary>
     ///     Show a yes/no confirmation dialog.
@@ -77,10 +72,7 @@ public sealed class DialogService
     /// <param name="title">Dialog title.</param>
     /// <param name="message">Body text.</param>
     /// <returns><see langword="true" /> if the user clicked Yes; otherwise <see langword="false" />.</returns>
-    public bool Confirm(string title, string message)
-    {
-        return MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-    }
+    public bool Confirm(string title, string message) => MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     private static bool? ShowModal(Window window, int width, int height)
     {

@@ -1,12 +1,11 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using Harbor.App.Wpf.Services;
 using Harbor.App.Wpf.ViewModels;
-
 namespace Harbor.App.Wpf.Views;
-
 /// <summary>
 ///     Streaming chat view — markdown transcript + input box.
 /// </summary>
@@ -18,7 +17,7 @@ public partial class ChatView : UserControl
     public ChatView()
     {
         InitializeComponent();
-        DataContextChanged += OnDataContextChanged;
+        this.DataContextChanged += OnDataContextChanged;
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -35,12 +34,12 @@ public partial class ChatView : UserControl
         }
     }
 
-    private void OnStreamingChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnStreamingChanged(object? sender, PropertyChangedEventArgs e)
     {
         // Visibility is bound via StreamingVisibility — see partial class below.
     }
 
-    private void OnMessagesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         // Auto-scroll to bottom.
         if (Transcript.Items.Count > 0)
@@ -53,7 +52,7 @@ public partial class ChatView : UserControl
     {
         if (e.Key != Key.Enter) return;
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) return;
-        if (DataContext is not ChatViewModel vm) return;
+        if (this.DataContext is not ChatViewModel vm) return;
         e.Handled = true;
         if (vm.SendCommand.CanExecute(null))
         {

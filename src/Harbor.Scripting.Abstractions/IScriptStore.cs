@@ -1,6 +1,5 @@
 // Storage layer — script store contract. See ScriptEntry.cs for layering rules.
 namespace Harbor.Scripting.Abstractions;
-
 /// <summary>
 ///     Script storage: where script files live and how to read / write them.
 /// </summary>
@@ -32,7 +31,7 @@ public interface IScriptStore
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Success with the list of entries, or failure with an error.</returns>
-    Task<Result<IReadOnlyList<ScriptEntry>>> ListAsync(CancellationToken cancellationToken = default);
+    public Task<Result<IReadOnlyList<ScriptEntry>>> ListAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Read a single script by name.
@@ -40,7 +39,7 @@ public interface IScriptStore
     /// <param name="name">Script name (file stem, no extension).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Success with the entry, or failure if not found / unreadable.</returns>
-    Task<Result<ScriptEntry>> ReadAsync(string name, CancellationToken cancellationToken = default);
+    public Task<Result<ScriptEntry>> ReadAsync(string name, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Write (create or replace) a script.
@@ -49,7 +48,7 @@ public interface IScriptStore
     /// <param name="content">Script source code.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Success, or failure with an error.</returns>
-    Task<Result> WriteAsync(string name, string content, CancellationToken cancellationToken = default);
+    public Task<Result> WriteAsync(string name, string content, CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Delete a script. Returns success if the script existed and was
@@ -58,5 +57,5 @@ public interface IScriptStore
     /// <param name="name">Script name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Success, or failure if not found.</returns>
-    Task<Result> DeleteAsync(string name, CancellationToken cancellationToken = default);
+    public Task<Result> DeleteAsync(string name, CancellationToken cancellationToken = default);
 }

@@ -1,24 +1,20 @@
 using System.Text.Json;
 using Harbor.Desktop.Abstractions.Models;
-using Microsoft.Extensions.Logging;
-
 namespace Harbor.Desktop.DesignSystem.Themes;
-
 /// <summary>
-///     Theme manager — holds the current <see cref="ThemeKind"/>, persists it
+///     Theme manager — holds the current <see cref="ThemeKind" />, persists it
 ///     to <c>~/.harbor/theme.json</c>, and exposes the active token dictionary
-///     (<see cref="DarkTheme"/> or <see cref="LightTheme"/>). Each platform
+///     (<see cref="DarkTheme" /> or <see cref="LightTheme" />). Each platform
 ///     app's <c>IThemeService</c> implementation wraps this class to add the
 ///     actual color-application step (e.g. swapping Avalonia resource
 ///     dictionaries).
 /// </summary>
 public sealed class ThemeManager
 {
-    private readonly ILogger<ThemeManager> _logger;
     private readonly string _filePath;
-    private ThemeKind _current;
+    private readonly ILogger<ThemeManager> _logger;
 
-    /// <summary>Construct a <see cref="ThemeManager"/> and load persisted state.</summary>
+    /// <summary>Construct a <see cref="ThemeManager" /> and load persisted state.</summary>
     /// <param name="logger">Logger.</param>
     /// <param name="filePath">
     ///     Optional override for the persistence path. Defaults to
@@ -28,31 +24,35 @@ public sealed class ThemeManager
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _filePath = filePath ?? DefaultPath();
-        _current = Load();
+        Current = Load();
     }
+
+    /// <summary>The currently active theme kind. Always Dark or Light (never System).</summary>
+    public ThemeKind Current
+    {
+        get;
+        private set;
+    }
+
+    /// <summary>The active token map (Mocha or Latte).</summary>
+    public IReadOnlyDictionary<string, string> CurrentTokens =>
+        Current == ThemeKind.Light ? LightTheme.Tokens : DarkTheme.Tokens;
 
     /// <summary>Default persistence path: <c>~/.harbor/theme.json</c>.</summary>
     public static string DefaultPath()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return Path.Combine(home, ".harbor", "theme.json");
     }
 
-    /// <summary>The currently active theme kind. Always Dark or Light (never System).</summary>
-    public ThemeKind Current => _current;
-
-    /// <summary>Raised when <see cref="Current"/> changes. Payload is the new kind.</summary>
+    /// <summary>Raised when <see cref="Current" /> changes. Payload is the new kind.</summary>
     public event EventHandler<ThemeKind>? ThemeChanged;
-
-    /// <summary>The active token map (Mocha or Latte).</summary>
-    public IReadOnlyDictionary<string, string> CurrentTokens =>
-        _current == ThemeKind.Light ? LightTheme.Tokens : DarkTheme.Tokens;
 
     /// <summary>Apply the dark (Mocha) theme and persist.</summary>
     public void ApplyDark()
     {
-        if (_current == ThemeKind.Dark) return;
-        _current = ThemeKind.Dark;
+        if (Current == ThemeKind.Dark) return;
+        Current = ThemeKind.Dark;
         Persist();
         RaiseChanged();
     }
@@ -60,8 +60,8 @@ public sealed class ThemeManager
     /// <summary>Apply the light (Latte) theme and persist.</summary>
     public void ApplyLight()
     {
-        if (_current == ThemeKind.Light) return;
-        _current = ThemeKind.Light;
+        if (Current == ThemeKind.Light) return;
+        Current = ThemeKind.Light;
         Persist();
         RaiseChanged();
     }
@@ -73,13 +73,15 @@ public sealed class ThemeManager
     /// </remarks>
     public void ApplySystem(bool osPrefersDark)
     {
-        if (osPrefersDark) ApplyDark(); else ApplyLight();
+        if (osPrefersDark) ApplyDark();
+        else ApplyLight();
     }
 
     /// <summary>Toggle between Dark and Light.</summary>
     public void Toggle()
     {
-        if (_current == ThemeKind.Dark) ApplyLight(); else ApplyDark();
+        if (Current == ThemeKind.Dark) ApplyLight();
+        else ApplyDark();
     }
 
     private ThemeKind Load()
@@ -87,11 +89,11 @@ public sealed class ThemeManager
         try
         {
             if (!File.Exists(_filePath)) return ThemeKind.Dark;
-            var json = File.ReadAllText(_filePath);
+            string json = File.ReadAllText(_filePath);
             var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("theme", out var el)
                 && el.ValueKind == JsonValueKind.String
-                && Enum.TryParse<ThemeKind>(el.GetString(), ignoreCase: true, out var kind)
+                && Enum.TryParse<ThemeKind>(el.GetString(), true, out var kind)
                 && kind != ThemeKind.System)
                 return kind;
         }
@@ -106,10 +108,10 @@ public sealed class ThemeManager
     {
         try
         {
-            var dir = Path.GetDirectoryName(_filePath);
+            string? dir = Path.GetDirectoryName(_filePath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            var payload = new { theme = _current.ToString().ToLowerInvariant() };
-            var json = JsonSerializer.Serialize(payload);
+            var payload = new { theme = Current.ToString().ToLowerInvariant() };
+            string json = JsonSerializer.Serialize(payload);
             File.WriteAllText(_filePath, json);
         }
         catch (Exception ex)
@@ -118,8 +120,5 @@ public sealed class ThemeManager
         }
     }
 
-    private void RaiseChanged()
-    {
-        ThemeChanged?.Invoke(this, _current);
-    }
+    private void RaiseChanged() => ThemeChanged?.Invoke(this, Current);
 }

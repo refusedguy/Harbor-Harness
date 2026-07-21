@@ -1,6 +1,4 @@
 using System.Text;
-using Markdig.Syntax;
-using Markdig.Syntax.Inlines;
 using MdInline = Markdig.Syntax.Inlines.Inline;
 using MdContainerInline = Markdig.Syntax.Inlines.ContainerInline;
 using MdLiteralInline = Markdig.Syntax.Inlines.LiteralInline;
@@ -9,7 +7,6 @@ using MdCodeInline = Markdig.Syntax.Inlines.CodeInline;
 using MdLeafBlock = Markdig.Syntax.LeafBlock;
 
 namespace Harbor.App.Avalonia.Views.Controls.Markdown;
-
 /// <summary>
 ///     Stateless text-extraction helpers for the Markdown renderer.
 ///     Extracted from <c>MarkdownRenderer.axaml.cs</c> (Task R31
@@ -24,7 +21,7 @@ internal static class MarkdownTextExtractor
 {
     /// <summary>
     ///     Concatenate the literal text of every inline in a container.
-    ///     Returns <see cref="string.Empty"/> for null containers.
+    ///     Returns <see cref="string.Empty" /> for null containers.
     /// </summary>
     public static string ExtractInlineText(MdContainerInline? container)
     {
@@ -33,7 +30,7 @@ internal static class MarkdownTextExtractor
             return string.Empty;
         }
         var sb = new StringBuilder();
-        foreach (MdInline inline in container)
+        foreach (var inline in container)
         {
             AppendInlineText(inline, sb);
         }
@@ -42,7 +39,7 @@ internal static class MarkdownTextExtractor
 
     /// <summary>
     ///     Recursively append the literal text of an inline (and its
-    ///     children, for containers) to <paramref name="sb"/>.
+    ///     children, for containers) to <paramref name="sb" />.
     /// </summary>
     public static void AppendInlineText(MdInline inline, StringBuilder sb)
     {
@@ -61,7 +58,7 @@ internal static class MarkdownTextExtractor
                 sb.Append(code.Content);
                 break;
             case MdContainerInline ci:
-                foreach (MdInline child in ci)
+                foreach (var child in ci)
                 {
                     AppendInlineText(child, sb);
                 }

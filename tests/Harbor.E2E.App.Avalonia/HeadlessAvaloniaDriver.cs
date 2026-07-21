@@ -1,33 +1,29 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
-using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
-
+using Microsoft.Extensions.Hosting;
 // The test project lives in the Harbor.E2E.App.Avalonia namespace, which
 // shadows Harbor.App.Avalonia for unqualified name lookup. Alias the
 // production App class to 'HarborApp' (not 'App' — that collides with the
 // Harbor.E2E.App NAMESPACE that the C# compiler finds when walking out from
 // Harbor.E2E.App.Avalonia, and namespace lookup wins over using-aliases).
-using HarborApp = global::Harbor.App.Avalonia.App;
+using HarborApp = Harbor.App.Avalonia.App;
 
 namespace Harbor.E2E.App.Avalonia;
-
 /// <summary>
 ///     Real in-process headless driver for the Harbor Avalonia desktop app.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Builds the full app — <see cref="App"/> + <see cref="MainWindow"/> +
+///         Builds the full app — <see cref="App" /> + <see cref="MainWindow" /> +
 ///         the production DI host (<c>AppHost.BuildAsync</c>) — on a dedicated
 ///         UI pump thread using <c>Avalonia.Headless</c>'s off-screen software
 ///         renderer. No real display is required: the window is rendered to an
@@ -35,23 +31,28 @@ namespace Harbor.E2E.App.Avalonia;
 ///     </para>
 ///     <para>
 ///         <b>Why a dedicated UI thread:</b> TUnit executes each test method
-///         on a threadpool thread, but Avalonia's <see cref="Application"/> +
-///         <see cref="Dispatcher"/> are bound to ONE thread for the lifetime
+///         on a threadpool thread, but Avalonia's <see cref="Application" /> +
+///         <see cref="Dispatcher" /> are bound to ONE thread for the lifetime
 ///         of the process. Binding the dispatcher to whatever threadpool
 ///         thread runs the first test (the previous design) caused every
 ///         subsequent test to throw
-///         <c>"calling thread cannot access this object because a different
-///         thread owns it"</c> when they touched the visual tree.
+///         <c>
+///             "calling thread cannot access this object because a different
+///             thread owns it"
+///         </c>
+///         when they touched the visual tree.
 ///     </para>
 ///     <para>
 ///         The fix is to start a dedicated background thread that:
 ///         <list type="number">
-///           <item>Binds <see cref="Dispatcher.UIThread"/> to itself.</item>
-///           <item>Enters <see cref="Dispatcher.MainLoop(CancellationToken)"/>
-///                 so it continuously drains the dispatcher job queue.</item>
+///             <item>Binds <see cref="Dispatcher.UIThread" /> to itself.</item>
+///             <item>
+///                 Enters <see cref="Dispatcher.MainLoop(CancellationToken)" />
+///                 so it continuously drains the dispatcher job queue.
+///             </item>
 ///         </list>
 ///         Test threads then marshal all UI access through
-///         <see cref="DispatcherExtensions.InvokeAsync{T}(Dispatcher, Func{T})"/>
+///         <see cref="DispatcherExtensions.InvokeAsync{T}(Dispatcher, Func{T})" />
 ///         — the job runs on the UI thread, the test thread awaits the result.
 ///         No manual <c>RunJobs</c> pumping needed because MainLoop is always
 ///         running on the UI thread.
@@ -65,9 +66,9 @@ namespace Harbor.E2E.App.Avalonia;
 ///         launch.
 ///     </para>
 ///     <para>
-///         <b>Process-wide singleton:</b> Avalonia's <see cref="Application.Current"/>
+///         <b>Process-wide singleton:</b> Avalonia's <see cref="Application.Current" />
 ///         is a static singleton. Once <c>AppBuilder.Configure&lt;App&gt;()</c>
-///         runs, no second <see cref="Application"/> instance can be created in
+///         runs, no second <see cref="Application" /> instance can be created in
 ///         the same AppDomain. The driver guards initialization with a lock so
 ///         the first test class to use it sets up the app; later instances
 ///         reuse the same app. Tests must run sequentially within a class —
@@ -86,7 +87,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     private static readonly object InitLock = new();
     private static bool _appInitialized;
     private static IClassicDesktopStyleApplicationLifetime? _lifetime;
-    private static Microsoft.Extensions.Hosting.IHost? _host;
+    private static IHost? _host;
 
     // ── Dedicated UI pump thread ──────────────────────────────────────────
     // Avalonia's Dispatcher is a thread-affine singleton: once bound to a
@@ -107,15 +108,114 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     private static readonly CancellationTokenSource UiCts = new();
     private static readonly TaskCompletionSource DispatcherReady =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly string? _originalHome;
+
+    private readonly string _screenshotDir;
+    private readonly string _tempHome;
 
     static HeadlessAvaloniaDriver()
     {
         var uiThread = new Thread(UIThreadMain)
         {
             IsBackground = true,
-            Name = "HarborAvaloniaUIThread",
+            Name = "HarborAvaloniaUIThread"
         };
         uiThread.Start();
+    }
+
+    /// <summary>
+    ///     Create a driver that writes screenshots to <paramref name="screenshotDir" />
+    ///     and uses <paramref name="tempHome" /> as <c>$HOME</c> for the duration
+    ///     of this driver's lifetime.
+    /// </summary>
+    /// <param name="screenshotDir">Directory to write PNG screenshots into. Created if missing.</param>
+    /// <param name="tempHome">Absolute path to use as <c>$HOME</c>. Created if missing.</param>
+    public HeadlessAvaloniaDriver(string screenshotDir, string tempHome)
+    {
+        _screenshotDir = screenshotDir;
+        _tempHome = tempHome;
+        Directory.CreateDirectory(_screenshotDir);
+        Directory.CreateDirectory(_tempHome);
+        Directory.CreateDirectory(Path.Combine(_tempHome, ".harbor"));
+
+        // Capture the current HOME so we can restore it on dispose. Switching
+        // HOME mid-process is process-wide (env vars aren't thread-local) so
+        // tests using this driver MUST be marked [NotInParallel].
+        _originalHome = Environment.GetEnvironmentVariable("HOME");
+        Environment.SetEnvironmentVariable("HOME", _tempHome);
+    }
+
+    /// <summary>
+    ///     The main window exposed by the desktop lifetime. Available after
+    ///     <see cref="InitializeAsync" /> has completed.
+    /// </summary>
+    /// <remarks>
+    ///     Accessing this property from a non-UI thread reads
+    ///     <see cref="IClassicDesktopStyleApplicationLifetime.MainWindow" />
+    ///     which is just a managed field — no AvaloniaObject property access,
+    ///     so it's safe from any thread. Code that walks the visual tree
+    ///     from <see cref="MainWindow" /> must still marshal to the UI thread
+    ///     via <see cref="Dispatcher.UIThread" />.
+    /// </remarks>
+    public MainWindow MainWindow
+    {
+        get
+        {
+            if (_lifetime?.MainWindow is not MainWindow mw)
+                throw new InvalidOperationException(
+                    "HeadlessAvaloniaDriver.MainWindow called before InitializeAsync() " +
+                    "or after DisposeAsync().");
+            return mw;
+        }
+    }
+
+    /// <summary>The underlying DI host (so tests can resolve services if needed).</summary>
+    public IHost Host
+        => _host ?? throw new InvalidOperationException("Driver not initialized.");
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        // Hide the window so it doesn't keep rendering frames in the background.
+        try
+        {
+            if (_lifetime?.MainWindow is { } mw)
+            {
+                Dispatcher.UIThread
+                    .InvokeAsync(() => mw.Hide())
+                    .GetAwaiter().GetResult();
+            }
+        }
+        catch
+        {
+            // Ignore — best-effort cleanup.
+        }
+
+        // Stop the DI host so background services (agent loop, IPC, session
+        // store) are torn down cleanly. The Avalonia Application itself is a
+        // process-wide singleton and is NOT shut down here — subsequent tests
+        // in the same session reuse it.
+        if (_host is not null)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await _host.StopAsync(cts.Token).ConfigureAwait(false);
+                _host.Dispose();
+            }
+            catch
+            {
+                // Best-effort — don't fail the test because cleanup threw.
+            }
+            _host = null;
+        }
+
+        // Restore HOME. The next driver instance (e.g. in the next test class)
+        // will set its own HOME before calling InitializeAsync.
+        if (_originalHome is not null)
+        {
+            Environment.SetEnvironmentVariable("HOME", _originalHome);
+        }
     }
 
     private static void UIThreadMain()
@@ -139,60 +239,6 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             DispatcherReady.TrySetException(ex);
         }
     }
-
-    private readonly string _screenshotDir;
-    private readonly string _tempHome;
-    private readonly string? _originalHome;
-
-    /// <summary>
-    ///     Create a driver that writes screenshots to <paramref name="screenshotDir"/>
-    ///     and uses <paramref name="tempHome"/> as <c>$HOME</c> for the duration
-    ///     of this driver's lifetime.
-    /// </summary>
-    /// <param name="screenshotDir">Directory to write PNG screenshots into. Created if missing.</param>
-    /// <param name="tempHome">Absolute path to use as <c>$HOME</c>. Created if missing.</param>
-    public HeadlessAvaloniaDriver(string screenshotDir, string tempHome)
-    {
-        _screenshotDir = screenshotDir;
-        _tempHome = tempHome;
-        Directory.CreateDirectory(_screenshotDir);
-        Directory.CreateDirectory(_tempHome);
-        Directory.CreateDirectory(Path.Combine(_tempHome, ".harbor"));
-
-        // Capture the current HOME so we can restore it on dispose. Switching
-        // HOME mid-process is process-wide (env vars aren't thread-local) so
-        // tests using this driver MUST be marked [NotInParallel].
-        _originalHome = Environment.GetEnvironmentVariable("HOME");
-        Environment.SetEnvironmentVariable("HOME", _tempHome);
-    }
-
-    /// <summary>
-    ///     The main window exposed by the desktop lifetime. Available after
-    ///     <see cref="InitializeAsync"/> has completed.
-    /// </summary>
-    /// <remarks>
-    ///     Accessing this property from a non-UI thread reads
-    ///     <see cref="IClassicDesktopStyleApplicationLifetime.MainWindow"/>
-    ///     which is just a managed field — no AvaloniaObject property access,
-    ///     so it's safe from any thread. Code that walks the visual tree
-    ///     from <see cref="MainWindow"/> must still marshal to the UI thread
-    ///     via <see cref="Dispatcher.UIThread"/>.
-    /// </remarks>
-    public MainWindow MainWindow
-    {
-        get
-        {
-            if (_lifetime?.MainWindow is not MainWindow mw)
-                throw new InvalidOperationException(
-                    "HeadlessAvaloniaDriver.MainWindow called before InitializeAsync() " +
-                    "or after DisposeAsync().");
-            return mw;
-        }
-    }
-
-    /// <summary>The underlying DI host (so tests can resolve services if needed).</summary>
-    public Microsoft.Extensions.Hosting.IHost Host
-        => _host ?? throw new InvalidOperationException("Driver not initialized.");
 
     /// <summary>
     ///     Build the Avalonia app + Harbor DI host. Idempotent across instances
@@ -251,7 +297,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 AppBuilder.Configure<HarborApp>()
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions
                     {
-                        UseHeadlessDrawing = false,
+                        UseHeadlessDrawing = false
                     })
                     .UseSkia()
                     .WithInterFont()
@@ -284,7 +330,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             // Flush layout + force a render tick so the first frame is rendered
             // and CaptureRenderedFrame returns real pixels (not the empty default).
             window.UpdateLayout();
-            AvaloniaHeadlessPlatform.ForceRenderTimerTick(1);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         }).GetAwaiter().GetResult();
 
         // Give the UI thread's MainLoop a moment to drain layout + render
@@ -323,7 +369,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         // UpdateLayout + ForceRenderTimerTick three times — each cycle drains
         // one batch of layout/render work so containers are fully realised
         // before the final capture.
-        var path = Dispatcher.UIThread.InvokeAsync<string>(() =>
+        string path = Dispatcher.UIThread.InvokeAsync(() =>
         {
             var window = MainWindow;
             for (int i = 0; i < 3; i++)
@@ -341,7 +387,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                     "window wasn't shown or layout didn't run.");
             }
 
-            var p = Path.Combine(_screenshotDir, $"{name}.png");
+            string p = Path.Combine(_screenshotDir, $"{name}.png");
             using var fs = File.Create(p);
             bitmap.Save(fs);
             return p;
@@ -356,20 +402,20 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     /// <remarks>
     ///     Synchronous because tests use it inline (<c>var input = Driver.FindControlByName&lt;TextBox&gt;("InputBox");</c>).
-    ///     Blocks the test thread on <see cref="Dispatcher.UIThread.InvokeAsync{T}(Func{T})"/>'s
+    ///     Blocks the test thread on <see cref="Dispatcher.UIThread.InvokeAsync{T}(Func{T})" />'s
     ///     awaiter — the UI thread's MainLoop executes the lookup and unblocks the caller.
     ///     <para>
-    ///         <b>Visual tree walk:</b> <see cref="ControlExtensions.FindControl{T}"/> only
+    ///         <b>Visual tree walk:</b> <see cref="ControlExtensions.FindControl{T}" /> only
     ///         searches the immediate <c>NameScope</c> of the control it's called on — it
     ///         does NOT recurse into child <c>UserControl</c>s. Since <c>InputBox</c> lives
     ///         inside <c>ChatView.axaml</c> (a <c>UserControl</c> embedded in <c>MainWindow</c>),
-    ///         we walk the visual tree depth-first and match by <see cref="StyledElement.Name"/>.
+    ///         we walk the visual tree depth-first and match by <see cref="StyledElement.Name" />.
     ///     </para>
     /// </remarks>
     public T? FindControlByName<T>(string name) where T : Control
     {
         return Dispatcher.UIThread
-            .InvokeAsync<T?>(() => FindByName<T>(MainWindow, name))
+            .InvokeAsync(() => FindByName<T>(MainWindow, name))
             .GetAwaiter()
             .GetResult();
     }
@@ -406,16 +452,16 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Find the first <see cref="RadioButton"/> whose
-    ///     <see cref="ContentControl.Content"/> stringifies to
-    ///     <paramref name="text"/> (case-sensitive, trimmed). Used to locate
+    ///     Find the first <see cref="RadioButton" /> whose
+    ///     <see cref="ContentControl.Content" /> stringifies to
+    ///     <paramref name="text" /> (case-sensitive, trimmed). Used to locate
     ///     the "💬 Chat" / "📝 Code" tab toggle buttons in the main window's
     ///     tab strip.
     /// </summary>
     public RadioButton? FindRadioButtonByText(string text)
     {
         return Dispatcher.UIThread
-            .InvokeAsync<RadioButton?>(() =>
+            .InvokeAsync(() =>
                 FindFirst<RadioButton>(MainWindow, b =>
                     b.Content is { } c &&
                     string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)))
@@ -424,14 +470,14 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Find the first <see cref="Button"/> whose <see cref="ContentControl.Content"/>
-    ///     stringifies to <paramref name="text"/> (case-sensitive, trimmed).
+    ///     Find the first <see cref="Button" /> whose <see cref="ContentControl.Content" />
+    ///     stringifies to <paramref name="text" /> (case-sensitive, trimmed).
     ///     Used to locate the "Send ▶" button which has no x:Name in ChatView.axaml.
     /// </summary>
     public Button? FindButtonByText(string text)
     {
         return Dispatcher.UIThread
-            .InvokeAsync<Button?>(() =>
+            .InvokeAsync(() =>
                 FindFirst<Button>(MainWindow, b =>
                     b.Content is { } c &&
                     string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)))
@@ -440,7 +486,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Type text into a <see cref="TextBox"/> by setting its <see cref="TextBox.Text"/>
+    ///     Type text into a <see cref="TextBox" /> by setting its <see cref="TextBox.Text" />
     ///     and advancing the caret. This is the simplest input simulation that
     ///     exercises the binding pipeline (TextBox.Text → ViewModel.InputText).
     /// </summary>
@@ -468,12 +514,12 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Click a button by invoking its <see cref="Button.Command"/> if it
-    ///     has one; otherwise raise the <see cref="Button.Click"/> routed event.
+    ///     Click a button by invoking its <see cref="Button.Command" /> if it
+    ///     has one; otherwise raise the <see cref="Button.Click" /> routed event.
     ///     Either path triggers the bound view-model action.
     /// </summary>
     /// <remarks>
-    ///     For <see cref="RadioButton"/> (which has no Command by default and
+    ///     For <see cref="RadioButton" /> (which has no Command by default and
     ///     toggles <c>IsChecked</c> via the <c>OnClick</c> virtual rather than
     ///     the routed <c>ClickEvent</c>), we set <c>IsChecked = true</c>
     ///     directly. This is the path of least surprise in headless mode —
@@ -507,16 +553,16 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Poll the visible visual tree until <paramref name="text"/> appears
+    ///     Poll the visible visual tree until <paramref name="text" /> appears
     ///     in any TextBlock / TextBox / ContentControl. Returns true if found
-    ///     before <paramref name="timeout"/> elapses.
+    ///     before <paramref name="timeout" /> elapses.
     /// </summary>
     public async Task<bool> WaitForTextAsync(string text, TimeSpan? timeout = null)
     {
         var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var current = GetAllVisibleText();
+            string current = GetAllVisibleText();
             if (current.Contains(text, StringComparison.Ordinal))
             {
                 return true;
@@ -529,17 +575,17 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// <summary>
     ///     Concatenate every TextBlock.Text, TextBox.Text, and ContentControl.Content
     ///     (when string) visible in the main window's visual tree. Used for
-    ///     text-based assertions + <see cref="WaitForTextAsync"/> polling.
+    ///     text-based assertions + <see cref="WaitForTextAsync" /> polling.
     /// </summary>
     /// <remarks>
     ///     Synchronous so it can be called inline from tests and from
-    ///     <see cref="WaitForTextAsync"/>. Marshals to the UI thread via
-    ///     <see cref="Dispatcher.UIThread.InvokeAsync{T}(Func{T})"/>.GetResult().
+    ///     <see cref="WaitForTextAsync" />. Marshals to the UI thread via
+    ///     <see cref="Dispatcher.UIThread.InvokeAsync{T}(Func{T})" />.GetResult().
     /// </remarks>
     public string GetAllVisibleText()
     {
         return Dispatcher.UIThread
-            .InvokeAsync<string>(() =>
+            .InvokeAsync(() =>
             {
                 var sb = new StringBuilder();
                 AppendText(MainWindow, sb);
@@ -594,57 +640,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 // Without this, a previous test that triggered the agent loop
                 // (e.g. SendMessage_AddsToChatHistory) leaves StatusText="running"
                 // for every subsequent test.
-                try { vm.Chat.ClearCommand.Execute(null); } catch { }
+                try { vm.Chat.ClearCommand.Execute(null); }
+                catch { }
                 vm.SwitchViewCommand.Execute("chat");
             }
         }).GetAwaiter().GetResult();
 
         await Task.Delay(20).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        // Hide the window so it doesn't keep rendering frames in the background.
-        try
-        {
-            if (_lifetime?.MainWindow is { } mw)
-            {
-                Dispatcher.UIThread
-                    .InvokeAsync(() => mw.Hide())
-                    .GetAwaiter().GetResult();
-            }
-        }
-        catch
-        {
-            // Ignore — best-effort cleanup.
-        }
-
-        // Stop the DI host so background services (agent loop, IPC, session
-        // store) are torn down cleanly. The Avalonia Application itself is a
-        // process-wide singleton and is NOT shut down here — subsequent tests
-        // in the same session reuse it.
-        if (_host is not null)
-        {
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                await _host.StopAsync(cts.Token).ConfigureAwait(false);
-                _host.Dispose();
-            }
-            catch
-            {
-                // Best-effort — don't fail the test because cleanup threw.
-            }
-            _host = null;
-        }
-
-        // Restore HOME. The next driver instance (e.g. in the next test class)
-        // will set its own HOME before calling InitializeAsync.
-        if (_originalHome is not null)
-        {
-            Environment.SetEnvironmentVariable("HOME", _originalHome);
-        }
     }
 
     /// <summary>Depth-first walk of the visual tree, collecting text from text-bearing controls.</summary>
@@ -669,7 +671,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         }
     }
 
-    /// <summary>Depth-first search for the first control matching <paramref name="predicate"/>.</summary>
+    /// <summary>Depth-first search for the first control matching <paramref name="predicate" />.</summary>
     private static T? FindFirst<T>(Visual root, Func<T, bool> predicate) where T : Control
     {
         if (root is T match && predicate(match))
@@ -688,8 +690,8 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
 
     /// <summary>
     ///     Depth-first walk of the visual tree looking for a control whose
-    ///     <see cref="StyledElement.Name"/> matches <paramref name="name"/>.
-    ///     Unlike <see cref="ControlExtensions.FindControl{T}"/>, this recurses
+    ///     <see cref="StyledElement.Name" /> matches <paramref name="name" />.
+    ///     Unlike <see cref="ControlExtensions.FindControl{T}" />, this recurses
     ///     into child <c>UserControl</c>s (which have their own NameScope that
     ///     <c>FindControl</c> doesn't traverse).
     /// </summary>

@@ -6,16 +6,16 @@ LLM turns, tool invocations, compaction events, and permission checks.
 
 ## What's in here
 
-| File | Responsibility |
-| --- | --- |
-| `Agents/AgentLoop.cs` | The Chain-of-Responsibility turn loop: prompt → LLM stream → tool execution → compaction → repeat. |
-| `Agents/DefaultAgent.cs` | Stateful `IAgent` implementation that wraps `AgentLoop` with steering, follow-up, and event-bus plumbing. |
-| `Sessions/CompactionService.cs` | Anchored-summary compaction: when a session approaches the context window, summarize the head and keep a recent tail. |
-| `Sessions/SystemPromptBuilder.cs` | Assembles the system prompt: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files. |
-| `Sessions/MessageConverter.cs` | Adapter from domain `AgentMessage`s to LLM-specific `LlmMessage`s. |
-| `Permissions/PermissionService.cs` | Specification-pattern permission evaluator: looks up the agent's `PermissionRuleset` and applies allow/deny/ask. |
-| `Onboarding/OnboardingWizard.cs` | First-run interactive wizard: pick provider → enter API key → pick model → pick agent → save config. |
-| `Configuration/HarborConfig.cs` | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets`. |
+| File                               | Responsibility                                                                                                          |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `Agents/AgentLoop.cs`              | The Chain-of-Responsibility turn loop: prompt → LLM stream → tool execution → compaction → repeat.                      |
+| `Agents/DefaultAgent.cs`           | Stateful `IAgent` implementation that wraps `AgentLoop` with steering, follow-up, and event-bus plumbing.               |
+| `Sessions/CompactionService.cs`    | Anchored-summary compaction: when a session approaches the context window, summarize the head and keep a recent tail.   |
+| `Sessions/SystemPromptBuilder.cs`  | Assembles the system prompt: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files. |
+| `Sessions/MessageConverter.cs`     | Adapter from domain `AgentMessage`s to LLM-specific `LlmMessage`s.                                                      |
+| `Permissions/PermissionService.cs` | Specification-pattern permission evaluator: looks up the agent's `PermissionRuleset` and applies allow/deny/ask.        |
+| `Onboarding/OnboardingWizard.cs`   | First-run interactive wizard: pick provider → enter API key → pick model → pick agent → save config.                    |
+| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets`.                                           |
 
 ## Why this project exists
 

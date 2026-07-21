@@ -4,7 +4,6 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Core.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-using Result = CSharpFunctionalExtensions.Result;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
 ///     Tests for <see cref="McpToolTool" /> — argument validation, missing-registry error
@@ -133,7 +132,7 @@ public class McpToolToolTests
         registry.Register("fs", "cmd");
         await Assert.That(registry.Unregister("fs").IsSuccess).IsTrue();
 
-        var invokeResult = await registry.InvokeAsync("fs", "tools/list", default(JsonElement));
+        var invokeResult = await registry.InvokeAsync("fs", "tools/list", default);
         await Assert.That(invokeResult.IsFailure).IsTrue();
         await Assert.That(invokeResult.Error).Contains("not registered");
     }

@@ -1,28 +1,26 @@
 using System.IO;
 using System.Windows;
-using Harbor.App.Wpf.Configuration;
-using Harbor.App.Wpf.Services;
-using Harbor.App.Wpf.ViewModels;
-using Harbor.App.Wpf.Views;
+using Excubo.Analyzers.DependencyInjection;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.App.Wpf.Configuration;
+using Harbor.App.Wpf.Services;
+using Harbor.App.Wpf.ViewModels;
+using Harbor.App.Wpf.Views;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
 using Harbor.Core.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Storage.Memory;
-using Excubo.Analyzers.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-
 namespace Harbor.App.Wpf;
-
 /// <summary>
 ///     WPF application root. Bootstraps the Microsoft.Extensions.Hosting DI
 ///     container, registers Harbor.Core services, and shows the
@@ -70,7 +68,7 @@ public partial class App : Application
         await _host.StartAsync().ConfigureAwait(false);
 
         var window = _host.Services.GetRequiredService<MainWindow>();
-        MainWindow = window;
+        this.MainWindow = window;
         window.Show();
     }
 
@@ -92,17 +90,14 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static IHost BuildHost()
-    {
-        return BuildHostInternal();
-    }
+    private static IHost BuildHost() => BuildHostInternal();
 
     /// <summary>
     ///     Builds the Harbor DI host. Internal so the DI test project
     ///     (Harbor.App.Wpf.Tests) can call it directly without going through
     ///     the WPF startup lifetime. The public surface stays unchanged.
     /// </summary>
-    /// <returns>A built <see cref="IHost"/>. Caller is responsible for disposal.</returns>
+    /// <returns>A built <see cref="IHost" />. Caller is responsible for disposal.</returns>
     // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
     // (EDI01–EDI04) and exercised at runtime by Harbor.App.Wpf.Tests/AppDiTests.cs.
     [Exposes(typeof(IProviderRegistry))]
@@ -146,10 +141,10 @@ public partial class App : Application
 
         // appsettings.json is copied next to the .exe.
         string baseDir = AppContext.BaseDirectory;
-        var settingsPath = Path.Combine(baseDir, "appsettings.json");
+        string settingsPath = Path.Combine(baseDir, "appsettings.json");
         if (File.Exists(settingsPath))
         {
-            builder.Configuration.AddJsonFile(settingsPath, optional: true, reloadOnChange: true);
+            builder.Configuration.AddJsonFile(settingsPath, true, true);
         }
 
         ConfigureLogging(builder);

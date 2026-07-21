@@ -1,19 +1,17 @@
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
-
 namespace Harbor.App.Avalonia.Services;
-
 /// <summary>
 ///     Centralised keyboard-shortcut dispatcher for the main window. Every
 ///     global key binding (Ctrl+P, Ctrl+B, Ctrl+Shift+T, Ctrl+O, Ctrl+S,
-///     Ctrl+L, Esc) is routed through <see cref="HandleKeyDown"/> so the
+///     Ctrl+L, Esc) is routed through <see cref="HandleKeyDown" /> so the
 ///     MainWindow code-behind stays free of branching logic and the
 ///     shortcut table is unit-testable in isolation.
 /// </summary>
 /// <remarks>
 ///     Registered as a singleton in <c>AppHost</c> so tests can verify
 ///     "Ctrl+P opens the command palette" by calling
-///     <see cref="HandleKeyDown"/> with a synthetic <see cref="KeyEventArgs"/>
+///     <see cref="HandleKeyDown" /> with a synthetic <see cref="KeyEventArgs" />
 ///     instead of driving a real Avalonia input pump.
 /// </remarks>
 public sealed class KeyboardShortcutService
@@ -24,7 +22,7 @@ public sealed class KeyboardShortcutService
     ///     mark the event handled); <c>false</c> when no binding matched
     ///     (and the caller should forward to base).
     /// </summary>
-    /// <param name="vm">The active <see cref="MainViewModel"/>, or null when no shell is bound.</param>
+    /// <param name="vm">The active <see cref="MainViewModel" />, or null when no shell is bound.</param>
     /// <param name="e">The key event args.</param>
     /// <returns>True when the shortcut was handled.</returns>
     public bool HandleKeyDown(MainViewModel? vm, KeyEventArgs e)
@@ -37,12 +35,36 @@ public sealed class KeyboardShortcutService
         // Esc closes the topmost open modal.
         if (e.Key == Key.Escape)
         {
-            if (vm.IsCommandPaletteOpen) { vm.IsCommandPaletteOpen = false; return true; }
-            if (vm.IsSettingsOpen) { vm.IsSettingsOpen = false; return true; }
-            if (vm.IsModelPickerOpen) { vm.IsModelPickerOpen = false; return true; }
-            if (vm.IsProviderBrowserOpen) { vm.IsProviderBrowserOpen = false; return true; }
-            if (vm.IsDiffOpen) { vm.IsDiffOpen = false; return true; }
-            if (vm.IsTokenUsageOpen) { vm.IsTokenUsageOpen = false; return true; }
+            if (vm.IsCommandPaletteOpen)
+            {
+                vm.IsCommandPaletteOpen = false;
+                return true;
+            }
+            if (vm.IsSettingsOpen)
+            {
+                vm.IsSettingsOpen = false;
+                return true;
+            }
+            if (vm.IsModelPickerOpen)
+            {
+                vm.IsModelPickerOpen = false;
+                return true;
+            }
+            if (vm.IsProviderBrowserOpen)
+            {
+                vm.IsProviderBrowserOpen = false;
+                return true;
+            }
+            if (vm.IsDiffOpen)
+            {
+                vm.IsDiffOpen = false;
+                return true;
+            }
+            if (vm.IsTokenUsageOpen)
+            {
+                vm.IsTokenUsageOpen = false;
+                return true;
+            }
             return false;
         }
 

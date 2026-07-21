@@ -1,5 +1,4 @@
 namespace Harbor.E2E.Framework;
-
 /// <summary>
 ///     Helpers for resolving the path to a built Harbor app executable and
 ///     locating the .NET host. Centralised so all drivers agree on the build

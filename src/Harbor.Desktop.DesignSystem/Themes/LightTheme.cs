@@ -1,7 +1,5 @@
 using Harbor.Desktop.Abstractions.Models;
-
 namespace Harbor.Desktop.DesignSystem.Themes;
-
 /// <summary>
 ///     Catppuccin-Latte (light) theme as a flat <c>Dictionary&lt;string,string&gt;</c>
 ///     of hex strings. Each platform app consumes this to populate its own
@@ -9,8 +7,6 @@ namespace Harbor.Desktop.DesignSystem.Themes;
 /// </summary>
 public static class LightTheme
 {
-    /// <summary>The theme kind — always <see cref="ThemeKind.Light"/>.</summary>
-    public static ThemeKind Kind => ThemeKind.Light;
 
     /// <summary>The flat token map. Keys are semantic names ("AppBackground", "Accent", etc.).</summary>
     public static readonly IReadOnlyDictionary<string, string> Tokens = new Dictionary<string, string>
@@ -45,6 +41,8 @@ public static class LightTheme
         ["StatusIdle"] = "#6C6F85",
         ["StatusRunning"] = "#1E66F5",
         ["StatusCompact"] = "#DF8E1D",
-        ["StatusError"] = "#D20F39",
+        ["StatusError"] = "#D20F39"
     };
+    /// <summary>The theme kind — always <see cref="ThemeKind.Light" />.</summary>
+    public static ThemeKind Kind => ThemeKind.Light;
 }

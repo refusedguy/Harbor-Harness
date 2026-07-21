@@ -1,13 +1,11 @@
 using Harbor.Ui.Framework.Services;
-
 namespace Harbor.Ui.Framework.Sessions;
-
 /// <summary>
 ///     Tracks git status (branch + dirty flag) per session, keyed on session
 ///     id. Refreshed on every session switch via
-///     <see cref="SessionManager.OpenSessionAsync"/> /
-///     <see cref="SessionManager.EnsureDefaultSessionAsync"/>. Decoupled
-///     from <see cref="SessionManager"/> so the tracker can be unit-tested
+///     <see cref="SessionManager.OpenSessionAsync" /> /
+///     <see cref="SessionManager.EnsureDefaultSessionAsync" />. Decoupled
+///     from <see cref="SessionManager" /> so the tracker can be unit-tested
 ///     in isolation (and so the git refresh can be mocked in tests that
 ///     don't have a real git binary on PATH).
 /// </summary>
@@ -30,8 +28,8 @@ public sealed class SessionGitTracker
 
     /// <summary>
     ///     Refresh the cached git info for a session by querying the
-    ///     <see cref="GitService"/> for the session's working directory.
-    ///     No-op when <paramref name="gitService"/> is null (no git binary
+    ///     <see cref="GitService" /> for the session's working directory.
+    ///     No-op when <paramref name="gitService" /> is null (no git binary
     ///     available — e.g. in unit tests).
     /// </summary>
     /// <param name="sessionId">The session id.</param>

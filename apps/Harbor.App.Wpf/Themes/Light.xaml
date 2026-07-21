@@ -33,24 +33,24 @@
     <Color x:Key="Latte.Flamingo">#DD7878</Color>
     <Color x:Key="Latte.Rosewater">#DCDCE8</Color>
 
-    <SolidColorBrush x:Key="Light.BaseBrush" Color="{StaticResource Latte.Base}"/>
-    <SolidColorBrush x:Key="Light.MantleBrush" Color="{StaticResource Latte.Mantle}"/>
-    <SolidColorBrush x:Key="Light.CrustBrush" Color="{StaticResource Latte.Crust}"/>
-    <SolidColorBrush x:Key="Light.Surface0Brush" Color="{StaticResource Latte.Surface0}"/>
-    <SolidColorBrush x:Key="Light.Surface1Brush" Color="{StaticResource Latte.Surface1}"/>
-    <SolidColorBrush x:Key="Light.Surface2Brush" Color="{StaticResource Latte.Surface2}"/>
-    <SolidColorBrush x:Key="Light.Overlay0Brush" Color="{StaticResource Latte.Overlay0}"/>
-    <SolidColorBrush x:Key="Light.Overlay1Brush" Color="{StaticResource Latte.Overlay1}"/>
-    <SolidColorBrush x:Key="Light.Overlay2Brush" Color="{StaticResource Latte.Overlay2}"/>
-    <SolidColorBrush x:Key="Light.TextBrush" Color="{StaticResource Latte.Text}"/>
-    <SolidColorBrush x:Key="Light.Subtext0Brush" Color="{StaticResource Latte.Subtext0}"/>
-    <SolidColorBrush x:Key="Light.Subtext1Brush" Color="{StaticResource Latte.Subtext1}"/>
-    <SolidColorBrush x:Key="Light.BlueBrush" Color="{StaticResource Latte.Blue}"/>
-    <SolidColorBrush x:Key="Light.LavenderBrush" Color="{StaticResource Latte.Lavender}"/>
-    <SolidColorBrush x:Key="Light.GreenBrush" Color="{StaticResource Latte.Green}"/>
-    <SolidColorBrush x:Key="Light.YellowBrush" Color="{StaticResource Latte.Yellow}"/>
-    <SolidColorBrush x:Key="Light.PeachBrush" Color="{StaticResource Latte.Peach}"/>
-    <SolidColorBrush x:Key="Light.RedBrush" Color="{StaticResource Latte.Red}"/>
-    <SolidColorBrush x:Key="Light.MauveBrush" Color="{StaticResource Latte.Mauve}"/>
+    <SolidColorBrush x:Key="Light.BaseBrush" Color="{StaticResource Latte.Base}" />
+    <SolidColorBrush x:Key="Light.MantleBrush" Color="{StaticResource Latte.Mantle}" />
+    <SolidColorBrush x:Key="Light.CrustBrush" Color="{StaticResource Latte.Crust}" />
+    <SolidColorBrush x:Key="Light.Surface0Brush" Color="{StaticResource Latte.Surface0}" />
+    <SolidColorBrush x:Key="Light.Surface1Brush" Color="{StaticResource Latte.Surface1}" />
+    <SolidColorBrush x:Key="Light.Surface2Brush" Color="{StaticResource Latte.Surface2}" />
+    <SolidColorBrush x:Key="Light.Overlay0Brush" Color="{StaticResource Latte.Overlay0}" />
+    <SolidColorBrush x:Key="Light.Overlay1Brush" Color="{StaticResource Latte.Overlay1}" />
+    <SolidColorBrush x:Key="Light.Overlay2Brush" Color="{StaticResource Latte.Overlay2}" />
+    <SolidColorBrush x:Key="Light.TextBrush" Color="{StaticResource Latte.Text}" />
+    <SolidColorBrush x:Key="Light.Subtext0Brush" Color="{StaticResource Latte.Subtext0}" />
+    <SolidColorBrush x:Key="Light.Subtext1Brush" Color="{StaticResource Latte.Subtext1}" />
+    <SolidColorBrush x:Key="Light.BlueBrush" Color="{StaticResource Latte.Blue}" />
+    <SolidColorBrush x:Key="Light.LavenderBrush" Color="{StaticResource Latte.Lavender}" />
+    <SolidColorBrush x:Key="Light.GreenBrush" Color="{StaticResource Latte.Green}" />
+    <SolidColorBrush x:Key="Light.YellowBrush" Color="{StaticResource Latte.Yellow}" />
+    <SolidColorBrush x:Key="Light.PeachBrush" Color="{StaticResource Latte.Peach}" />
+    <SolidColorBrush x:Key="Light.RedBrush" Color="{StaticResource Latte.Red}" />
+    <SolidColorBrush x:Key="Light.MauveBrush" Color="{StaticResource Latte.Mauve}" />
 
 </ResourceDictionary>

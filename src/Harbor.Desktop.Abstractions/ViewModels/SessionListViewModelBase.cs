@@ -1,7 +1,5 @@
 using Harbor.Abstractions.Models;
-
 namespace Harbor.Desktop.Abstractions.ViewModels;
-
 /// <summary>
 ///     Base for the session-list view-model. Holds the observable session
 ///     collection, search filter, and current selection; platform VMs add
@@ -9,25 +7,25 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 /// </summary>
 public abstract partial class SessionListViewModelBase : ViewModelBase
 {
-    /// <summary>Construct a <see cref="SessionListViewModelBase"/>.</summary>
-    protected SessionListViewModelBase(ILogger logger) : base(logger)
-    {
-    }
 
-    /// <summary>Visible sessions, projected for the view layer.</summary>
-    public ObservableCollection<SessionListItem> Sessions { get; } = new();
+    /// <summary>True while the session list is loading from the store.</summary>
+    [ObservableProperty]
+    private bool _isLoading;
 
-    /// <summary>Search filter applied to <see cref="Sessions"/>.</summary>
+    /// <summary>Search filter applied to <see cref="Sessions" />.</summary>
     [ObservableProperty]
     private string _searchText = string.Empty;
 
     /// <summary>Currently selected session id, or null.</summary>
     [ObservableProperty]
     private string? _selectedSessionId;
+    /// <summary>Construct a <see cref="SessionListViewModelBase" />.</summary>
+    protected SessionListViewModelBase(ILogger logger) : base(logger)
+    {
+    }
 
-    /// <summary>True while the session list is loading from the store.</summary>
-    [ObservableProperty]
-    private bool _isLoading;
+    /// <summary>Visible sessions, projected for the view layer.</summary>
+    public ObservableCollection<SessionListItem> Sessions { get; } = new();
 
     /// <summary>Refresh the session list from the store. Implemented by the platform VM.</summary>
     protected abstract Task RefreshAsync(CancellationToken cancellationToken);
@@ -47,7 +45,7 @@ public abstract partial class SessionListViewModelBase : ViewModelBase
 
 /// <summary>
 ///     One session-list row projected for the UI. Lightweight projection of
-///     <see cref="Session"/> — the platform VM can map from the full Session
+///     <see cref="Session" /> — the platform VM can map from the full Session
 ///     model when refreshing.
 /// </summary>
 /// <param name="Id">Session id.</param>

@@ -1,5 +1,4 @@
 namespace Harbor.Ui.Framework.ViewModels;
-
 /// <summary>
 ///     Status of a single tool invocation. Drives the color of the
 ///     status pill on <c>ToolCallViewModel</c>. Pure enum — no UI-framework
@@ -15,5 +14,5 @@ public enum ToolCallStatus : byte
     Success,
 
     /// <summary>Tool returned an error.</summary>
-    Error,
+    Error
 }
