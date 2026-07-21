@@ -294,6 +294,12 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _lifetime = new ClassicDesktopStyleApplicationLifetime();
+                
+                // Force dark theme BEFORE the app initializes so
+                // OnFrameworkInitializationCompleted applies it deterministically
+                // regardless of the test host's OS theme (often Light/Default).
+                HarborApp.ThemeMode = "dark";
+                
                 AppBuilder.Configure<HarborApp>()
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions
                     {
