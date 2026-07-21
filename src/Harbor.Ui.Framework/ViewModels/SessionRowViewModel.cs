@@ -1,24 +1,23 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
-namespace Harbor.App.Avalonia.ViewModels.Shell;
+namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
-///     Dense projection of one session for the Orca left rail.
+///     Dense projection of one session for a shell rail or sidebar list.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         Wraps the underlying <see cref="SessionItemViewModel" /> fields and
-///         adds the derived display strings the Orca rail template needs:
+///         adds the derived display strings the shell rail template needs:
 ///         <see cref="RelativeTime" />, <see cref="MetaLine" />,
 ///         <see cref="StatusLine" />, plus the resource-key strings
-///         (<see cref="StatusBrush" />, <see cref="RowBackground" />,
-///         <see cref="RowBorder" />) that the XAML resolves to brushes via
-///         <see cref="global::Harbor.App.Avalonia.Views.BrushKeyConverter" />.
+///         (<see cref="StatusBrushKey" />, <see cref="RowBackgroundKey" />,
+///         <see cref="RowBorderKey" />) that the renderer resolves to brushes via
+///         its own resource-lookup mechanism.
 ///     </para>
 ///     <para>
-///         Returning resource-key strings (rather than <c>IBrush</c> directly)
-///         keeps the VM testable without an Avalonia <c>Application</c>
-///         instance, and matches the pattern used by the classic
-///         <see cref="MainViewModel.StatusBrushKey" />.
+///         Returning resource-key strings (rather than platform-specific brush
+///         types directly) keeps the VM testable without a UI framework
+///         <c>Application</c> instance.
 ///     </para>
 /// </remarks>
 public sealed partial class SessionRowViewModel : ObservableObject
@@ -29,25 +28,21 @@ public sealed partial class SessionRowViewModel : ObservableObject
     private bool _isActive;
 
     /// <summary>
-    ///     Total messages in the session. Originally populated from the
-    ///     inner <see cref="SessionItemViewModel.MessageCount" /> at
-    ///     projection time, but also updated in place by
+    ///     Total messages in the session. Updated in place by
     ///     <see cref="LeftRailViewModel.OnItemMessageCountChanged" /> so
-    ///     the count tracks new messages without a full ReprojectAll
-    ///     (Task S2 / Problem 2).
+    ///     the count tracks new messages without a full ReprojectAll.
     /// </summary>
     [ObservableProperty]
     private int _messageCount;
 
     /// <summary>
     ///     Session status: <c>idle</c> | <c>running</c> | <c>error</c> |
-    ///     <c>completed</c>. Drives the status dot color + status-line text.
-    ///     Updated in place by <see cref="LeftRailViewModel.OnItemStatusChanged" />
-    ///     so the dot colour tracks the agent state in real time (Task S2 /
-    ///     Problem 1: "status indicator always green").
+    ///     <c>completed</c>. Updated in place by <see cref="LeftRailViewModel.OnItemStatusChanged" />
+    ///     so the dot colour tracks the agent state in real time.
     /// </summary>
     [ObservableProperty]
     private string _status = "idle";
+
     /// <summary>Construct a dense session row projection.</summary>
     public SessionRowViewModel(
         string id,
@@ -75,7 +70,7 @@ public sealed partial class SessionRowViewModel : ObservableObject
         CostTotal = costTotal;
     }
 
-    /// <summary>Stable session identifier (from <see cref="SessionItemViewModel.Id" />).</summary>
+    /// <summary>Stable session identifier.</summary>
     public string Id { get; init; }
 
     /// <summary>Session title (first user prompt or "New session").</summary>
@@ -145,8 +140,8 @@ public sealed partial class SessionRowViewModel : ObservableObject
     public bool HasStatusLine => !string.IsNullOrEmpty(StatusLine);
 
     /// <summary>
-    ///     Brush resource key for the status dot. Resolved by
-    ///     <see cref="global::Harbor.App.Avalonia.Views.BrushKeyConverter" />.
+    ///     Brush resource key for the status dot. Resolved by the renderer's
+    ///     resource-lookup mechanism (e.g. <c>BrushKeyConverter</c> in Avalonia).
     /// </summary>
     public string StatusBrushKey => Status switch
     {
@@ -158,8 +153,7 @@ public sealed partial class SessionRowViewModel : ObservableObject
 
     /// <summary>
     ///     Brush resource key for the row background. Active row → amber-tinted
-    ///     <c>BgActiveBrush</c>; otherwise transparent (the ListBox provides
-    ///     hover via its own chrome).
+    ///     <c>BgActiveBrush</c>; otherwise transparent.
     /// </summary>
     public string RowBackgroundKey => IsActive ? "BgActiveBrush" : "TransparentBrush";
 
@@ -173,27 +167,20 @@ public sealed partial class SessionRowViewModel : ObservableObject
     ///     Source-generated partial invoked by <c>[ObservableProperty]</c>
     ///     whenever <see cref="Status" /> changes. Forwards the change to
     ///     the derived <see cref="StatusBrushKey" /> / <see cref="StatusLine" />
-    ///     / <see cref="HasStatusLine" /> properties so bindings to the
-    ///     status dot's <c>Fill</c> and the status line's <c>Text</c> /
-    ///     <c>IsVisible</c> refresh live (the derived props are computed
-    ///     getters — without this, the dot colour would never update).
+    ///     / <see cref="HasStatusLine" /> properties so bindings refresh live.
     /// </summary>
-    /// <param name="value">The new Status value.</param>
     partial void OnStatusChanged(string value)
     {
-        this.OnPropertyChanged(nameof(StatusBrushKey));
-        this.OnPropertyChanged(nameof(StatusLine));
-        this.OnPropertyChanged(nameof(HasStatusLine));
+        OnPropertyChanged(nameof(StatusBrushKey));
+        OnPropertyChanged(nameof(StatusLine));
+        OnPropertyChanged(nameof(HasStatusLine));
     }
 
     /// <summary>
     ///     Source-generated partial invoked by <c>[ObservableProperty]</c>
     ///     whenever <see cref="MessageCount" /> changes. Currently a no-op
-    ///     (no derived props depend on it) but kept here so future
-    ///     derived display strings (e.g. "N msgs" in MetaLine) can hook
-    ///     in without re-trawling for the call site.
+    ///     but kept for future derived display strings.
     /// </summary>
-    /// <param name="value">The new MessageCount value.</param>
     partial void OnMessageCountChanged(int value)
     {
         // Intentionally empty — MessageCount is bound directly.

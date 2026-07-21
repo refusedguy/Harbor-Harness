@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Providers;
-using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
@@ -33,7 +33,7 @@ public sealed partial class ProviderConfigViewModel : ObservableObject
     private readonly ICommonConfigStore _commonStore;
     private readonly ILogger<ProviderConfigViewModel> _logger;
     private readonly IProviderRegistry _providers;
-    private readonly ToastService _toasts;
+    private readonly IToastService _toasts;
 
     /// <summary>API key (editable in the UI).</summary>
     [ObservableProperty]
@@ -73,7 +73,7 @@ public sealed partial class ProviderConfigViewModel : ObservableObject
         ICommonConfigStore commonStore,
         IProviderRegistry providers,
         IAuthResolver authResolver,
-        ToastService toasts,
+        IToastService toasts,
         ILogger<ProviderConfigViewModel> logger)
     {
         Id = id;

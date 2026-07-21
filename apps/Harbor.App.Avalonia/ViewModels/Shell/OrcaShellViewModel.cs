@@ -53,7 +53,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
     {
         Main = main;
         _dispatcher = dispatcher;
-        ShellState = new AvaloniaShellState();
+        ShellState = new ShellState();
         Sessions = new LeftRailViewModel(main.Sessions, _dispatcher);
         Chat = main.Chat;
         CodeEditor = main.CodeEditor;
@@ -77,7 +77,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Local shell state (rail width, right panel, mode).</summary>
-    public AvaloniaShellState ShellState { get; }
+    public ShellState ShellState { get; }
 
     /// <summary>Left-rail view-model (dense session rows).</summary>
     public LeftRailViewModel Sessions { get; }
@@ -145,7 +145,7 @@ public sealed partial class OrcaShellViewModel : ObservableObject, IDisposable
 
     private void OnShellStateChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(AvaloniaShellState.ActiveMode), StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(ShellState.ActiveMode), StringComparison.Ordinal))
         {
             // Forward the Chat/Code toggle to the underlying MainViewModel so
             // the ChatView/CodeEditorView IsVisible bindings (which point at

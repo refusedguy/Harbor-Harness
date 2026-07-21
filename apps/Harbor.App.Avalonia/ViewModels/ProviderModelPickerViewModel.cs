@@ -2,7 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Providers;
-using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Sessions;
+using Harbor.Ui.Framework.Services;
 using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
@@ -52,8 +53,8 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
     private readonly ILogger<ProviderModelPickerViewModel> _logger;
 
     private readonly IProviderRegistry _providers;
-    private readonly SessionManager _sessions;
-    private readonly ToastService _toasts;
+    private readonly ISessionManager _sessions;
+    private readonly IToastService _toasts;
 
     [ObservableProperty]
     private string _currentModelLabel = string.Empty;
@@ -73,8 +74,8 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
         IProviderRegistry providers,
         IAuthResolver authResolver,
         ICommonConfigStore configStore,
-        SessionManager sessions,
-        ToastService toasts,
+        ISessionManager sessions,
+        IToastService toasts,
         ILogger<ProviderModelPickerViewModel> logger)
     {
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));

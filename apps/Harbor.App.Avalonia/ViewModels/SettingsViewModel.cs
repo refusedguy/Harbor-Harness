@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Harbor.Core.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
@@ -42,8 +43,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ILogger<SettingsViewModel> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IProviderRegistry _providers;
-    private readonly ThemeService _themeService;
-    private readonly ToastService _toasts;
+    private readonly IThemeService _themeService;
+    private readonly IToastService _toasts;
     private AvaloniaConfig _app;
     private CommonConfig _common;
 
@@ -67,10 +68,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Construct the settings view-model and load the persisted config.</summary>
     public SettingsViewModel(
-        ThemeService theme,
+        IThemeService theme,
         ILogger<SettingsViewModel> logger,
         ILoggerFactory loggerFactory,
-        ToastService toasts,
+        IToastService toasts,
         ICommonConfigStore commonStore,
         IAppConfigStore<AvaloniaConfig> appStore,
         IProviderRegistry providers,

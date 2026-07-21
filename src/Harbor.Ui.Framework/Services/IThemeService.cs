@@ -14,6 +14,12 @@ public interface IThemeService
     /// <summary>Apply a theme by name.</summary>
     public void Apply(string theme);
 
+    /// <summary>Apply dark theme.</summary>
+    public void ApplyDark();
+
+    /// <summary>Apply light theme.</summary>
+    public void ApplyLight();
+
     /// <summary>Toggle between dark and light.</summary>
     public void Toggle();
 }

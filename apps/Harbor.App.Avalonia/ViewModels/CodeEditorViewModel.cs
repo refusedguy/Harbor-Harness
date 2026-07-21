@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
@@ -14,7 +15,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private readonly IDispatcherAdapter _dispatcher;
     private readonly ILogger<CodeEditorViewModel> _logger;
     private readonly AvaloniaFilePicker _picker;
-    private readonly ToastService _toasts;
+    private readonly IToastService _toasts;
 
     [ObservableProperty]
     private EditorTabViewModel? _activeTab;
@@ -23,7 +24,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     public CodeEditorViewModel(
         AvaloniaFilePicker picker,
         ILogger<CodeEditorViewModel> logger,
-        ToastService toasts,
+        IToastService toasts,
         IDispatcherAdapter dispatcher)
     {
         _picker = picker;

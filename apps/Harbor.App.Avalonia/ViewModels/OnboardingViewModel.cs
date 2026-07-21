@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -22,8 +23,8 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
 
     private readonly ICommonConfigStore _configStore;
     private readonly ILogger<OnboardingViewModel> _logger;
-    private readonly ThemeService _theme;
-    private readonly ToastService _toasts;
+    private readonly IThemeService _theme;
+    private readonly IToastService _toasts;
     private readonly CancellationTokenSource _wizardCts = new();
 
     /// <summary>API key currently being entered for the provider on step 3.</summary>
@@ -63,8 +64,8 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
     /// <summary>Construct the onboarding wizard view-model.</summary>
     public OnboardingViewModel(
         ICommonConfigStore configStore,
-        ThemeService theme,
-        ToastService toasts,
+        IThemeService theme,
+        IToastService toasts,
         ILogger<OnboardingViewModel> logger)
     {
         _configStore = configStore;

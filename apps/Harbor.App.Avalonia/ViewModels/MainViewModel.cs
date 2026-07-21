@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
 using Harbor.Ui.Framework.Converters;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -15,15 +16,15 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly AvaloniaDispatcherAdapter _dispatcher;
+    private readonly IDispatcherAdapter _dispatcher;
     private readonly TuiEffectHost _effects;
     private readonly ILogger<MainViewModel> _logger;
 
     private readonly EventHandler<UiState> _onStoreChanged;
     private readonly IServiceProvider _services;
     private readonly UiStore _store;
-    private readonly ThemeService _theme;
-    private readonly ToastService _toasts;
+    private readonly IThemeService _theme;
+    private readonly IToastService _toasts;
 
     [ObservableProperty]
     private int _activeSessionCount = 1;
@@ -99,9 +100,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ILogger<MainViewModel> logger,
         UiStore store,
         TuiEffectHost effects,
-        AvaloniaDispatcherAdapter dispatcher,
-        ThemeService theme,
-        ToastService toasts)
+        IDispatcherAdapter dispatcher,
+        IThemeService theme,
+        IToastService toasts)
     {
         _services = services;
         _logger = logger;
@@ -140,7 +141,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // ViewModel would create duplicate subscriptions (now prevented by the idempotent
         // Bind, but we still centralise the call for clarity).
         _onStoreChanged = (_, state) => OnStoreChanged(state);
-        _dispatcher.OnUiThread += _onStoreChanged;
+        _dispatcher.StateChanged += _onStoreChanged;
 
         // Toasts push on every error.
         _toasts.Show("Harbor ready — press Ctrl+P for the command palette.", ToastKind.Info);
@@ -188,7 +189,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _dispatcher.OnUiThread -= _onStoreChanged;
+        _dispatcher.StateChanged -= _onStoreChanged;
     }
 
     private void OnStoreChanged(UiState state)

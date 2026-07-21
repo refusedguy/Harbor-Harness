@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
-             xmlns:shellVm="clr-namespace:Harbor.App.Avalonia.ViewModels.Shell"
+             xmlns:shellVm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
              xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.Shell.LeftRailView">
 

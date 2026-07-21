@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
 ///     Theme selection + preview view-model. Owns the active theme string
@@ -19,7 +19,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class ThemeSettingsViewModel : ObservableObject
 {
-    private readonly ThemeService _themeService;
+    private readonly IThemeService _themeService;
 
     /// <summary>
     ///     True when the resolved (applied) theme is dark. Updated by
@@ -39,7 +39,7 @@ public sealed partial class ThemeSettingsViewModel : ObservableObject
 
     /// <summary>Construct a <see cref="ThemeSettingsViewModel" />.</summary>
     /// <param name="themeService">The theme service that applies the theme to the running app.</param>
-    public ThemeSettingsViewModel(ThemeService themeService)
+    public ThemeSettingsViewModel(IThemeService themeService)
     {
         _themeService = themeService;
     }

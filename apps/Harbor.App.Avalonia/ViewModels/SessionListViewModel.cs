@@ -3,7 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Sessions;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
@@ -11,11 +12,11 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 public sealed partial class SessionListViewModel : ObservableObject
 {
+    private readonly ISessionManager _sessionManager;
     private readonly IDispatcherAdapter _dispatcher;
     private readonly ILogger<SessionListViewModel> _logger;
-    private readonly SessionManager _sessionManager;
     private readonly ISessionStore _sessionStore;
-    private readonly ToastService _toasts;
+    private readonly IToastService _toasts;
 
     [ObservableProperty]
     private SessionItemViewModel? _activeSession;
@@ -26,9 +27,9 @@ public sealed partial class SessionListViewModel : ObservableObject
     /// <summary>Construct the session list view-model.</summary>
     public SessionListViewModel(
         ISessionStore sessionStore,
-        SessionManager sessionManager,
+        ISessionManager sessionManager,
         ILogger<SessionListViewModel> logger,
-        ToastService toasts,
+        IToastService toasts,
         IDispatcherAdapter dispatcher)
     {
         _sessionStore = sessionStore;

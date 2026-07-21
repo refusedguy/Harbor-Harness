@@ -59,17 +59,24 @@ public sealed class AvaloniaDispatcherAdapter : IDispatcherAdapter
     }
 
     /// <inheritdoc />
-    void IDispatcherAdapter.Bind(object store)
+    public void Bind(UiStore store)
     {
         ArgumentNullException.ThrowIfNull(store);
-        if (store is UiStore uiStore)
+
+        if (ReferenceEquals(BoundStore, store))
         {
-            Bind(uiStore);
+            // Already bound — no-op. Prevents double subscription when multiple
+            // ViewModels call Bind during their construction.
             return;
         }
-        throw new ArgumentException(
-            $"Expected UiStore instance, got {store.GetType().FullName}.",
-            nameof(store));
+
+        if (BoundStore is not null)
+        {
+            BoundStore.Changed -= _onStoreChanged;
+        }
+
+        BoundStore = store;
+        store.Changed += _onStoreChanged;
     }
 
     /// <inheritdoc />
@@ -89,36 +96,17 @@ public sealed class AvaloniaDispatcherAdapter : IDispatcherAdapter
         return Dispatcher.UIThread.InvokeAsync(func).GetAwaiter().GetResult();
     }
 
-    /// <summary>Raised on the UI thread whenever the UiStore transitions.</summary>
+    /// <summary>
+    ///     Raised on the UI thread whenever the UiStore transitions.
+    ///     Implemented explicitly from <see cref="IDispatcherAdapter.StateChanged" />.
+    /// </summary>
     public event EventHandler<UiState>? OnUiThread;
 
-    /// <summary>
-    ///     Subscribe to <see cref="UiStore.Changed" /> and forward every
-    ///     transition to <see cref="OnUiThread" /> via
-    ///     <see cref="Dispatcher.UIThread.Post" />. Idempotent: calling
-    ///     <see cref="Bind" /> with the same store instance is a no-op, and
-    ///     calling it with a different store first unsubscribes from the
-    ///     previous one.
-    /// </summary>
-    /// <param name="store">The UiStore to subscribe to.</param>
-    public void Bind(UiStore store)
+    /// <inheritdoc />
+    event EventHandler<UiState>? IDispatcherAdapter.StateChanged
     {
-        ArgumentNullException.ThrowIfNull(store);
-
-        if (ReferenceEquals(BoundStore, store))
-        {
-            // Already bound — no-op. Prevents double subscription when multiple
-            // ViewModels call Bind during their construction.
-            return;
-        }
-
-        if (BoundStore is not null)
-        {
-            BoundStore.Changed -= _onStoreChanged;
-        }
-
-        BoundStore = store;
-        store.Changed += _onStoreChanged;
+        add => OnUiThread += value;
+        remove => OnUiThread -= value;
     }
 
     /// <summary>

@@ -1,5 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using Harbor.App.Avalonia.Services;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
@@ -22,7 +22,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     </para>
 ///     <para>
 ///         <b>Wiring:</b> MainViewModel subscribes to
-///         <see cref="AvaloniaDispatcherAdapter.OnUiThread" /> and forwards
+///         <see cref="IDispatcherAdapter.StateChanged" /> and forwards
 ///         each <see cref="UiState" /> transition to
 ///         <see cref="ApplyState" />. The status bar view binds directly
 ///         to this VM's properties.
@@ -39,7 +39,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class StatusBarViewModel : ObservableObject
 {
-    private readonly AvaloniaDispatcherAdapter _dispatcher;
+    private readonly IDispatcherAdapter _dispatcher;
     private readonly ILogger<StatusBarViewModel> _logger;
 
     [ObservableProperty]
@@ -73,7 +73,7 @@ public sealed partial class StatusBarViewModel : ObservableObject
     private long _tokensOut;
 
     public StatusBarViewModel(
-        AvaloniaDispatcherAdapter dispatcher,
+        IDispatcherAdapter dispatcher,
         ILogger<StatusBarViewModel> logger)
     {
         _dispatcher = dispatcher;

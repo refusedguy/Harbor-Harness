@@ -2,13 +2,14 @@ using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 using Harbor.App.Avalonia.Configuration;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Switches between the Catppuccin-Mocha (dark) and Catppuccin-Latte (light)
 ///     themes by swapping the merged resource dictionaries on the application.
 /// </summary>
-public sealed class ThemeService
+public sealed class ThemeService : IThemeService
 {
     private readonly ILogger<ThemeService> _logger;
     private Application? _app;
@@ -29,6 +30,9 @@ public sealed class ThemeService
     /// <summary>True when dark theme is active. Defaults to true.</summary>
     public bool IsDark { get; private set; } = true;
 
+    /// <summary>Current theme name.</summary>
+    public string Current => IsDark ? "dark" : "light";
+
     /// <summary>
     ///     Swap the merged resource dictionaries so the dark (Mocha) palette
     ///     is the only one loaded. Also sets <see cref="Application.RequestedThemeVariant" />
@@ -38,22 +42,17 @@ public sealed class ThemeService
     {
         if (_app is null) return;
         var merged = _app.Resources.MergedDictionaries;
-        // Remove any previously-loaded Dark/Light theme dictionaries.
         for (int i = merged.Count - 1; i >= 0; i--)
         {
             if (merged[i] is ResourceInclude inc
                 && inc.Source?.ToString() is string src
                 && (src.Contains("Themes/Dark.axaml", StringComparison.Ordinal)
-                    || src.Contains("Themes/Light.axaml", StringComparison.Ordinal)))
+                    || src.Contains("Themes/Light.axaml", StringComparison.Ordinal)
+                    || src.Contains("Themes/Harbor", StringComparison.Ordinal)))
             {
                 merged.RemoveAt(i);
             }
         }
-        // Load the requested theme. Avalonia 12.1's ResourceInclude
-        // requires a baseUri argument in its constructor (the parameterless
-        // ctor was removed in 12.x). We pass the app's resource root as
-        // baseUri and set Source to the absolute theme path so the loader
-        // resolves the XAML at the correct location.
         string themePath = dark
             ? "avares://Harbor.App.Avalonia/Themes/Dark.axaml"
             : "avares://Harbor.App.Avalonia/Themes/Light.axaml";
@@ -62,6 +61,14 @@ public sealed class ThemeService
             Source = new Uri(themePath, UriKind.Absolute)
         };
         merged.Add(newTheme);
+        string harborPath = dark
+            ? "avares://Harbor.App.Avalonia/Themes/HarborDark.axaml"
+            : "avares://Harbor.App.Avalonia/Themes/HarborLight.axaml";
+        var harborTheme = new ResourceInclude(new Uri("avares://Harbor.App.Avalonia/", UriKind.Absolute))
+        {
+            Source = new Uri(harborPath, UriKind.Absolute)
+        };
+        merged.Add(harborTheme);
         _logger.LogDebug("Theme resource dictionary swapped to {Theme}", dark ? "Dark" : "Light");
     }
 
@@ -76,10 +83,16 @@ public sealed class ThemeService
     ///     </list>
     /// </summary>
     /// <param name="config">The Avalonia configuration whose <see cref="AvaloniaConfig.Theme" /> field is read.</param>
-    public void ApplyFromConfig(AvaloniaConfig config)
+    /// <param name="themeMode">Optional explicit theme mode override from CLI arg (--theme). When set, overrides config.Theme.</param>
+    public void ApplyFromConfig(AvaloniaConfig config, string? themeMode = null)
     {
         ArgumentNullException.ThrowIfNull(config);
-        string theme = (config.Theme ?? "system").ToLowerInvariant();
+        string? effectiveTheme = themeMode ?? config.Theme;
+        if (string.IsNullOrWhiteSpace(effectiveTheme))
+        {
+            effectiveTheme = "dark";
+        }
+        string theme = effectiveTheme.ToLowerInvariant();
         switch (theme)
         {
             case "dark":
@@ -88,9 +101,12 @@ public sealed class ThemeService
             case "light":
                 ApplyLight();
                 break;
+            case "system":
+                ApplyDark();
+                break;
             default:
-                // "system" or unknown — leave the default dark theme active.
-                _logger.LogInformation("Theme 'system' requested — leaving default dark theme active.");
+                ApplyDark();
+                _logger.LogInformation("Unknown theme '{Theme}', falling back to dark.", theme);
                 break;
         }
     }

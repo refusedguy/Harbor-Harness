@@ -79,7 +79,7 @@ internal static class AppHost
     [Exposes(typeof(AvaloniaFilePicker))]
     [Exposes(typeof(SessionManager))]
     [Exposes(typeof(GitService))]
-    [Exposes(typeof(ToastService))]
+    [Exposes(typeof(IToastService))]
     [Exposes(typeof(AvaloniaDispatcherAdapter))]
     [Exposes(typeof(IHarborClient))]
     [Exposes(typeof(IAppConfigStore<AvaloniaConfig>))]

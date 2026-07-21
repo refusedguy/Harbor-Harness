@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Sessions;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
@@ -26,15 +28,15 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </remarks>
 public sealed partial class ChatViewModel : ObservableObject
 {
-    private readonly AvaloniaDispatcherAdapter _dispatcher;
+    private readonly IDispatcherAdapter _dispatcher;
     private readonly TuiEffectHost _effects;
     private readonly ILogger<ChatViewModel> _logger;
 
     private readonly EventHandler<UiState> _onStoreChanged;
     private readonly ChatStreamingPresenter _presenter;
     private readonly ChatMessageRenderer _renderer;
-    private readonly SessionManager? _sessionManager;
-    private readonly ToastService _toasts;
+    private readonly ISessionManager? _sessionManager;
+    private readonly IToastService _toasts;
     private readonly Dictionary<string, ToolCallViewModel> _toolCallById = new();
     private readonly Stopwatch _toolCallStopwatch = new();
 
@@ -74,10 +76,10 @@ public sealed partial class ChatViewModel : ObservableObject
     public ChatViewModel(
         UiStore store,
         TuiEffectHost effects,
-        SessionManager? sessionManager,
-        AvaloniaDispatcherAdapter dispatcher,
+        ISessionManager? sessionManager,
+        IDispatcherAdapter dispatcher,
         ILogger<ChatViewModel> logger,
-        ToastService toasts,
+        IToastService toasts,
         ChatMessageRenderer renderer,
         ChatStreamingPresenter presenter)
     {
@@ -94,7 +96,7 @@ public sealed partial class ChatViewModel : ObservableObject
         // NOTE: _dispatcher.Bind(_store) is intentionally NOT called here — the
         // composition root (AppHost.BuildAsync) binds the dispatcher to the UiStore
         // exactly once, idempotently. Subscribing here would duplicate the binding.
-        _dispatcher.OnUiThread += _onStoreChanged;
+        _dispatcher.StateChanged += _onStoreChanged;
     }
 
     /// <summary>Visible chat lines.</summary>

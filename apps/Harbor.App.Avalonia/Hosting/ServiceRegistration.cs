@@ -142,12 +142,12 @@ internal static class ServiceRegistration
     /// <param name="services">The DI container.</param>
     public static void RegisterAppServices(IServiceCollection services)
     {
-        services.AddSingleton<ThemeService>();
-        services.AddSingleton<DialogService>();
-        services.AddSingleton<AvaloniaFilePicker>();
-        services.AddSingleton<SessionManager>();
+        services.AddSingleton<IThemeService, ThemeService>();
+        services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<IFilePicker, AvaloniaFilePicker>();
+        services.AddSingleton<ISessionManager, SessionManager>();
         services.AddSingleton<GitService>();
-        services.AddSingleton<ToastService>();
+        services.AddSingleton<IToastService, ToastService>();
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
         services.AddSingleton<ChatMessageRenderer>();
@@ -157,15 +157,7 @@ internal static class ServiceRegistration
         services.AddSingleton<SessionGitTracker>();
         services.AddSingleton<IChatViewBinder, AvaloniaChatViewBinder>();
         services.AddSingleton<SessionStatusTracker>();
-        // AvaloniaDispatcherAdapter is the UiStore→UI-thread bridge. Bound to
-        // the UiStore exactly once in AppHost.BuildAsync (after host.Build())
-        // so VMs that resolve the adapter can subscribe to OnUiThread without
-        // racing with a Bind call from another VM's constructor.
-        // Forwarded as IDispatcherAdapter so ViewModels can inject the
-        // framework-side interface (no Avalonia dependency) — keeps the VMs
-        // movable to Harbor.Ui.Framework.
-        services.AddSingleton<AvaloniaDispatcherAdapter>();
-        services.AddSingleton<IDispatcherAdapter>(sp => sp.GetRequiredService<AvaloniaDispatcherAdapter>());
+        services.AddSingleton<IDispatcherAdapter, AvaloniaDispatcherAdapter>();
     }
 
     /// <summary>
