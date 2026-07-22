@@ -100,8 +100,8 @@ public static class StatusMappers
     public static string DurationToText(TimeSpan duration) => duration.TotalMilliseconds < 1
         ? string.Empty
         : duration.TotalSeconds < 1
-            ? $"{duration.TotalMilliseconds:F0}ms"
-            : $"{duration.TotalSeconds:F1}s";
+            ? $"{duration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)}ms"
+            : $"{duration.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture)}s";
 
     /// <summary>
     ///     Format a UTC timestamp as a relative "time ago" string
@@ -129,8 +129,8 @@ public static class StatusMappers
     {
         if (tokens <= 0) return "0";
         if (tokens < 1000) return tokens.ToString();
-        if (tokens < 1_000_000) return $"{tokens / 1000.0:F1}K";
-        return $"{tokens / 1_000_000.0:F1}M";
+        if (tokens < 1_000_000) return $"{(tokens / 1000.0).ToString("F1", CultureInfo.InvariantCulture)}K";
+        return $"{(tokens / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture)}M";
     }
 
     /// <summary>

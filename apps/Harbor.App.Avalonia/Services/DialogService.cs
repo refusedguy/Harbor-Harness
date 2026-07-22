@@ -140,7 +140,7 @@ public sealed class DialogService : IDialogService
         panel.Children.Add(box);
         panel.Children.Add(buttons);
         dialog.Content = panel;
-        string? result = await dialog.ShowDialog<string?>(window, cancellationToken);
+        string? result = await dialog.ShowDialog<string?>(window);
         _logger.LogDebug("Prompt '{Title}' → '{Result}'", title, result);
         return result;
     }

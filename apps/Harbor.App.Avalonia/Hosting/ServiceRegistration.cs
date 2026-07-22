@@ -142,12 +142,17 @@ internal static class ServiceRegistration
     /// <param name="services">The DI container.</param>
     public static void RegisterAppServices(IServiceCollection services)
     {
-        services.AddSingleton<IThemeService, ThemeService>();
-        services.AddSingleton<IDialogService, DialogService>();
-        services.AddSingleton<IFilePicker, AvaloniaFilePicker>();
-        services.AddSingleton<ISessionManager, SessionManager>();
+        services.AddSingleton<ThemeService>();
+        services.AddSingleton<IThemeService>(sp => sp.GetRequiredService<ThemeService>());
+        services.AddSingleton<DialogService>();
+        services.AddSingleton<IDialogService>(sp => sp.GetRequiredService<DialogService>());
+        services.AddSingleton<AvaloniaFilePicker>();
+        services.AddSingleton<IFilePicker>(sp => sp.GetRequiredService<AvaloniaFilePicker>());
+        services.AddSingleton<SessionManager>();
+        services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<SessionManager>());
         services.AddSingleton<GitService>();
-        services.AddSingleton<IToastService, ToastService>();
+        services.AddSingleton<ToastService>();
+        services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
         services.AddSingleton<ChatMessageRenderer>();

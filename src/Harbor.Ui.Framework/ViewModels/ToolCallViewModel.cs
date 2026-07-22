@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 namespace Harbor.Ui.Framework.ViewModels;
 /// <summary>
@@ -72,8 +73,8 @@ public sealed partial class ToolCallViewModel : ObservableObject
     public string DurationText => Duration.TotalMilliseconds < 1
         ? string.Empty
         : Duration.TotalSeconds < 1
-            ? $"{Duration.TotalMilliseconds:F0}ms"
-            : $"{Duration.TotalSeconds:F1}s";
+            ? $"{Duration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)}ms"
+            : $"{Duration.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture)}s";
 
     /// <summary>
     ///     Resource-key string for the status pill background brush.

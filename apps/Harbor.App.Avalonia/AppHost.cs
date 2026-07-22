@@ -136,7 +136,7 @@ internal static class AppHost
         // bound to; SessionManager.RebindChatViewModel rebinds to per-session
         // stores as the user opens/creates/switches sessions.
         var uiStore = host.Services.GetRequiredService<UiStore>();
-        host.Services.GetRequiredService<AvaloniaDispatcherAdapter>().Bind(uiStore);
+        host.Services.GetRequiredService<IDispatcherAdapter>().Bind(uiStore);
 
         // CRITICAL: subscribe to IEventBus and route each agent event to the
         // correct per-session UiStore. Without this routing, a background
@@ -155,8 +155,8 @@ internal static class AppHost
         //     because only one PromptAsync can be in flight at a time.
         //   - Fallback: route to the active session's store (or the DI
         //     singleton store if there's no active session yet).
-        var sessionManager = host.Services.GetRequiredService<SessionManager>();
-        var dispatcherAdapter = host.Services.GetRequiredService<AvaloniaDispatcherAdapter>();
+        var sessionManager = (SessionManager)host.Services.GetRequiredService<ISessionManager>();
+        var dispatcherAdapter = (AvaloniaDispatcherAdapter)host.Services.GetRequiredService<IDispatcherAdapter>();
         string? currentAgentSessionId = null;
         var eventBus = host.Services.GetRequiredService<IEventBus>();
         eventBus.Subscribe(async (evt, ct) =>
@@ -184,7 +184,7 @@ internal static class AppHost
         });
 
         // 9. Initialize the agent with a fresh session so the user can start chatting immediately.
-        await host.Services.GetRequiredService<SessionManager>().EnsureDefaultSessionAsync().ConfigureAwait(false);
+        await host.Services.GetRequiredService<ISessionManager>().EnsureDefaultSessionAsync().ConfigureAwait(false);
 
         return host;
     }
