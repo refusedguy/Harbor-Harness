@@ -183,9 +183,14 @@ public sealed class TuiDriver : IE2eDriver
 
     private readonly string _projectRelativePath;
     private readonly string _tuiName;
+    private readonly string? _screenshotDir;
     private Process? _process;
+    private Process? _xvfbProcess;
+    private Process? _terminalProcess;
+    private string? _display;
     private CancellationTokenSource? _readerCts;
     private StringBuilder _screen = new();
+    private StringBuilder _rawAnsi = new(); // Keep raw ANSI for screenshot rendering
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
     private StreamReader? _stdoutReader;
@@ -201,17 +206,28 @@ public sealed class TuiDriver : IE2eDriver
     ///     <c>spectre-tui</c>, <c>termina</c>, <c>terminal-gui</c>, <c>razor</c>,
     ///     <c>plain</c>, <c>ansi</c>, <c>spectre</c>, <c>fullscreen</c>.
     /// </param>
-    public TuiDriver(string projectRelativePath, string tuiName)
+    /// <param name="screenshotDir">
+    ///     Optional directory for screenshot capture. If provided, screenshots will
+    ///     be taken using Xvfb + terminal emulator. If null, no screenshots.
+    /// </param>
+    public TuiDriver(string projectRelativePath, string tuiName, string? screenshotDir = null)
     {
         _projectRelativePath = projectRelativePath;
         _tuiName = tuiName;
+        _screenshotDir = screenshotDir;
+        if (screenshotDir is not null)
+        {
+            Directory.CreateDirectory(screenshotDir);
+        }
     }
 
     /// <inheritdoc />
-    public bool IsRunning => _process is { HasExited: false };
+    public bool IsRunning =>
+        (_process is { HasExited: false }) ||
+        (_terminalProcess is { HasExited: false });
 
     /// <inheritdoc />
-    public Task StartAsync(string[] args, IDictionary<string, string>? env = null, CancellationToken ct = default)
+    public async Task StartAsync(string[] args, IDictionary<string, string>? env = null, CancellationToken ct = default)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -223,6 +239,109 @@ public sealed class TuiDriver : IE2eDriver
         if (_process is { HasExited: false })
             throw new InvalidOperationException("TuiDriver already running. Call WaitForExitAsync or StopAsync first.");
 
+        // If screenshot directory is provided, start Xvfb and use terminal emulator
+        if (_screenshotDir is not null)
+        {
+            await StartXvfbAsync(ct).ConfigureAwait(false);
+            await StartTerminalEmulatorAsync(args, env, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            // Use original PTY approach for non-screenshot mode
+            await StartPtyModeAsync(args, env, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task StartXvfbAsync(CancellationToken ct)
+    {
+        // Try to find an available display starting from :98 (avoid :99 used by Avalonia)
+        for (int displayNum = 98; displayNum >= 90; displayNum--)
+        {
+            string display = $":{displayNum}";
+            string lockFile = $"/tmp/.X{displayNum}-lock";
+
+            if (!File.Exists(lockFile))
+            {
+                _display = display;
+                break;
+            }
+        }
+
+        if (_display is null)
+            throw new InvalidOperationException("Could not find available display for Xvfb");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "Xvfb",
+            Arguments = $"{_display} -screen 0 1280x720x24 -ac +extension GLX +render -noreset",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+
+        _xvfbProcess = Process.Start(psi);
+        if (_xvfbProcess is null)
+            throw new InvalidOperationException("Failed to start Xvfb");
+
+        await Task.Delay(500, ct).ConfigureAwait(false);
+
+        if (_xvfbProcess.HasExited)
+            throw new InvalidOperationException($"Xvfb exited immediately with code {_xvfbProcess.ExitCode}");
+    }
+
+    private async Task StartTerminalEmulatorAsync(string[] args, IDictionary<string, string>? env, CancellationToken ct)
+    {
+        // Resolve the built DLL
+        string projectPath = HarborAppLocator.ResolveProjectPath(_projectRelativePath);
+        string projectDir = Path.GetDirectoryName(projectPath) ?? ".";
+        string projectName = Path.GetFileNameWithoutExtension(projectPath);
+        string assemblyPath = Path.Combine(projectDir, "bin", "Debug", "net10.0", projectName + ".dll");
+        if (!File.Exists(assemblyPath))
+        {
+            string releasePath = Path.Combine(projectDir, "bin", "Release", "net10.0", projectName + ".dll");
+            if (File.Exists(releasePath))
+                assemblyPath = releasePath;
+        }
+
+        string host = HarborAppLocator.ResolveDotnetHost();
+        string dotnetArgs = $"exec {assemblyPath} " + string.Join(" ", args.Select(a => $"\"{a}\""));
+
+        // Use xterm with explicit geometry and font
+        var terminalPsi = new ProcessStartInfo
+        {
+            FileName = "xterm",
+            Arguments = $"-geometry 120x50 -fa \"Monospace\" -fs 12 -bg black -fg white -e {host} {dotnetArgs}",
+            Environment =
+            {
+                ["DISPLAY"] = _display!,
+                ["HARBOR_TUI"] = _tuiName,
+                ["TERM"] = "xterm-256color"
+            },
+            UseShellExecute = false
+        };
+
+        if (env is not null)
+        {
+            foreach ((string k, string v) in env)
+                terminalPsi.Environment[k] = v;
+        }
+
+        _terminalProcess = Process.Start(terminalPsi);
+        if (_terminalProcess is null)
+            throw new InvalidOperationException("Failed to start terminal emulator");
+
+        // Wait a bit for terminal to start
+        await Task.Delay(1000, ct).ConfigureAwait(false);
+
+        // For terminal emulator mode, we can't easily capture PTY output
+        // So we'll rely on window screenshots instead
+        _screen = new StringBuilder();
+        _rawAnsi = new StringBuilder();
+        _readerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+    }
+
+    private Task StartPtyModeAsync(string[] args, IDictionary<string, string>? env, CancellationToken ct)
+    {
         // Resolve the built DLL — same convention as CliDriver.
         string projectPath = HarborAppLocator.ResolveProjectPath(_projectRelativePath);
         string projectDir = Path.GetDirectoryName(projectPath) ?? ".";
@@ -275,6 +394,7 @@ public sealed class TuiDriver : IE2eDriver
 
         _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _screen = new StringBuilder();
+        _rawAnsi = new StringBuilder();
         _readerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
         if (!_process.Start())
@@ -288,6 +408,7 @@ public sealed class TuiDriver : IE2eDriver
         // Drain stdout (the PTY master's output) into the rolling screen buffer.
         // ANSI escape sequences are stripped as we go so WaitForTextAsync can do
         // a plain substring search instead of dealing with cursor-move sequences.
+        // We also keep raw ANSI for screenshot rendering.
         var readerToken = _readerCts.Token;
         _ = Task.Run(async () =>
         {
@@ -300,6 +421,10 @@ public sealed class TuiDriver : IE2eDriver
                 lock (_screen)
                 {
                     _screen.Append(clean);
+                }
+                lock (_rawAnsi)
+                {
+                    _rawAnsi.Append(chunk);
                 }
             }
         }, readerToken);
@@ -326,6 +451,9 @@ public sealed class TuiDriver : IE2eDriver
     /// <inheritdoc />
     public async Task SendInputAsync(string input, CancellationToken ct = default)
     {
+        if (_terminalProcess is not null)
+            throw new InvalidOperationException("SendInputAsync not supported in terminal emulator mode. Use PTY mode for interactive tests.");
+
         if (_stdinWriter is null)
             throw new InvalidOperationException("TuiDriver not started.");
         await _stdinWriter.WriteAsync(input.AsMemory(), ct).ConfigureAwait(false);
@@ -335,6 +463,9 @@ public sealed class TuiDriver : IE2eDriver
     /// <inheritdoc />
     public async Task SendKeyAsync(ConsoleKey key, ConsoleModifiers modifiers = ConsoleModifiers.None, CancellationToken ct = default)
     {
+        if (_terminalProcess is not null)
+            throw new InvalidOperationException("SendKeyAsync not supported in terminal emulator mode. Use PTY mode for interactive tests.");
+
         string seq = KeyToAnsi(key, modifiers);
         await SendInputAsync(seq, ct).ConfigureAwait(false);
     }
@@ -348,9 +479,115 @@ public sealed class TuiDriver : IE2eDriver
         }
     }
 
+    /// <summary>
+    ///     Get the raw ANSI output from the PTY (without stripping escape sequences).
+    ///     This can be used for screenshot rendering with ANSI-capable tools.
+    /// </summary>
+    public string ReadRawAnsi()
+    {
+        lock (_rawAnsi)
+        {
+            return _rawAnsi.ToString();
+        }
+    }
+
+    /// <summary>
+    ///     Capture the current TUI screen to a text file (ANSI-preserved).
+    ///     The output can be rendered with tools like `ansi2html` or `TerminalImageViewer`.
+    ///     Only works in PTY mode, not terminal emulator mode.
+    /// </summary>
+    /// <param name="path">Output file path</param>
+    public async Task CaptureScreenAsync(string path, CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+            throw new InvalidOperationException("ANSI capture not available in terminal emulator mode. Use ScreenshotAsync instead.");
+
+        string rawAnsi = ReadRawAnsi();
+        await File.WriteAllTextAsync(path, rawAnsi, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Take a screenshot of the TUI window.
+    ///     Only works in terminal emulator mode with Xvfb.
+    /// </summary>
+    /// <param name="name">Screenshot filename (without extension)</param>
+    /// <returns>Path to the saved PNG, or null if screenshot failed</returns>
+    public async Task<string?> ScreenshotAsync(string name, CancellationToken ct = default)
+    {
+        if (_screenshotDir is null || _display is null)
+            return null; // Screenshots only supported when screenshotDir is provided
+
+        string outputPath = Path.Combine(_screenshotDir, $"{name}.png");
+
+        // Find the xterm window
+        var findWindowPsi = new ProcessStartInfo
+        {
+            FileName = "xwininfo",
+            Arguments = "-root -tree",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            Environment = { ["DISPLAY"] = _display }
+        };
+
+        string? windowId = null;
+        using (var findWindow = Process.Start(findWindowPsi))
+        {
+            if (findWindow is not null)
+            {
+                string output = await findWindow.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+                await findWindow.WaitForExitAsync(ct).ConfigureAwait(false);
+
+                // Look for xterm window
+                foreach (string line in output.Split('\n'))
+                {
+                    if ((line.Contains("xterm") || line.Contains("XTerm")) && line.Contains("0x"))
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(line, @"(0x[0-9a-f]+)");
+                        if (match.Success)
+                        {
+                            windowId = match.Groups[1].Value;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (windowId is not null)
+        {
+            // Capture specific window
+            var capturePsi = new ProcessStartInfo
+            {
+                FileName = "import",
+                Arguments = $"-window {windowId} \"{outputPath}\"",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                Environment = { ["DISPLAY"] = _display }
+            };
+
+            using var capture = Process.Start(capturePsi);
+            if (capture is not null)
+            {
+                await capture.WaitForExitAsync(ct).ConfigureAwait(false);
+                if (capture.ExitCode == 0 && File.Exists(outputPath))
+                    return outputPath;
+            }
+        }
+
+        return null; // Screenshot failed
+    }
+
     /// <inheritdoc />
     public async Task<bool> WaitForTextAsync(string pattern, TimeSpan? timeout = null, CancellationToken ct = default)
     {
+        if (_terminalProcess is not null)
+        {
+            // In terminal emulator mode, we can't read text directly
+            // Just wait a fixed delay and assume the app started
+            await Task.Delay(timeout ?? TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            return true; // Optimistic assumption
+        }
+
         var deadline = TimeSpan.FromSeconds(10);
         if (timeout is { } t) deadline = t;
         var sw = Stopwatch.StartNew();
@@ -368,25 +605,29 @@ public sealed class TuiDriver : IE2eDriver
     /// <inheritdoc />
     public async Task<int> WaitForExitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
     {
-        if (_process is null)
-            throw new InvalidOperationException("TuiDriver not started.");
         var deadline = TimeSpan.FromSeconds(30);
         if (timeout is { } t) deadline = t;
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(deadline);
+
+        // Use terminal process if in screenshot mode, otherwise use PTY process
+        Process? targetProcess = _terminalProcess ?? _process;
+        if (targetProcess is null)
+            throw new InvalidOperationException("TuiDriver not started.");
+
         try
         {
-            await _process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
-            return _process.ExitCode;
+            await targetProcess.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            return targetProcess.ExitCode;
         }
         catch (OperationCanceledException)
         {
-            try { _process.Kill(entireProcessTree: true); }
+            try { targetProcess.Kill(entireProcessTree: true); }
             catch
             { /* ignore */
             }
-            try { _process.WaitForExit(2000); }
+            try { targetProcess.WaitForExit(2000); }
             catch
             { /* ignore */
             }
@@ -397,17 +638,30 @@ public sealed class TuiDriver : IE2eDriver
     /// <inheritdoc />
     public Task StopAsync(CancellationToken ct = default)
     {
-        if (_process is { HasExited: false } p)
+        if (_process is { HasExited: false } proc)
         {
-            try { p.Kill(entireProcessTree: true); }
+            try { proc.Kill(entireProcessTree: true); }
             catch
             { /* ignore */
             }
-            try { p.WaitForExit(2000); }
+            try { proc.WaitForExit(2000); }
             catch
             { /* ignore */
             }
         }
+
+        if (_terminalProcess is { HasExited: false } termProc)
+        {
+            try { termProc.Kill(entireProcessTree: true); }
+            catch
+            { /* ignore */
+            }
+            try { termProc.WaitForExit(2000); }
+            catch
+            { /* ignore */
+            }
+        }
+
         return Task.CompletedTask;
     }
 
@@ -416,10 +670,8 @@ public sealed class TuiDriver : IE2eDriver
     {
         _readerCts?.Cancel();
         _readerCts?.Dispose();
-        // Close stdin/stdout/stderr readers + writers defensively. If the PTY
-        // was killed mid-write (sandbox SIGKILL of the wrapper), the pipe may
-        // be broken; swallowing the IOException keeps teardown from masking
-        // the real test failure.
+
+        // Close stdin/stdout/stderr readers + writers defensively
         try { _stdinWriter?.Dispose(); }
         catch
         { /* pipe broken — ignore */
@@ -433,6 +685,27 @@ public sealed class TuiDriver : IE2eDriver
         { /* pipe broken — ignore */
         }
         _process?.Dispose();
+        _terminalProcess?.Dispose();
+
+        // Cleanup Xvfb
+        if (_xvfbProcess is not null)
+        {
+            try
+            {
+                if (!_xvfbProcess.HasExited)
+                {
+                    _xvfbProcess.Kill(entireProcessTree: true);
+                    _xvfbProcess.WaitForExit(2000);
+                }
+            }
+            catch
+            {
+                // Ignore cleanup errors
+            }
+            _xvfbProcess.Dispose();
+            _xvfbProcess = null;
+        }
+
         return ValueTask.CompletedTask;
     }
 

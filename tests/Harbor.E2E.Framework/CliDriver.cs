@@ -211,6 +211,17 @@ public sealed class CliDriver : IE2eDriver
         return _process.ExitCode;
     }
 
+    /// <summary>
+    ///     Capture the current screen output to a text file.
+    ///     Useful for CLI screenshot artifacts.
+    /// </summary>
+    /// <param name="path">Output file path</param>
+    public async Task CaptureScreenAsync(string path, CancellationToken ct = default)
+    {
+        string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
+        await File.WriteAllTextAsync(path, screen, ct).ConfigureAwait(false);
+    }
+
     /// <inheritdoc />
     public Task StopAsync(CancellationToken ct = default)
     {
