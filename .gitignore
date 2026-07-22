@@ -89,6 +89,9 @@ config.local.json
 *.harbor-cache
 runtime/
 
+## Serena tooling
+.serena/
+
 ## Build scripts / temp
 *.tmp
 *.bak
@@ -107,6 +110,9 @@ runtime/
 _site/
 api/
 
+## E2E screenshots / test artifacts
+docs/screenshots/
+tests/**/docs/
 
 ## Build artifacts
 *.binlog
