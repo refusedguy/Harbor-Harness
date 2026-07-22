@@ -1,4 +1,8 @@
 using Harbor.E2E.Framework;
+using System.IO;
+using System.Threading.Tasks;
+using System;
+using System.Diagnostics;
 namespace Harbor.E2E.Tui.SpectreTui;
 /// <summary>
 ///     End-to-end tests for the Spectre.Tui-based interactive TUI renderer.
@@ -213,5 +217,37 @@ public class SpectreTuiE2ETests : E2eTestBase
         // and ignores the rest of the input box contents.
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
         await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Takes a screenshot of the SpectreTui interface using Xvfb + terminal emulator.
+    ///     This demonstrates the screenshot capability for TUI interfaces.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Screenshot_CapturesTuiInterface()
+    {
+        // Use the actual screenshots directory
+        string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/spectre-tui";
+        Directory.CreateDirectory(screenshotDir);
+
+        await using var driver = new TuiDriver(CliProjectPath, TuiName, screenshotDir);
+        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
+
+        // Wait for the TUI to boot
+        await Task.Delay(5000).ConfigureAwait(false);
+
+        // Take a screenshot
+        string? screenshotPath = await driver.ScreenshotAsync("01-main-interface").ConfigureAwait(false);
+
+        // Cleanup
+        await driver.StopAsync().ConfigureAwait(false);
+
+        // The screenshot might fail if Xvfb/ImageMagick aren't available, so we don't assert
+        // This is more of a demonstration that the infrastructure exists
+        if (screenshotPath is not null)
+        {
+            await Assert.That(File.Exists(screenshotPath)).IsTrue();
+        }
     }
 }

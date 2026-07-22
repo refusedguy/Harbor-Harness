@@ -1,4 +1,6 @@
 using Harbor.E2E.Framework;
+using System.IO;
+using System;
 namespace Harbor.E2E.Cli;
 /// <summary>
 ///     End-to-end tests for the Harbor CLI one-shot commands. Each test spawns
@@ -140,5 +142,29 @@ public class CliE2ETests : E2eTestBase
         await Assert.That(output).Contains("Hello from mock LLM!");
         // Verify the mock server actually received a chat-completion request.
         await Assert.That(this.Server.ReceivedRequests.Count).IsGreaterThan(0);
+    }
+
+    /// <summary>
+    ///     Captures CLI output as a screenshot artifact for documentation.
+    ///     This demonstrates the text capture capability for CLI interfaces.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task VersionCommand_CapturesScreenshot()
+    {
+        await using var driver = new CliDriver(CliProjectPath);
+        await driver.StartAsync(["--version"], this.GetEnv()).ConfigureAwait(false);
+        int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+
+        await Assert.That(exit).IsEqualTo(0);
+
+        // Capture the output to docs/screenshots/cli/
+        string screenshotPath = "/mnt/projects/Harbor-Harness/docs/screenshots/cli/01-version.txt";
+        Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
+        await driver.CaptureScreenAsync(screenshotPath).ConfigureAwait(false);
+
+        await Assert.That(File.Exists(screenshotPath)).IsTrue();
+        string captured = await File.ReadAllTextAsync(screenshotPath).ConfigureAwait(false);
+        await Assert.That(captured).Contains("Harbor");
     }
 }
