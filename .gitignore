@@ -120,3 +120,11 @@ tests/**/docs/
 *.wpftmp.csproj
 build/_build/Configuration/
 BenchmarkDotNet.Artifacts/
+.opencode/
+.agent/
+.agents/
+.kilocode/
+.ai-factory.json
+opencode.json
+#.ai-factory/
+/skills-lock.json
