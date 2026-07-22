@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.IO;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views.Shell;
+using Harbor.E2E.Framework;
 using Microsoft.Extensions.DependencyInjection;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
@@ -42,9 +44,7 @@ namespace Harbor.E2E.App.Avalonia;
 public sealed class OrcaShellE2ETests
 {
     private static readonly string ScreenshotDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".harbor",
-        "test-screenshots");
+        E2EHelpers.FindRepoRoot(), "docs", "screenshots");
 
     private static readonly string TempHome = Path.Combine(
         Path.GetTempPath(),

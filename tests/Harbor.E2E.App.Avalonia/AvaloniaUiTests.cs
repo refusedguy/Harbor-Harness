@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Text;
 using System.Text.Json;
 using Avalonia;
@@ -8,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
+using Harbor.E2E.Framework;
 using Microsoft.Extensions.DependencyInjection;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
@@ -47,15 +49,12 @@ namespace Harbor.E2E.App.Avalonia;
 public sealed class AvaloniaUiTests
 {
     /// <summary>
-    ///     Directory where PNGs are written. Defaults to
-    ///     <c>~/.harbor/test-screenshots/</c> so it survives across runs and is
-    ///     easy to find from a shell. Cleared at the start of every test run
-    ///     so stale screenshots from a previous run don't confuse review.
+    ///     Directory where PNGs are written. Points to the repo's
+    ///     <c>docs/screenshots/</c> so screenshots persist after the test run
+    ///     and are available for review / CI artifact upload.
     /// </summary>
     private static readonly string ScreenshotDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".harbor",
-        "test-screenshots");
+        E2EHelpers.FindRepoRoot(), "docs", "screenshots");
 
     /// <summary>Per-class temp HOME so each test run starts with an empty <c>~/.harbor</c>.</summary>
     private static readonly string TempHome = Path.Combine(
@@ -85,15 +84,22 @@ public sealed class AvaloniaUiTests
     [Before(Test)]
     public async Task SetupTestAsync()
     {
-        // Wipe + recreate the screenshot dir on the very first test so reviewers
-        // only see the latest run. (CI uploads the dir as an artifact on every run.)
+        // Wipe only our own screenshot files so stale frames from a previous
+        // run don't confuse review, but leave any manually-added or non-test
+        // files intact (docs/screenshots/ may contain baseline/reference images).
         if (_driver is null)
         {
             if (Directory.Exists(ScreenshotDir))
             {
-                Directory.Delete(ScreenshotDir, true);
+                foreach (string stale in Directory.GetFiles(ScreenshotDir, "??-*.png"))
+                {
+                    File.Delete(stale);
+                }
             }
-            Directory.CreateDirectory(ScreenshotDir);
+            else
+            {
+                Directory.CreateDirectory(ScreenshotDir);
+            }
 
             // Fresh HOME with ~/.harbor/config.json marking onboarding done.
             if (Directory.Exists(TempHome))
@@ -409,6 +415,10 @@ public sealed class AvaloniaUiTests
                 .GetAwaiter().GetResult();
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ════════════════════════════════════════════════════════════════════
 
     /// <summary>Walks the visual tree appending TextBlock/TextBox/ContentControl text.</summary>
     private static void AppendText(Visual visual, StringBuilder sb)
