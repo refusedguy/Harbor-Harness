@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Core.Events;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -263,7 +264,16 @@ internal static class HostBuilder
         builder.Services.AddSingleton<AuthStore>();
         builder.Services.AddSingleton<OnboardingWizard>();
         builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
-        builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(sp.GetRequiredService<ILogger<InMemoryEventBus>>()));
+        builder.Services.AddSingleton<IEventBusMiddleware>(sp =>
+            new SamplingMiddleware(sp.GetRequiredService<ILogger<SamplingMiddleware>>()));
+        builder.Services.AddSingleton<IEventBusMiddleware>(sp =>
+            new TypeFilterMiddleware(sp.GetRequiredService<ILogger<TypeFilterMiddleware>>()));
+        builder.Services.AddSingleton<IEventBus>(sp =>
+        {
+            var logger = sp.GetRequiredService<ILogger<InMemoryEventBus>>();
+            var middlewares = sp.GetServices<IEventBusMiddleware>().ToArray();
+            return new InMemoryEventBus(logger, maxScrollback: 1000, middlewares);
+        });
         builder.Services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
