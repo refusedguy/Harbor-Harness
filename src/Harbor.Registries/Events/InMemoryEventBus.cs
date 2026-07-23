@@ -52,6 +52,12 @@ public sealed class InMemoryEventBus : IEventBus
     private readonly int _maxScrollback;
 
     /// <summary>
+    ///     Middleware pipeline. Evaluated in registration order before scrollback
+    ///     and fan-out. Empty (zero-alloc) when no middleware is registered.
+    /// </summary>
+    private readonly IReadOnlyList<IEventBusMiddleware> _middlewares = Array.Empty<IEventBusMiddleware>();
+
+    /// <summary>
     ///     Scrollback ring buffer. Holds the most recent
     ///     <see cref="_maxScrollback" /> events in publication order. Updated
     ///     via
@@ -86,10 +92,48 @@ public sealed class InMemoryEventBus : IEventBus
         _maxScrollback = maxScrollback > 0 ? maxScrollback : 1;
     }
 
+    /// <summary>
+    ///     Construct an <see cref="InMemoryEventBus" /> with a logger, bounded
+    ///     scrollback buffer, and a middleware pipeline.
+    /// </summary>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers.</param>
+    /// <param name="middlewares">Middleware pipeline evaluated before scrollback + fan-out.</param>
+    public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback, IEnumerable<IEventBusMiddleware> middlewares)
+    {
+        _logger = logger;
+        _maxScrollback = maxScrollback > 0 ? maxScrollback : 1;
+        _middlewares = middlewares?.ToArray() ?? Array.Empty<IEventBusMiddleware>();
+    }
+
     /// <inheritdoc />
     public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
         _logger.LogDebug("Publishing event: {EventType}", @event.GetType().Name);
+
+        // ── Middleware pipeline (BEFORE scrollback + fan-out) ──
+        // Dropped events never reach scrollback or subscribers.
+        if (_middlewares.Count > 0)
+        {
+            foreach (var mw in _middlewares)
+            {
+                try
+                {
+                    bool continuePipeline = await mw.ProcessAsync(ref @event, ct).ConfigureAwait(false);
+                    if (!continuePipeline)
+                    {
+                        _logger.LogTrace("Event {EventType} dropped by middleware {Middleware}",
+                            @event.GetType().Name, mw.Name);
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Middleware {Middleware} threw — event dropped", mw.Name);
+                    return;
+                }
+            }
+        }
 
         // 1. Append to scrollback ring buffer (lock-free CAS).
         AppendScrollback(@event);
