@@ -353,7 +353,131 @@ the maui-tizen workload. Both are skipped at the slnx level on Linux.
 
 ---
 
-## 7. Conventions
+## 8. State Coverage Matrix
+
+The renderer-agnostic `UiState` snapshot (defined in
+`src/Harbor.Ui.Framework/State/UiState.cs`) is the single source of truth that
+every interactive renderer projects from. It contains **58 distinct renderable
+states** across these dimensions:
+
+- **Chat transcript** (7 `ChatRole` values × line presence)
+- **Streaming** (IsStreaming, Active.TextBuffer, Active.ThinkBuffer)
+- **Agent lifecycle** (IsAgentRunning, WasRunning, Status: idle/running/compacting/error)
+- **Input model** (Text, History, HistoryIndex, slash autocomplete)
+- **Focus** (FocusMode: Input/Chat/Panel, FocusedPanelId)
+- **Scroll** (ScrollOffset, ViewportLines, TotalLines, ScrollPercent)
+- **Panels** (TuiPanelState: Hidden/Visible/Focused/Pinned, PanelSizes, RegisteredPanelIds)
+- **Session chrome** (Model, Provider, AgentName, Cost)
+
+The matrix below tracks which states are covered by at least one E2E test
+across the 5 test projects. A state is "covered" when a test asserts on the
+rendered output (or in-memory property) for that state.
+
+### 8.1 Matrix
+
+| # | State | SpectreTui | Termina | TerminalGui | RazorConsole | Avalonia | ComponentTests |
+|---|---|---|---|---|---|---|---|
+| 1 | Boot (initial render, provider/model in header) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 2 | Help panel open (`?` toggles) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 3 | Logs panel open (F12 toggles) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 4 | Input typed (user typing in input box) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 5 | Streaming (IsStreaming=true, live text) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 6 | Streaming buffer (Active.TextBuffer non-empty) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 7 | Thinking (Active.ThinkBuffer non-empty) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 8 | Tool call (tool call card visible) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 9 | Tool result (tool result in transcript) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 10 | Error state (error message in transcript) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 11 | Compaction (Status=compacting) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 12 | Agent running (Status=running, IsAgentRunning=true) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 13 | Agent idle (Status=idle) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 14 | WasRunning rising edge (IsAgentRunning && !WasRunning) | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| 15 | ShouldQuit (quit requested) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 16 | User message in transcript | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| 17 | Assistant message in transcript | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| 18 | System message in transcript | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 19 | Thinking message in transcript | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 20 | Tool call message in transcript | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 21 | Tool result message in transcript | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 22 | Error message in transcript | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| 23 | Input text empty | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 24 | Input text non-empty | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 25 | Input text with slash (slash command) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 26 | Input slash autocomplete (Tab completes /help) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 27 | Input history navigation (Alt+Up/Down) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 28 | Input history empty (no history) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 29 | Input history non-empty (HistoryIndex > 0) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 30 | Focus=Input (input box owns focus) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 31 | Focus=Chat (chat owns focus) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 32 | Focus=Panel (panel owns focus) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 33 | FocusedPanelId set (specific panel focused) | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| 34 | Panel Hidden (not rendered) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 35 | Panel Visible (rendered, not focused) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 36 | Panel Focused (rendered + owns focus) | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| 37 | Panel Pinned (persistent visibility) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 38 | Panel toggle (F12 / `?` toggles visibility) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 39 | Panel focus (Alt+1 focuses panel) | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| 40 | Panel cycle (Ctrl+Tab cycles focus) | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| 41 | Scroll up (PageUp scrolls history) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 42 | Scroll offset > 0 (history scrolled) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 43 | Scroll percent > 0 (not at bottom) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 44 | ViewportLines > 0 (rows visible) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 45 | TotalLines > 0 (content exists) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 46 | Cost display (tokens/cost in status bar) | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 47 | Model display (model in header/status) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 48 | Provider display (provider in header/status) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 49 | Agent name display (agent in header) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 50 | Active message empty (no active message) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 51 | Active message with text (TextBuffer non-empty) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 52 | Active message with thinking (ThinkBuffer non-empty) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 53 | Active message with both (text + thinking) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 54 | Status=error (error status in status bar) | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| 55 | Status=compacting (compaction in progress) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 56 | Status=running (agent running in status) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| 57 | RegisteredPanelIds non-empty (panels registered) | ✅ | ✅ | ✅ | ✅ | — | — |
+| 58 | PanelSizes set (custom panel size) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+### 8.2 Coverage summary
+
+| Project | States covered | Coverage |
+|---|---|---|
+| SpectreTui | 32 | 55% |
+| Termina | 32 | 55% |
+| TerminalGui | 32 | 55% |
+| RazorConsole | 32 | 55% |
+| Avalonia | 30 | 52% |
+| ComponentTests | 10 | 17% |
+| **Total unique states covered** | **40** | **69%** |
+
+### 8.3 Gaps
+
+The 4 TUI projects now share differentiated state tests (no longer copy-paste).
+Critical gaps that have been **addressed** by Tasks 3.1, 3.2, 4.1, 4.2:
+
+- **Streaming** (states 5-7): ✅ Covered by `Streaming_ShowsResponse`, `Chat_ShowStreamingBuffer`, `Chat_ShowThinkingBuffer`.
+- **Agent lifecycle** (states 12, 56): ✅ Covered by `AgentRunning_ShowsRunningBanner`, `Chat_ShowCompactionStatus`.
+- **Panel interactions** (states 32-40): ✅ Covered by `Alt1_TogglesPanel`, `CtrlTab_CyclesPanelFocus`, `Panel_ToggleVisibility`, `Panel_FocusPanel`.
+- **Scroll** (states 41-43): ✅ Covered by `ScrollUp_ScrollsHistory`, `Chat_ScrollHistory`.
+- **Input history** (states 27, 29): ✅ Covered by `AltUp_NavigatesInputHistory`, `Input_HistoryNavigation`.
+- **Autocomplete** (state 26): ✅ Covered by `Tab_AutocompleteSlashCommand`, `Input_AutocompleteSlashCommand`.
+- **Error state** (states 10, 54): ✅ Covered by `ErrorState_ShowsError`, `Chat_ShowErrorState`.
+- **Compaction** (states 11, 55): ✅ Covered by `Compaction_ShowsCompactionStatus`, `Chat_ShowCompactionStatus`.
+- **Tool call** (state 8): ✅ Covered by `ToolCall_RendersToolCard`, `Chat_ShowToolCallCard`.
+
+**Remaining gaps:**
+
+- **Tool result in transcript** (state 9, 21): No test verifies tool result rendering in the transcript.
+- **System/Thinking/Error message types in transcript** (states 18-19, 22): No test for system/thinking/error message roles.
+- **Panel pinned** (state 37): No test for persistent panel visibility.
+- **Active message with both text + thinking** (state 53): No test for simultaneous streaming + thinking.
+- **PanelSizes set** (state 58): No test for custom panel size overrides.
+- **Focus=Chat** (state 31): No explicit test for chat owning focus (vs input).
+- **Agent name display** (state 49): Partially covered — shows in header but no dedicated assertion.
+
+These remaining gaps are tracked for future work.
+
+---
+
+## 9. Conventions
 
 - **`sealed` classes** for all drivers and the mock server.
 - **`ConfigureAwait(false)`** on every await in the framework + tests.

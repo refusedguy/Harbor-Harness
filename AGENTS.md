@@ -10,6 +10,8 @@
 > - Plugin compilation: 24/24 tests pass (R30 fix for `Harbor.Abstractions.Models.*` Roslyn resolution)
 >
 > **Связанные документы:**
+> - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
+> - [.ai-factory/rules/base.md](./.ai-factory/rules/base.md) — базовые правила и конвенции
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
 > - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
