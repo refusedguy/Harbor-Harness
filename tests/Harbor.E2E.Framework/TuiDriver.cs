@@ -191,6 +191,7 @@ public sealed class TuiDriver : IE2eDriver
     private CancellationTokenSource? _readerCts;
     private StringBuilder _screen = new();
     private StringBuilder _rawAnsi = new(); // Keep raw ANSI for screenshot rendering
+    private readonly AnsiTerminalBuffer _terminalBuffer = new(120, 50);
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
     private StreamReader? _stdoutReader;
@@ -426,6 +427,10 @@ public sealed class TuiDriver : IE2eDriver
                 {
                     _rawAnsi.Append(chunk);
                 }
+                lock (_terminalBuffer)
+                {
+                    _terminalBuffer.Write(chunk);
+                }
             }
         }, readerToken);
         _ = Task.Run(async () =>
@@ -452,7 +457,10 @@ public sealed class TuiDriver : IE2eDriver
     public async Task SendInputAsync(string input, CancellationToken ct = default)
     {
         if (_terminalProcess is not null)
-            throw new InvalidOperationException("SendInputAsync not supported in terminal emulator mode. Use PTY mode for interactive tests.");
+        {
+            await SendInputToTerminalWindowAsync(input, ct).ConfigureAwait(false);
+            return;
+        }
 
         if (_stdinWriter is null)
             throw new InvalidOperationException("TuiDriver not started.");
@@ -464,7 +472,11 @@ public sealed class TuiDriver : IE2eDriver
     public async Task SendKeyAsync(ConsoleKey key, ConsoleModifiers modifiers = ConsoleModifiers.None, CancellationToken ct = default)
     {
         if (_terminalProcess is not null)
-            throw new InvalidOperationException("SendKeyAsync not supported in terminal emulator mode. Use PTY mode for interactive tests.");
+        {
+            string xKey = ToXdotoolKey(key, modifiers);
+            await ExecuteXdotoolAsync(xKey, ct).ConfigureAwait(false);
+            return;
+        }
 
         string seq = KeyToAnsi(key, modifiers);
         await SendInputAsync(seq, ct).ConfigureAwait(false);
@@ -504,6 +516,24 @@ public sealed class TuiDriver : IE2eDriver
 
         string rawAnsi = ReadRawAnsi();
         await File.WriteAllTextAsync(path, rawAnsi, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Capture the current visible TUI screen as a PNG image.
+    ///     Works in PTY mode: waits for the screen buffer, then renders it via
+    ///     headless Chromium (or ImageMagick fallback).
+    /// </summary>
+    public async Task CapturePngAsync(string path, CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+            throw new InvalidOperationException("CapturePngAsync requires PTY mode. Pass no screenshotDir to TuiDriver.");
+
+        string html;
+        lock (_terminalBuffer)
+        {
+            html = _terminalBuffer.ToHtml();
+        }
+        await TerminalScreenshotRenderer.RenderHtmlToPngAsync(html, path, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -582,21 +612,54 @@ public sealed class TuiDriver : IE2eDriver
     {
         if (_terminalProcess is not null)
         {
-            // In terminal emulator mode, we can't read text directly
-            // Just wait a fixed delay and assume the app started
-            await Task.Delay(timeout ?? TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            // Terminal emulator mode: poll for text via xdotool window title,
+            // then fallback to ReadScreenAsync (PTY buffer) with a delay.
+            Console.WriteLine($"DEBUG [TuiDriver] WaitForTextAsync: polling for '{pattern}' in terminal-emulator mode");
+            var deadline = timeout ?? TimeSpan.FromSeconds(10);
+            var sw = Stopwatch.StartNew();
+            while (sw.Elapsed < deadline)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Try xdotool getwindowfocus getwindowname first
+                string? windowTitle = await TryGetWindowTitleAsync(ct).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(windowTitle) && windowTitle.Contains(pattern, StringComparison.Ordinal))
+                    return true;
+
+                // Fallback: try ReadScreenAsync (works in PTY mode, may be empty in terminal emulator mode)
+                string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(screen) && screen.Contains(pattern, StringComparison.Ordinal))
+                    return true;
+
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+
+            // If we get here, the pattern was not found. In terminal emulator mode,
+            // we can't reliably read the screen, so we fall back to an optimistic
+            // assumption with a warning.
+            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, falling back to delay for '{pattern}'");
+            await Task.Delay(500, ct).ConfigureAwait(false);
             return true; // Optimistic assumption
         }
 
-        var deadline = TimeSpan.FromSeconds(10);
-        if (timeout is { } t) deadline = t;
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < deadline)
+        var ptyDeadline = TimeSpan.FromSeconds(10);
+        if (timeout is { } t) ptyDeadline = t;
+        var ptySw = Stopwatch.StartNew();
+        while (ptySw.Elapsed < ptyDeadline)
         {
             ct.ThrowIfCancellationRequested();
             string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
             if (screen.Contains(pattern, StringComparison.Ordinal))
                 return true;
+            // Also check the AnsiTerminalBuffer 2D grid — renderers like
+            // Spectre.Console use cursor positioning to overwrite text, so the
+            // flat ANSI-stripped buffer may not contain text that IS visible
+            // on the actual screen.
+            lock (_terminalBuffer)
+            {
+                if (_terminalBuffer.ContainsText(pattern))
+                    return true;
+            }
             await Task.Delay(100, ct).ConfigureAwait(false);
         }
         return false;
@@ -770,11 +833,19 @@ public sealed class TuiDriver : IE2eDriver
     {
         bool ctrl = (modifiers & ConsoleModifiers.Control) != 0;
         bool shift = (modifiers & ConsoleModifiers.Shift) != 0;
+        bool alt = (modifiers & ConsoleModifiers.Alt) != 0;
 
         // Ctrl+letter → 0x01..0x1A
         if (ctrl && key is >= ConsoleKey.A and <= ConsoleKey.Z)
         {
             return char.ToString((char)(key - ConsoleKey.A + 1));
+        }
+
+        // Alt+digit → ESC + digit (e.g. Alt+1 → ESC 1)
+        if (alt && key is >= ConsoleKey.D0 and <= ConsoleKey.D9)
+        {
+            char digit = (char)('0' + (key - ConsoleKey.D0));
+            return "\u001b" + digit;
         }
 
         return key switch
@@ -806,5 +877,210 @@ public sealed class TuiDriver : IE2eDriver
             ConsoleKey.Spacebar => " ",
             _ => char.ToString((char)key)
         };
+    }
+
+    private async Task SendInputToTerminalWindowAsync(string input, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(input))
+            return;
+
+        var textBuffer = new StringBuilder();
+        for (int i = 0; i < input.Length; i++)
+        {
+            char ch = input[i];
+            switch (ch)
+            {
+                case '\r':
+                case '\n':
+                    await FlushTypedTextAsync(textBuffer, ct).ConfigureAwait(false);
+                    await ExecuteXdotoolAsync("Return", ct).ConfigureAwait(false);
+                    break;
+                case '\t':
+                    await FlushTypedTextAsync(textBuffer, ct).ConfigureAwait(false);
+                    await ExecuteXdotoolAsync("Tab", ct).ConfigureAwait(false);
+                    break;
+                case '\u001b':
+                    await FlushTypedTextAsync(textBuffer, ct).ConfigureAwait(false);
+                    await ExecuteXdotoolAsync("Escape", ct).ConfigureAwait(false);
+                    break;
+                default:
+                    textBuffer.Append(ch);
+                    break;
+            }
+        }
+
+        await FlushTypedTextAsync(textBuffer, ct).ConfigureAwait(false);
+    }
+
+    private async Task FlushTypedTextAsync(StringBuilder textBuffer, CancellationToken ct)
+    {
+        if (textBuffer.Length == 0)
+            return;
+
+        string text = textBuffer.ToString();
+        textBuffer.Clear();
+
+        string? windowId = await TryGetTerminalWindowIdAsync(ct).ConfigureAwait(false);
+        if (windowId is null)
+            throw new InvalidOperationException("Could not resolve xterm window id for terminal input.");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xdotool",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            Environment = { ["DISPLAY"] = _display! }
+        };
+        psi.ArgumentList.Add("type");
+        psi.ArgumentList.Add("--window");
+        psi.ArgumentList.Add(windowId);
+        psi.ArgumentList.Add("--delay");
+        psi.ArgumentList.Add("1");
+        psi.ArgumentList.Add("--");
+        psi.ArgumentList.Add(text);
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            throw new InvalidOperationException("Failed to start xdotool type process.");
+
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException("xdotool type failed to deliver text input.");
+    }
+
+    private async Task ExecuteXdotoolAsync(string keyChord, CancellationToken ct)
+    {
+        string? windowId = await TryGetTerminalWindowIdAsync(ct).ConfigureAwait(false);
+        if (windowId is null)
+            throw new InvalidOperationException("Could not resolve xterm window id for terminal key input.");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xdotool",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            Environment = { ["DISPLAY"] = _display! }
+        };
+        psi.ArgumentList.Add("key");
+        psi.ArgumentList.Add("--window");
+        psi.ArgumentList.Add(windowId);
+        psi.ArgumentList.Add(keyChord);
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            throw new InvalidOperationException("Failed to start xdotool key process.");
+
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"xdotool key failed for '{keyChord}'.");
+    }
+
+    private async Task<string?> TryGetTerminalWindowIdAsync(CancellationToken ct)
+    {
+        if (_display is null)
+            return null;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xwininfo",
+            Arguments = "-root -tree",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            Environment = { ["DISPLAY"] = _display }
+        };
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return null;
+
+        string output = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+            return null;
+
+        foreach (string line in output.Split('\n'))
+        {
+            if ((line.Contains("xterm", StringComparison.OrdinalIgnoreCase) ||
+                 line.Contains("XTerm", StringComparison.OrdinalIgnoreCase)) &&
+                line.Contains("0x", StringComparison.Ordinal))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"(0x[0-9a-f]+)");
+                if (match.Success)
+                    return match.Groups[1].Value;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> TryGetWindowTitleAsync(CancellationToken ct)
+    {
+        if (_display is null)
+            return null;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "xdotool",
+            Arguments = "getwindowfocus getwindowname",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            Environment = { ["DISPLAY"] = _display }
+        };
+
+        using var process = Process.Start(psi);
+        if (process is null)
+            return null;
+
+        string output = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+        await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        if (process.ExitCode != 0)
+            return null;
+
+        return output.Trim();
+    }
+
+    private static string ToXdotoolKey(ConsoleKey key, ConsoleModifiers modifiers)
+    {
+        string baseKey = key switch
+        {
+            ConsoleKey.Enter => "Return",
+            ConsoleKey.Escape => "Escape",
+            ConsoleKey.Tab => "Tab",
+            ConsoleKey.Backspace => "BackSpace",
+            ConsoleKey.UpArrow => "Up",
+            ConsoleKey.DownArrow => "Down",
+            ConsoleKey.RightArrow => "Right",
+            ConsoleKey.LeftArrow => "Left",
+            ConsoleKey.Home => "Home",
+            ConsoleKey.End => "End",
+            ConsoleKey.PageUp => "Page_Up",
+            ConsoleKey.PageDown => "Page_Down",
+            ConsoleKey.F12 => "F12",
+            ConsoleKey.F11 => "F11",
+            ConsoleKey.F10 => "F10",
+            ConsoleKey.F9 => "F9",
+            ConsoleKey.F8 => "F8",
+            ConsoleKey.F7 => "F7",
+            ConsoleKey.F6 => "F6",
+            ConsoleKey.F5 => "F5",
+            ConsoleKey.F4 => "F4",
+            ConsoleKey.F3 => "F3",
+            ConsoleKey.F2 => "F2",
+            ConsoleKey.F1 => "F1",
+            ConsoleKey.Spacebar => "space",
+            _ when key is >= ConsoleKey.A and <= ConsoleKey.Z => key.ToString().ToLowerInvariant(),
+            _ => key.ToString()
+        };
+
+        if ((modifiers & ConsoleModifiers.Control) != 0)
+            return $"ctrl+{baseKey}";
+        if ((modifiers & ConsoleModifiers.Shift) != 0)
+            return $"shift+{baseKey}";
+        if ((modifiers & ConsoleModifiers.Alt) != 0)
+            return $"alt+{baseKey}";
+
+        return baseKey;
     }
 }

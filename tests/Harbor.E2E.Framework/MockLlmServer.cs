@@ -150,7 +150,22 @@ public sealed class MockLlmServer : IAsyncDisposable
     /// </summary>
     public void SetResponse(string model, string responseText)
     {
-        var canned = new CannedResponse(responseText, false, null, null);
+        var canned = new CannedResponse(responseText, false, null, null, false, null);
+        lock (_responsesLock)
+        {
+            _responses[model] = canned;
+        }
+    }
+
+    /// <summary>
+    ///     Configure an error response for a given model id. Subsequent
+    ///     <c>chat/completions</c> requests for that model will receive an
+    ///     HTTP 500 with <paramref name="errorMessage" /> in the body, simulating
+    ///     a provider-side failure (rate limit, auth, server error).
+    /// </summary>
+    public void SetErrorResponse(string model, string errorMessage)
+    {
+        var canned = new CannedResponse(null, false, null, null, true, errorMessage);
         lock (_responsesLock)
         {
             _responses[model] = canned;
@@ -165,7 +180,7 @@ public sealed class MockLlmServer : IAsyncDisposable
     public void SetToolCallResponse(string model, string toolName, object args)
     {
         string argsJson = JsonSerializer.Serialize(args);
-        var canned = new CannedResponse(null, true, toolName, argsJson);
+        var canned = new CannedResponse(null, true, toolName, argsJson, false, null);
         lock (_responsesLock)
         {
             _responses[model] = canned;
@@ -294,7 +309,18 @@ public sealed class MockLlmServer : IAsyncDisposable
             canned = model is not null && _responses.TryGetValue(model, out var r)
                 ? r
                 : new CannedResponse("(no mock response configured for model '" + model + "')",
-                    false, null, null);
+                    false, null, null, false, null);
+        }
+
+        // Error response: return HTTP 500 with the error message in the body.
+        if (canned.IsError)
+        {
+            resp.StatusCode = 500;
+            byte[] errBody = Encoding.UTF8.GetBytes(canned.ErrorMessage ?? "mock error");
+            resp.ContentType = "application/json";
+            resp.ContentLength64 = errBody.Length;
+            await resp.OutputStream.WriteAsync(errBody, ct).ConfigureAwait(false);
+            return;
         }
 
         resp.ContentType = "text/event-stream";
@@ -430,7 +456,9 @@ public sealed class MockLlmServer : IAsyncDisposable
         string? Text,
         bool IsToolCall,
         string? ToolName,
-        string? ToolArgs);
+        string? ToolArgs,
+        bool IsError,
+        string? ErrorMessage);
 }
 
 /// <summary>

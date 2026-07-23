@@ -155,4 +155,27 @@ public abstract class E2eTestBase
         Console.WriteLine("[SKIP] " + TuiDriver.NoPtySkipReason);
         return false;
     }
+
+    /// <summary>
+    ///     Assert screenshot PNG artifacts exist and are not byte-identical.
+    /// </summary>
+    protected static async Task AssertPngArtifactsExistAndDifferAsync(params string[] paths)
+    {
+        var hashes = new byte[paths.Length][];
+        for (int i = 0; i < paths.Length; i++)
+        {
+            await Assert.That(File.Exists(paths[i])).IsTrue();
+            hashes[i] = await File.ReadAllBytesAsync(paths[i]).ConfigureAwait(false);
+            await Assert.That(hashes[i].Length).IsGreaterThan(0);
+        }
+
+        for (int i = 0; i < hashes.Length; i++)
+        {
+            for (int j = i + 1; j < hashes.Length; j++)
+            {
+                bool same = hashes[i].AsSpan().SequenceEqual(hashes[j]);
+                await Assert.That(same).IsFalse();
+            }
+        }
+    }
 }
