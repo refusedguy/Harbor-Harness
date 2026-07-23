@@ -78,6 +78,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="ComponentTests.disabled\**\*"/>
+    <!-- ComponentTests are now compiled by default (renamed from ComponentTests.disabled/).
+         The SDK auto-includes all .cs files, so no explicit Compile Include is needed. -->
   </ItemGroup>
 </Project>

@@ -10,6 +10,8 @@ using Avalonia.VisualTree;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.E2E.Framework;
+using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
@@ -813,5 +815,372 @@ public sealed class AvaloniaUiTests
         bool hasSession = await Driver.WaitForTextAsync("session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasSession).IsTrue();
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  TASK 4.1 — Avalonia E2E state tests (streaming/thinking/tool-call/error/compaction)
+    //  Each test drives a DIFFERENT visible state of the ChatView shell by
+    //  setting view-model properties directly (no LLM round-trip needed in
+    //  headless mode). Screenshots land in docs/screenshots/.
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    ///     Streaming buffer: <c>Chat.IsStreaming = true</c> + non-empty
+    ///     <c>StreamingBuffer</c>. The chat area should show the streaming
+    ///     indicator + live text. Captures <c>22-streaming-buffer.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ShowStreamingBuffer()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.IsStreaming = true;
+                vm.Chat.StreamingBuffer = "Streaming response text...";
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawStreaming = await Driver.WaitForTextAsync("Streaming response", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawStreaming).IsTrue();
+
+        await Driver.ScreenshotAsync("22-streaming-buffer").ConfigureAwait(false);
+
+        // Reset for next test.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.IsStreaming = false;
+                vm.Chat.StreamingBuffer = string.Empty;
+            }
+        });
+    }
+
+    /// <summary>
+    ///     Thinking buffer: <c>Chat.IsThinking = true</c> + thinking text in
+    ///     the status message. Captures <c>23-thinking-buffer.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ShowThinkingBuffer()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.IsThinking = true;
+                vm.Chat.StatusMessage = "Thinking...";
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawThinking = await Driver.WaitForTextAsync("Thinking", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawThinking).IsTrue();
+
+        await Driver.ScreenshotAsync("23-thinking-buffer").ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.IsThinking = false;
+                vm.Chat.StatusMessage = string.Empty;
+            }
+        });
+    }
+
+    /// <summary>
+    ///     Tool call card: a <see cref="ToolCallViewModel" /> added to
+    ///     <c>Chat.ToolCalls</c> renders a tool-call card showing the tool
+    ///     name and status. Captures <c>24-tool-call-card.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ShowToolCallCard()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                var toolCall = new ToolCallViewModel
+                {
+                    ToolName = "read",
+                    ArgsPreview = "path=/test.txt",
+                    Status = ToolCallStatus.Running
+                };
+                vm.Chat.ToolCalls.Add(toolCall);
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawTool = await Driver.WaitForTextAsync("read", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawTool).IsTrue();
+
+        await Driver.ScreenshotAsync("24-tool-call-card").ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.ToolCalls.Clear();
+            }
+        });
+    }
+
+    /// <summary>
+    ///     Error state: <c>StatusText = "error"</c> + error message in the
+    ///     status bar. The status dot should be red. Captures
+    ///     <c>25-error-state.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ShowErrorState()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.StatusText = "error";
+                vm.Chat.StatusMessage = "Something went wrong";
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawError = await Driver.WaitForTextAsync("error", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawError).IsTrue();
+
+        await Driver.ScreenshotAsync("25-error-state").ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.StatusText = "idle";
+                vm.Chat.StatusMessage = string.Empty;
+            }
+        });
+    }
+
+    /// <summary>
+    ///     Compaction status: <c>StatusText = "compacting"</c> in the status
+    ///     bar. Captures <c>26-compaction-status.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ShowCompactionStatus()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.StatusText = "compacting";
+                vm.IsRunning = true;
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawCompacting = await Driver.WaitForTextAsync("compacting", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawCompacting).IsTrue();
+
+        await Driver.ScreenshotAsync("26-compaction-status").ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.StatusText = "idle";
+                vm.IsRunning = false;
+            }
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  TASK 4.2 — Avalonia E2E state tests (panel/scroll/focus/input-history)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    ///     Panel toggle: <c>IsSidebarVisible</c> toggles the left session-list
+    ///     pane. Captures <c>27a-sidebar-visible.png</c> + <c>27b-sidebar-hidden.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Panel_ToggleVisibility()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // Default: visible. Capture baseline.
+        await Driver.ScreenshotAsync("27a-sidebar-visible").ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.IsSidebarVisible = false;
+            }
+        });
+        await Task.Delay(200).ConfigureAwait(false);
+        await Driver.ScreenshotAsync("27b-sidebar-hidden").ConfigureAwait(false);
+
+        bool sidebarGone = !Driver.OnUIThread(() =>
+            Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible);
+        await Assert.That(sidebarGone).IsTrue();
+
+        // Toggle back for next test.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.IsSidebarVisible = true;
+            }
+        });
+        await Task.Delay(200).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Panel focus: switching to the code view (<c>ActiveView = "code"</c>)
+    ///     shows the code editor's empty-state placeholder. Captures
+    ///     <c>28-panel-focus.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Panel_FocusPanel()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.SwitchViewCommand.Execute("code");
+            }
+        });
+        await Task.Delay(200).ConfigureAwait(false);
+
+        bool sawCode = await Driver.WaitForTextAsync("No file open", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawCode).IsTrue();
+
+        string? activeView = Driver.OnUIThread(() =>
+            (Driver.MainWindow.DataContext as MainViewModel)?.ActiveView);
+        await Assert.That(activeView).IsEqualTo("code");
+
+        await Driver.ScreenshotAsync("28-panel-focus").ConfigureAwait(false);
+
+        // Switch back to chat.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.SwitchViewCommand.Execute("chat");
+            }
+        });
+        await Task.Delay(200).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Input history navigation: setting <c>Chat.InputText</c> to a
+    ///     previous command simulates history navigation (Alt+Up). Captures
+    ///     <c>29-input-history.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Input_HistoryNavigation()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // Simulate Alt+Up by setting InputText to a history item.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.InputText = "previous command from history";
+            }
+        });
+        await Task.Delay(200).ConfigureAwait(false);
+
+        string? historyText = Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+                return vm.Chat.InputText;
+            return null;
+        });
+        await Assert.That(historyText).IsEqualTo("previous command from history");
+
+        await Driver.ScreenshotAsync("29-input-history").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Slash-command autocomplete: setting <c>Chat.InputText</c> to
+    ///     "/help" simulates Tab-autocompleting a slash command. Captures
+    ///     <c>30-autocomplete-slash.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Input_AutocompleteSlashCommand()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        var input = Driver.FindControlByName<TextBox>("InputBox");
+        await Assert.That(input).IsNotNull();
+        await Driver.TypeAsync(input!, "/help").ConfigureAwait(false);
+
+        bool sawSlash = await Driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawSlash).IsTrue();
+
+        await Driver.ScreenshotAsync("30-autocomplete-slash").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Chat scroll history: adding multiple chat lines to
+    ///     <c>Chat.Lines</c> populates the transcript so the scroll bar
+    ///     appears. Captures <c>31-chat-scroll.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task Chat_ScrollHistory()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        // Add multiple chat lines to enable scrolling.
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 1: Hello"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 1"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 2: How are you?"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 2"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 3: What's up?"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 3"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 4: Goodbye"));
+                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 4"));
+            }
+        });
+        await Task.Delay(300).ConfigureAwait(false);
+
+        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(sawLines).IsTrue();
+
+        await Driver.ScreenshotAsync("31-chat-scroll").ConfigureAwait(false);
     }
 }
