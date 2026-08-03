@@ -60,10 +60,9 @@ namespace Harbor.E2E.App.Avalonia;
 ///     <para>
 ///         <b>Why this exists:</b> the user can't run the Avalonia app manually
 ///         inside the build sandbox. By capturing PNGs of every screen the app
-///         renders, an out-of-process VLM (or a human reviewing the artifacts
-///         in CI) can SEE what the UI looks like and flag visual regressions
-///         (broken layout, missing theme, wrong font, etc.) without a manual
-///         launch.
+///         renders, a human reviewing the artifacts in CI can SEE what the UI
+///         looks like and flag visual regressions (broken layout, missing theme,
+///         wrong font, etc.) without a manual launch.
 ///     </para>
 ///     <para>
 ///         <b>Process-wide singleton:</b> Avalonia's <see cref="Application.Current" />
@@ -576,6 +575,36 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             await Task.Delay(50).ConfigureAwait(false);
         }
         return false;
+    }
+
+    /// <summary>
+    ///     Poll a condition until it returns <see langword="true" /> or the
+    ///     timeout elapses. Replaces arbitrary <c>Task.Delay</c> calls for UI
+    ///     settling with deterministic polling.
+    /// </summary>
+    /// <param name="condition">
+    ///     A delegate evaluated on each poll. Typically reads a view-model
+    ///     property or checks the visual tree via <see cref="OnUIThread{T}" />.
+    /// </param>
+    /// <param name="timeout">Maximum time to wait. Defaults to 5 seconds.</param>
+    /// <param name="pollInterval">Time between polls. Defaults to 50 ms.</param>
+    /// <returns><see langword="true" /> if the condition was met before the timeout.</returns>
+    public async Task<bool> WaitForConditionAsync(
+        Func<bool> condition,
+        TimeSpan? timeout = null,
+        TimeSpan? pollInterval = null)
+    {
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        var interval = pollInterval ?? TimeSpan.FromMilliseconds(50);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return true;
+            }
+            await Task.Delay(interval).ConfigureAwait(false);
+        }
+        return condition();
     }
 
     /// <summary>

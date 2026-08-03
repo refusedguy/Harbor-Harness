@@ -20,11 +20,9 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <para>
 ///         Each derived test class drives a single component (ChatView,
 ///         SessionList, Settings, Onboarding, CommandPalette, Toasts, StatusBar)
-///         through 5+ states, captures a screenshot per state with the
+///         through 5+ states and captures a screenshot per state with the
 ///         <c>ct-</c> prefix (component-tests, distinct from the existing
-///         <c>c-</c> prefix used by <c>ComponentStateE2ETests</c>), and runs
-///         a VLM verification step that calls the <c>z-ai vision</c> CLI with
-///         a DETAILED content description.
+///         <c>c-</c> prefix used by <c>ComponentStateE2ETests</c>).
 ///     </para>
 ///     <para>
 ///         <b>Screenshot directory:</b> <c>~/.harbor/test-screenshots-comp-ct/</c>
@@ -120,8 +118,7 @@ public abstract class ComponentTestBase
 
     /// <summary>
     ///     Capture a screenshot with a sequential <c>ct-</c> prefix name.
-    ///     Returns the absolute path so the test can later call
-    ///     <see cref="VlmVerifier.VerifyAsync"/>.
+    ///     Returns the absolute path to the saved PNG.
     /// </summary>
     /// <param name="logicalName">Logical name (no extension, no prefix). e.g. <c>chat-empty</c>.</param>
     /// <returns>Absolute path to the saved PNG.</returns>

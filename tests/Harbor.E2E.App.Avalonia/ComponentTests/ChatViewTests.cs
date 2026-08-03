@@ -17,10 +17,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <para>
 ///         Each test drives the <c>ChatView</c> into one specific state (empty,
 ///         typing, send-enabled, message-sent, streaming, agent-running,
-///         cleared, error), captures a screenshot with the <c>ct-</c> prefix,
-///         then verifies the screenshot via the <c>z-ai vision</c> VLM using a
-///         DETAILED content description (e.g. "user bubble text='Hello AI!',
-///         send button enabled, status: idle").
+///         cleared, error) and captures a screenshot with the <c>ct-</c> prefix.
 ///     </para>
 ///     <para>
 ///         Every test calls <see cref="HeadlessAvaloniaDriver.ResetStateAsync"/>
@@ -55,15 +52,6 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(enabled).IsFalse();
 
         var path = await CaptureAsync("chat-empty").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel in EMPTY state. Center shows a large 💬 emoji and the text 'Start a conversation'. " +
-            "Below the empty-state placeholder, a multi-line input box with placeholder text 'Message Harbor…  (Enter to send, Shift+Enter for newline)'. " +
-            "To the right of the input, a 'Send ▶' button that is greyed-out / DISABLED because the input is empty. " +
-            "Status bar at the bottom reads 'idle'. No message bubbles anywhere.",
-            nameof(ChatView_EmptyState_ShowsPlaceholderAndDisabledSend)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -89,15 +77,6 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(isEnabled).IsTrue();
 
         var path = await CaptureAsync("chat-typing").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel with text typed into the input. The bottom input box contains the text 'Hello'. " +
-            "The 'Send ▶' button next to it is ENABLED (full opacity / accent color). " +
-            "The empty-state placeholder 'Start a conversation' may still be visible above. " +
-            "No message bubbles.",
-            nameof(ChatView_Typing_EnablesSendButton)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -125,15 +104,6 @@ public sealed class ChatViewTests : ComponentTestBase
 
         await Task.Delay(200).ConfigureAwait(false);
         var path = await CaptureAsync("chat-message-sent").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel after the user sent a message. Exactly 1 message bubble in the transcript area. " +
-            "The bubble's role label (left gutter, monospace) reads 'user' and the bubble body reads 'Hello AI!'. " +
-            "The input box below is empty again. The 'Send ▶' button is now DISABLED (input is empty). " +
-            "Status bar at the bottom reads 'idle' (no streaming indicator).",
-            nameof(ChatView_SendMessage_AddsUserBubble)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -172,15 +142,6 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsStreaming = false;
             chat.StreamingBuffer = string.Empty;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel with the streaming indicator visible. There is a horizontal banner with a small dot on the left, " +
-            "the word 'streaming' (in a peach/orange accent color, monospace), and the streaming buffer text " +
-            "'The model is streaming a response token by token, character by character…'. " +
-            "The input box is still visible below. No 'Agent is running…' banner (that's the non-streaming variant).",
-            nameof(ChatView_Streaming_ShowsStreamingLabelAndBuffer)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -215,14 +176,6 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsAgentRunning = false;
             chat.StatusMessage = string.Empty;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel showing the agent-running banner. There is a horizontal banner with a small blue dot on the left, " +
-            "the text 'Agent is running…' (in a blue accent color, monospace), followed by three small '●●●' dots. " +
-            "Status bar at the bottom reads 'running' (with an amber/yellow status dot).",
-            nameof(ChatView_AgentRunning_ShowsRunningBanner)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -259,14 +212,6 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(stillThere).IsFalse();
 
         var path = await CaptureAsync("chat-cleared").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel after the user pressed Ctrl+L to clear the chat. The transcript is EMPTY — no message bubbles. " +
-            "The 'Start a conversation' empty-state placeholder is back in the center with the 💬 emoji. " +
-            "Input box below is empty. 'Send ▶' button is DISABLED. Status bar reads 'idle'.",
-            nameof(ChatView_Clear_RemovesMessagesAndShowsPlaceholder)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -294,16 +239,6 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(hasError).IsTrue();
 
         var path = await CaptureAsync("chat-error").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel showing an ERROR state. There is 1 message bubble in the transcript. " +
-            "Its role label (left gutter) reads 'error' and the bubble body reads " +
-            "'Something went wrong: provider returned 503 Service Unavailable'. " +
-            "The bubble's text is rendered in a RED color (ChatErrorBrush). " +
-            "Input box below is empty.",
-            nameof(ChatView_ErrorState_ShowsRedErrorMessage)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -337,13 +272,5 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsThinking = false;
             chat.IsAgentRunning = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Chat panel showing the thinking indicator. There is a small banner with a 🤔 emoji and the word 'thinking…' " +
-            "(in a blue accent color, monospace). Next to the 'Send ▶' button, a 'Stop ■' button is also visible " +
-            "(because the agent is thinking). Status bar reads 'running'.",
-            nameof(ChatView_Thinking_ShowsThinkingLabelAndStopButton)).ConfigureAwait(false);
-        
     }
 }

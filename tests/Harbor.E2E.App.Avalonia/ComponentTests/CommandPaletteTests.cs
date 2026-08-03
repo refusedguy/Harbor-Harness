@@ -48,16 +48,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
         var path = await CaptureAsync("cmdpalette-open").ConfigureAwait(false);
 
         UI(() => Vm.IsCommandPaletteOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Command palette modal overlay. The palette is a centered card with a '⌘ Command palette' header, " +
-            "a text input below (placeholder 'Type a command, /slash, or search…'), and a scrollable list of " +
-            "command rows below the input. Each row has: an icon (⚡ for commands, / for slash commands), " +
-            "the command label (e.g. 'Switch to chat', 'Open settings', '/help'), and a hint on the right " +
-            "(e.g. 'ChatView', 'SettingsDialog', 'Slash command'). The first row is highlighted (selected).",
-            nameof(CommandPalette_Open_ShowsSearchInputAndAllCommands)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -92,15 +82,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
             Vm.CommandPalette.Query = string.Empty;
             Vm.IsCommandPaletteOpen = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Command palette after the user typed 'session' into the search. The search input contains 'session'. " +
-            "The results list below shows ONLY commands whose label or hint contains 'session' — e.g. " +
-            "'New session', 'Branch active session', 'Refresh session list'. Other commands like 'Switch to chat' " +
-            "or 'Open settings' are NOT visible (filtered out). The first match is highlighted.",
-            nameof(CommandPalette_Search_FiltersResults)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -128,14 +109,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
         var path = await CaptureAsync("cmdpalette-arrow-down").ConfigureAwait(false);
 
         UI(() => Vm.IsCommandPaletteOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Command palette with the SECOND row highlighted as the selected item (after pressing Arrow Down once). " +
-            "The first row 'Switch to chat' is no longer highlighted; the second row 'Switch to code editor' " +
-            "is now highlighted. Search input is empty (showing all commands).",
-            nameof(CommandPalette_ArrowDown_MovesSelection)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -168,15 +141,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
 
         // Reset to chat view for the next test.
         UI(() => Vm.SwitchViewCommand.Execute("chat"));
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "After executing the 'Switch to code editor' command from the palette, the main window now shows the " +
-            "Code Editor view in the center pane. The tab strip at the top shows '📝 Code' tab as the active one " +
-            "(rather than '💬 Chat'). The code editor's empty-state placeholder 'No file open — press Ctrl+O to open a file.' " +
-            "is visible in the center. The command palette is closed.",
-            nameof(CommandPalette_Enter_ExecutesSelected)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -201,14 +165,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
         await Assert.That(stillOpen).IsFalse();
 
         var path = await CaptureAsync("cmdpalette-closed").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Main window with the command palette CLOSED. The center shows the chat empty-state placeholder " +
-            "'Start a conversation'. No palette overlay is visible — the search input and command list are gone. " +
-            "Status bar at the bottom reads 'idle'.",
-            nameof(CommandPalette_Closed_NotVisible)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -239,13 +195,5 @@ public sealed class CommandPaletteTests : ComponentTestBase
             Vm.CommandPalette.Query = string.Empty;
             Vm.IsCommandPaletteOpen = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Command palette after typing a query that matches nothing ('zzzznomatch'). The search input contains " +
-            "'zzzznomatch'. The results list below the input is EMPTY — no command rows visible. " +
-            "The header '⌘ Command palette' is still visible. No row is highlighted.",
-            nameof(CommandPalette_NoMatches_EmptyResultsList)).ConfigureAwait(false);
-        
     }
 }

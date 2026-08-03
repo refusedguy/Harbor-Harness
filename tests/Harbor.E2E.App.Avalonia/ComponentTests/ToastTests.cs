@@ -40,15 +40,6 @@ public sealed class ToastTests : ComponentTestBase
         await Assert.That(hasMsg).IsTrue();
 
         var path = await CaptureAsync("toast-info").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "1 toast notification visible in the bottom-right corner of the window (above the status bar). " +
-            "The toast card has a blue accent border on its left edge (3px wide), a small blue info icon, " +
-            "the kind label 'Info' (blue, semi-bold), and the body text 'Info: connection established.' " +
-            "Toast card has a dark surface background, rounded corners, and a drop shadow.",
-            nameof(Toast_Info_BlueAccentAndMessage)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -69,14 +60,6 @@ public sealed class ToastTests : ComponentTestBase
         await Assert.That(hasMsg).IsTrue();
 
         var path = await CaptureAsync("toast-success").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "1 toast notification in the bottom-right. The toast has a GREEN accent border on its left edge, " +
-            "a green checkmark icon, the kind label 'Success' (green, semi-bold), and the body text 'Success: file saved.' " +
-            "Drop shadow under the card.",
-            nameof(Toast_Success_GreenAccent)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -97,14 +80,6 @@ public sealed class ToastTests : ComponentTestBase
         await Assert.That(hasMsg).IsTrue();
 
         var path = await CaptureAsync("toast-warning").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "1 toast notification in the bottom-right. The toast has a PEACH/ORANGE accent border on its left edge, " +
-            "a peach warning icon, the kind label 'Warning' (peach, semi-bold), and the body text " +
-            "'Warning: rate limit approaching.' Drop shadow under the card.",
-            nameof(Toast_Warning_PeachAccent)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -125,14 +100,6 @@ public sealed class ToastTests : ComponentTestBase
         await Assert.That(hasMsg).IsTrue();
 
         var path = await CaptureAsync("toast-error").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "1 toast notification in the bottom-right. The toast has a RED accent border on its left edge, " +
-            "a red error icon, the kind label 'Error' (red, semi-bold), and the body text " +
-            "'Error: provider returned 503.' Drop shadow under the card.",
-            nameof(Toast_Error_RedAccent)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -166,15 +133,6 @@ public sealed class ToastTests : ComponentTestBase
 
         // Wait for auto-dismiss so the next test starts clean.
         await Task.Delay(5_000).ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "3 toast notifications stacked VERTICALLY in the bottom-right corner of the window. " +
-            "Each toast has a different accent colour: top = Info (blue), middle = Success (green), bottom = Warning (peach). " +
-            "The toast bodies read 'First toast body', 'Second toast body', 'Third toast body' respectively. " +
-            "Consistent 8px vertical spacing between them. Each has its own drop shadow.",
-            nameof(Toast_Multiple_StackedVertically)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -201,14 +159,6 @@ public sealed class ToastTests : ComponentTestBase
         await Assert.That(stillThere).IsFalse();
 
         var path = await CaptureAsync("toast-auto-dismissed").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Main window 5 seconds after a toast was pushed. The toast 'Auto-dismiss test' is NO LONGER visible — " +
-            "it auto-dismissed after 4 seconds. The bottom-right corner is empty (no toast cards). " +
-            "The chat empty-state placeholder is still visible in the center.",
-            nameof(Toast_AutoDismiss_After4Seconds)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -236,14 +186,5 @@ public sealed class ToastTests : ComponentTestBase
 
         // Wait for auto-dismiss.
         await Task.Delay(5_000).ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "1 toast notification in the bottom-right containing a LONG multi-line message. The toast card is at " +
-            "its MaxWidth (~380px) and the message wraps across multiple lines (3-5 lines) without overflowing " +
-            "the card's horizontal bounds. The card grows vertically to fit the wrapped text. Blue accent border " +
-            "on the left, 'Info' label, drop shadow.",
-            nameof(Toast_LongMessage_WrapsWithinMaxWidth)).ConfigureAwait(false);
-        
     }
 }

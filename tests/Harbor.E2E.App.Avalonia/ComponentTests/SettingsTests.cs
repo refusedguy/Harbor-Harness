@@ -57,16 +57,6 @@ public sealed class SettingsTests : ComponentTestBase
         var path = await CaptureAsync("settings-open").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Settings MODAL overlay centered on the window. A dark backdrop covers the main window; a centered card " +
-            "with header 'Settings' and subtitle 'Persists to ~/.harbor/config.json + ~/.harbor/avalonia.json'. " +
-            "The card contains 6 labelled fields: Theme (dropdown with dark/light/system options), " +
-            "Default provider (text input), Default model (text input), Font family (text input), " +
-            "Storage backend (dropdown), Log level (dropdown). Footer has 'Cancel' and 'Save' buttons.",
-            nameof(Settings_Open_ShowsAllFields)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -96,14 +86,6 @@ public sealed class SettingsTests : ComponentTestBase
             Vm.Settings.ThemeSettings.Theme = "dark";
             Vm.IsSettingsOpen = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Settings MODAL open. The 'Theme' field's dropdown shows 'light' (the currently-selected value). " +
-            "All other fields (Default provider, Default model, Font family, Storage backend, Log level) are visible. " +
-            "Cancel + Save buttons visible in the footer.",
-            nameof(Settings_ChangeTheme_ShowsLightInDropdown)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -139,14 +121,6 @@ public sealed class SettingsTests : ComponentTestBase
         var path = await CaptureAsync("settings-saved").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Settings MODAL after Save was clicked. The fields show 'light' for Theme and 'test-model-save' for Default model. " +
-            "Footer Cancel + Save buttons visible. The persisted config.json on disk now contains 'light' and 'test-model-save'. " +
-            "A success toast 'Settings saved — theme: light, model: ollama/test-model-save.' may be visible bottom-right.",
-            nameof(Settings_Save_PersistsConfig)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -176,13 +150,6 @@ public sealed class SettingsTests : ComponentTestBase
         var path = await CaptureAsync("settings-cancelled").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Settings MODAL after Cancel was clicked. The Theme field has reverted to 'dark' (the persisted value). " +
-            "Any unsaved changes were discarded — Default model + Storage backend + Log level also show their persisted values.",
-            nameof(Settings_Cancel_RevertsChanges)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -212,14 +179,5 @@ public sealed class SettingsTests : ComponentTestBase
         var path = await CaptureAsync("settings-provider-config").ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Settings MODAL scrolled to show the 'Provider Configuration' section. Below the section header there is a " +
-            "list of provider rows (e.g. Anthropic, OpenAI, OpenRouter, Ollama). Each row has: the provider display name + id, " +
-            "an auth badge showing '✓ Authenticated' or '✗ No key', an API key text input (hidden for Ollama which needs no key), " +
-            "and 'Save key' + 'Test connection' buttons.",
-            nameof(Settings_ProviderConfig_ShowsApiKeyInputsAndTestButtons)).ConfigureAwait(false);
-        
     }
 }

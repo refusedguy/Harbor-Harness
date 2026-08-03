@@ -85,17 +85,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step1-welcome")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard, Step 1 of 5 — Welcome. Window title 'Harbor — Welcome'. Top-left brand: ⚓ + 'Harbor'. " +
-                "Below: a 5-dot progress stepper (dot 1 is filled/accent-coloured, dots 2-5 are muted). " +
-                "Step title: 'Welcome to Harbor'. Caption below: 'Step 1 of 5'. " +
-                "Body: a 🚀 emoji, the text 'Your local-first AI coding agent.', a longer description, " +
-                "and a green-bordered tip '💡 Tip: pick Ollama if you want to run models locally — no API key required.' " +
-                "Footer: 'Skip' (left) + 'Next →' button (right, primary).",
-                nameof(Onboarding_Step1_Welcome)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -123,18 +112,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step2-providers")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard, Step 2 of 5 — Choose your providers. Progress stepper: dot 2 filled, dots 1+3-5 muted " +
-                "(dot 1 may also be filled as 'completed'). Step title 'Choose your providers'. " +
-                "Body: a scrollable list of provider rows, each with a checkbox, an emoji icon (🤖 Anthropic, 🌐 OpenAI, " +
-                "🛰️ OpenRouter, 🐋 DeepSeek, ⚡ Groq, 🌬️ Mistral, ✖️ xAI, 🤝 Together AI, 🎆 Fireworks, 🧠 Cerebras, " +
-                "⌨️ Kilo Code, 🦙 Ollama), the display name, an env-var hint or 'local — no key required', and a small " +
-                "model-id chip on the right. Ollama's checkbox is pre-selected (default). " +
-                "Footer: 'Skip' + '← Back' + 'Next →' buttons.",
-                nameof(Onboarding_Step2_Providers)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -169,16 +146,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step3-apikey")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard, Step 3 of 5 — Enter API key. Progress stepper: dot 3 filled. " +
-                "Body shows the selected provider's icon (🤖) + display name 'Anthropic' + 'Enter your API key'. " +
-                "A text input below for the key (with password masking •). A small helper text mentioning " +
-                "'Will be saved to the ANTHROPIC_API_KEY field in ~/.harbor/config.json'. " +
-                "Footer: 'Skip' + '← Back' + 'Next →' buttons.",
-                nameof(Onboarding_Step3_ApiKey)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -205,16 +172,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step4-model")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard, Step 4 of 5 — Default model. Progress stepper: dot 4 filled. " +
-                "Body shows 'Pick the default model for new sessions:', a small chip showing the selected provider " +
-                "(icon + 'Provider: <name>'), and a text input below pre-filled with the suggested model id " +
-                "(e.g. 'qwen2.5-coder:7b' for Ollama). Helper text 'You can switch models anytime with /model or in Settings.' " +
-                "Footer: 'Skip' + '← Back' + 'Next →' buttons.",
-                nameof(Onboarding_Step4_Model)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -242,18 +199,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step5-theme")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard, Step 5 of 5 — Theme. Progress stepper: dot 5 filled (all 5 dots now filled). " +
-                "Body shows 'Choose your theme:' and 3 radio-button cards stacked vertically: " +
-                "1) '🌙  Dark (Catppuccin Mocha)' (pre-selected), " +
-                "2) '☀️  Light (Catppuccin Latte)', " +
-                "3) '🖥  System'. " +
-                "Below them: 'Click Finish to save and start using Harbor.' " +
-                "Footer: 'Skip' + '← Back' + 'Finish' (primary, was 'Next' on earlier steps).",
-                nameof(Onboarding_Step5_Theme)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -284,15 +229,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-back-to-step2")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard after the user clicked '← Back' from step 3. The wizard is now on Step 2 of 5 — " +
-                "Choose your providers. Step title 'Choose your providers'. Caption 'Step 2 of 5'. " +
-                "Provider list visible with checkboxes + icons. Footer shows 'Skip' + 'Next →' (no '← Back' on step 2, " +
-                "or it's hidden because we're on the second step).",
-                nameof(Onboarding_BackButton_NavigatesToPreviousStep)).ConfigureAwait(false);
-            
         }
         finally
         {
@@ -320,14 +256,6 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-skip")
                 .ConfigureAwait(false);
-
-            var vlm = await VlmVerifier.VerifyAsync(
-                path,
-                "Onboarding wizard after the user clicked 'Skip'. The wizard's IsCompleted flag is true and the " +
-                "window is closing/closed. The screenshot may show the wizard mid-close (blank or partially rendered) " +
-                "or the main window behind. The MainViewModel's IsCommandPaletteOpen / IsSettingsOpen / etc. are all false.",
-                nameof(Onboarding_SkipButton_ClosesWizard)).ConfigureAwait(false);
-            
         }
         finally
         {

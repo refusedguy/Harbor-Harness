@@ -30,15 +30,15 @@ namespace Harbor.E2E.App.Avalonia;
 ///         <c>Avalonia.Headless</c> off-screen renderer, drives the UI like a
 ///         user (type / click / hover-equivalent), then captures a PNG of the
 ///         rendered window. The PNGs are written to
-///         <c>~/.harbor/test-screenshots/</c> so the user (or an out-of-process
-///         VLM) can SEE what the UI looks like without running the app.
+///         <c>~/.harbor/test-screenshots/</c> so the user can SEE what the UI
+///         looks like without running the app.
 ///     </para>
 ///     <para>
 ///         <b>Navigation coverage:</b> each test drives a DIFFERENT visible
 ///         state of the shell — chat default, typed input, send-enabled,
 ///         message-sent, code-editor view, diff modal, onboarding. This
 ///         guarantees every screenshot's pixels differ (verified by md5sum
-///         in the post-run check), so a VLM reviewer can SEE the test
+///         in the post-run check), so a reviewer can SEE the test
 ///         actually navigated rather than guessing from a static frame.
 ///     </para>
 ///     <para>
@@ -258,14 +258,12 @@ public sealed class AvaloniaUiTests
         // finds TextBlocks regardless of IsVisible — but the ItemsControl's
         // container materialization + ScrollViewer layout pass needs one more
         // dispatcher cycle before the chat row is actually painted. Without
-        // this delay, the screenshot captured a blank chat area even though
-        // the message was already in the visual tree. 250ms gives the UI
-        // thread's MainLoop enough time to drain the layout/render queue
-        // AND lets the PromptAsync background failure path complete so the
-        // user-message + error-message rows are both rendered before the
-        // screenshot is captured. (Task S1 bumped this from 150ms → 250ms
-        // and ScreenshotAsync now runs 3 layout+render cycles.)
-        await Task.Delay(250).ConfigureAwait(false);
+        // this settle, the screenshot captured a blank chat area even though
+        // the message was already in the visual tree. Polling the condition
+        // replaces the old fixed 250ms delay with a deterministic wait.
+        await Driver.WaitForConditionAsync(
+            () => Driver.GetAllVisibleText().Contains("Hello AI!", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
 
         await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }
@@ -374,8 +372,15 @@ public sealed class AvaloniaUiTests
 
         try
         {
-            // Let the UI thread's MainLoop drain layout + first render.
-            await Task.Delay(120).ConfigureAwait(false);
+            // Poll until the onboarding window's visual tree contains the brand
+            // text — proves layout + first render have settled (replaces the old
+            // fixed 120ms delay).
+            await Driver.WaitForConditionAsync(() =>
+            {
+                var sb = new StringBuilder();
+                Dispatcher.UIThread.InvokeAsync(() => AppendText(onboardingWindow, sb)).GetAwaiter().GetResult();
+                return sb.ToString().Contains("Harbor", StringComparison.Ordinal);
+            }, TimeSpan.FromSeconds(3)).ConfigureAwait(false);
 
             // Capture the rendered frame on the UI thread —
             // CaptureRenderedFrame accesses the window's render target which
@@ -446,7 +451,7 @@ public sealed class AvaloniaUiTests
 
     // ════════════════════════════════════════════════════════════════════
     //  TASK A1 — UI state coverage tests
-    //  Each test exercises a DIFFERENT visible state of the shell so a VLM
+    //  Each test exercises a DIFFERENT visible state of the shell so a
     //  reviewer can SEE the test actually navigated rather than guessing
     //  from a static frame. Screenshots land in ~/.harbor/test-screenshots/.
     // ════════════════════════════════════════════════════════════════════
@@ -469,12 +474,12 @@ public sealed class AvaloniaUiTests
                 vm.IsSettingsOpen = true;
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("08-settings").ConfigureAwait(false);
-
+        // Poll for the settings dialog content instead of a fixed delay.
         bool hasTheme = await Driver.WaitForTextAsync("Theme", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasTheme).IsTrue();
+
+        await Driver.ScreenshotAsync("08-settings").ConfigureAwait(false);
 
         // Close for the next test.
         Driver.OnUIThread(() =>
@@ -519,13 +524,17 @@ public sealed class AvaloniaUiTests
             Dispatcher.UIThread
                 .InvokeAsync(() => settingsVm.Settings.SaveCommand.ExecuteAsync(null))
                 .GetAwaiter().GetResult(); // Wait for dispatch
-            // The inner Task (SaveAsync) might still be running — wait a bit.
-            await Task.Delay(500).ConfigureAwait(false);
         }
-        await Task.Delay(400).ConfigureAwait(false);
+
+        // Poll the config file until it contains "light" instead of a fixed delay.
+        string configPath = Path.Combine(TempHome, ".harbor", "config.json");
+        await Driver.WaitForConditionAsync(() =>
+        {
+            if (!File.Exists(configPath)) return false;
+            return File.ReadAllText(configPath).Contains("light", StringComparison.Ordinal);
+        }, TimeSpan.FromSeconds(3)).ConfigureAwait(false);
 
         // Verify ~/.harbor/config.json (CommonConfig) contains "light".
-        string configPath = Path.Combine(TempHome, ".harbor", "config.json");
         string configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
         await Assert.That(configText).Contains("light");
 
@@ -558,12 +567,12 @@ public sealed class AvaloniaUiTests
                 vm.AddToast(new ToastNotification("Hello toast", ToastKind.Info));
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("10-toast-shown").ConfigureAwait(false);
-
+        // Poll for the toast text instead of a fixed delay.
         bool hasToast = await Driver.WaitForTextAsync("Hello toast", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasToast).IsTrue();
+
+        await Driver.ScreenshotAsync("10-toast-shown").ConfigureAwait(false);
 
         // Auto-dismiss fires after 4s — wait 5s to be safe, then verify
         // the toast text is gone from the visual tree.
@@ -591,12 +600,12 @@ public sealed class AvaloniaUiTests
                 vm.IsCommandPaletteOpen = true;
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("12-command-palette").ConfigureAwait(false);
-
+        // Poll for the command palette content instead of a fixed delay.
         bool hasPalette = await Driver.WaitForTextAsync("Command", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasPalette).IsTrue();
+
+        await Driver.ScreenshotAsync("12-command-palette").ConfigureAwait(false);
 
         Driver.OnUIThread(() =>
         {
@@ -624,12 +633,12 @@ public sealed class AvaloniaUiTests
                 vm.IsProviderBrowserOpen = true;
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("13-provider-browser").ConfigureAwait(false);
-
+        // Poll for the provider browser content instead of a fixed delay.
         bool hasBrowser = await Driver.WaitForTextAsync("Provider browser", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasBrowser).IsTrue();
+
+        await Driver.ScreenshotAsync("13-provider-browser").ConfigureAwait(false);
 
         Driver.OnUIThread(() =>
         {
@@ -650,7 +659,7 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        // Default: visible. Capture baseline first so a VLM can compare.
+        // Default: visible. Capture baseline first for comparison.
         await Driver.ScreenshotAsync("14a-sidebar-default").ConfigureAwait(false);
 
         Driver.OnUIThread(() =>
@@ -660,7 +669,11 @@ public sealed class AvaloniaUiTests
                 vm.IsSidebarVisible = false;
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Poll for the sidebar state instead of a fixed delay.
+        await Driver.WaitForConditionAsync(() =>
+            !Driver.OnUIThread(() =>
+                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("14-sidebar-hidden").ConfigureAwait(false);
 
         bool sidebarGone = !Driver.OnUIThread(() =>
@@ -674,7 +687,11 @@ public sealed class AvaloniaUiTests
                 vm.IsSidebarVisible = true;
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Poll for the sidebar state instead of a fixed delay.
+        await Driver.WaitForConditionAsync(() =>
+            Driver.OnUIThread(() =>
+                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("15-sidebar-shown").ConfigureAwait(false);
 
         bool sidebarBack = Driver.OnUIThread(() =>
@@ -703,7 +720,10 @@ public sealed class AvaloniaUiTests
                 vm.ToggleThemeCommand.Execute(null);
             }
         });
-        await Task.Delay(400).ConfigureAwait(false);
+        // Minimal settle for the theme resource swap to propagate through the
+        // visual tree (one dispatcher cycle replaces the old fixed 400ms delay).
+        await Driver.WaitForConditionAsync(() => true,
+            TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(30)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("17-theme-light").ConfigureAwait(false);
 
         // Toggle back to dark so the next test starts in the default theme.
@@ -714,7 +734,8 @@ public sealed class AvaloniaUiTests
                 vm.ToggleThemeCommand.Execute(null);
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        await Driver.WaitForConditionAsync(() => true,
+            TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(30)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -736,9 +757,7 @@ public sealed class AvaloniaUiTests
                 vm.AddToast(new ToastNotification("Third toast body", ToastKind.Warning));
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("18-multiple-toasts").ConfigureAwait(false);
-
+        // Poll for the toast text instead of a fixed delay.
         bool hasFirst = await Driver.WaitForTextAsync("First toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         bool hasSecond = await Driver.WaitForTextAsync("Second toast body", TimeSpan.FromSeconds(2))
@@ -746,6 +765,8 @@ public sealed class AvaloniaUiTests
         bool hasThird = await Driver.WaitForTextAsync("Third toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasFirst && hasSecond && hasThird).IsTrue();
+
+        await Driver.ScreenshotAsync("18-multiple-toasts").ConfigureAwait(false);
 
         // Wait for auto-dismiss so the next test starts clean.
         await Task.Delay(5_000).ConfigureAwait(false);
@@ -771,12 +792,12 @@ public sealed class AvaloniaUiTests
                 vm.Chat.StatusMessage = "Agent is running…";
             }
         });
-        await Task.Delay(400).ConfigureAwait(false);
-        await Driver.ScreenshotAsync("19-streaming-indicator").ConfigureAwait(false);
-
+        // Poll for the streaming indicator instead of a fixed delay.
         bool hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasIndicator).IsTrue();
+
+        await Driver.ScreenshotAsync("19-streaming-indicator").ConfigureAwait(false);
 
         // Stop the agent.
         Driver.OnUIThread(() =>
@@ -787,7 +808,10 @@ public sealed class AvaloniaUiTests
                 vm.Chat.StatusMessage = string.Empty;
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
+        // Poll until the running indicator is gone instead of a fixed delay.
+        await Driver.WaitForConditionAsync(
+            () => !Driver.GetAllVisibleText().Contains("Agent is running", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("20-streaming-done").ConfigureAwait(false);
 
         bool stillRunning = Driver.GetAllVisibleText().Contains("Agent is running", StringComparison.Ordinal);
@@ -843,8 +867,7 @@ public sealed class AvaloniaUiTests
                 vm.Chat.StreamingBuffer = "Streaming response text...";
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the streaming buffer text instead of a fixed delay.
         bool sawStreaming = await Driver.WaitForTextAsync("Streaming response", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawStreaming).IsTrue();
@@ -880,8 +903,7 @@ public sealed class AvaloniaUiTests
                 vm.Chat.StatusMessage = "Thinking...";
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the thinking indicator instead of a fixed delay.
         bool sawThinking = await Driver.WaitForTextAsync("Thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawThinking).IsTrue();
@@ -922,8 +944,7 @@ public sealed class AvaloniaUiTests
                 vm.Chat.ToolCalls.Add(toolCall);
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the tool call card text instead of a fixed delay.
         bool sawTool = await Driver.WaitForTextAsync("read", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
@@ -958,8 +979,7 @@ public sealed class AvaloniaUiTests
                 vm.Chat.StatusMessage = "Something went wrong";
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the error state text instead of a fixed delay.
         bool sawError = await Driver.WaitForTextAsync("error", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawError).IsTrue();
@@ -994,8 +1014,7 @@ public sealed class AvaloniaUiTests
                 vm.IsRunning = true;
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the compaction status text instead of a fixed delay.
         bool sawCompacting = await Driver.WaitForTextAsync("compacting", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawCompacting).IsTrue();
@@ -1036,7 +1055,11 @@ public sealed class AvaloniaUiTests
                 vm.IsSidebarVisible = false;
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Poll for the sidebar state instead of a fixed delay.
+        await Driver.WaitForConditionAsync(() =>
+            !Driver.OnUIThread(() =>
+                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("27b-sidebar-hidden").ConfigureAwait(false);
 
         bool sidebarGone = !Driver.OnUIThread(() =>
@@ -1051,7 +1074,10 @@ public sealed class AvaloniaUiTests
                 vm.IsSidebarVisible = true;
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        await Driver.WaitForConditionAsync(() =>
+            Driver.OnUIThread(() =>
+                Driver.MainWindow.DataContext is MainViewModel vm && vm.IsSidebarVisible),
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1072,8 +1098,7 @@ public sealed class AvaloniaUiTests
                 vm.SwitchViewCommand.Execute("code");
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
-
+        // Poll for the code view placeholder instead of a fixed delay.
         bool sawCode = await Driver.WaitForTextAsync("No file open", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawCode).IsTrue();
@@ -1092,7 +1117,9 @@ public sealed class AvaloniaUiTests
                 vm.SwitchViewCommand.Execute("chat");
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Minimal settle for the view switch to propagate.
+        await Driver.WaitForConditionAsync(() => true,
+            TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(30)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1114,7 +1141,11 @@ public sealed class AvaloniaUiTests
                 vm.Chat.InputText = "previous command from history";
             }
         });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Poll for the input text to propagate instead of a fixed delay.
+        await Driver.WaitForConditionAsync(() =>
+            Driver.OnUIThread(() =>
+                (Driver.MainWindow.DataContext as MainViewModel)?.Chat.InputText) == "previous command from history",
+            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
 
         string? historyText = Driver.OnUIThread(() =>
         {
@@ -1175,8 +1206,7 @@ public sealed class AvaloniaUiTests
                 vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 4"));
             }
         });
-        await Task.Delay(300).ConfigureAwait(false);
-
+        // Poll for the chat lines to render instead of a fixed delay.
         bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawLines).IsTrue();

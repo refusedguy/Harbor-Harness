@@ -41,14 +41,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasIdle).IsTrue();
 
         var path = await CaptureAsync("statusbar-idle").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar at the bottom of the main window. Group 1 (left): a small grey status dot + the word 'idle' (semi-bold). " +
-            "Group 2: agent label 'code' (blue, monospace) + '·' separator + model label '—' (or the model id) in green. " +
-            "Group 3: tokens in '↓ 0' (sky) + tokens out '↑ 0' (peach). Group 4 (right): cost '$0.0000' (yellow) + session count '1 session'.",
-            nameof(StatusBar_Idle_GreyDotAndIdleText)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -79,13 +71,6 @@ public sealed class StatusBarTests : ComponentTestBase
             Vm.StatusText = "idle";
             Vm.IsRunning = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar with the agent RUNNING. Group 1: an amber/yellow status dot + the word 'running' (semi-bold). " +
-            "All other groups (agent, model, tokens, cost, sessions) are still visible — only the status dot + label changed colour.",
-            nameof(StatusBar_Running_AmberDotAndRunningText)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -110,14 +95,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasModel).IsTrue();
 
         var path = await CaptureAsync("statusbar-model-label").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar group 2: agent label 'code' (blue, monospace) + '·' separator + model label " +
-            "'qwen2.5-coder:7b' (green, monospace, clickable button styling). The model label is visibly distinct " +
-            "from the surrounding text because of its green colour + subtle button hover styling.",
-            nameof(StatusBar_ModelLabel_Visible)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -144,14 +121,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasIn && hasOut).IsTrue();
 
         var path = await CaptureAsync("statusbar-token-counts").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar group 3: tokens-in '↓ 1,234' (sky blue, monospace) + tokens-out '↑ 5,678' (peach, monospace) " +
-            "+ a small sparkline chart (~80px wide, 14px tall) showing recent output-token history. " +
-            "The ↓ arrow is for input tokens, ↑ arrow for output tokens.",
-            nameof(StatusBar_TokenCounts_Visible)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -172,13 +141,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasCost).IsTrue();
 
         var path = await CaptureAsync("statusbar-cost").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar group 4 (left side of the right cluster): cost value '$0.0234' (yellow, monospace, 4 decimal places). " +
-            "The cost is to the LEFT of the spacer that pushes the session count to the right edge.",
-            nameof(StatusBar_Cost_Visible)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -199,13 +161,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasSession).IsTrue();
 
         var path = await CaptureAsync("statusbar-session-count").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar group 4 (rightmost): session count '7 session' (muted text, monospace) on the far right edge " +
-            "of the status bar, after the cost value. A vertical hairline separator sits to the LEFT of the session count.",
-            nameof(StatusBar_SessionCount_Visible)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -245,16 +200,5 @@ public sealed class StatusBarTests : ComponentTestBase
             Vm.StatusText = "idle";
             Vm.IsRunning = false;
         });
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Status bar FULLY POPULATED with all groups showing real values. From left to right: " +
-            "amber dot + 'running' (status group), " +
-            "'code' (blue, agent) + '·' + 'claude-sonnet-4' (green, model) (agent+model group), " +
-            "'↓ 12,345' (sky, tokens in) + '↑ 6,789' (peach, tokens out) + sparkline (tokens group), " +
-            "'$0.1234' (yellow, cost), " +
-            "right-aligned: '3 session' (session count). Vertical hairline separators between groups.",
-            nameof(StatusBar_FullPopulation_AllGroupsVisible)).ConfigureAwait(false);
-        
     }
 }

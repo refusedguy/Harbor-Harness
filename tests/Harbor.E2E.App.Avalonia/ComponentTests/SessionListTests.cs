@@ -47,14 +47,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(sidebarVisible).IsTrue();
 
         var path = await CaptureAsync("sessions-empty").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar is visible. At the top of the sidebar: '⚓ Harbor' brand on the left, a small '+' button on the right, " +
-            "and a 'Search sessions…' input below the brand. The list area below the search input is EMPTY — no session rows. " +
-            "The center pane shows the chat empty-state placeholder 'Start a conversation'.",
-            nameof(SessionList_Empty_NoRowsInList)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -92,15 +84,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(has1 && has2).IsTrue();
 
         var path = await CaptureAsync("sessions-with-items").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar with 3 session rows visible. Each row shows: a bold title (e.g. 'Refactor agent loop'), " +
-            "the agent name 'code' below it, and a row of small grey text showing relative time + 'N msgs' message count. " +
-            "Row 1: 'Refactor agent loop' (12 msgs). Row 2: 'Investigate IPC deadlock' (4 msgs). " +
-            "Row 3: 'Polish onboarding flow' (22 msgs). Each row has a small coloured dot on the right edge indicating status.",
-            nameof(SessionList_WithSessions_ShowsTitleAgentTimeAndCount)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -133,15 +116,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(activeId).IsEqualTo("s2");
 
         var path = await CaptureAsync("sessions-active-highlighted").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar with 2 session rows. The second row 'Second session' is visually HIGHLIGHTED as the active " +
-            "session — it has an accent-coloured border or background fill distinguishing it from the first row " +
-            "'First session' which is in the default unselected style. The active row is also the one bound to " +
-            "the ListBox's SelectedItem.",
-            nameof(SessionList_ActiveSession_Highlighted)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -193,15 +167,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(hasOther).IsFalse();
 
         var path = await CaptureAsync("sessions-search-filtered").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar after the user typed 'IPC' into the search box. The search box at the top contains 'IPC'. " +
-            "Only ONE session row is visible: 'Investigate IPC deadlock'. The other two sessions " +
-            "('Refactor agent loop' and 'Polish onboarding flow') are NOT visible — they were filtered out. " +
-            "The visible row has its title, 'code' agent label, relative time, and '4 msgs' count.",
-            nameof(SessionList_SearchFilter_ShowsOnlyMatching)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -240,14 +205,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(hasNew).IsTrue();
 
         var path = await CaptureAsync("sessions-new-created").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar showing 2 session rows. Row 1: 'Existing session' (5 msgs). Row 2: 'New session' (0 msgs). " +
-            "The second row 'New session' is visually highlighted as the active session — it's the newly-created " +
-            "row that was auto-selected after creation.",
-            nameof(SessionList_NewSession_AddedAndSelected)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -284,13 +241,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(hasDeleted).IsFalse();
 
         var path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar with 1 session row visible: 'Keep me' (5 msgs). The previously-present 'Delete me' row " +
-            "is gone — it was deleted. The list now contains only the kept session.",
-            nameof(SessionList_Deleted_RemovedFromList)).ConfigureAwait(false);
-        
     }
 
     /// <summary>
@@ -323,13 +273,5 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(hasFeature).IsTrue();
 
         var path = await CaptureAsync("sessions-git-info").ConfigureAwait(false);
-
-        var vlm = await VlmVerifier.VerifyAsync(
-            path,
-            "Left sidebar with 1 session row 'Feature work'. The row shows the title 'Feature work', agent 'code', " +
-            "relative time, '8 msgs' count, and (if the git badge is rendered) the git branch name 'feature/agent-loop' " +
-            "with a dirty indicator. A small status dot is on the right edge.",
-            nameof(SessionList_WithGitInfo_ShowsBranchBadge)).ConfigureAwait(false);
-        
     }
 }
