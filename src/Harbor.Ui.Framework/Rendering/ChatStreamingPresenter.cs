@@ -2,48 +2,12 @@ using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 namespace Harbor.Ui.Framework.Rendering;
 /// <summary>
-///     Owns the streaming-buffer presentation state derived from a
-///     <see cref="UiState" /> snapshot: <see cref="IsStreaming" />,
-///     <see cref="IsThinking" />, <see cref="IsAgentRunning" />,
-///     <see cref="StatusMessage" />, and <see cref="StreamingBuffer" />.
+///     Derives session status and streaming-presentation state from a
+///     <see cref="UiState" /> snapshot. Registered as a singleton in
+///     <c>AppHost</c>.
 /// </summary>
-/// <remarks>
-///     Extracted from <c>ChatViewModel</c> so the streaming-state
-///     derivation (a pure function of <see cref="UiState" />) can be
-///     unit-tested without spinning up an Avalonia dispatcher or
-///     observable object. Registered as a singleton in <c>AppHost</c>.
-/// </remarks>
 public sealed class ChatStreamingPresenter
 {
-    /// <summary>
-    ///     Compute the streaming-presentation state from a
-    ///     <see cref="UiState" /> snapshot and push it into the
-    ///     supplied setters.
-    /// </summary>
-    /// <param name="state">The current UiState.</param>
-    /// <param name="setStreaming">Setter for <c>IsStreaming</c>.</param>
-    /// <param name="setThinking">Setter for <c>IsThinking</c>.</param>
-    /// <param name="setAgentRunning">Setter for <c>IsAgentRunning</c>.</param>
-    /// <param name="setStatusMessage">Setter for <c>StatusMessage</c>.</param>
-    /// <param name="setStreamingBuffer">Setter for <c>StreamingBuffer</c>.</param>
-    public void Apply(
-        UiState state,
-        Action<bool> setStreaming,
-        Action<bool> setThinking,
-        Action<bool> setAgentRunning,
-        Action<string> setStatusMessage,
-        Action<string> setStreamingBuffer)
-    {
-        setStreaming(state.IsStreaming);
-        setThinking(state.IsAgentRunning && !state.IsStreaming);
-        setAgentRunning(state.IsAgentRunning);
-
-        setStatusMessage(state.IsAgentRunning
-            ? state.IsStreaming ? "Streaming response…" : "Agent is running…"
-            : string.Empty);
-        setStreamingBuffer(state.Active.TextBuffer ?? string.Empty);
-    }
-
     /// <summary>
     ///     Derive the session status from a <see cref="UiState" />
     ///     snapshot. Used by <c>ChatViewModel</c> (and tests) to push

@@ -29,7 +29,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     private readonly CancellationToken _appCt;
     private readonly ILogger<TuiEffectHost>? _logger;
     private readonly Func<string, Task>? _slash;
-    private readonly UiStore _store;
+    private UiStore _store;
 
     public TuiEffectHost(
         IAgentRunner agent,
@@ -43,6 +43,12 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         _slash = slash;
         _appCt = appCt;
         _logger = logger;
+    }
+
+    public void RebindStore(UiStore newStore)
+    {
+        ArgumentNullException.ThrowIfNull(newStore);
+        _store = newStore;
     }
 
     /// <summary>Slash command list for input autocomplete.</summary>

@@ -167,12 +167,13 @@ public sealed class SessionManager : ISessionManager
         if (session is null) return;
 
         var ctx = GetOrCreateContext(session);
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return;
-        ctx.StoreWasHydrated = true;
         ActiveContext = ctx;
         RefreshGitInfo(session.Id, session.Directory);
         SetStatus(session.Id, SessionStatus.Idle);
-        RebindChatViewModel(ctx, ctx.RenderedLineCount);
+        RebindChatViewModel(ctx);
+
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return;
+        ctx.StoreWasHydrated = true;
     }
 
     /// <summary>
@@ -223,12 +224,12 @@ public sealed class SessionManager : ISessionManager
         if (session is null) return null;
 
         var ctx = GetOrCreateContext(session);
-        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return null;
-        ctx.StoreWasHydrated = true;
-        SaveActiveRenderedLineCount();
         ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx, ctx.RenderedLineCount);
+        RebindChatViewModel(ctx);
+
+        if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return null;
+        ctx.StoreWasHydrated = true;
         return session;
     }
 
@@ -255,12 +256,31 @@ public sealed class SessionManager : ISessionManager
             if (!await _switcher.OpenAsync(session, ctx.Store).ConfigureAwait(false)) return false;
             ctx.StoreWasHydrated = true;
         }
+        else
+        {
+            ctx.Store.Reset();
+            var agents = _services.GetRequiredService<IAgentRegistry>();
+            var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == session.Agent)
+                           ?? agents.GetAllAgents().First()
+                           ?? throw new InvalidOperationException("No agents registered.");
+            _agent.Initialize(session, agentDef);
+            ctx.Store.BindSession(session.Model, session.ProviderId, session.Agent);
+            var messages = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
+            if (messages.IsSuccess)
+            {
+                foreach (var msg in messages.Value)
+                {
+                    (var role, string text) = SessionFactory.MessageToChatLine(msg);
+                    ctx.Store.Transition(s => s.AddLine(role, text));
+                }
+            }
+        }
 
         RefreshGitInfo(session.Id, session.Directory);
-        SaveActiveRenderedLineCount();
         ActiveContext = ctx;
         ClearTokenUsageForActiveSession();
-        RebindChatViewModel(ctx, ctx.RenderedLineCount);
+        RebindChatViewModel(ctx);
+
         return true;
     }
 
@@ -311,16 +331,31 @@ public sealed class SessionManager : ISessionManager
     }
 
     /// <summary>
-    ///     Rename a session. <b>NOT YET SUPPORTED</b> — the underlying
-    ///     <see cref="ISessionStore" /> has no metadata-update API. Logs a
-    ///     warning and returns <c>false</c>.
+    ///     Rename a session by updating its title in the store and
+    ///     refreshing the in-memory session record.
     /// </summary>
-    public Task<bool> RenameSessionAsync(string sessionId, string newTitle)
+    public async Task<bool> RenameSessionAsync(string sessionId, string newTitle)
     {
-        _logger.LogWarning(
-            "Rename session {Id} → '{Title}' ignored — ISessionStore has no metadata-update API. Coming in v0.8.",
-            sessionId, newTitle);
-        return Task.FromResult(false);
+        if (string.IsNullOrWhiteSpace(newTitle))
+            return false;
+
+        var sessionResult = await _sessionStore.GetAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+        {
+            _logger.LogWarning("Rename session {Id} failed: {Error}", sessionId, sessionResult.Error);
+            return false;
+        }
+
+        var updated = sessionResult.Value with { Title = newTitle.Trim(), UpdatedAt = DateTimeOffset.UtcNow };
+        var saveResult = await _sessionStore.UpdateAsync(updated).ConfigureAwait(false);
+        if (saveResult.IsFailure)
+        {
+            _logger.LogWarning("Rename session {Id} failed: {Error}", sessionId, saveResult.Error);
+            return false;
+        }
+
+        _logger.LogInformation("Renamed session {Id} → '{Title}'", sessionId, updated.Title);
+        return true;
     }
 
     /// <summary>
@@ -343,25 +378,15 @@ public sealed class SessionManager : ISessionManager
     }
 
     /// <summary>
-    ///     Persist the ChatViewModel's <c>_renderedLineCount</c> into the
-    ///     currently-active <see cref="SessionContext.RenderedLineCount" />.
-    /// </summary>
-    private void SaveActiveRenderedLineCount()
-    {
-        if (ActiveContext is null) return;
-        ActiveContext.RenderedLineCount = _chatViewBinder.GetRenderedLineCount();
-    }
-
-    /// <summary>
     ///     Rebind the singleton chat view-model to a different session's
     ///     <see cref="UiStore" />. Delegates to <see cref="IChatViewBinder" />.
     /// </summary>
-    private void RebindChatViewModel(SessionContext ctx, int savedRenderedLineCount)
+    private void RebindChatViewModel(SessionContext ctx)
     {
-        _chatViewBinder.Rebind(ctx.Store, savedRenderedLineCount);
+        _chatViewBinder.Rebind(ctx.Store);
         _logger.LogInformation(
-            "RebindChatViewModel → session {Id} (renderedLineCount={Count})",
-            ctx.Session.Id, savedRenderedLineCount);
+            "RebindChatViewModel → session {Id}",
+            ctx.Session.Id);
     }
 
     /// <summary>

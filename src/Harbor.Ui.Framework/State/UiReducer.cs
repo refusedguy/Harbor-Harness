@@ -45,8 +45,8 @@ public static class UiReducer
         MessageStartEvent => OnMessageStart(state),
         MessageUpdateEvent mu => OnMessageUpdate(state, mu),
         MessageEndEvent => OnMessageEnd(state),
-        ToolExecutionStartEvent tes => state.AddLine(ChatRole.Tool, FormatToolStart(tes)),
-        ToolExecutionEndEvent tee => state.AddLine(ChatRole.ToolResult, FormatToolEnd(tee)),
+        ToolExecutionStartEvent tes => state.AddLine(ChatRole.Tool, FormatToolStart(tes), tes.ToolCallId),
+        ToolExecutionEndEvent tee => state.AddLine(ChatRole.ToolResult, FormatToolEnd(tee), tee.ToolCallId),
         CompactionStartedEvent => state with { Status = "compacting" },
         CompactionCompletedEvent cc => OnCompactionCompleted(state, cc),
         AgentErrorEvent err => state
@@ -102,7 +102,7 @@ public static class UiReducer
     {
         TextDeltaEvent td => state with { Active = state.Active with { TextBuffer = state.Active.TextBuffer + td.Delta } },
         ThinkingDeltaEvent thd => state with { Active = state.Active with { ThinkBuffer = state.Active.ThinkBuffer + thd.Delta } },
-        ToolCallStartEvent tcs => state.AddLine(ChatRole.Tool, $"→ {tcs.ToolName}"),
+        ToolCallStartEvent tcs => state.AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
         StepFinishEvent sf when sf.Usage is not null => OnStepFinish(state, sf.Usage),
         _ => state
     };

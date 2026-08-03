@@ -46,7 +46,7 @@ public interface ISessionManager
     /// <summary>Delete the given session.</summary>
     Task<bool> DeleteSessionAsync(string sessionId);
 
-    /// <summary>Rename a session (not yet supported).</summary>
+    /// <summary>Rename a session.</summary>
     Task<bool> RenameSessionAsync(string sessionId, string newTitle);
 
     /// <summary>

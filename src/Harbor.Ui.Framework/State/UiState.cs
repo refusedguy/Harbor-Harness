@@ -23,7 +23,10 @@ public enum ChatRole : byte
 /// </summary>
 /// <param name="Role">Semantic origin of the line.</param>
 /// <param name="Text">Already-escaped, display-ready text.</param>
-public readonly record struct ChatLine(ChatRole Role, string Text);
+/// <param name="ToolCallId">Stable tool-call identifier; null for non-tool lines.</param>
+/// <param name="MessageId">Stable message identifier from the agent event; null for lines not tied to a specific message (e.g. tool calls, system notices).</param>
+/// <param name="TimestampUtc">UTC timestamp when the message was received. Defaults to <see cref="DateTime.MinValue" /> when unknown.</param>
+public readonly record struct ChatLine(ChatRole Role, string Text, string? ToolCallId = null, string? MessageId = null, DateTime TimestampUtc = default);
 
 /// <summary>
 ///     Currently-streaming assistant message. Mutable deltas are folded into
@@ -164,8 +167,8 @@ public sealed record UiState
     ///     Append a line to the transcript, returning a new immutable snapshot.
     ///     Avoids allocating an intermediate list.
     /// </summary>
-    public UiState AddLine(ChatRole role, string text) =>
-        this with { Lines = Lines.Add(new ChatLine(role, text)) };
+    public UiState AddLine(ChatRole role, string text, string? toolCallId = null) =>
+        this with { Lines = Lines.Add(new ChatLine(role, text, toolCallId)) };
 
     /// <summary>Replace a line at the given index (used only for in-place edits if needed).</summary>
     public UiState SetLine(int index, ChatRole role, string text)
