@@ -113,6 +113,14 @@ public sealed class StateTestRunner
                 parts.Add(line.Text);
         }
 
+        // Input text (history navigation, slash autocomplete).
+        if (!string.IsNullOrEmpty(state.Input.Text))
+            parts.Add(state.Input.Text);
+
+        // Focused panel id.
+        if (!string.IsNullOrEmpty(state.FocusedPanelId))
+            parts.Add(state.FocusedPanelId);
+
         // Status (idle / running / compacting / error).
         if (!string.IsNullOrEmpty(state.Status))
             parts.Add(state.Status);

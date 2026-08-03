@@ -42,13 +42,13 @@ public class StateTestRunnerTests
     }
 
     [Test]
-    public async Task ExtractExpectedText_EmptyState_ReturnsEmptyString()
+    public async Task ExtractExpectedText_EmptyState_ReturnsOnlyDefaultStatus()
     {
         var state = new UiState();
 
         string text = StateTestRunner.ExtractExpectedText(state);
 
-        await Assert.That(text).IsEmpty();
+        await Assert.That(text).IsEqualTo("idle");
     }
 
     [Test]

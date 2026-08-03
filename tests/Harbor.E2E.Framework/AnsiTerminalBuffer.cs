@@ -262,9 +262,21 @@ internal sealed class AnsiTerminalBuffer
         {
             switch (command)
             {
-                case 'h': // Set private mode — ignore (e.g. alternate screen, cursor visibility)
+                case 'h': // Set private mode
+                    if (p0 == 1049 || p0 == 47 || p0 == 1047)
+                    {
+                        ClearEntireScreen();
+                        _cursorRow = 0;
+                        _cursorCol = 0;
+                    }
                     return;
-                case 'l': // Reset private mode — ignore
+                case 'l': // Reset private mode
+                    if (p0 == 1049 || p0 == 47 || p0 == 1047)
+                    {
+                        ClearEntireScreen();
+                        _cursorRow = 0;
+                        _cursorCol = 0;
+                    }
                     return;
                 case 'J': // Erase in Display (private mode) — treat same as non-private
                     if (p0 == 0 || p0 == 2)
@@ -606,6 +618,26 @@ internal sealed class AnsiTerminalBuffer
         }
 
         return true;
+    }
+
+    /// <summary>
+    ///     Returns the entire visible grid as a single string with rows
+    ///     separated by newlines. Trailing whitespace on each row is trimmed.
+    /// </summary>
+    public string GetVisibleText()
+    {
+        var sb = new StringBuilder(_height * (_width + 1));
+        for (int r = 0; r < _height; r++)
+        {
+            var rowSb = new StringBuilder(_width);
+            for (int c = 0; c < _width; c++)
+            {
+                char ch = _grid[r, c].Character;
+                rowSb.Append(ch == '\0' ? ' ' : ch);
+            }
+            sb.AppendLine(rowSb.ToString().TrimEnd());
+        }
+        return sb.ToString();
     }
 
     /// <summary>

@@ -337,9 +337,10 @@ public sealed class MockLlmServer : IAsyncDisposable
         }
         else
         {
-            // Stream the canned text in 4-char chunks. Real providers stream
-            // per-token; 4-char chunks are visually similar and fast enough
-            // for tests (no Thread.Sleep between chunks).
+            // Stream the canned text in 4-char chunks with a small delay to
+            // simulate real provider cadence. Without the delay, all chunks
+            // arrive in a single TCP frame and the TUI's event pipeline may
+            // not process them all before the finish event closes the message.
             string text = canned.Text ?? string.Empty;
             for (int i = 0; i < text.Length; i += 4)
             {
@@ -347,6 +348,7 @@ public sealed class MockLlmServer : IAsyncDisposable
                 string slice = text.Substring(i, len);
                 string chunk = BuildTextDeltaChunk(model ?? "mock", slice);
                 await WriteSseAsync(outStream, chunk, ct).ConfigureAwait(false);
+                await Task.Delay(50, ct).ConfigureAwait(false);
             }
             string finishChunk = BuildFinishChunk(model ?? "mock", "stop");
             await WriteSseAsync(outStream, finishChunk, ct).ConfigureAwait(false);

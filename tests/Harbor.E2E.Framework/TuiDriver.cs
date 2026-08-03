@@ -492,6 +492,17 @@ public sealed class TuiDriver : IE2eDriver
     }
 
     /// <summary>
+    ///     Read the current visible terminal grid (2D screen buffer). Unlike
+    ///     <see cref="ReadScreenAsync" /> which returns the append-only log of
+    ///     all output, this returns only what is currently visible on screen —
+    ///     reflecting cursor positioning, scrolling, and overwrites.
+    /// </summary>
+    public Task<string> ReadGridAsync(CancellationToken ct = default)
+    {
+        return Task.FromResult(_terminalBuffer.GetVisibleText());
+    }
+
+    /// <summary>
     ///     Get the raw ANSI output from the PTY (without stripping escape sequences).
     ///     This can be used for screenshot rendering with ANSI-capable tools.
     /// </summary>
@@ -634,12 +645,10 @@ public sealed class TuiDriver : IE2eDriver
                 await Task.Delay(100, ct).ConfigureAwait(false);
             }
 
-            // If we get here, the pattern was not found. In terminal emulator mode,
-            // we can't reliably read the screen, so we fall back to an optimistic
-            // assumption with a warning.
-            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, falling back to delay for '{pattern}'");
-            await Task.Delay(500, ct).ConfigureAwait(false);
-            return true; // Optimistic assumption
+            // Pattern was not found within the deadline. In terminal emulator mode
+            // we can't reliably read the screen, so report failure honestly.
+            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, pattern '{pattern}' not found within timeout");
+            return false;
         }
 
         var ptyDeadline = TimeSpan.FromSeconds(10);

@@ -112,6 +112,10 @@ public class BlazorE2ETests : E2eTestBase
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
         var response = await http.GetAsync(FormattableString.Invariant($"http://localhost:{port}/css/site.css")).ConfigureAwait(false);
         await Assert.That((int)response.StatusCode).IsEqualTo(200);
+        // Verify the body is actual CSS content (not an empty 200 or HTML error
+        // page). site.css begins with a :root { --ctp-base: ... } block.
+        string css = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        await Assert.That(css).Contains(":root");
 
         await driver.StopAsync().ConfigureAwait(false);
     }
@@ -135,6 +139,10 @@ public class BlazorE2ETests : E2eTestBase
         // Blazor Server falls back to the index page for client-side routing,
         // so we expect 200 (not 404) regardless of whether the route resolves.
         await Assert.That((int)response.StatusCode).IsEqualTo(200);
+        // Verify the SPA fallback actually served the Blazor app shell (App.razor)
+        // rather than an empty 200. The index page includes the blazor.web.js script.
+        string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+        await Assert.That(body).Contains("blazor.web.js");
 
         await driver.StopAsync().ConfigureAwait(false);
     }

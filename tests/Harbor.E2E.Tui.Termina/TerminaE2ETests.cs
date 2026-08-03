@@ -39,7 +39,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -57,7 +57,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_IsDispatched()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -76,7 +76,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -95,7 +95,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Screenshot_CapturesCoreStates()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/termina";
         Directory.CreateDirectory(screenshotDir);
@@ -142,7 +142,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Streaming_ShowsResponse()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetResponse("test-model", "Hello from the mock LLM!");
 
@@ -167,7 +167,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
 
@@ -192,7 +192,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
 
@@ -217,7 +217,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
@@ -242,7 +242,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetResponse("test-model", "Agent is responding.");
 
@@ -271,7 +271,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -294,7 +294,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Alt1_TogglesPanel()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -316,14 +316,15 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
-        await Task.Delay(500).ConfigureAwait(false);
+        // Short debounce between rapid key presses — no observable state change expected.
+        await Task.Delay(50).ConfigureAwait(false);
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
         bool sawCycle = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawCycle).IsTrue();
@@ -340,14 +341,19 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
+
+        // Configure a mock response so we can poll for the round-trip completion.
+        Server.SetResponse("test-model", "Mock reply for scroll.");
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
-        await Task.Delay(1000).ConfigureAwait(false);
+        // Poll for the mock response instead of a fixed delay — proves the agent
+        // round-trip completed and chat history is populated.
+        await driver.WaitForTextAsync("Mock reply for scroll.", TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.PageUp).ConfigureAwait(false);
         bool sawScroll = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -365,14 +371,19 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
+
+        // Configure a mock response so we can poll for the round-trip completion.
+        Server.SetResponse("test-model", "Mock reply for history.");
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("first prompt\r").ConfigureAwait(false);
-        await Task.Delay(1000).ConfigureAwait(false);
+        // Poll for the mock response instead of a fixed delay — proves the agent
+        // round-trip completed and the prompt is in input history.
+        await driver.WaitForTextAsync("Mock reply for history.", TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.UpArrow, ConsoleModifiers.Alt).ConfigureAwait(false);
         bool sawHistory = await driver.WaitForTextAsync("first prompt", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
@@ -390,7 +401,7 @@ public class TerminaE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);

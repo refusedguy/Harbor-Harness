@@ -72,7 +72,7 @@ public abstract class E2eTestBase
                                 "authType": "bearer",
                                 "authEnvVar": "MOCK_API_KEY",
                                 "models": [
-                                  { "id": "test-model", "displayName": "Mock Test Model", "contextLength": 4096, "maxOutputTokens": 1024 }
+                                  { "id": "test-model", "providerId": "mock", "displayName": "Mock Test Model", "contextWindow": 128000, "maxOutputTokens": 4096, "supportsReasoning": false, "supportsVision": false, "supportsToolUse": true, "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 }, "promptTemplate": "openai" }
                                 ]
                               }
                               """;
@@ -135,10 +135,11 @@ public abstract class E2eTestBase
     };
 
     /// <summary>
-    ///     Per-test guard for TUI E2E tests: returns <see langword="true" /> if
-    ///     the current sandbox supports PTY allocation (so the test should run
-    ///     normally) or <see langword="false" /> if PTY is blocked (in which
-    ///     case the test should bail out with a passing no-op).
+    ///     Per-test guard for TUI E2E tests: throws TUnit's
+    ///     <see cref="TUnit.Core.Exceptions.SkipTestException" /> (via
+    ///     <see cref="Skip.Test" />) when the current sandbox does not support
+    ///     PTY allocation, causing the test to appear as <b>Skipped</b> in test
+    ///     reports rather than silently passing.
     /// </summary>
     /// <remarks>
     ///     TUI renderers (SpectreTui, Termina, Terminal.Gui, RazorConsole)
@@ -149,11 +150,10 @@ public abstract class E2eTestBase
     ///     guard at the top of each TUI test keeps the suite green in
     ///     PTY-restricted environments without ripping the tests out.
     /// </remarks>
-    protected static bool EnsurePtyAvailable()
+    protected static void EnsurePtyAvailable()
     {
-        if (TuiDriver.IsPtyAvailable()) return true;
-        Console.WriteLine("[SKIP] " + TuiDriver.NoPtySkipReason);
-        return false;
+        if (TuiDriver.IsPtyAvailable()) return;
+        Skip.Test(TuiDriver.NoPtySkipReason);
     }
 
     /// <summary>

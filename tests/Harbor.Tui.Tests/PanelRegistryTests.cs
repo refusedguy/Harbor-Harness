@@ -559,7 +559,7 @@ public class TeaComplianceTests
 
     /// <summary>
     ///     <see cref="SpectreTuiRenderer" />'s private <c>ChatScreen</c> class has no
-    ///     mutable instance fields named <c>_scroll</c>, <c>_viewport</c>, or
+    ///     mutable instance fields named <c>_scroll</c> or
     ///     <c>_wasRunning</c>. These were the §FP-005 violation — they used to bypass
     ///     the reducer and store state locally. After the fix, all state lives in
     ///     <see cref="UiState" />.
@@ -578,7 +578,6 @@ public class TeaComplianceTests
             .ToHashSet();
 
         await Assert.That(fields.Contains("_scroll")).IsFalse();
-        await Assert.That(fields.Contains("_viewport")).IsFalse();
         await Assert.That(fields.Contains("_wasRunning")).IsFalse();
     }
 

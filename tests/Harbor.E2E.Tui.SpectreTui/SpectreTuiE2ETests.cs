@@ -23,8 +23,10 @@ namespace Harbor.E2E.Tui.SpectreTui;
 ///     </para>
 ///     <para>
 ///         <b>Skip when PTY is blocked:</b> each test calls
-///         <see cref="E2eTestBase.EnsurePtyAvailable" /> at the top and bails
-///         out (returning without asserting) so the E2E suite stays green in
+///         <see cref="E2eTestBase.EnsurePtyAvailable" /> at the top, which
+///         throws TUnit's <c>SkipTestException</c> (via <c>Skip.Test</c>)
+///         so the test is reported as <b>Skipped</b> in test reports rather
+///         than silently passing. This keeps the E2E suite green in
 ///         PTY-restricted environments without ripping the tests out.
 ///     </para>
 ///     <para>
@@ -71,7 +73,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -95,17 +97,18 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_ShowsCommandList()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
-        bool sawHelp = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        // The slash command is echoed back by the renderer; the help text
-        // itself may be rendered as a popup. Asserting on the echoed command
-        // is sufficient to prove the keystroke path works end-to-end.
+        // The SlashCommandDispatcher outputs "Commands: /setup /auth /model ..."
+        // for /help. Assert on the "Commands:" header to prove the help handler
+        // actually ran and rendered the command list — not just that the typed
+        // "/help" text was echoed back by the input box.
+        bool sawHelp = await driver.WaitForTextAsync("Commands:", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawHelp).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -120,7 +123,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -144,7 +147,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -169,7 +172,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task QuestionMark_TogglesHelpPanel()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -196,7 +199,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task TypedText_IsEchoedToScreen()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -223,7 +226,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Screenshot_CapturesCoreStates()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         string screenshotDir = "/mnt/projects/Harbor-Harness/docs/screenshots/tui/spectre-tui";
         Directory.CreateDirectory(screenshotDir);
@@ -273,7 +276,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     //  TASK 3.1 — State coverage tests (streaming, tool-call, error, compaction, agent-running)
     //  Each test drives the agent loop via the mock LLM and asserts on the
     //  rendered screen buffer for a DIFFERENT UiState. These tests are
-    //  PTY-gated (skipped when EnsurePtyAvailable() returns false).
+    //  PTY-gated (skipped via SkipTestException when PTY is unavailable).
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
@@ -286,7 +289,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Streaming_ShowsResponse()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         // Configure the mock LLM to return a known response.
         Server.SetResponse("test-model", "Hello from the mock LLM!");
@@ -304,9 +307,11 @@ public class SpectreTuiE2ETests : E2eTestBase
         {
             string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
             string rawAnsi = driver.ReadRawAnsi();
+            var requests = Server.ReceivedRequests;
+            var reqInfo = string.Join("\n", requests.Select(r => $"  Model='{r.Model}' Body={r.RawBody[..Math.Min(200, r.RawBody.Length)]}"));
             string debugPath = Path.Combine(Path.GetTempPath(), "harbor-debug-streaming.txt");
             await File.WriteAllTextAsync(debugPath,
-                $"=== SCREEN ({screen.Length} chars) ===\n{screen}\n\n=== RAW ANSI ({rawAnsi.Length} chars) ===\n{rawAnsi}\n").ConfigureAwait(false);
+                $"=== REQUESTS ({requests.Count}) ===\n{reqInfo}\n\n=== SCREEN ({screen.Length} chars) ===\n{screen}\n\n=== RAW ANSI ({rawAnsi.Length} chars) ===\n{rawAnsi}\n").ConfigureAwait(false);
         }
         await Assert.That(sawResponse).IsTrue();
 
@@ -322,7 +327,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         // Configure the mock to return a tool call for the "read" tool.
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
@@ -333,8 +338,10 @@ public class SpectreTuiE2ETests : E2eTestBase
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
 
-        // The tool name should appear in the tool-call card.
-        bool sawTool = await driver.WaitForTextAsync("read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        // The tool-call card is formatted by UiReducer.FormatToolStart as
+        // "→ {toolName}  {args}" — assert on the arrow-prefixed tool name to
+        // avoid matching the generic word "read" in the user's own prompt echo.
+        bool sawTool = await driver.WaitForTextAsync("→ read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -349,7 +356,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         // Configure the mock to return an HTTP 500 error.
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
@@ -377,20 +384,38 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
-        // Configure a long response to fill context and trigger compaction.
+        // Override the mock provider config with a tiny context window so
+        // compaction triggers on the first turn (system prompt alone exceeds 50 tokens).
+        string providersDir = Path.Combine(TempHome, ".harbor", "providers");
+        string mockConfigPath = Path.Combine(providersDir, "mock.json");
+        string mockConfig = $$"""
+                              {
+                                "id": "mock",
+                                "displayName": "Mock LLM (E2E)",
+                                "description": "In-process mock for E2E tests.",
+                                "baseUrl": "{{Server.BaseUri}}",
+                                "apiType": "openai-compatible",
+                                "authType": "bearer",
+                                "authEnvVar": "MOCK_API_KEY",
+                                "models": [
+                                  { "id": "test-model", "providerId": "mock", "displayName": "Mock Test Model", "contextWindow": 50, "maxOutputTokens": 32, "supportsReasoning": false, "supportsVision": false, "supportsToolUse": true, "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 }, "promptTemplate": "openai" }
+                                ]
+                              }
+                              """;
+        await File.WriteAllTextAsync(mockConfigPath, mockConfig).ConfigureAwait(false);
+
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
-        // Send a prompt to trigger the agent loop.
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
-        // Wait for the status to show "compacting" or "running".
-        bool sawStatus = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        // The compacting status pill renders as " COMPACT " (ChatMarkup.StatusPill).
+        bool sawStatus = await driver.WaitForTextAsync("COMPACT", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawStatus).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -405,7 +430,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         Server.SetResponse("test-model", "Agent is responding.");
 
@@ -436,14 +461,17 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Alt1_TogglesPanel()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
-        bool sawPanel = await driver.WaitForTextAsync("panel", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        // Alt+1 toggles the first registered panel (HelpPanel) visible.
+        // The panel content includes the keymap listing — assert on that since
+        // the tab strip label may not survive cursor-positioned rendering.
+        bool sawPanel = await driver.WaitForTextAsync("keymap", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawPanel).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -458,16 +486,22 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
+        // Ctrl+Tab cycles focus between *visible* panels (UiReducer.CycleFocus).
+        // With all panels hidden it's a no-op, so first toggle the 1st panel
+        // (HelpPanel) visible via Alt+1.
+        await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
+        // Wait for the help panel content to confirm it's visible.
+        await driver.WaitForTextAsync("keymap", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+        // Now cycle focus — the panel content should remain visible after cycling.
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
-        await Task.Delay(500).ConfigureAwait(false);
-        await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
-        bool sawCycle = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        bool sawCycle = await driver.WaitForTextAsync("keymap", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawCycle).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -482,20 +516,41 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
+
+        // Generate enough chat history to exceed the viewport height so that
+        // PageUp actually changes the visible content.
+        Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("Scroll line. ", 40)));
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
         await WaitBootAsync(driver).ConfigureAwait(false);
 
-        // Generate some chat history first.
-        await driver.SendInputAsync("hello\r").ConfigureAwait(false);
-        await Task.Delay(1000).ConfigureAwait(false);
+        // Send multiple prompts to fill the screen beyond the viewport.
+        for (int i = 1; i <= 3; i++)
+        {
+            Server.SetResponse("test-model", $"Reply number {i}. " + string.Concat(Enumerable.Repeat("filler ", 30)));
+            await driver.SendInputAsync($"prompt {i}\r").ConfigureAwait(false);
+            await driver.WaitForTextAsync($"Reply number {i}.", TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        }
+
+        // Capture the visible grid before scrolling so we can prove the viewport changed.
+        string beforeScroll = await driver.ReadGridAsync().ConfigureAwait(false);
 
         // Scroll up.
         await driver.SendKeyAsync(ConsoleKey.PageUp).ConfigureAwait(false);
-        bool sawScroll = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Assert.That(sawScroll).IsTrue();
+        // Poll for the grid content to change instead of a fixed delay —
+        // proves the scroll offset was updated and the renderer re-drew.
+        var scrollDeadline = Stopwatch.StartNew();
+        string afterScroll = beforeScroll;
+        while (scrollDeadline.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            afterScroll = await driver.ReadGridAsync().ConfigureAwait(false);
+            if (afterScroll != beforeScroll) break;
+            await Task.Delay(50).ConfigureAwait(false);
+        }
+
+        await Assert.That(afterScroll).IsNotEqualTo(beforeScroll);
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
         await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
@@ -509,7 +564,10 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
+
+        // Configure a mock response so we can poll for the round-trip completion.
+        Server.SetResponse("test-model", "Mock reply for history.");
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
@@ -517,7 +575,9 @@ public class SpectreTuiE2ETests : E2eTestBase
 
         // Submit a command to populate history.
         await driver.SendInputAsync("first prompt\r").ConfigureAwait(false);
-        await Task.Delay(1000).ConfigureAwait(false);
+        // Poll for the mock response instead of a fixed delay — proves the agent
+        // round-trip completed and the prompt is in input history.
+        await driver.WaitForTextAsync("Mock reply for history.", TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // Navigate up in history.
         await driver.SendKeyAsync(ConsoleKey.UpArrow, ConsoleModifiers.Alt).ConfigureAwait(false);
@@ -536,7 +596,7 @@ public class SpectreTuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        if (!EnsurePtyAvailable()) return;
+        EnsurePtyAvailable();
 
         await using var driver = new TuiDriver(CliProjectPath, TuiName);
         await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);

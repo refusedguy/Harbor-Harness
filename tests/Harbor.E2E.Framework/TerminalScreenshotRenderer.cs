@@ -94,10 +94,9 @@ internal static class TerminalScreenshotRenderer
         psi.ArgumentList.Add("--headless");
         psi.ArgumentList.Add("--disable-gpu");
         psi.ArgumentList.Add("--hide-scrollbars");
-        psi.ArgumentList.Add("--window-size=1280,720");
+        psi.ArgumentList.Add("--virtual-time-budget=2000");
+        psi.ArgumentList.Add("--window-size=1280,2000");
         psi.ArgumentList.Add($"--screenshot={outputPngPath}");
-        // Add cache-busting query param so Chromium doesn't serve a cached render
-        // from a previous invocation with the same file:// URL.
         psi.ArgumentList.Add(new Uri(htmlPath).AbsoluteUri + "?t=" + Guid.NewGuid().ToString("N"));
 
         using var process = Process.Start(psi);
