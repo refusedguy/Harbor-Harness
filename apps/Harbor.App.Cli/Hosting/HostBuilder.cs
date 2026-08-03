@@ -264,8 +264,8 @@ internal static class HostBuilder
         builder.Services.AddSingleton<AuthStore>();
         builder.Services.AddSingleton<OnboardingWizard>();
         builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
-        builder.Services.AddSingleton<IEventBusMiddleware>(sp =>
-            new SamplingMiddleware(sp.GetRequiredService<ILogger<SamplingMiddleware>>()));
+        // SamplingMiddleware (rate=0.1) drops ~90% of MessageUpdateEvents which
+        // breaks streaming text delivery to TUI renderers — not registered.
         builder.Services.AddSingleton<IEventBusMiddleware>(sp =>
             new TypeFilterMiddleware(sp.GetRequiredService<ILogger<TypeFilterMiddleware>>()));
         builder.Services.AddSingleton<IEventBus>(sp =>
