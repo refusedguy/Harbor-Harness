@@ -722,7 +722,7 @@ dotnet build
 # Run all tests
 dotnet test
 
-# Run a specific test project
+# Run a specific test project (TUnit uses --treenode-filter, NOT --filter)
 dotnet test tests/Harbor.Core.Tests
 
 # Run the CLI

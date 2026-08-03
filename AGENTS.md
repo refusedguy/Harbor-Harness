@@ -572,8 +572,9 @@ dotnet build
 # Run all tests
 dotnet test
 
-# Run specific project tests
+# Run specific project tests (TUnit uses --treenode-filter, NOT --filter)
 dotnet test tests/Harbor.Core.Tests
+dotnet test tests/Harbor.Tui.Tests --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
 # Run CLI
 dotnet run --project src/Harbor.Cli
