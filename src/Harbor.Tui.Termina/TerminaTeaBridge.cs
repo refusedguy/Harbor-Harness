@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.Termina.Handlers;
+using Harbor.Tui.Termina.Views;
+using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Termina;
@@ -66,11 +68,28 @@ public sealed class TerminaTeaBridge : IDisposable
     public string? DequeueToast() =>
         _toastQueue.TryDequeue(out string? msg) ? msg : null;
 
+    /// <summary>Shared diagnostics panel (resolved from DI by the renderer).</summary>
+    public IDiagnosticsPanel? DiagnosticsPanel { get; set; }
+
+    /// <summary>Dump recent log entries into the chat transcript via the store.</summary>
+    public void DumpDiagnostics()
+    {
+        if (DiagnosticsPanel is null)
+        {
+            PushLine("F12: no diagnostics panel registered (non-interactive build).");
+            return;
+        }
+        var view = new DiagnosticsView();
+        foreach (string line in view.Render(DiagnosticsPanel, 10))
+            Store.Transition(s => s.AddLine(ChatRole.System, line));
+    }
+
     /// <summary>Submit a prompt through the TEA reducer (runs PromptAgent effect).</summary>
     public void Submit(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
+        Store.Transition(s => s.SetInput(s.Input.SetText(text)));
         var effect = Store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
         Effects.Run(effect);
     }

@@ -70,6 +70,7 @@ public sealed class TerminalGuiTeaBridge : IDisposable
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
+        Store.Transition(s => s.SetInput(s.Input.SetText(text)));
         var effect = Store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
         Effects.Run(effect);
     }

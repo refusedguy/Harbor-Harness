@@ -9,6 +9,7 @@ using Harbor.Tui.SpectreTui.Panels;
 using Harbor.Tui.SpectreTui.Panels.Builtin;
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
@@ -138,7 +139,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         // panel state; the registry only holds the provider list.
         SeedPanelRegistryIntoState();
 
-        _screen = new ChatScreen(_store, _effects, _logger, Panels, host);
+        _screen = new ChatScreen(_store, _effects, _logger, Panels, host, new DefaultUiProjector());
 
         var settings = new ApplicationSettings
         {
@@ -221,6 +222,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly TuiEffectHost _effects;
         private readonly ChatKeyMap _keyMap = new();
         private readonly ChatViewProjector _layout;
+        private readonly SpectreUiViewport _viewport;
         private readonly ILogger _logger;
         private readonly PanelViewProjector _panels;
         private readonly PanelLayoutShell _panelShell;
@@ -228,17 +230,21 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
         private readonly PanelRegistry _registry;
         private readonly IServiceProvider _services;
         private readonly UiStore _store;
+        private readonly IUiProjector _projector;
         private ApplicationContext? _app;
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
-            PanelRegistry registry, IServiceProvider services, SpectreTuiRenderer? parent = null)
+            PanelRegistry registry, IServiceProvider services, IUiProjector projector,
+            SpectreTuiRenderer? parent = null)
         {
             _store = store;
             _effects = effects;
             _logger = logger;
             _registry = registry;
             _services = services;
+            _projector = projector;
             _layout = new ChatViewProjector();
+            _viewport = new SpectreUiViewport(_layout);
             _panels = new PanelViewProjector(_layout, registry);
             _panelShell = new PanelLayoutShell(registry);
             _parent = parent!;
@@ -246,7 +252,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
 
         public ChatScreen(UiStore store, TuiEffectHost effects, ILogger logger,
             PanelRegistry registry, IServiceProvider services)
-            : this(store, effects, logger, registry, services, null)
+            : this(store, effects, logger, registry, services, new DefaultUiProjector(), null)
         {
             // Backwards-compatible ctor for tests that don't pass a parent.
         }
@@ -459,8 +465,9 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 state = _store.State;
             }
 
-            // ── 3. Sync UiState into the chat projector (read-only copy for this frame).
-            SyncLayout(state, historyArea.Width);
+            // ── 3. Project UiState → UiScreenModel → apply to Spectre widgets.
+            var screen = _projector.Project(state);
+            _viewport.Apply(screen);
             _layout.ScrollOffset = state.ScrollOffset;
 
             // ── 4. Build widgets (this measures TotalLines / MaxScroll / EffectiveScroll).
@@ -482,8 +489,7 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
                 _layout.ScrollOffset = state.ScrollOffset;
             }
 
-            // Footer after measure so scroll % matches this frame.
-            _layout.FooterText = BuildFooter(state);
+            // Footer text was set by the viewport in Apply(screen).
 
             _logger.LogTrace(
                 "Render: scroll={Scroll}/{Max} total={Total} viewport={Viewport} lines={Lines}",
@@ -506,60 +512,12 @@ public sealed class SpectreTuiRenderer : BaseTuiRenderer, IInteractiveTuiRendere
             }
         }
 
-        private void SyncLayout(UiState s, int historyWidth)
-        {
-            _layout.Model = s.Model;
-            _layout.Provider = s.Provider;
-            _layout.Agent = s.AgentName;
-            _layout.Status = s.Status;
-            _layout.TokensIn = (int)s.Cost.TokensIn;
-            _layout.TokensOut = (int)s.Cost.TokensOut;
-            _layout.Cost = s.Cost.CostUsd;
-            _layout.IsStreaming = s.IsStreaming;
-            _layout.StreamBuffer = s.Active.TextBuffer;
-            _layout.ThinkBuffer = s.Active.ThinkBuffer;
-            _layout.IsReadingInput = !s.IsAgentRunning;
-            // Panel width minus the body indent ("  ") so the grid never overflows.
-            _layout.SetLines(s.Lines, s.IsStreaming, s.Active, historyWidth - 2);
-            _layout.InputText = s.Input.Text;
-            _layout.Focus = s.Focus;
-            // Do NOT assign TotalLines / ViewportLines / SourceCount —
-            // LayoutBuilder owns those (private set) during BuildHistory.
-            // ScrollOffset is set in RenderCore right before BuildWidgets.
-        }
-
-        /// <summary>
-        ///     Build the footer markup from the current <see cref="UiState" />. Reads
-        ///     <c>state.ScrollOffset</c> / <c>_layout.MaxScroll</c> for the scroll
-        ///     percentage. Pure (no state mutation).
-        /// </summary>
-        private string BuildFooter(UiState s)
-        {
-            string Label(ChatAction a) => _keyMap.Get(a).Label;
-            string mode = s.Focus == FocusMode.Input ? "[green]INPUT[/]" : "[aqua]CHAT[/]";
-
-            int max = _layout.MaxScroll;
-            int scroll = s.ScrollOffset;
-            string scrollPct = max > 0
-                ? $"scroll {scroll * 100 / max}%"
-                : "scroll 0%";
-
-            // Esc is quit (see keymap); show it honestly.
-            return $"[grey]esc[/] {Label(ChatAction.Quit)}  " +
-                   $"[grey]F2[/] {Label(ChatAction.ToggleFocus)}  {mode}  " +
-                   $"[grey]↑/↓[/] {Label(ChatAction.ScrollUpLine)}  " +
-                   $"[grey]PgUp/PgDn[/] {Label(ChatAction.ScrollUpPage)}  " +
-                   $"[grey]Home/End[/] {Label(ChatAction.ScrollTop)}  " +
-                   $"[grey]Alt+↑/↓[/] {Label(ChatAction.InputHistoryPrev)}  " +
-                   $"[grey]F12[/] logs  {scrollPct}";
-        }
-
-        private static IWidget ParagraphFromFooter(string markup)
-        {
-            // Same shape LayoutBuilder uses for footer.
-            return Paragraph.FromMarkup(
-                string.IsNullOrEmpty(markup) ? " " : markup).Centered();
-        }
+private static IWidget ParagraphFromFooter(string markup)
+    {
+        // Same shape LayoutBuilder uses for footer.
+        return Paragraph.FromMarkup(
+            string.IsNullOrEmpty(markup) ? " " : markup).Centered();
+    }
 
         private static UiKey ToUiKey(KeyMessage key)
         {

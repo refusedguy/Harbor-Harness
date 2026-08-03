@@ -1,46 +1,29 @@
 using Harbor.Tui.RazorConsole.Handlers;
 using Harbor.Tui.RazorConsole.Rendering;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using UiChatLine = Harbor.Ui.Framework.State.ChatLine;
 
 namespace Harbor.Tui.RazorConsole.Views;
 /// <summary>
-///     Projects an immutable <see cref="UiState" /> snapshot into a list of
-///     Spectre markup strings for RazorConsole. Each <see cref="UiChatLine" />
-///     is expanded through <see cref="RazorMarkdownRenderer" /> with its
-///     role color, prefixed by the <c>─ role ─</c> header band. Streaming
-///     output (active text + thinking) is appended as a live block.
+///     Projects an immutable <see cref="UiScreenModel" /> snapshot into a list of
+///     Spectre markup strings for RazorConsole. Each rendered line is
+///     expanded through <see cref="RazorMarkdownRenderer" /> with its
+///     role color. Streaming output is already embedded in the projected lines.
 /// </summary>
 public sealed class ChatView
 {
-    /// <summary>Build the list of display strings for the supplied state.</summary>
-    public IReadOnlyList<string> Build(UiState s, int historyWidth)
+    /// <summary>Build the list of display strings for the supplied screen model.</summary>
+    public IReadOnlyList<string> Build(UiScreenModel screen)
     {
-        var outp = new List<string>(s.Lines.Length + 8);
-        int bodyWidth = Math.Max(0, historyWidth - 2);
-        foreach (var line in ScrollHandler.VisibleSlice(s))
+        var outp = new List<string>(screen.Transcript.RenderedLines.Count + 8);
+        foreach (var line in screen.Transcript.RenderedLines)
         {
-            if (line.Role is not ChatRole.ToolResult)
-                outp.Add(RazorMarkdownRenderer.RenderHeader(line.Role));
-            foreach (string body in RazorMarkdownRenderer.RenderBody(line.Role, line.Text, bodyWidth))
+            var role = line.Kind == UiLineKind.Thinking ? ChatRole.Thinking : ChatRole.Assistant;
+            outp.Add(RazorMarkdownRenderer.RenderHeader(role));
+            foreach (string body in RazorMarkdownRenderer.RenderBody(role, string.Join(string.Empty, line.Spans.Select(s => s.Text)), 80 - 2))
                 outp.Add(body);
             outp.Add(" ");
-        }
-
-        if (s.IsStreaming)
-        {
-            if (!string.IsNullOrEmpty(s.Active.ThinkBuffer))
-            {
-                outp.Add(RazorMarkdownRenderer.RenderHeader(ChatRole.Thinking));
-                foreach (string b in RazorMarkdownRenderer.RenderBody(ChatRole.Thinking, s.Active.ThinkBuffer, bodyWidth))
-                    outp.Add(b);
-            }
-            if (!string.IsNullOrEmpty(s.Active.TextBuffer))
-            {
-                outp.Add(RazorMarkdownRenderer.RenderHeader(ChatRole.Assistant));
-                foreach (string b in RazorMarkdownRenderer.RenderBody(ChatRole.Assistant, s.Active.TextBuffer, bodyWidth))
-                    outp.Add(b);
-            }
         }
 
         return outp;

@@ -1,52 +1,43 @@
 using System.Text;
-using Harbor.Tui.Termina.Handlers;
 using Harbor.Tui.Termina.Rendering;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using TerminaColor = Termina.Terminal.Color;
 
 namespace Harbor.Tui.Termina.Views;
-/// <summary>
-///     Status bar projection: <c>provider/model/agent · tokens↑↓ · $cost · status · scroll%</c>.
-///     Mirrors SpectreTui's footer semantics; reads only from <see cref="UiState" />
-///     (no local mutable counters).
-/// </summary>
+
 public sealed class StatusBarView
 {
-    /// <summary>Build the status bar text for the supplied state.</summary>
-    public string Build(UiState s)
+    public string Build(UiScreenModel screen)
     {
         var sb = new StringBuilder(128);
         sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, " "));
-        sb.Append(TerminaMarkdownRenderer.Ansi(StatusColor(s), StatusGlyph(s)));
-        sb.Append(' ').Append(TerminaMarkdownRenderer.Ansi(StatusColor(s), s.Status));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "  ·  "));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, s.Provider));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "/"));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.White, s.Model));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "  ·  agent "));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Cyan, s.AgentName));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "  ·  "));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Green, $"{s.Cost.TokensIn}↑"));
-        sb.Append(' ').Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Magenta, $"{s.Cost.TokensOut}↓"));
-        sb.Append(' ').Append(TerminaMarkdownRenderer.Ansi(TerminaColor.Yellow, $"${s.Cost.CostUsd:F4}"));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, "  ·  "));
-        sb.Append(TerminaMarkdownRenderer.Ansi(TerminaColor.DarkGray, ScrollHandler.ScrollPercent(s)));
+
+        foreach (var segment in OrderedSegments(screen.StatusBar.Segments))
+        {
+            var color = segment.Style switch
+            {
+                UiSpanStyle.Accent => TerminaColor.Cyan,
+                UiSpanStyle.Dim => TerminaColor.DarkGray,
+                UiSpanStyle.Danger => TerminaColor.Red,
+                _ => TerminaColor.White
+            };
+            sb.Append(TerminaMarkdownRenderer.Ansi(color, segment.Text));
+        }
+
         return sb.ToString();
     }
 
-    private static TerminaColor StatusColor(UiState s) => s.Status switch
+    private static IReadOnlyList<UiStatusSegment> OrderedSegments(IReadOnlyList<UiStatusSegment> segments)
     {
-        "running" => TerminaColor.Cyan,
-        "compacting" => TerminaColor.Yellow,
-        "error" => TerminaColor.Red,
-        _ => TerminaColor.Gray
-    };
+        var left = segments.Where(s => s.Align == Alignment.Left).OrderBy(s => s.Importance).ToList();
+        var center = segments.Where(s => s.Align == Alignment.Center).OrderBy(s => s.Importance).ToList();
+        var right = segments.Where(s => s.Align == Alignment.Right).OrderByDescending(s => s.Importance).ToList();
 
-    private static string StatusGlyph(UiState s) => s.Status switch
-    {
-        "running" => "▌",
-        "compacting" => "◐",
-        "error" => "✗",
-        _ => "○"
-    };
+        var result = new List<UiStatusSegment>();
+        result.AddRange(left);
+        result.AddRange(center);
+        result.AddRange(right);
+        return result;
+    }
 }
