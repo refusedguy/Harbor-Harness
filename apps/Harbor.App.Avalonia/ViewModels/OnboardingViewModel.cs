@@ -137,7 +137,6 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
     /// </summary>
     public void Dispose()
     {
-        _wizardCts.Cancel();
         _wizardCts.Dispose();
     }
 
@@ -187,11 +186,53 @@ public sealed partial class OnboardingViewModel : ObservableObject, IDisposable
         this.OnPropertyChanged(nameof(CanAdvance));
     }
 
-    /// <summary>Skip onboarding entirely — closes the wizard without saving.</summary>
+    /// <summary>Skip onboarding entirely — closes the wizard with defaults saved.</summary>
     [RelayCommand]
-    private void Skip()
+    private async Task Skip()
     {
-        _wizardCts.Cancel();
+        try
+        {
+            string provider = SelectedProvider?.Id ?? "ollama";
+            string model = string.IsNullOrWhiteSpace(DefaultModel)
+                ? SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b"
+                : DefaultModel.Trim();
+            string? newKey = SelectedProvider is not null
+                             && SelectedProvider.RequiresKey
+                             && !string.IsNullOrWhiteSpace(ApiKey)
+                ? ApiKey.Trim()
+                : null;
+
+            var updateResult = await _configStore.UpdateAsync(cfg =>
+            {
+                var mergedKeys = cfg.ApiKeys.ToBuilder();
+                if (newKey is not null)
+                {
+                    mergedKeys[provider] = newKey;
+                }
+                return cfg with
+                {
+                    OnboardingCompleted = true,
+                    ApiKeys = mergedKeys.ToImmutable(),
+                    DefaultProvider = string.IsNullOrEmpty(cfg.DefaultProvider) ? provider : cfg.DefaultProvider,
+                    DefaultModel = string.IsNullOrEmpty(cfg.DefaultModel) ? model : cfg.DefaultModel,
+                    StorageBackend = string.IsNullOrEmpty(cfg.StorageBackend) ? "jsonl" : cfg.StorageBackend
+                };
+            }, _wizardCts.Token).ConfigureAwait(true);
+
+            if (updateResult.IsFailure)
+            {
+                _logger.LogWarning("Onboarding skip save failed: {Error}", updateResult.Error);
+            }
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogInformation(ex, "Onboarding skip cancelled.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Onboarding skip failed");
+        }
+
         IsCompleted = true;
         Completed?.Invoke(this, EventArgs.Empty);
     }

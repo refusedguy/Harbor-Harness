@@ -111,7 +111,10 @@ public sealed class ProviderRegistry : IProviderRegistry
         List<string>? errors = null;
         try
         {
-            // Kick off all provider queries in parallel.
+            // Kick off all provider queries in parallel. Each provider gets its
+            // own 5-second timeout so a missing local provider (e.g. Ollama
+            // not running) doesn't cancel the entire fan-out.
+            const int PerProviderTimeoutMs = 5000;
             for (int i = 0; i < providerCount; i++)
             {
                 var pid = providers[i];
@@ -130,7 +133,9 @@ public sealed class ProviderRegistry : IProviderRegistry
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), client.Error);
                         }
 
-                        var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);
+                        using var perProviderCts = new CancellationTokenSource(PerProviderTimeoutMs);
+                        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, perProviderCts.Token);
+                        var models = await client.Value.GetModelsAsync(linkedCts.Token).ConfigureAwait(false);
                         if (models.IsFailure)
                         {
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), models.Error);
@@ -138,6 +143,11 @@ public sealed class ProviderRegistry : IProviderRegistry
 
                         _modelCache[pid] = models.Value;
                         return new ModelBatch(pid, models.Value, null);
+                    }
+                    catch (OperationCanceledException ex)
+                    {
+                        _logger.LogWarning(ex, "Model fetch timed out for provider: {ProviderId}", pid);
+                        return new ModelBatch(pid, Array.Empty<ModelInfo>(), "timeout");
                     }
                     catch (Exception ex)
                     {

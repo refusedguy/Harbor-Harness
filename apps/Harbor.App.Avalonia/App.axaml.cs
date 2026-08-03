@@ -21,7 +21,7 @@ namespace Harbor.App.Avalonia;
 ///     constructs the <see cref="MainViewModel" />, and shows the
 ///     <see cref="MainWindow" />.
 /// </summary>
-public class App : Application
+public partial class App : Application
 {
     /// <summary>
     ///     The DI container. Set by <c>Program.cs</c> in the Avalonia
@@ -152,8 +152,7 @@ public class App : Application
 
         var mainWindow = new MainWindow
         {
-            DataContext = windowDataContext,
-            IsVisible = false // hidden until onboarding completes
+            DataContext = windowDataContext
         };
         desktop.MainWindow = mainWindow;
 
@@ -161,17 +160,20 @@ public class App : Application
         var onboardingWindow = new OnboardingWindow();
         onboardingWindow.Bind(onboardingVm);
 
+        // Show the main window first so the dialog has a visible parent.
+        // The dialog is modal, so the user cannot interact with the main
+        // window while the wizard is open.
+        mainWindow.Show();
+
         // ShowDialog must run after the parent window has been initialized by
         // the dispatcher. Use Dispatcher.UIThread.Post to defer it one tick.
         Dispatcher.UIThread.Post(async () =>
         {
-            await onboardingWindow.ShowDialog<OnboardingWindow.OnboardingResult>(mainWindow);
-            if (onboardingWindow.DataContext is OnboardingViewModel vm && vm.IsCompleted)
+            var result = await onboardingWindow.ShowDialog<OnboardingWindow.OnboardingResult>(mainWindow);
+            if (result != OnboardingWindow.OnboardingResult.Cancelled)
             {
-                // Either the user finished the wizard OR clicked Skip — either
-                // way, open the main window. (Skip leaves OnboardingCompleted
-                // false in the persisted config, so the wizard will reappear
-                // next launch — that matches user intent: "I'll do this later".)
+                // User finished or skipped — rebind to the saved config and
+                // keep the main window open.
 
                 // Rebind the agent to the wizard's saved provider/model. The
                 // agent was initialized in AppHost.BuildAsync with the pre-wizard

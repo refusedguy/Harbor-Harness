@@ -41,6 +41,16 @@ public partial class ProviderModelPicker : UserControl
     ///     always in the visual tree (just hidden) — loading on attach would
     ///     fan out a 5s network call on app startup.
     /// </summary>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        if (!_loadedOnce && this.DataContext is ProviderModelPickerViewModel vm)
+        {
+            _loadedOnce = true;
+            _ = vm.LoadCommand.ExecuteAsync(null);
+        }
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);

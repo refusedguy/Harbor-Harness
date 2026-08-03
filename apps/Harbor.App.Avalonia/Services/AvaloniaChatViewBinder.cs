@@ -34,19 +34,12 @@ public sealed class AvaloniaChatViewBinder : IChatViewBinder
     }
 
     /// <inheritdoc />
-    public int GetRenderedLineCount()
-    {
-        var chatVm = _services.GetService<ChatViewModel>();
-        return chatVm?.RenderedLineCount ?? 0;
-    }
-
-    /// <inheritdoc />
-    public void Rebind(UiStore store, int savedRenderedLineCount)
+    public void Rebind(UiStore store)
     {
         var chatVm = _services.GetService<ChatViewModel>();
         if (chatVm is null) return;
         // Marshal onto the UI thread — RebindToStore mutates
         // ObservableCollection bound to the chat view.
-        Dispatcher.UIThread.Post(() => chatVm.RebindToStore(store, savedRenderedLineCount));
+        Dispatcher.UIThread.Post(() => chatVm.RebindToStore(store));
     }
 }

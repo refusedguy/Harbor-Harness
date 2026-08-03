@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Command palette view code-behind. Handles keyboard navigation
@@ -55,10 +57,8 @@ public partial class CommandPaletteView : UserControl
 
     private void ClosePalette()
     {
-        if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
-        {
+        if (ResolveMainViewModel() is { } main)
             main.IsCommandPaletteOpen = false;
-        }
     }
 
     /// <summary>
@@ -73,5 +73,20 @@ public partial class CommandPaletteView : UserControl
         {
             ClosePalette();
         }
+    }
+
+    private MainViewModel? ResolveMainViewModel()
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+        {
+            return window.DataContext switch
+            {
+                MainViewModel vm => vm,
+                OrcaShellViewModel orca => orca.Main,
+                _ => null
+            };
+        }
+
+        return null;
     }
 }

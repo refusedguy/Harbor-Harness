@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Settings dialog code-behind.
@@ -16,30 +18,49 @@ public partial class SettingsView : UserControl
 
     private void Close_Click(object? sender, RoutedEventArgs e)
     {
-        if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
-        {
+        if (ResolveMainViewModel() is { } main)
             main.IsSettingsOpen = false;
-        }
+    }
+
+    private void Cancel_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is SettingsViewModel vm)
+            vm.CancelCommand.Execute(null);
+
+        CloseModal();
     }
 
     /// <summary>
-    ///     Click on the backdrop (the dark scrim outside the card) closes the
-    ///     modal — same behaviour as Esc. The card itself stops the
-    ///     PointerPressed event from bubbling because its Background is set
-    ///     (Avalonia only routes pointer events through controls with a
-    ///     non-null background brush).
+    ///     Close the modal when the user clicks the dark backdrop outside
+    ///     the card. Only fires when the click landed directly on the
+    ///     backdrop, not on a child (the card eats the event).
     /// </summary>
     private void Backdrop_Click(object? sender, PointerPressedEventArgs e)
     {
-        // Only close when the click landed directly on the backdrop, not on a
-        // child. e.Source is the original hit-test target; if it's the
-        // backdrop Border itself, the click was outside the card.
         if (ReferenceEquals(e.Source, sender))
         {
-            if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
-            {
-                main.IsSettingsOpen = false;
-            }
+            CloseModal();
         }
+    }
+
+    private void CloseModal()
+    {
+        if (ResolveMainViewModel() is { } main)
+            main.IsSettingsOpen = false;
+    }
+
+    private MainViewModel? ResolveMainViewModel()
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+        {
+            return window.DataContext switch
+            {
+                MainViewModel vm => vm,
+                OrcaShellViewModel orca => orca.Main,
+                _ => null
+            };
+        }
+
+        return null;
     }
 }

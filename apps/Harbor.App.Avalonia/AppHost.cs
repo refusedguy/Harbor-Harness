@@ -183,8 +183,6 @@ internal static class AppHost
             await Task.CompletedTask;
         });
 
-        // 9. Initialize the agent with a fresh session so the user can start chatting immediately.
-        await host.Services.GetRequiredService<ISessionManager>().EnsureDefaultSessionAsync().ConfigureAwait(false);
 
         return host;
     }
@@ -219,9 +217,8 @@ internal static class AppHost
             case SessionStatsEvent ss:
                 return ss.SessionId;
             case AgentEndEvent:
-                // Don't clear currentAgentSessionId — late-arriving events
-                // (e.g. a final MessageEnd) still belong to the just-finished run.
-                return currentAgentSessionId;
+                currentAgentSessionId = null;
+                return null;
             default:
                 return currentAgentSessionId;
         }

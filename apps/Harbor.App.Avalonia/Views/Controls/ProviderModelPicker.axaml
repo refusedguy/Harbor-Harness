@@ -1,4 +1,5 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl x:Name="Root"
+             xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
@@ -102,7 +103,7 @@
                                                         HorizontalAlignment="Stretch"
                                                         HorizontalContentAlignment="Left"
                                                         Padding="8,6" Margin="0,1"
-                                                        Command="{Binding $parent[UserControl].SelectModelCommand}"
+                                                        Command="{Binding DataContext.SelectModelCommand, ElementName=Root}"
                                                         CommandParameter="{Binding}">
                                                     <StackPanel Spacing="2">
                                                         <StackPanel Orientation="Horizontal" Spacing="6">

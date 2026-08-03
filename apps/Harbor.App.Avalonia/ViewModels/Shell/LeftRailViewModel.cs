@@ -78,6 +78,30 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task RefreshAsync() => await _inner.RefreshCommand.ExecuteAsync(null).ConfigureAwait(false);
 
+    /// <summary>Delete a session row (delegates to inner SessionListViewModel).</summary>
+    [RelayCommand]
+    private async Task DeleteSessionAsync(SessionRowViewModel? row)
+    {
+        if (row is null) return;
+        var match = _inner.Sessions.FirstOrDefault(s => s.Id == row.Id);
+        if (match is not null)
+        {
+            await _inner.DeleteCommand.ExecuteAsync(match).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Rename a session row (delegates to inner SessionListViewModel).</summary>
+    [RelayCommand]
+    private async Task RenameSessionAsync(SessionRowViewModel? row)
+    {
+        if (row is null) return;
+        var match = _inner.Sessions.FirstOrDefault(s => s.Id == row.Id);
+        if (match is not null)
+        {
+            await _inner.RenameCommand.ExecuteAsync(match).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     ///     Called when <see cref="ActiveSession" /> changes (ListBox selection).
     ///     Forwards the selection to the inner VM so the SessionManager opens
@@ -91,7 +115,17 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
         var match = _inner.Sessions.FirstOrDefault(s => s.Id == value.Id);
         if (match is not null)
         {
-            _ = _inner.OpenCommand.ExecuteAsync(match);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _inner.OpenCommand.ExecuteAsync(match).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Open session failed: {ex}");
+                }
+            });
         }
     }
 
@@ -136,17 +170,26 @@ public sealed partial class LeftRailViewModel : ObservableObject, IDisposable
             })
             .ToList();
 
+        var selectedId = ActiveSession?.Id;
         FilteredSessions.Clear();
         foreach (var r in rows)
         {
             FilteredSessions.Add(r);
         }
 
-        // Keep ActiveSession in sync with the inner VM's active selection.
-        if (innerActive is not null)
+        // Restore selection after collection rebuild to avoid ListBox SelectedItem orphan.
+        if (selectedId is not null)
+        {
+            var match = rows.FirstOrDefault(r => r.Id == selectedId);
+            if (match is not null)
+            {
+                ActiveSession = match;
+            }
+        }
+        else if (innerActive is not null)
         {
             var match = rows.FirstOrDefault(r => r.Id == innerActive.Id);
-            if (match is not null && !ReferenceEquals(match, ActiveSession))
+            if (match is not null)
             {
                 ActiveSession = match;
             }

@@ -204,18 +204,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             TokensOut = state.Cost.TokensOut;
             CostUsd = state.Cost.CostUsd;
             IsRunning = state.IsAgentRunning;
-            // Refresh the status bar's session-count group from the live
-            // sidebar collection so it tracks New / Open / Delete without
-            // waiting for a RefreshAsync round-trip (Task S2 / Problem 2 —
-            // the count was frozen at the initial value of 1 forever).
             ActiveSessionCount = Math.Max(1, Sessions.Sessions.Count);
-            // Push the live message count so the status bar's "N msgs"
-            // label updates immediately after the user sends a prompt
-            // (Task D2 / Problem 2: status bar message count was stale).
             MessageCount = state.Lines.Length;
             this.OnPropertyChanged(nameof(StatusBrushKey));
 
-            // Track token-usage history for the chart.
             TokenUsage.RecordUsage(state);
         });
     }

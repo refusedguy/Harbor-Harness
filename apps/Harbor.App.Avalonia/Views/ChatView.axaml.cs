@@ -56,6 +56,25 @@ public partial class ChatView : UserControl
                 InputBox.Focus();
             }
         };
+
+        this.DataContextChanged += (_, _) => BindAutoScroll();
+    }
+
+    private void BindAutoScroll()
+    {
+        if (Vm is not { } vm) return;
+        vm.Lines.CollectionChanged += (_, __) => ScrollToBottom();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ChatViewModel.StreamingBuffer))
+                ScrollToBottom();
+        };
+    }
+
+    private void ScrollToBottom()
+    {
+        if (ChatScrollViewer is null) return;
+        ChatScrollViewer.ScrollToEnd();
     }
 
     /// <summary>

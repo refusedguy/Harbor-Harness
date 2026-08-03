@@ -25,10 +25,15 @@
     <Grid RowDefinitions="*,Auto,Auto">
 
         <!-- ════════════ Chat history ════════════ -->
-        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" x:Name="ChatScrollViewer">
             <StackPanel>
                 <!-- Tool-call cards (killer feature #2). -->
                 <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,8,12,4">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="uvm:ToolCallViewModel">
                             <ctrl:ToolCallCardView />
@@ -38,6 +43,11 @@
 
                 <!-- Text transcript (non-tool lines) — ORCA-style chat rows. -->
                 <ItemsControl ItemsSource="{Binding Lines}" Padding="12,4">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="da:ChatLineViewModel">
                             <Grid Margin="0,6" ColumnDefinitions="100,*">

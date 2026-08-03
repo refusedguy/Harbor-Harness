@@ -14,6 +14,7 @@ public sealed partial class SessionListViewModel : ObservableObject
 {
     private readonly ISessionManager _sessionManager;
     private readonly IDispatcherAdapter _dispatcher;
+    private readonly IDialogService _dialogs;
     private readonly ILogger<SessionListViewModel> _logger;
     private readonly ISessionStore _sessionStore;
     private readonly IToastService _toasts;
@@ -24,16 +25,24 @@ public sealed partial class SessionListViewModel : ObservableObject
     [ObservableProperty]
     private string _searchText = string.Empty;
 
+    partial void OnActiveSessionChanged(SessionItemViewModel? value)
+    {
+        if (value is null) return;
+        _ = OpenCommand.ExecuteAsync(value);
+    }
+
     /// <summary>Construct the session list view-model.</summary>
     public SessionListViewModel(
         ISessionStore sessionStore,
         ISessionManager sessionManager,
+        IDialogService dialogs,
         ILogger<SessionListViewModel> logger,
         IToastService toasts,
         IDispatcherAdapter dispatcher)
     {
         _sessionStore = sessionStore;
         _sessionManager = sessionManager;
+        _dialogs = dialogs;
         _logger = logger;
         _toasts = toasts;
         _dispatcher = dispatcher;
@@ -210,16 +219,19 @@ public sealed partial class SessionListViewModel : ObservableObject
             bool ok = await _sessionManager.OpenSessionAsync(item.Id).ConfigureAwait(false);
             if (!ok)
             {
-                _toasts.Show($"Could not open session '{item.Title}'.", ToastKind.Error);
+                _dispatcher.Post(() => _toasts.Show($"Could not open session '{item.Title}'.", ToastKind.Error));
                 return;
             }
-            ActiveSession = item;
-            _toasts.Show($"Opened: {item.Title}", ToastKind.Info);
+            _dispatcher.Post(() =>
+            {
+                ActiveSession = item;
+                _toasts.Show($"Opened: {item.Title}", ToastKind.Info);
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Open session crashed");
-            _toasts.Show($"Could not open session: {ex.Message}", ToastKind.Error);
+            _dispatcher.Post(() => _toasts.Show($"Could not open session: {ex.Message}", ToastKind.Error));
         }
     }
 
@@ -230,6 +242,13 @@ public sealed partial class SessionListViewModel : ObservableObject
         if (item is null) return;
         try
         {
+            bool confirmed = await _dialogs.ConfirmAsync(
+                "Delete session",
+                $"Delete \"{item.Title}\"? This cannot be undone.",
+                "Delete",
+                "Cancel").ConfigureAwait(true);
+            if (!confirmed) return;
+
             bool ok = await _sessionManager.DeleteSessionAsync(item.Id).ConfigureAwait(false);
             if (!ok)
             {
@@ -246,25 +265,27 @@ public sealed partial class SessionListViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    ///     Rename the selected session. <b>Not yet supported</b> — surfaces an
-    ///     honest "coming in v0.8" toast to the user instead of silently
-    ///     mutating in-memory state (the previous behaviour gave the illusion
-    ///     of a rename that would be lost on next refresh).
-    /// </summary>
+    /// <summary>Rename the selected session — prompts the user for a new title.</summary>
     [RelayCommand]
     private async Task RenameAsync(SessionItemViewModel? item)
     {
         if (item is null) return;
         try
         {
-            bool ok = await _sessionManager.RenameSessionAsync(item.Id, item.Title + " (renamed)").ConfigureAwait(false);
+            string? newTitle = await _dialogs.PromptAsync(
+                "Rename session",
+                "Enter a new name for this session:",
+                item.Title).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(newTitle)) return;
+
+            bool ok = await _sessionManager.RenameSessionAsync(item.Id, newTitle.Trim()).ConfigureAwait(false);
             if (!ok)
             {
-                _toasts.Show("Rename not yet supported — coming in v0.8.", ToastKind.Warning);
+                _toasts.Show("Rename failed — the session could not be updated.", ToastKind.Error);
                 return;
             }
             await RefreshAsync().ConfigureAwait(false);
+            _toasts.Show($"Renamed to: {newTitle.Trim()}", ToastKind.Success);
         }
         catch (Exception ex)
         {

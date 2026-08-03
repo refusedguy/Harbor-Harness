@@ -36,7 +36,7 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 App.ShellMode = ResolveShellMode(args);
 App.ThemeMode = ResolveThemeMode(args);
 
-using var host = await AppHost.BuildAsync(args);
+using var host = AppHost.BuildAsync(args).GetAwaiter().GetResult();
 
 AppBuilder.Configure<App>()
     .UsePlatformDetect()

@@ -1,7 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Token usage view code-behind. Closes itself via the parent MainViewModel.
@@ -30,9 +32,22 @@ public partial class TokenUsageView : UserControl
 
     private void CloseModal()
     {
-        if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
-        {
+        if (ResolveMainViewModel() is { } main)
             main.IsTokenUsageOpen = false;
+    }
+
+    private MainViewModel? ResolveMainViewModel()
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+        {
+            return window.DataContext switch
+            {
+                MainViewModel vm => vm,
+                OrcaShellViewModel orca => orca.Main,
+                _ => null
+            };
         }
+
+        return null;
     }
 }

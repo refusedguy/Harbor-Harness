@@ -199,6 +199,13 @@ public sealed partial class ProviderModelPickerViewModel : ObservableObject
     {
         if (model is null) return;
 
+        var group = AllProviders.FirstOrDefault(g => g.Id == model.ProviderId);
+        if (group is not null && group.RequiresApiKey && !group.IsAuthenticated)
+        {
+            _toasts.Show($"Provider '{model.ProviderId}' has no API key configured. Set one in Settings first.", ToastKind.Error);
+            return;
+        }
+
         try
         {
             var updateResult = await _configStore.UpdateAsync(cfg => cfg with

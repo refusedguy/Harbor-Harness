@@ -22,7 +22,8 @@
     <Border Width="280"
             Background="{DynamicResource BgRailBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
-            BorderThickness="0,0,1,0">
+            BorderThickness="0,0,1,0"
+            x:Name="Root">
         <Grid RowDefinitions="Auto,Auto,*">
 
             <!-- ════════════ Brand header ════════════ -->
@@ -57,7 +58,8 @@
                      Padding="8,4" />
 
             <!-- ════════════ Session list ════════════ -->
-            <ListBox Grid.Row="2"
+            <ListBox x:Name="SessionList"
+                     Grid.Row="2"
                      ItemsSource="{Binding FilteredSessions}"
                      SelectedItem="{Binding ActiveSession, Mode=TwoWay}"
                      Background="Transparent"
@@ -69,12 +71,13 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
                 <ListBox.Styles>
-                    <!-- Make the ListBoxItem transparent + tight so the
-                         SessionRowView's own BgActive highlight shows through. -->
                     <Style Selector="ListBoxItem">
+                        <Setter Property="Background" Value="Transparent" />
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0,1" />
                     </Style>
+                    <!-- Make the ListBoxItem transparent + tight so the
+                         SessionRowView's own BgActive highlight shows through. -->
                     <Style Selector="ListBoxItem /template/ ContentPresenter">
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="CornerRadius" Value="4" />

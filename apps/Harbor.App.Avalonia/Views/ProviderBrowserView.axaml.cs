@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Provider browser code-behind. Loads providers on first visibility —
@@ -34,16 +35,6 @@ public partial class ProviderBrowserView : UserControl
     {
         base.OnPropertyChanged(change);
 
-        // Only fire on the false→true transition of IsVisible, and only once
-        // per session (the user can re-trigger by closing+reopening the
-        // browser — the VM's LoadProvidersCommand is idempotent enough to
-        // re-run safely). This is the fix for the "UI hangs when Ollama
-        // isn't running" bug: the previous AttachedToVisualTree handler
-        // fired on app startup (the view is in the visual tree even when
-        // hidden), kicked off GetAllModelsAsync, and blocked for ~30s on
-        // the default HttpClient timeout. With this change, the fetch is
-        // deferred until the user opens the browser AND is bounded to 5s
-        // by the VM's CancellationTokenSource.
         if (change.Property == IsVisibleProperty
             && change.NewValue is true
             && !_loadedOnce
@@ -70,10 +61,23 @@ public partial class ProviderBrowserView : UserControl
 
     private void CloseModal()
     {
-        if (this.VisualRoot is Window window && window.DataContext is MainViewModel main)
-        {
+        if (ResolveMainViewModel() is { } main)
             main.IsProviderBrowserOpen = false;
+    }
+
+    private MainViewModel? ResolveMainViewModel()
+    {
+        if (TopLevel.GetTopLevel(this) is Window window)
+        {
+            return window.DataContext switch
+            {
+                MainViewModel vm => vm,
+                OrcaShellViewModel orca => orca.Main,
+                _ => null
+            };
         }
+
+        return null;
     }
 
     private void Provider_SelectionChanged(object? sender, SelectionChangedEventArgs e)
