@@ -419,6 +419,52 @@ public sealed class JsonlSessionStore : ISessionStore
         return Result.Success();
     }
 
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    {
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            string sessionFile = GetSessionFilePath(session.Id);
+            if (!File.Exists(sessionFile))
+                return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
+
+            lock (_lock)
+            {
+                ct.ThrowIfCancellationRequested();
+                var lines = File.ReadAllLines(sessionFile).ToList();
+                if (lines.Count == 0)
+                    return Task.FromResult(Result.Failure($"Session '{session.Id}' is empty."));
+
+                var header = new SessionHeaderEntry(
+                    "session",
+                    1,
+                    session.Id,
+                    session.ProjectId,
+                    session.Directory,
+                    session.Title,
+                    session.Agent,
+                    session.Model,
+                    session.ProviderId,
+                    session.CreatedAt);
+
+                lines[0] = JsonSerializer.Serialize(header, JsonOptions);
+                File.WriteAllLines(sessionFile, lines);
+            }
+
+            _messageCache.TryRemove(session.Id, out _);
+            return Task.FromResult(Result.Success());
+        }
+        catch (OperationCanceledException)
+        {
+            return Task.FromResult(Result.Failure("Operation was cancelled."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
+            return Task.FromResult(Result.Failure(ex.Message));
+        }
+    }
+
     /// <summary>
     ///     Parse the JSONL session file from disk into a chronological message
     ///     list. Per-line JSON parse errors are aggregated into a
