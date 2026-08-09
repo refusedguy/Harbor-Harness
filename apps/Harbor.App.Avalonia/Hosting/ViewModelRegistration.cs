@@ -1,5 +1,5 @@
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.App.Avalonia.ViewModels.Shell;
+using Harbor.App.Avalonia.ViewModels.Board;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Hosting;
 /// <summary>
@@ -35,12 +35,16 @@ internal static class ViewModelRegistration
     /// <param name="services">The DI container.</param>
     public static void Register(IServiceCollection services)
     {
+        // Shared shell state (ObservableValidator) — single instance
+        // so MainViewModel keeps it updated.
+        services.AddSingleton<ShellStatus>();
+
         // Singleton cluster — shell VMs reference each other.
         services.AddSingleton<MainViewModel>();
-        services.AddSingleton<StatusBarViewModel>();
         services.AddSingleton<ChatViewModel>();
         services.AddSingleton<SessionListViewModel>();
         services.AddSingleton<CommandPaletteViewModel>();
+        services.AddSingleton<BoardViewModel>();
 
         // Transient — per-document VMs the user may discard on close.
         services.AddTransient<ProviderBrowserViewModel>();
@@ -60,13 +64,6 @@ internal static class ViewModelRegistration
         // step, typed API key) that we explicitly want to discard on close.
         services.AddTransient<OnboardingViewModel>();
 
-        // ── Experimental Orca shell VM (Task F2) ────────────────────────────
-        // Singleton so it survives across the app lifetime (same lifetime
-        // as the MainViewModel it wraps). Resolved ONLY when HARBOR_SHELL=orca
-        // (App.ShowMain branches on App.IsOrcaShell); in classic mode the
-        // singleton is constructed lazily on first resolve and never resolved,
-        // so its constructor side-effects (event subscriptions on MainViewModel)
-        // never run.
-        services.AddSingleton<OrcaShellViewModel>();
+        services.AddTransient<FocusSessionViewModel>();
     }
 }

@@ -53,6 +53,19 @@ public sealed partial class ToolCallViewModel : ObservableObject
 
     [ObservableProperty]
     private string _toolName = string.Empty;
+
+    [ObservableProperty]
+    private bool _isDiffTool;
+
+    [ObservableProperty]
+    private string? _diffFilePath;
+
+    [ObservableProperty]
+    private string? _diffPreview;
+
+    [ObservableProperty]
+    private string? _diffFull;
+
     /// <summary>Stable identifier used to coalesce start/end events.</summary>
     public string Id { get; init; } = string.Empty;
 

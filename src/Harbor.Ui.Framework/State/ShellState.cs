@@ -47,4 +47,12 @@ public sealed partial class ShellState : ObservableObject
     /// <summary>Free-text filter applied to the session list.</summary>
     [ObservableProperty]
     private string _sessionListFilter = string.Empty;
+
+    /// <summary>Active overlay in the main content area (None | SessionPicker | CommandPalette).</summary>
+    [ObservableProperty]
+    private string _activeOverlay = "None";
+
+    /// <summary>Active right-drawer tab: None | Files | Terminal | History.</summary>
+    [ObservableProperty]
+    private string _rightDrawerTab = "None";
 }

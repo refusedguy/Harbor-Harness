@@ -1,5 +1,6 @@
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Services;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Centralised keyboard-shortcut dispatcher for the main window. Every
@@ -14,17 +15,20 @@ namespace Harbor.App.Avalonia.Services;
 ///     <see cref="HandleKeyDown" /> with a synthetic <see cref="KeyEventArgs" />
 ///     instead of driving a real Avalonia input pump.
 /// </remarks>
-public sealed class KeyboardShortcutService
+internal sealed class KeyboardShortcutService
 {
-    /// <summary>
-    ///     Try to handle a key press. Returns <c>true</c> when the key
-    ///     combination matches a known binding (and the caller should
-    ///     mark the event handled); <c>false</c> when no binding matched
-    ///     (and the caller should forward to base).
-    /// </summary>
-    /// <param name="vm">The active <see cref="MainViewModel" />, or null when no shell is bound.</param>
-    /// <param name="e">The key event args.</param>
-    /// <returns>True when the shortcut was handled.</returns>
+    private readonly IOverlayStack _overlayStack;
+
+    public KeyboardShortcutService()
+        : this(new OverlayStackService())
+    {
+    }
+
+    public KeyboardShortcutService(IOverlayStack overlayStack)
+    {
+        _overlayStack = overlayStack;
+    }
+
     public bool HandleKeyDown(MainViewModel? vm, KeyEventArgs e)
     {
         if (vm is null) return false;
@@ -32,39 +36,12 @@ public sealed class KeyboardShortcutService
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
-        // Esc closes the topmost open modal.
+        // Esc closes the topmost overlay via the overlay stack.
         if (e.Key == Key.Escape)
         {
-            if (vm.IsCommandPaletteOpen)
-            {
-                vm.IsCommandPaletteOpen = false;
+            var popped = _overlayStack.PopTop();
+            if (popped is not null)
                 return true;
-            }
-            if (vm.IsSettingsOpen)
-            {
-                vm.IsSettingsOpen = false;
-                return true;
-            }
-            if (vm.IsModelPickerOpen)
-            {
-                vm.IsModelPickerOpen = false;
-                return true;
-            }
-            if (vm.IsProviderBrowserOpen)
-            {
-                vm.IsProviderBrowserOpen = false;
-                return true;
-            }
-            if (vm.IsDiffOpen)
-            {
-                vm.IsDiffOpen = false;
-                return true;
-            }
-            if (vm.IsTokenUsageOpen)
-            {
-                vm.IsTokenUsageOpen = false;
-                return true;
-            }
             return false;
         }
 

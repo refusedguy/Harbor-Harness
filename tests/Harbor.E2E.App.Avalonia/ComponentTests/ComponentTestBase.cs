@@ -112,7 +112,7 @@ public abstract class ComponentTestBase
     protected static T UI<T>(Func<T> fn) => Driver.OnUIThread(fn);
 
     /// <summary>Get the bound MainViewModel from the main window's DataContext.</summary>
-    protected static MainViewModel Vm => UI(() =>
+    internal static MainViewModel Vm => UI(() =>
         (Driver.MainWindow.DataContext as MainViewModel)
         ?? throw new InvalidOperationException("MainViewModel not bound."));
 

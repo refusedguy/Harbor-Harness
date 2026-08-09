@@ -147,7 +147,7 @@ public sealed class SessionManager : ISessionManager
         _statusTracker.NotifyMessageCount(sessionId, count);
 
     /// <summary>Get git info for a session's working directory (forwards to <see cref="SessionGitTracker" />).</summary>
-    public (string? Branch, bool IsDirty) GetGitInfo(string sessionId) =>
+    public GitSessionInfo GetGitInfo(string sessionId) =>
         _gitTracker.Get(sessionId);
 
     /// <summary>Refresh git info for a session (forwards to <see cref="SessionGitTracker" />).</summary>

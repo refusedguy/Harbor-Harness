@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Controls.HdsDiffCompact"
+             x:Name="root">
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource BgPanelBrush}"
+            CornerRadius="4"
+            Padding="8,4"
+            Cursor="Hand"
+            PointerPressed="RootBorder_PointerPressed">
+        <DockPanel>
+            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding Lines, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Text}"
+                                   FontFamily="{DynamicResource FontMono}"
+                                   FontSize="11"
+                                   Foreground="{Binding Brush}"
+                                   TextWrapping="Wrap" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="▼ Click to expand"
+                       Foreground="{DynamicResource TextTertiaryBrush}"
+                       FontSize="10"
+                       Margin="0,2,0,0"
+                       HorizontalAlignment="Center" />
+        </DockPanel>
+    </Border>
+</UserControl>

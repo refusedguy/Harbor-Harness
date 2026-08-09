@@ -1,0 +1,193 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views.Components"
+             x:Class="Harbor.App.Avalonia.Views.Dev.ComponentGalleryView"
+             AutomationProperties.AutomationId="ComponentGallery">
+
+    <ScrollViewer Background="{DynamicResource BgAppBrush}">
+        <StackPanel Spacing="{StaticResource Space6}">
+            <TextBlock Text="HDS Component Gallery (Dev Mode)"
+                       FontSize="{StaticResource FontSizeHeading}"
+                       FontWeight="{StaticResource FontWeightSemiBold}"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+
+            <!-- HdsButton Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="HdsButton"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <Button Classes="hds-primary" Content="Primary" />
+                        <Button Classes="hds-secondary" Content="Secondary" />
+                        <Button Classes="hds-ghost" Content="Ghost" />
+                        <Button Classes="hds-danger" Content="Danger" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- HdsTextBox Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="HdsTextBox"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBox Classes="hds-textbox" PlaceholderText="Default TextBox" />
+                    <TextBox Classes="hds-flush" PlaceholderText="Flush variant" />
+                </StackPanel>
+            </Border>
+
+            <!-- HdsCard Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="HdsCard"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <Border Classes="hds-card" Width="120" Height="80" />
+                        <Border Classes="hds-card-elevated" Width="120" Height="80" />
+                        <Border Classes="hds-card hoverable" Width="120" Height="80" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- HdsChip Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="HdsChip"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <Button Classes="hds-chip" Content="Default" />
+                        <Button Classes="hds-chip selected" Content="Selected" />
+                        <Button Classes="hds-chip" Content="Dismiss" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- HdsPill Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="HdsPill"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <Button Classes="hds-pill" Content="Pill Button" />
+                        <Button Classes="hds-pill selected" Content="Active" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- SegmentedControl Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="SegmentedControl"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <views:SegmentedControl />
+                </StackPanel>
+            </Border>
+
+            <!-- Kbd Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="Kbd"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <views:Kbd Keys="Ctrl+C" />
+                        <views:Kbd Keys="Cmd+K" />
+                        <views:Kbd Keys="Esc" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Icon Library Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="Icons"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <UniformGrid Columns="10" Rows="5" Margin="8">
+                        <Path Data="{StaticResource IcAdd}" Fill="{DynamicResource AccentPrimaryBrush}" />
+                        <Path Data="{StaticResource IcSearch}" Fill="{DynamicResource TextPrimaryBrush}" />
+                        <Path Data="{StaticResource IcSettings}" Fill="{DynamicResource TextPrimaryBrush}" />
+                        <Path Data="{StaticResource IcSend}" Fill="{DynamicResource AccentPrimaryBrush}" />
+                        <Path Data="{StaticResource IcTrash}" Fill="{DynamicResource StateErrorBrush}" />
+                        <Path Data="{StaticResource IcChevronRight}" Fill="{DynamicResource TextSecondaryBrush}" />
+                        <Path Data="{StaticResource IcHome}" Fill="{DynamicResource TextPrimaryBrush}" />
+                        <Path Data="{StaticResource IcTerminal}" Fill="{DynamicResource TextPrimaryBrush}" />
+                        <Path Data="{StaticResource IcCheck}" Fill="{DynamicResource StateSuccessBrush}" />
+                        <Path Data="{StaticResource IcX}" Fill="{DynamicResource StateErrorBrush}" />
+                        <Path Data="{StaticResource IcInfo}" Fill="{DynamicResource AccentPrimaryBrush}" />
+                        <Path Data="{StaticResource IcWarning}" Fill="{DynamicResource StateWarningBrush}" />
+                        <Path Data="{StaticResource IcLoading}" Fill="{DynamicResource TextTertiaryBrush}" />
+                        <Path Data="{StaticResource IcEye}" Fill="{DynamicResource TextPrimaryBrush}" />
+                        <Path Data="{StaticResource IcCopy}" Fill="{DynamicResource TextPrimaryBrush}" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+
+            <!-- StatusDot Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="StatusDot"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space2}">
+                        <Ellipse Classes="StatusDot" Fill="{DynamicResource StateSuccessBrush}" />
+                        <Ellipse Classes="StatusDot" Fill="{DynamicResource StateWarningBrush}" />
+                        <Ellipse Classes="StatusDot" Fill="{DynamicResource StateErrorBrush}" />
+                        <Ellipse Classes="StatusDot" Fill="{DynamicResource StateRunningBrush}" />
+                        <Ellipse Classes="StatusDot" Fill="{DynamicResource StateIdleBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Typography Demo -->
+            <Border Background="{DynamicResource BgPanelElevatedBrush}"
+                    CornerRadius="{StaticResource RadiusLg}"
+                    Padding="16">
+                <StackPanel Spacing="{StaticResource Space2}">
+                    <TextBlock Text="Typography"
+                               FontSize="{StaticResource FontSizeSubtitle}"
+                               FontWeight="{StaticResource FontWeightSemiBold}"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock Classes="Display" Text="Display Heading" FontWeight="{StaticResource FontWeightBold}" />
+                    <TextBlock Classes="Title" Text="Title Text" />
+                    <TextBlock Classes="Subtitle" Text="Subtitle Text" />
+                    <TextBlock Classes="Body" Text="Body text — the workhorse of interface copy." />
+                    <TextBlock Classes="Caption" Text="Caption or label text" />
+                    <TextBlock Classes="Code" Text="const api_key = 'sk-…'" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

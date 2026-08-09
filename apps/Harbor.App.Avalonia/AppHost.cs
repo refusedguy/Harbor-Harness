@@ -9,7 +9,6 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
-using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.Core.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ipc;
@@ -87,7 +86,6 @@ internal static class AppHost
     [Exposes(typeof(ICommonConfigStore))]
     [Exposes(typeof(CommonConfig))]
     [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
-    [Exposes(typeof(OrcaShellViewModel))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
         string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

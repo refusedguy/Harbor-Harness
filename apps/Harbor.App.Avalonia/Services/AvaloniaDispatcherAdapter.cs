@@ -130,13 +130,6 @@ public sealed class AvaloniaDispatcherAdapter : IDispatcherAdapter
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
     {
-        if (Dispatcher.UIThread.CheckAccess())
-        {
-            OnUiThread?.Invoke(this, e.State);
-        }
-        else
-        {
-            Dispatcher.UIThread.Post(() => OnUiThread?.Invoke(this, e.State));
-        }
+        Dispatcher.UIThread.Post(() => OnUiThread?.Invoke(this, e.State));
     }
 }

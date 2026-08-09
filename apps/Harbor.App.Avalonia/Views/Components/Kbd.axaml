@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Components.Kbd">
+
+    <Border Background="{DynamicResource BgPanelElevatedBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="1"
+            CornerRadius="4"
+            Padding="8,3">
+        <TextBlock Text="{Binding Keys, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                   FontFamily="{DynamicResource FontMono}"
+                   FontSize="10"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextTertiaryBrush}" />
+    </Border>
+</UserControl>

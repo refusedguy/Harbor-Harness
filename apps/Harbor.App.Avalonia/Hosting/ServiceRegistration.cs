@@ -154,6 +154,8 @@ internal static class ServiceRegistration
         services.AddSingleton<GitService>();
         services.AddSingleton<ToastService>();
         services.AddSingleton<IToastService>(sp => sp.GetRequiredService<ToastService>());
+        services.AddSingleton<OverlayStackService>();
+        services.AddSingleton<IOverlayStack>(sp => sp.GetRequiredService<OverlayStackService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
         services.AddSingleton<DefaultUiProjector>();

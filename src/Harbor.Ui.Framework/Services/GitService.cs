@@ -15,30 +15,35 @@ public sealed class GitService
         _logger = logger;
     }
 
-    /// <summary>
-    ///     Get git info for a directory. Returns (branch, isDirty).
-    ///     Branch is null if not a git repo.
-    /// </summary>
-    public (string? Branch, bool IsDirty) GetGitStatus(string directory)
+    /// <summary>Get git info for a directory.</summary>
+    public GitSessionInfo GetGitStatus(string directory)
     {
         if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-            return (null, false);
+            return GitSessionInfo.Empty;
 
         try
         {
             string? branch = RunGit(directory, "rev-parse", "--abbrev-ref", "HEAD");
             if (string.IsNullOrEmpty(branch))
-                return (null, false);
+                return GitSessionInfo.Empty;
 
             string? status = RunGit(directory, "status", "--porcelain");
             bool isDirty = !string.IsNullOrEmpty(status?.Trim());
+            int dirtyCount = isDirty ? status!.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries).Length : 0;
 
-            return (branch.Trim(), isDirty);
+            string? lastCommit = RunGit(directory, "log", "-1", "--format=%cr");
+            string? commitTime = null;
+            if (!string.IsNullOrEmpty(lastCommit))
+            {
+                commitTime = lastCommit.Trim();
+            }
+
+            return new GitSessionInfo(branch.Trim(), isDirty, dirtyCount, commitTime);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex, "Git status failed for {Dir}", directory);
-            return (null, false);
+            return GitSessionInfo.Empty;
         }
     }
 

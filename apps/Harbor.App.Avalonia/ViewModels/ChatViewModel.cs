@@ -2,14 +2,18 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
+using Harbor.App.Avalonia.Views.Components;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Avalonia.ViewModels;
+
 /// <summary>
 ///     Streaming chat view-model. Subscribes to <see cref="UiStore" /> transitions on the
 ///     UI thread and projects them into an observable chat-line collection. User input is
@@ -25,16 +29,14 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///         + commands for the view to bind against.
 ///     </para>
 /// </remarks>
-public sealed partial class ChatViewModel : ObservableObject, IDisposable
+internal sealed partial class ChatViewModel : StoreSubscriberViewModel
 {
-    private readonly IDispatcherAdapter _dispatcher;
     private readonly TuiEffectHost _effects;
-    private readonly ILogger<ChatViewModel> _logger;
-
-    private readonly EventHandler<UiState> _onStoreChanged;
     private readonly UiRenderEngine _renderEngine;
     private readonly ISessionManager? _sessionManager;
+    private readonly ISessionStore _sessionStore;
     private readonly IToastService _toasts;
+    private UiStore _store;
 
     [ObservableProperty]
     private string _inputText = string.Empty;
@@ -63,7 +65,53 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     private string _statusMessage = string.Empty;
-    private UiStore _store;
+
+    [ObservableProperty]
+    private bool _isLoadingHistory;
+
+    [ObservableProperty]
+    private double _pullProgress;
+
+    [ObservableProperty]
+    private double _pullOffset;
+
+    [ObservableProperty]
+    private double _contentScale = 1.0;
+
+    [ObservableProperty]
+    private bool _canLoadOlder = true;
+
+    [ObservableProperty]
+    private bool _showPullIndicator;
+
+    public ObservableCollection<Suggestion> ContextualSuggestions { get; } = new();
+
+    partial void OnIsThinkingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
+    partial void OnIsStreamingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
+    partial void OnIsAgentRunningChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
+
+    partial void OnIsLoadingHistoryChanged(bool value) => OnPropertyChanged(nameof(PullRefreshStatusText));
+    partial void OnPullProgressChanged(double value) => OnPropertyChanged(nameof(PullRefreshStatusText));
+
+    public string PullRefreshStatusText => IsLoadingHistory ? "Loading older messages..."
+        : PullProgress >= 0.5 ? "Release to refresh" : "Pull to load older messages";
+
+    /// <summary>
+    ///     Context-aware placeholder for the composer input. Changes based on
+    ///     the current agent state so the user always knows what's happening.
+    /// </summary>
+    public string InputPlaceholder => GetPlaceholder();
+
+    private string GetPlaceholder()
+    {
+        if (IsThinking)
+            return "Agent is thinking…";
+        if (IsStreaming)
+            return "Receiving response…";
+        if (IsAgentRunning)
+            return "Agent is running…";
+        return "Ask Harbor anything…";
+    }
 
     [ObservableProperty]
     private string _streamingBuffer = string.Empty;
@@ -73,21 +121,19 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
         UiStore store,
         TuiEffectHost effects,
         ISessionManager? sessionManager,
+        ISessionStore sessionStore,
         IDispatcherAdapter dispatcher,
         ILogger<ChatViewModel> logger,
         IToastService toasts,
         UiRenderEngine renderEngine)
+        : base(dispatcher, logger)
     {
         _store = store;
         _effects = effects;
         _sessionManager = sessionManager;
-        _dispatcher = dispatcher;
-        _logger = logger;
+        _sessionStore = sessionStore;
         _toasts = toasts;
         _renderEngine = renderEngine;
-
-        _onStoreChanged = (_, state) => OnStoreChanged(state);
-        _dispatcher.StateChanged += _onStoreChanged;
     }
 
     /// <summary>Visible chat lines.</summary>
@@ -113,22 +159,18 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
         _ => "ChatAssistantBrush"
     };
 
-    private void OnStoreChanged(UiState state)
+    protected override void OnStoreChanged(UiState state)
     {
-        _dispatcher.Post(() =>
+        Logger.LogDebug("OnStoreChanged: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
+            state.Lines.Length, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
+
+        _renderEngine.Render(state, this);
+
+        if (_sessionManager?.Active is { } activeSession)
         {
-            var current = _store.State;
-            _logger.LogDebug("OnStoreChanged: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
-                current.Lines.Length, current.IsStreaming, current.IsAgentRunning, current.Active.TextBuffer?.Length ?? 0);
-
-            _renderEngine.Render(current, this);
-
-            if (_sessionManager?.Active is { } activeSession)
-            {
-                _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(current));
-                _sessionManager.NotifyMessageCount(activeSession.Id, current.Lines.Length);
-            }
-        });
+            _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
+            _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
+        }
     }
 
     /// <summary>Submit the current input text. Plain Enter (handled in view) triggers this.</summary>
@@ -146,7 +188,7 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
         string text = (InputText ?? string.Empty).TrimEnd('\r', '\n');
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        _logger.LogInformation("Submitting prompt, length={Length}", text.Length);
+        Logger.LogInformation("Submitting prompt, length={Length}", text.Length);
         InputText = string.Empty;
         SendCommand.NotifyCanExecuteChanged();
 
@@ -201,6 +243,96 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
         ResetRendering();
     }
 
+    [RelayCommand]
+    private void SendSuggestion(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return;
+        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _effects.Run(new TuiEffect.PromptAgent(prompt));
+    }
+
+    /// <summary>
+    ///     Simulate loading older messages from the session store. Runs on
+    ///     release after the user pulls past the threshold at the top of the
+    ///     chat scroll viewer.
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadOlderMessagesAsync()
+    {
+        if (IsLoadingHistory || !CanLoadOlder) return;
+
+        IsLoadingHistory = true;
+        ShowPullIndicator = true;
+        PullProgress = 1.0;
+
+        try
+        {
+            await Task.Delay(1500).ConfigureAwait(false);
+
+            var session = _sessionManager?.Active;
+            if (session is null) return;
+
+            var messagesResult = await _sessionStore.GetMessagesAsync(session.Id).ConfigureAwait(false);
+            if (messagesResult.IsFailure) return;
+
+            var messages = messagesResult.Value;
+            var olderMessages = new List<ChatLineViewModel>();
+
+            for (int i = 0; i < Math.Min(5, messages.Count); i++)
+            {
+                var msg = messages[i];
+                var role = msg.Role switch
+                {
+                    "user" => ChatRole.User,
+                    "assistant" => ChatRole.Assistant,
+                    "tool_result" => ChatRole.ToolResult,
+                    _ => ChatRole.System
+                };
+                var prefix = msg.Role switch
+                {
+                    "user" => "[User]",
+                    "assistant" => "[Assistant]",
+                    "tool_result" => "[Tool]",
+                    _ => "[System]"
+                };
+                olderMessages.Add(new ChatLineViewModel(role, $"{prefix} Older message #{i + 1} from history"));
+            }
+
+            for (int i = olderMessages.Count - 1; i >= 0; i--)
+            {
+                Lines.Insert(0, olderMessages[i]);
+            }
+
+            _toasts.Show($"Loaded {olderMessages.Count} older messages", ToastKind.Info);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load older messages");
+            _toasts.Show("Failed to load older messages", ToastKind.Error);
+        }
+        finally
+        {
+            IsLoadingHistory = false;
+            ShowPullIndicator = false;
+            CanLoadOlder = false;
+        }
+    }
+
+    public void UpdateContextualSuggestions()
+    {
+        ContextualSuggestions.Clear();
+        ContextualSuggestions.Add(Suggestion.Create("⚡ Explain this codebase", "Explain this codebase structure and purpose", new RelayCommand(() => ExecuteSuggestion("Explain this codebase structure and purpose"))));
+        ContextualSuggestions.Add(Suggestion.Create("🔍 Review recent changes", "Review recent changes and suggest improvements", new RelayCommand(() => ExecuteSuggestion("Review recent changes and suggest improvements"))));
+        ContextualSuggestions.Add(Suggestion.Create("📋 Find TODOs", "Find all TODO comments in the codebase", new RelayCommand(() => ExecuteSuggestion("Find all TODO comments in the codebase"))));
+    }
+
+    private void ExecuteSuggestion(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt)) return;
+        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _effects.Run(new TuiEffect.PromptAgent(prompt));
+    }
+
     /// <summary>
     ///     Reset rendering state — called when switching sessions so the
     ///     previous session's chat lines + tool-call cards are evicted and
@@ -222,6 +354,7 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
         IsAgentRunning = false;
         StatusMessage = string.Empty;
         StreamingBuffer = string.Empty;
+        UpdateContextualSuggestions();
     }
 
     /// <summary>
@@ -267,7 +400,7 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
 
         void RebindCore()
         {
-            _dispatcher.Unbind(_store);
+            Dispatcher.Unbind(_store);
 
             Lines.Clear();
             ToolCalls.Clear();
@@ -279,31 +412,22 @@ public sealed partial class ChatViewModel : ObservableObject, IDisposable
 
             _store = newStore;
             _effects.RebindStore(newStore);
-            _dispatcher.Bind(newStore);
+            Dispatcher.Bind(newStore);
 
             OnStoreChanged(newStore.State);
         }
 
-        if (Dispatcher.UIThread.CheckAccess())
+        if (global::Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
         {
             RebindCore();
         }
         else
         {
-            _ = _dispatcher.Invoke<object>(() =>
+            _ = Dispatcher.Invoke<object>(() =>
             {
                 RebindCore();
                 return null!;
             });
         }
-    }
-
-    /// <summary>
-    ///     Unsubscribe from the dispatcher state changes to prevent
-    ///     memory leaks when the view-model is destroyed.
-    /// </summary>
-    public void Dispose()
-    {
-        _dispatcher.StateChanged -= _onStoreChanged;
     }
 }

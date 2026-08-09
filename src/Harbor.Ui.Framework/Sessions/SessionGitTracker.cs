@@ -11,19 +11,15 @@ namespace Harbor.Ui.Framework.Sessions;
 /// </summary>
 public sealed class SessionGitTracker
 {
-    /// <summary>Per-session git info (branch + dirty flag).</summary>
-    private readonly Dictionary<string, (string? Branch, bool IsDirty)> _gitInfo = new();
+    /// <summary>Per-session git info.</summary>
+    private readonly Dictionary<string, GitSessionInfo> _gitInfo = new();
 
-    /// <summary>
-    ///     Get the cached git info for a session.
-    /// </summary>
-    /// <param name="sessionId">The session id.</param>
-    /// <returns>The cached (branch, isDirty) tuple, or (null, false) when no info is cached.</returns>
-    public (string? Branch, bool IsDirty) Get(string sessionId)
+    /// <summary>Get the cached git info for a session.</summary>
+    public GitSessionInfo Get(string sessionId)
     {
         if (_gitInfo.TryGetValue(sessionId, out var info))
             return info;
-        return (null, false);
+        return GitSessionInfo.Empty;
     }
 
     /// <summary>

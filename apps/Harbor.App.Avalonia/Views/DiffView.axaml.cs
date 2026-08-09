@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Diff view code-behind. Closes itself via the parent MainViewModel.
@@ -43,12 +42,7 @@ public partial class DiffView : UserControl
     {
         if (TopLevel.GetTopLevel(this) is Window window)
         {
-            return window.DataContext switch
-            {
-                MainViewModel vm => vm,
-                OrcaShellViewModel orca => orca.Main,
-                _ => null
-            };
+            return window.DataContext as MainViewModel;
         }
 
         return null;

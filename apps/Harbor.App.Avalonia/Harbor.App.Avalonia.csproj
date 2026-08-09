@@ -38,17 +38,17 @@
          We can't pin a higher version of a transitive dep, so suppress NU1903 in this project. -->
     <NoWarn>$(NoWarn);NU1903</NoWarn>
 
-    <!-- Avalonia XAML codegen emits some pattern-matching warnings under .NET 10 analyzers. -->
-    <NoWarn>$(NoWarn);AVLN1000;AVLN1001</NoWarn>
 
-    <!-- Avalonia 12 promotes AVLN2100 (missing x:DataType on compiled bindings)
-         from warning → error. Adding x:DataType to every view is a separate UI
-         task; for now we disable compiled bindings project-wide so the launch
-         build unblocks. Reflection-based bindings work identically at runtime —
-         the only cost is compile-time binding validation. Re-enable per-view
-         via x:DataType directives during the ORCA UI redesign (Task U2).
-         AvaloniaUseCompiledBindingsByDefault is the canonical Avalonia 12
-         property name (see AvaloniaBuildTasks.targets line 185). -->
+    <WarningsAsErrors>$(WarningsAsErrors);AVLN0001;AVLN0002;AVLN0003;AVLN0004;AVLN1000;AVLN1010</WarningsAsErrors>
+
+    <!-- Full XAML→IL compilation: enables compile-time validation of Setter
+         values, binding types, and resource keys. Invalid values (e.g. a
+         string assigned to a BoxShadows property) become build-time AVLN2000
+         errors instead of runtime InvalidCastException. -->
+    <AvaloniaUseCompiledXaml>true</AvaloniaUseCompiledXaml>
+    <AvaloniaXamlReportErrors>true</AvaloniaXamlReportErrors>
+    <AvaloniaVerifyBindings>true</AvaloniaVerifyBindings>
+
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
 
     <!-- Source-generator MVVM emits some unused-field warnings. -->

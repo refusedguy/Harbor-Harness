@@ -1,7 +1,8 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
-             x:Class="Harbor.App.Avalonia.Views.Controls.ToolCallCardView">
+    <UserControl xmlns="https://github.com/avaloniaui"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
+                 xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+                 x:Class="Harbor.App.Avalonia.Views.Controls.ToolCallCardView">
 
     <!--
         ToolCallCardView — collapsible card for a single tool call.
@@ -26,13 +27,13 @@
     </UserControl.Resources>
 
     <Border Classes="ToolCallCard"
-            Background="{StaticResource MochaSurface0}"
-            BorderBrush="{StaticResource BorderBrush}"
+            Background="{DynamicResource BgSubtleBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="1"
             CornerRadius="6"
             Padding="10,6"
             Margin="0,2">
-        <Grid RowDefinitions="Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto">
 
             <!-- Header: icon + name + status pill + duration -->
             <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto">
@@ -43,7 +44,7 @@
                 <TextBlock Grid.Column="1"
                            Text="{Binding ToolName}"
                            FontWeight="SemiBold"
-                           FontFamily="{StaticResource CodeFont}"
+                           FontFamily="{DynamicResource FontMono}"
                            FontSize="12"
                            Margin="6,0,8,0"
                            VerticalAlignment="Center"
@@ -55,19 +56,26 @@
                         VerticalAlignment="Center">
                     <TextBlock Text="{Binding StatusPill}"
                                FontSize="10"
-                               FontFamily="{StaticResource CodeFont}"
-                               Foreground="{StaticResource MochaCrust}" />
+                               FontFamily="{DynamicResource FontMono}"
+                               Foreground="{DynamicResource BgPanelBrush}" />
                 </Border>
                 <TextBlock Grid.Column="3"
                            Text="{Binding DurationText}"
                            FontSize="10"
-                           Foreground="{StaticResource MochaOverlay2}"
+                           Foreground="{DynamicResource TextTertiaryBrush}"
                            Margin="8,0,0,0"
                            VerticalAlignment="Center" />
             </Grid>
 
+            <!-- Diff preview for edit/write/patch tools -->
+            <ctrl:HdsDiffCompact Grid.Row="1"
+                                 Margin="0,4,0,0"
+                                 DiffText="{Binding DiffPreview}"
+                                 IsVisible="{Binding IsDiffTool}"
+                                 ExpandRequested="DiffCompact_ExpandRequested" />
+
             <!-- Expandable body: args + result -->
-            <Expander Grid.Row="1"
+            <Expander Grid.Row="2"
                       IsExpanded="{Binding IsExpanded}"
                       Header="details"
                       Margin="0,4,0,0">
@@ -75,29 +83,29 @@
                     <TextBlock Text="Args"
                                FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaOverlay2}" />
-                    <Border Background="{StaticResource MochaCrust}"
+                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                    <Border Background="{DynamicResource BgPanelBrush}"
                             CornerRadius="4"
                             Padding="8,4">
                         <TextBlock Text="{Binding ArgsPreview}"
-                                   FontFamily="{StaticResource CodeFont}"
+                                   FontFamily="{DynamicResource FontMono}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource MochaSubtext0}" />
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
                     </Border>
                     <TextBlock Text="Result"
                                FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaOverlay2}"
+                               Foreground="{DynamicResource TextTertiaryBrush}"
                                Margin="0,4,0,0" />
-                    <Border Background="{StaticResource MochaCrust}"
+                    <Border Background="{DynamicResource BgPanelBrush}"
                             CornerRadius="4"
                             Padding="8,4">
                         <TextBlock Text="{Binding ResultPreview}"
-                                   FontFamily="{StaticResource CodeFont}"
+                                   FontFamily="{DynamicResource FontMono}"
                                    FontSize="11"
                                    TextWrapping="Wrap"
-                                   Foreground="{StaticResource MochaSubtext0}" />
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
                     </Border>
                 </StackPanel>
             </Expander>

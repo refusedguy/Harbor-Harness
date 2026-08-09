@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:local="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             x:Class="Harbor.App.Avalonia.Views.Shell.SessionsFlyoutView"
+             Width="280"
+             MinWidth="280"
+             x:DataType="local:SessionListViewModel">
+
+    <Border Background="{DynamicResource BgPanelBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,0,1,0"
+            CornerRadius="{DynamicResource RadiusMd}"
+            Padding="12">
+
+        <StackPanel Spacing="8">
+            <!-- Header -->
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Text="SESSIONS" Classes="Caption" Foreground="{DynamicResource TextTertiaryBrush}"/>
+                <Button Name="SessionsFlyout_NewSessionButton" Classes="hds-ghost" ToolTip.Tip="New session" Click="NewSession_Click"
+                        AutomationProperties.AutomationId="SessionsFlyout_NewSessionButton">
+                    <PathIcon Data="{StaticResource IcAdd}" Width="14" Height="14"/>
+                </Button>
+            </StackPanel>
+
+            <!-- Search -->
+            <TextBox Name="SessionsFlyout_SearchBox" Classes="hds-flush" PlaceholderText="Search sessions..."
+                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.AutomationId="SessionsFlyout_SearchBox"/>
+
+            <!-- Session list -->
+            <ListBox Name="SessionsFlyout_List" ItemsSource="{Binding Sessions}"
+                     SelectedItem="{Binding ActiveSession, Mode=TwoWay}"
+                     Background="Transparent"
+                     AutomationProperties.AutomationId="SessionsFlyout_List">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="vm:SessionRowViewModel" x:DataType="vm:SessionRowViewModel">
+                        <Border Background="Transparent"
+                                CornerRadius="{DynamicResource RadiusSm}"
+                                Padding="8"
+                                MinHeight="40">
+                            <DockPanel>
+                                <TextBlock Text="{Binding Title}"
+                                           DockPanel.Dock="Left"
+                                           FontWeight="SemiBold"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding MetaLine}"
+                                           DockPanel.Dock="Right"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource TextTertiaryBrush}"/>
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </StackPanel>
+    </Border>
+</UserControl>

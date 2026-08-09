@@ -1,0 +1,48 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Components"
+             x:Class="Harbor.App.Avalonia.Views.Chrome.TitleBarView"
+             Height="{DynamicResource TitleBarHeight}"
+             PointerPressed="TitleBar_PointerPressed">
+
+    <Grid ColumnDefinitions="Auto,*,Auto"
+          Margin="12,0,12,0"
+          Background="Transparent">
+
+        <!-- Traffic lights -->
+        <StackPanel Grid.Column="0" Classes="TrafficLights" Orientation="Horizontal"
+                    Spacing="8" VerticalAlignment="Center">
+            <Button Classes="TrafficLight Close" Name="TitleBar_CloseButton"
+                    AutomationProperties.AutomationId="TitleBar_CloseButton"
+                    Click="Close_Click">
+                <PathIcon Data="{StaticResource IcClose}"/></Button>
+            <Button Classes="TrafficLight Minimize" Name="TitleBar_MinimizeButton"
+                    AutomationProperties.AutomationId="TitleBar_MinimizeButton"
+                    Click="Minimize_Click">
+                <PathIcon Data="{StaticResource IcMinus}"/></Button>
+            <Button Classes="TrafficLight Maximize" Name="TitleBar_MaximizeButton"
+                    AutomationProperties.AutomationId="TitleBar_MaximizeButton"
+                    Click="Maximize_Click">
+                <PathIcon Data="{StaticResource IcMaximize}"/></Button>
+        </StackPanel>
+
+        <!-- Fake command-palette trigger (center) -->
+        <Button Grid.Column="1" Classes="hds-cmdk" HorizontalAlignment="Center"
+                Command="{Binding OpenCommandPaletteCommand}"
+                Name="TitleBar_CommandPaletteTrigger"
+                AutomationProperties.AutomationId="TitleBar_CommandPaletteTrigger">
+            <StackPanel Orientation="Horizontal" Spacing="6" Opacity="0.7">
+                <PathIcon Data="{StaticResource IcSearch}" Width="12" Height="12"/>
+                <TextBlock Text="Search or jump to..." Classes="Caption"/>
+                <ctrl:Kbd Keys="Ctrl K"/>
+            </StackPanel>
+        </Button>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+            <Button Classes="hds-icon" ToolTip.Tip="Theme" Command="{Binding ToggleThemeCommand}"
+                    AutomationProperties.AutomationId="TitleBar_ThemeButton"/>
+            <Button Classes="hds-icon" ToolTip.Tip="Settings" Command="{Binding OpenSettingsCommand}"
+                    AutomationProperties.AutomationId="TitleBar_SettingsButton"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

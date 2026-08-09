@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
@@ -33,55 +34,16 @@ namespace Harbor.App.Avalonia.Views;
 /// </remarks>
 public partial class ChatView : UserControl
 {
-    /// <summary>
-    ///     Defines the <see cref="ShowInputArea" /> styled property.
-    ///     Default <c>true</c> so the classic shell keeps its inline input.
-    /// </summary>
     public static readonly StyledProperty<bool> ShowInputAreaProperty =
         AvaloniaProperty.Register<ChatView, bool>(
             nameof(ShowInputArea),
             true);
 
-    /// <summary>Construct the chat view.</summary>
     public ChatView()
     {
         InitializeComponent();
-        this.Loaded += (_, _) =>
-        {
-            // Focus the input on first load — ORCA pattern. Only focus when
-            // the input area is visible (Orca shell hides it; focusing a
-            // hidden control is a no-op but spurious).
-            if (ShowInputArea)
-            {
-                InputBox.Focus();
-            }
-        };
-
-        this.DataContextChanged += (_, _) => BindAutoScroll();
     }
 
-    private void BindAutoScroll()
-    {
-        if (Vm is not { } vm) return;
-        vm.Lines.CollectionChanged += (_, __) => ScrollToBottom();
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(ChatViewModel.StreamingBuffer))
-                ScrollToBottom();
-        };
-    }
-
-    private void ScrollToBottom()
-    {
-        if (ChatScrollViewer is null) return;
-        ChatScrollViewer.ScrollToEnd();
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether the chat view's own input
-    ///     area is visible. Set <c>false</c> when an external composer (e.g.
-    ///     the Orca <c>ComposerView</c>) takes over the input role.
-    /// </summary>
     public bool ShowInputArea
     {
         get => this.GetValue(ShowInputAreaProperty);
@@ -95,24 +57,130 @@ public partial class ChatView : UserControl
         var vm = Vm;
         if (vm is null) return;
 
-        // Plain Enter (no Shift, no Ctrl) sends. Shift+Enter inserts newline (default).
-        // Ctrl+Enter also sends (alternative convention).
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
         if (isPlainEnter || isCtrlEnter)
         {
-            // Mark handled BEFORE invoking the command — this prevents the
-            // TextBox from inserting a newline character. Without this, the
-            // newline would race the InputText = string.Empty in Send().
             e.Handled = true;
 
             if (vm.SendCommand.CanExecute(null))
             {
                 vm.SendCommand.Execute(null);
-                // Refocus so the user can immediately type the next message.
                 InputBox.Focus();
             }
+        }
+    }
+
+    private const double MaxPullDistance = 120.0;
+    private const double PullThreshold = 0.5;
+    private const int ReleaseDelayMs = 300;
+    private bool _isPulling;
+    private double _pullDistance;
+    private DispatcherTimer? _releaseTimer;
+
+    private void ChatScrollViewer_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (Vm is not { } vm) return;
+        if (ChatScrollViewer is not { } scrollViewer) return;
+
+        bool atTop = scrollViewer.Offset.Y <= 0;
+        bool scrollingUp = e.Delta.Y < 0;
+
+        if (atTop && scrollingUp)
+        {
+            e.Handled = true;
+
+            if (!_isPulling)
+            {
+                _isPulling = true;
+                vm.ShowPullIndicator = true;
+            }
+
+            _pullDistance = Math.Min(MaxPullDistance, _pullDistance + Math.Abs(e.Delta.Y) * 0.8);
+            vm.PullOffset = _pullDistance;
+            vm.PullProgress = _pullDistance / MaxPullDistance;
+            vm.ContentScale = 1.0 - (vm.PullProgress * 0.05);
+
+            _releaseTimer?.Stop();
+            _releaseTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(ReleaseDelayMs), DispatcherPriority.Background, (s, _) => OnPullReleased());
+            _releaseTimer.Start();
+        }
+        else if (_isPulling)
+        {
+            CancelPull();
+        }
+    }
+
+    private void OnPullReleased()
+    {
+        _releaseTimer?.Stop();
+        _releaseTimer = null;
+
+        if (Vm is not { } vm) return;
+        _isPulling = false;
+
+        if (vm.PullProgress >= PullThreshold && !vm.IsLoadingHistory && vm.CanLoadOlder)
+        {
+            _ = AnimateSnapBackAndLoadAsync();
+        }
+        else
+        {
+            _ = AnimateSnapBackAsync();
+        }
+    }
+
+    private async Task AnimateSnapBackAsync()
+    {
+        if (Vm is not { } vm) return;
+
+        const int frameDelay = 16;
+        const double snapSpeed = 10.0;
+
+        while (vm.PullOffset > 0.5)
+        {
+            vm.PullOffset = Math.Max(0, vm.PullOffset - snapSpeed);
+            vm.PullProgress = vm.PullOffset / MaxPullDistance;
+            vm.ContentScale = 1.0 - (vm.PullProgress * 0.05);
+            await Task.Delay(frameDelay);
+        }
+
+        vm.PullOffset = 0;
+        vm.PullProgress = 0;
+        vm.ContentScale = 1.0;
+        vm.ShowPullIndicator = false;
+        _pullDistance = 0;
+    }
+
+    private async Task AnimateSnapBackAndLoadAsync()
+    {
+        if (Vm is not { } vm) return;
+
+        await AnimateSnapBackAsync();
+        if (vm.LoadOlderMessagesCommand.CanExecute(null))
+        {
+            vm.LoadOlderMessagesCommand.Execute(null);
+        }
+
+        if (ChatScrollViewer is { } scrollViewer)
+        {
+            scrollViewer.ScrollToHome();
+        }
+    }
+
+    private void CancelPull()
+    {
+        _releaseTimer?.Stop();
+        _releaseTimer = null;
+        _isPulling = false;
+        _pullDistance = 0;
+
+        if (Vm is { } vm)
+        {
+            vm.PullOffset = 0;
+            vm.PullProgress = 0;
+            vm.ContentScale = 1.0;
+            vm.ShowPullIndicator = false;
         }
     }
 }

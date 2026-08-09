@@ -1,3 +1,4 @@
+using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Components;
 namespace Harbor.App.Avalonia.Tests;
 /// <summary>
@@ -15,6 +16,7 @@ namespace Harbor.App.Avalonia.Tests;
 ///     StyledProperty (which would silently break all bindings) or
 ///     removing a default (which would change the initial render).
 /// </remarks>
+[NotInParallel]
 public class ComponentTests
 {
     // ── StatusBadge ─────────────────────────────────────────────────
@@ -116,6 +118,25 @@ public class ComponentTests
         await Assert.That(bubble.IsCompact).IsTrue();
     }
 
+    // ── ActivityRailView ────────────────────────────────────────────
+
+    [Test]
+    public async Task ActivityRailView_Instantiate_DoesNotThrow()
+    {
+        var rail = new Views.Shell.ActivityRailView();
+        await Assert.That(rail).IsNotNull();
+        await Assert.That(rail.MinWidth).IsEqualTo(56.0);
+    }
+
+    // ── SessionsFlyoutView ──────────────────────────────────────────
+
+    [Test]
+    public async Task SessionsFlyoutView_Instantiate_DoesNotThrow()
+    {
+        var flyout = new Views.Shell.SessionsFlyoutView();
+        await Assert.That(flyout).IsNotNull();
+        await Assert.That(flyout.MinWidth).IsEqualTo(280.0);
+    }
     // ── SessionRow ──────────────────────────────────────────────────
 
     [Test]

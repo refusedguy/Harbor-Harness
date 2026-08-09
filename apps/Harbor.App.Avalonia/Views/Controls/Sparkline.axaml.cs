@@ -1,53 +1,58 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
 namespace Harbor.App.Avalonia.Views.Controls;
 /// <summary>
-///     Compact inline sparkline chart (no axes). Renders a polyline from
-///     <see cref="Values" /> auto-scaled to the visible min/max range.
-///     Used in the status bar to surface per-turn token-usage history at
-///     a glance — ports the sparkline pattern from Opencode's
+///     Compact inline sparkline chart with kinetic animation. Renders a polyline
+///     from <see cref="Values" /> auto-scaled to the visible min/max range.
+///     Used in the status bar to surface per-turn token-usage history at a
+///     glance — ports the sparkline pattern from Opencode's
 ///     <c>progress-circle-v2.tsx</c> and Kilocode's console header.
 /// </summary>
 /// <remarks>
-///     The control is dependency-property driven so it can be bound
-///     directly from XAML. Re-renders only when <see cref="Values" />
-///     changes (AffectsRender flag). Drawing is done in
-///     <see cref="Render" /> using a <see cref="StreamGeometry" /> for
-///     sub-pixel-smooth strokes.
+///     <para>
+///         Kinetic mode: when values change, the line smoothly interpolates
+///         from the previous state to the new state over ~250ms using a
+///         <see cref="DispatcherTimer" /> at ~60fps. The endpoint dot pulses
+///         gently to reinforce the "live" feel.
+///     </para>
+///     <para>
+///         Gradient stroke: when <see cref="StrokeBrush" /> is a
+///         <see cref="SolidColorBrush" />, the control automatically builds a
+///         <see cref="LinearGradientBrush" /> that fades from the accent color
+///         (left) to transparent (right), giving the line a "trailing off"
+///         temporal feel.
+///     </para>
 /// </remarks>
 public partial class Sparkline : UserControl
 {
-    /// <summary>
-    ///     Styled property for the data series to render. Re-rendering is
-    ///     triggered automatically by <c>AffectsRender&lt;T&gt;</c>.
-    /// </summary>
+    private readonly DispatcherTimer _animationTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private List<double>? _previousValues;
+    private List<double>? _targetValues;
+    private List<double>? _displayValues;
+    private double _animationProgress;
+    private bool _isAnimating;
+    private int _pulsePhase;
+
     public static readonly StyledProperty<IEnumerable<double>?> ValuesProperty =
         AvaloniaProperty.Register<Sparkline, IEnumerable<double>?>(nameof(Values));
 
-    /// <summary>
-    ///     Brush used for the sparkline stroke. Defaults to
-    ///     <c>MochaPeach</c> (output-token color) when available.
-    /// </summary>
     public static readonly StyledProperty<IBrush?> StrokeBrushProperty =
         AvaloniaProperty.Register<Sparkline, IBrush?>(nameof(StrokeBrush));
 
     static Sparkline()
     {
-        // AffectsRender wires up the invalidation: when Values changes,
-        // Avalonia schedules a Render pass automatically.
         AffectsRender<Sparkline>(ValuesProperty);
+        AffectsRender<Sparkline>(StrokeBrushProperty);
     }
 
-    /// <summary>Construct the sparkline.</summary>
     public Sparkline()
     {
         InitializeComponent();
+        _animationTimer.Tick += OnAnimationTick;
     }
 
-    /// <summary>
-    ///     The data series. Null or fewer-than-2 points renders nothing.
-    /// </summary>
     public IEnumerable<double>? Values
     {
         get => this.GetValue(ValuesProperty);
@@ -60,12 +65,57 @@ public partial class Sparkline : UserControl
         set => this.SetValue(StrokeBrushProperty, value);
     }
 
-    /// <inheritdoc />
+    private void OnValuesChanged(IEnumerable<double>? newValues)
+    {
+        if (newValues is null) return;
+        var list = newValues.ToList();
+        if (list.Count < 2) return;
+
+        _previousValues = _displayValues?.Count == list.Count
+            ? new List<double>(_displayValues)
+            : new List<double>(list);
+        _targetValues = list;
+        _animationProgress = 0;
+        _isAnimating = true;
+        _animationTimer.Start();
+        InvalidateVisual();
+    }
+
+    private void OnAnimationTick(object? sender, EventArgs e)
+    {
+        if (!_isAnimating)
+        {
+            _animationTimer.Stop();
+            return;
+        }
+
+        _animationProgress += 0.18;
+        if (_animationProgress >= 1.0)
+        {
+            _animationProgress = 1.0;
+            _isAnimating = false;
+            _animationTimer.Stop();
+        }
+
+        _displayValues = new List<double>(_targetValues!.Count);
+        for (int i = 0; i < _targetValues.Count; i++)
+        {
+            double prev = _previousValues is { } pv && _previousValues!.Count > i ? pv[i] : _targetValues[i];
+            double target = _targetValues[i];
+            _displayValues.Add(prev + (target - prev) * EaseOutCubic(_animationProgress));
+        }
+
+        _pulsePhase = (_pulsePhase + 1) % 60;
+        InvalidateVisual();
+    }
+
+    private static double EaseOutCubic(double t) => 1 - Math.Pow(1 - t, 3);
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
 
-        var values = Values?.ToList();
+        var values = _displayValues ?? Values?.ToList();
         if (values is null || values.Count < 2)
         {
             return;
@@ -76,13 +126,12 @@ public partial class Sparkline : UserControl
         double range = max - min;
         if (range < 0.0001)
         {
-            // Flat line — center it vertically.
             range = 1;
             min = max - 0.5;
         }
 
-        double w = this.Bounds.Width;
-        double h = this.Bounds.Height;
+        double w = Bounds.Width;
+        double h = Bounds.Height;
         if (w <= 0 || h <= 0)
         {
             return;
@@ -90,12 +139,26 @@ public partial class Sparkline : UserControl
 
         double stepX = w / (values.Count - 1);
 
-        // Resolve stroke brush: explicit > MochaPeach > fallback orange.
-        var brush = StrokeBrush
-                    ?? (Application.Current?.TryFindResource("MochaPeach", out object? r) == true
+        var baseBrush = StrokeBrush
+                    ?? (Application.Current?.TryFindResource("StateWarningBrush", out object? r) == true
                         ? r as IBrush
                         : null)
                     ?? Brushes.OrangeRed;
+
+        IBrush brush = baseBrush;
+        if (baseBrush is SolidColorBrush solid)
+        {
+            brush = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(solid.Color, 0),
+                    new GradientStop(Color.FromArgb(0, solid.Color.R, solid.Color.G, solid.Color.B), 1)
+                }
+            };
+        }
 
         var pen = new Pen(brush, 1.3)
         {
@@ -117,8 +180,10 @@ public partial class Sparkline : UserControl
         }
         context.DrawGeometry(null, pen, geometry);
 
-        // Final-point dot — gives the "live" feel.
+        // Pulsing endpoint dot.
         double lastY = h - (values[^1] - min) / range * h;
-        context.DrawEllipse(brush, null, new Rect(w - 3, lastY - 1.5, 3, 3));
+        double pulse = 0.5 + 0.5 * Math.Sin(_pulsePhase * Math.PI / 30.0);
+        double dotRadius = 1.5 + pulse * 1.0;
+        context.DrawEllipse(brush, null, new Rect(w - dotRadius, lastY - dotRadius, dotRadius * 2, dotRadius * 2));
     }
 }

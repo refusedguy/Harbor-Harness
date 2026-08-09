@@ -13,8 +13,8 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <para>
 ///         Tests cover: idle (grey dot, 'idle' text), running (amber dot,
 ///         'running' text), model label visible, token counts visible, cost
-///         visible, session count visible, and a fully-populated status bar
-///         with all groups showing real values.
+///         visible, and a fully-populated status bar with all groups showing
+///         real values.
 ///     </para>
 /// </remarks>
 [NotInParallel]
@@ -141,26 +141,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Assert.That(hasCost).IsTrue();
 
         var path = await CaptureAsync("statusbar-cost").ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Session count: shows the active session count.
-    /// </summary>
-    [Test]
-    [Category("E2E")]
-    [Category("Component")]
-    public async Task StatusBar_SessionCount_Visible()
-    {
-        await Driver.ResetStateAsync().ConfigureAwait(false);
-
-        UI(() => Vm.ActiveSessionCount = 7);
-        await Task.Delay(200).ConfigureAwait(false);
-
-        var hasSession = await Driver.WaitForTextAsync("7 session", TimeSpan.FromSeconds(2))
-            .ConfigureAwait(false);
-        await Assert.That(hasSession).IsTrue();
-
-        var path = await CaptureAsync("statusbar-session-count").ConfigureAwait(false);
     }
 
     /// <summary>

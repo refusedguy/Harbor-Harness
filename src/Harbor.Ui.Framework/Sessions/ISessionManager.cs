@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Ui.Framework.Services;
 namespace Harbor.Ui.Framework.Sessions;
 /// <summary>
 ///     Facade that owns the active session and delegates creation, switching,
@@ -23,7 +24,7 @@ public interface ISessionManager
     void NotifyMessageCount(string sessionId, int count);
 
     /// <summary>Get git info for a session's working directory.</summary>
-    (string? Branch, bool IsDirty) GetGitInfo(string sessionId);
+    GitSessionInfo GetGitInfo(string sessionId);
 
     /// <summary>Refresh git info for a session.</summary>
     void RefreshGitInfo(string sessionId, string directory);

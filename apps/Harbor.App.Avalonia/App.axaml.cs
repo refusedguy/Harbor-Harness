@@ -1,12 +1,13 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.App.Avalonia.ViewModels.Shell;
 using Harbor.App.Avalonia.Views;
+using Harbor.App.Avalonia.Views.Dev;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -70,6 +71,8 @@ public partial class App : Application
     /// </summary>
     public static string ThemeMode { get; set; } = "dark";
 
+    public static bool ShowGallery { get; set; } = false;
+
     /// <summary>
     ///     Convenience flag: <c>true</c> when <see cref="ThemeMode" /> is
     ///     <c>"dark"</c>.
@@ -82,6 +85,17 @@ public partial class App : Application
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()
     {
+        AppDomain.CurrentDomain.FirstChanceException += (sender, args) =>
+        {
+            if (args.Exception is InvalidCastException ice
+                && ice.StackTrace is { } stack
+                && stack.Contains("XamlDynamicSetter", StringComparison.Ordinal))
+            {
+                Services.GetRequiredService<ILogger<App>>()
+                    .LogError(ice, "XAML Style Setter type mismatch — check resource key type in ResourceDictionary");
+            }
+        };
+
         if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -142,17 +156,9 @@ public partial class App : Application
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
-        // In Orca shell mode, the MainWindow's DataContext is an
-        // OrcaShellViewModel wrapping MainViewModel; in classic mode it's the
-        // MainViewModel directly. MainWindow.axaml.cs checks App.IsOrcaShell
-        // in its constructor and swaps its Content to OrcaShellView accordingly.
-        object windowDataContext = IsOrcaShell
-            ? Services.GetRequiredService<OrcaShellViewModel>()
-            : mainViewModel;
-
         var mainWindow = new MainWindow
         {
-            DataContext = windowDataContext
+            DataContext = mainViewModel
         };
         desktop.MainWindow = mainWindow;
 
@@ -211,21 +217,19 @@ public partial class App : Application
     /// <summary>Show the main window directly (onboarding already completed previously).</summary>
     private void ShowMain(IClassicDesktopStyleApplicationLifetime desktop)
     {
+        if (ShowGallery)
+        {
+            ShowGalleryView(desktop);
+            return;
+        }
+
         var mainViewModel = Services.GetRequiredService<MainViewModel>();
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
-        // In Orca shell mode, the MainWindow's DataContext is an
-        // OrcaShellViewModel wrapping MainViewModel; in classic mode it's the
-        // MainViewModel directly. MainWindow.axaml.cs checks App.IsOrcaShell
-        // in its constructor and swaps its Content to OrcaShellView accordingly.
-        object windowDataContext = IsOrcaShell
-            ? Services.GetRequiredService<OrcaShellViewModel>()
-            : mainViewModel;
-
         var mainWindow = new MainWindow
         {
-            DataContext = windowDataContext
+            DataContext = mainViewModel
         };
         desktop.MainWindow = mainWindow;
 
@@ -249,6 +253,18 @@ public partial class App : Application
                 Services.GetService<ILogger<App>>()?.LogError(ex, "Session initialization failed");
             }
         });
+    }
+
+    private void ShowGalleryView(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var galleryWindow = new Window
+        {
+            Title = "HDS Component Gallery (Dev Mode)",
+            Width = 1200,
+            Height = 800,
+            Content = new ComponentGalleryView()
+        };
+        desktop.MainWindow = galleryWindow;
     }
 
     /// <summary>

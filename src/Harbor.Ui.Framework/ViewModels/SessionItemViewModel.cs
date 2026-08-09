@@ -10,6 +10,8 @@ public sealed partial class SessionItemViewModel : ObservableObject
 {
     [ObservableProperty] private string? _gitBranch;
     [ObservableProperty] private bool _gitIsDirty;
+    [ObservableProperty] private int _gitDirtyCount;
+    [ObservableProperty] private string? _gitLastCommit;
 
     /// <summary>
     ///     Live message count for this session. Originally populated from the
@@ -61,7 +63,7 @@ public sealed partial class SessionItemViewModel : ObservableObject
         get
         {
             string branch = GitBranch ?? "";
-            string dirty = GitIsDirty ? " *" : "";
+            string dirty = GitIsDirty ? $" +{GitDirtyCount}" : "";
             string folder = !string.IsNullOrEmpty(WorkingDirectory)
                 ? Path.GetFileName(WorkingDirectory)
                 : "";
@@ -71,6 +73,19 @@ public sealed partial class SessionItemViewModel : ObservableObject
             if (!string.IsNullOrEmpty(folder))
                 parts.Add(folder);
             parts.Add(Model);
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string GitInfoLine
+    {
+        get
+        {
+            if (!GitIsDirty) return string.Empty;
+            var parts = new List<string>();
+            parts.Add($"+{GitDirtyCount} files");
+            if (!string.IsNullOrEmpty(GitLastCommit))
+                parts.Add(GitLastCommit);
             return string.Join(" · ", parts);
         }
     }

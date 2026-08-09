@@ -23,6 +23,7 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
     Console.WriteLine("  --shell classic|orca   Shell layout (default: classic).");
     Console.WriteLine("                         'orca' = experimental Orca-inspired Harbor shell.");
     Console.WriteLine("  --theme dark|light|system  Theme (default: dark).");
+    Console.WriteLine("  --gallery                Open the HDS component gallery (dev mode).");
     Console.WriteLine();
     Console.WriteLine("Environment variables:");
     Console.WriteLine("  HARBOR_SHELL     classic | orca (default: classic — same as --shell).");
@@ -35,6 +36,7 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
 
 App.ShellMode = ResolveShellMode(args);
 App.ThemeMode = ResolveThemeMode(args);
+App.ShowGallery = HasGalleryFlag(args);
 
 using var host = AppHost.BuildAsync(args).GetAwaiter().GetResult();
 
@@ -138,4 +140,9 @@ static string ResolveThemeMode(string[] args)
         Console.Error.WriteLine($"[HARBOR_THEME] {message}");
         return "dark";
     }
+}
+
+static bool HasGalleryFlag(string[] args)
+{
+    return args.Contains("--gallery", StringComparer.OrdinalIgnoreCase);
 }

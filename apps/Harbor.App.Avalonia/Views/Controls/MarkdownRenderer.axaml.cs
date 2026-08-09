@@ -42,7 +42,6 @@ namespace Harbor.App.Avalonia.Views.Controls;
 /// </remarks>
 public sealed partial class MarkdownRenderer : UserControl
 {
-    /// <summary>Styled property for the markdown source string.</summary>
     public static readonly StyledProperty<string> MarkdownProperty =
         AvaloniaProperty.Register<MarkdownRenderer, string>(nameof(Markdown), string.Empty);
 
@@ -50,32 +49,22 @@ public sealed partial class MarkdownRenderer : UserControl
         .UseAdvancedExtensions()
         .Build();
 
-    /// <summary>Construct the markdown renderer.</summary>
+    static MarkdownRenderer()
+    {
+        MarkdownProperty.Changed.AddClassHandler<MarkdownRenderer>((r, _) => r.Render());
+    }
+
     public MarkdownRenderer()
     {
         InitializeComponent();
-        // Re-render on every Markdown change. PropertyChanged fires
-        // regardless of visual-tree attachment — ideal for streaming
-        // buffers that update before the control is fully laid out.
-        this.PropertyChanged += OnPropertyChangedHandler;
     }
 
-    /// <summary>The markdown source string.</summary>
     public string Markdown
     {
         get => this.GetValue(MarkdownProperty);
         set => this.SetValue(MarkdownProperty, value);
     }
 
-    private void OnPropertyChangedHandler(object? sender, AvaloniaPropertyChangedEventArgs e)
-    {
-        if (e.Property == MarkdownProperty)
-        {
-            Render();
-        }
-    }
-
-    /// <summary>Force a re-render of the current markdown.</summary>
     public void Render()
     {
         if (RootPanel is null)

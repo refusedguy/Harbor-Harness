@@ -57,7 +57,7 @@
                 <TextBox Grid.Column="0"
                          x:Name="InputBox"
                          Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         PlaceholderText="Message Harbor…"
+                         PlaceholderText="{Binding InputPlaceholder}"
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          MinHeight="36" MaxHeight="120"

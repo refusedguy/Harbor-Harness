@@ -131,6 +131,29 @@ public sealed class AvaloniaUiTests
     }
 
     /// <summary>
+    ///     The app boots without crashing, the main window is visible, has the
+    ///     new 720px minimum width, and the shell rendered (screenshot captured).
+    ///     Captures <c>00-main-window-opens.png</c>.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task MainWindow_Opens()
+    {
+        await Driver.ResetStateAsync().ConfigureAwait(false);
+
+        bool isVisible = Driver.OnUIThread(() => Driver.MainWindow.IsVisible);
+        await Assert.That(isVisible).IsTrue();
+
+        double width = Driver.OnUIThread(() => Driver.MainWindow.Width);
+        await Assert.That(width).IsGreaterThanOrEqualTo(720);
+
+        string screenshot = await Driver.ScreenshotAsync("00-main-window-opens").ConfigureAwait(false);
+        await Assert.That(File.Exists(screenshot)).IsTrue();
+        long size = new FileInfo(screenshot).Length;
+        await Assert.That(size).IsGreaterThan(5_000);
+    }
+
+    /// <summary>
     ///     The app boots without crashing, the main window is non-null, and the
     ///     Chat tab is the default active view (InputBox visible + "Start a
     ///     conversation" placeholder shown). Captures <c>01-chat-default.png</c>
@@ -820,7 +843,7 @@ public sealed class AvaloniaUiTests
 
     /// <summary>
     ///     Status bar shows the expected groups: status (idle), agent label,
-    ///     model label, token counts, cost, session count. Captures
+    ///     model label, token counts, cost. Captures
     ///     <c>21-status-bar-full.png</c>.
     /// </summary>
     [Test]
@@ -834,11 +857,6 @@ public sealed class AvaloniaUiTests
         bool hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasIdle).IsTrue();
-
-        // "session" appears in the ActiveSessionCount StringFormat ('{0} session').
-        bool hasSession = await Driver.WaitForTextAsync("session", TimeSpan.FromSeconds(2))
-            .ConfigureAwait(false);
-        await Assert.That(hasSession).IsTrue();
     }
 
     // ════════════════════════════════════════════════════════════════════

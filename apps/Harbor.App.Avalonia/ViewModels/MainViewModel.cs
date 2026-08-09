@@ -1,30 +1,35 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.App.Avalonia.ViewModels.Board;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
 namespace Harbor.App.Avalonia.ViewModels;
+
 /// <summary>
 ///     Shell view-model. Holds the active view tab, sidebar visibility, status bar,
 ///     and the central <see cref="UiStore" /> subscription. Top-level keyboard shortcuts
 ///     (Ctrl+P, Ctrl+Shift+P, Ctrl+B, Ctrl+Shift+T) are wired in MainWindow.axaml.cs
 ///     and dispatch to commands here.
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject, IDisposable
+internal sealed partial class MainViewModel : StoreSubscriberViewModel
 {
-    private readonly IDispatcherAdapter _dispatcher;
     private readonly TuiEffectHost _effects;
-    private readonly ILogger<MainViewModel> _logger;
-
-    private readonly EventHandler<UiState> _onStoreChanged;
     private readonly IServiceProvider _services;
-    private readonly UiStore _store;
+    private readonly IOverlayStack _overlayStack;
     private readonly IThemeService _theme;
     private readonly IToastService _toasts;
+    private bool _disposed;
+
+    [ObservableProperty]
+    private ShellStatus _shellStatus;
 
     [ObservableProperty]
     private int _activeSessionCount = 1;
@@ -37,7 +42,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private decimal _costUsd;
-    private bool _disposed;
+    private decimal _baseCost;
+    private decimal _displayCost;
 
     [ObservableProperty]
     private bool _isCommandPaletteOpen;
@@ -45,11 +51,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isDiffOpen;
 
-    /// <summary>
-    ///     True when the provider/model picker flyout is open. Toggled by
-    ///     clicking the status-bar model label (wired in MainWindow.axaml) and
-    ///     auto-reset to false after a model is selected.
-    /// </summary>
+    [ObservableProperty]
+    private bool _isFocusSessionOpen;
+
     [ObservableProperty]
     private bool _isModelPickerOpen;
 
@@ -60,6 +64,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private bool _isRunning;
 
     [ObservableProperty]
+    private bool _isRightDrawerOpen;
+
+    [ObservableProperty]
+    private string? _activeDiffText;
+
+    [ObservableProperty]
+    private string? _activeDiffTitle;
+
+    [ObservableProperty]
     private bool _isSettingsOpen;
 
     [ObservableProperty]
@@ -68,14 +81,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isTokenUsageOpen;
 
-    /// <summary>
-    ///     Live message count for the active chat (number of chat lines in
-    ///     the current <see cref="UiStore" /> state). Updated on every
-    ///     <see cref="OnStoreChanged" /> transition so the status bar's
-    ///     "N msgs" label tracks new messages immediately after the user
-    ///     sends a prompt (Task D2 / Problem 2: status bar message count
-    ///     was stale — only refreshed on full RefreshAsync cycles).
-    /// </summary>
     [ObservableProperty]
     private int _messageCount;
 
@@ -94,23 +99,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private long _tokensOut;
 
+    public ObservableCollection<double> TokenHistory { get; } = new();
+
+    public IOverlayStack OverlayStack => _overlayStack;
+
+    [ObservableProperty]
+    private bool _hasOverlay;
+
+    [RelayCommand(CanExecute = nameof(CanPopOverlay))]
+    private void OverlayPop()
+    {
+        _overlayStack.PopTop();
+    }
+
+    private bool CanPopOverlay() => _overlayStack.Current is not null;
+
+    private readonly DispatcherTimer _durationTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private DateTime? _runningStartTime;
+
     /// <summary>Construct the shell view-model.</summary>
     public MainViewModel(
         IServiceProvider services,
         ILogger<MainViewModel> logger,
-        UiStore store,
         TuiEffectHost effects,
         IDispatcherAdapter dispatcher,
         IThemeService theme,
-        IToastService toasts)
+        IToastService toasts,
+        ShellStatus shellStatus,
+        IOverlayStack? overlayStack = null)
+        : base(dispatcher, logger)
     {
         _services = services;
-        _logger = logger;
-        _store = store;
         _effects = effects;
-        _dispatcher = dispatcher;
         _theme = theme;
         _toasts = toasts;
+        _shellStatus = shellStatus;
+        _overlayStack = overlayStack ?? new OverlayStackService();
+        _durationTimer.Tick += OnDurationTick;
 
         Chat = services.GetRequiredService<ChatViewModel>();
         Sessions = services.GetRequiredService<SessionListViewModel>();
@@ -121,30 +146,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ProviderModelPicker = services.GetRequiredService<ProviderModelPickerViewModel>();
         Settings = services.GetRequiredService<SettingsViewModel>();
         CommandPalette = services.GetRequiredService<CommandPaletteViewModel>();
+        FocusSession = services.GetRequiredService<FocusSessionViewModel>();
+        Board = services.GetRequiredService<BoardViewModel>();
 
-        // Wire the picker into Settings so the embedded "Browse Models"
-        // section uses the same VM as the status-bar flyout.
         Settings.Picker = ProviderModelPicker;
 
-        // Close the picker flyout as soon as the user selects a model. The
-        // picker VM raises ModelSelected after persisting the choice and
-        // rebinding the active session — at that point the flyout has served
-        // its purpose and lingering would only confuse the user.
         ProviderModelPicker.ModelSelected += () =>
         {
-            _dispatcher.Post(() => IsModelPickerOpen = false);
+            Dispatcher.Post(() => IsModelPickerOpen = false);
         };
 
-        // Subscribe to UiStore transitions on the UI thread. NOTE: _dispatcher.Bind(store)
-        // is intentionally NOT called here — the composition root (AppHost.BuildAsync) binds
-        // the dispatcher to the UiStore exactly once, idempotently. Calling Bind from each
-        // ViewModel would create duplicate subscriptions (now prevented by the idempotent
-        // Bind, but we still centralise the call for clarity).
-        _onStoreChanged = (_, state) => OnStoreChanged(state);
-        _dispatcher.StateChanged += _onStoreChanged;
-
-        // Toasts push on every error.
         _toasts.Show("Harbor ready — press Ctrl+P for the command palette.", ToastKind.Info);
+
+        _overlayStack.Popped += id =>
+        {
+            if (id is not null)
+                CloseOverlay(id);
+        };
+        _overlayStack.Changed += (_, _) => HasOverlay = _overlayStack.Current is not null;
+        HasOverlay = _overlayStack.Current is not null;
     }
 
     /// <summary>Active chat view-model.</summary>
@@ -162,6 +182,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Token-usage chart view-model.</summary>
     public TokenUsageViewModel TokenUsage { get; }
 
+    public FocusSessionViewModel FocusSession { get; }
+
+    /// <summary>Board (mission control) view-model.</summary>
+    public BoardViewModel Board { get; }
+
     /// <summary>Provider browser view-model.</summary>
     public ProviderBrowserViewModel ProviderBrowser { get; }
 
@@ -178,38 +203,107 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Command palette view-model.</summary>
     public CommandPaletteViewModel CommandPalette { get; }
 
+    public ShellState ShellState { get; } = new();
+
+    public string RightDrawerTab
+    {
+        get => ShellState.RightDrawerTab;
+        set => ShellState.RightDrawerTab = value;
+    }
+
     /// <summary>Toast notifications visible right now.</summary>
     public ObservableCollection<ToastNotification> Toasts { get; } = new();
 
-    /// <summary>Status bar color key based on <see cref="StatusText" />.</summary>
     public string StatusBrushKey => StatusMappers.StatusToBrushKey(StatusText);
+    public string TokensInText => StatusMappers.TokensToCompact(TokensIn);
+    public string TokensOutText => StatusMappers.TokensToCompact(TokensOut);
+    public string CostText => StatusMappers.CostToUsd(CostUsd);
+    public string RunningDurationText => _runningStartTime is { } start ? FormatDuration(DateTime.UtcNow - start) : string.Empty;
+    public string AnimatedCostText => StatusMappers.CostToUsd(_displayCost);
+    public bool ShowAnimatedCost => _runningStartTime is not null;
 
-    /// <inheritdoc />
-    public void Dispose()
+    private static string FormatDuration(TimeSpan duration)
     {
-        if (_disposed) return;
-        _disposed = true;
-        _dispatcher.StateChanged -= _onStoreChanged;
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        return $"{duration.Seconds}s";
     }
 
-    private void OnStoreChanged(UiState state)
+    private void OnDurationTick(object? sender, EventArgs e)
     {
-        _dispatcher.Post(() =>
+        if (_runningStartTime is not { } start)
         {
-            StatusText = state.Status;
-            ProviderLabel = string.IsNullOrEmpty(state.Provider) ? "—" : state.Provider;
-            ModelLabel = string.IsNullOrEmpty(state.Model) ? "—" : state.Model;
-            AgentLabel = string.IsNullOrEmpty(state.AgentName) ? "—" : state.AgentName;
-            TokensIn = state.Cost.TokensIn;
-            TokensOut = state.Cost.TokensOut;
-            CostUsd = state.Cost.CostUsd;
-            IsRunning = state.IsAgentRunning;
-            ActiveSessionCount = Math.Max(1, Sessions.Sessions.Count);
-            MessageCount = state.Lines.Length;
-            this.OnPropertyChanged(nameof(StatusBrushKey));
+            _durationTimer.Stop();
+            return;
+        }
 
-            TokenUsage.RecordUsage(state);
-        });
+        var elapsed = DateTime.UtcNow - start;
+        var targetCost = _baseCost;
+        var smoothCost = targetCost + (decimal)(elapsed.TotalSeconds * 0.0001);
+        _displayCost = smoothCost;
+
+        OnPropertyChanged(nameof(RunningDurationText));
+        OnPropertyChanged(nameof(AnimatedCostText));
+    }
+
+    protected override void OnStoreChanged(UiState state)
+    {
+        var wasRunning = IsRunning;
+
+        StatusText = state.Status;
+        ProviderLabel = string.IsNullOrEmpty(state.Provider) ? "—" : state.Provider;
+        ModelLabel = string.IsNullOrEmpty(state.Model) ? "—" : state.Model;
+        AgentLabel = string.IsNullOrEmpty(state.AgentName) ? "—" : state.AgentName;
+        TokensIn = state.Cost.TokensIn;
+        TokensOut = state.Cost.TokensOut;
+        CostUsd = state.Cost.CostUsd;
+        IsRunning = state.IsAgentRunning;
+        ActiveSessionCount = Math.Max(1, Sessions.Sessions.Count);
+        MessageCount = state.Lines.Length;
+        OnPropertyChanged(nameof(StatusBrushKey));
+        OnPropertyChanged(nameof(TokensInText));
+        OnPropertyChanged(nameof(TokensOutText));
+        OnPropertyChanged(nameof(CostText));
+        OnPropertyChanged(nameof(RunningDurationText));
+        OnPropertyChanged(nameof(AnimatedCostText));
+        OnPropertyChanged(nameof(ShowAnimatedCost));
+
+        TokenHistory.Add(TokensIn + TokensOut);
+        while (TokenHistory.Count > 60)
+            TokenHistory.RemoveAt(0);
+
+        if (IsRunning && !wasRunning)
+        {
+            _runningStartTime = DateTime.UtcNow;
+            _baseCost = state.Cost.CostUsd;
+            _displayCost = state.Cost.CostUsd;
+            _durationTimer.Start();
+        }
+        else if (!IsRunning && wasRunning)
+        {
+            _runningStartTime = null;
+            _displayCost = state.Cost.CostUsd;
+            _durationTimer.Stop();
+        }
+        else if (IsRunning)
+        {
+            _baseCost = state.Cost.CostUsd;
+        }
+
+        ShellStatus.Status = state.Status;
+        ShellStatus.Provider = string.IsNullOrEmpty(state.Provider) ? "—" : state.Provider;
+        ShellStatus.Model = string.IsNullOrEmpty(state.Model) ? "—" : state.Model;
+        ShellStatus.AgentName = string.IsNullOrEmpty(state.AgentName) ? "—" : state.AgentName;
+        ShellStatus.TokensIn = state.Cost.TokensIn;
+        ShellStatus.TokensOut = state.Cost.TokensOut;
+        ShellStatus.CostUsd = state.Cost.CostUsd;
+        ShellStatus.IsAgentRunning = state.IsAgentRunning;
+        ShellStatus.ActiveSessionCount = Math.Max(1, ActiveSessionCount);
+        ShellStatus.MessageCount = state.Lines.Length;
+
+        TokenUsage.RecordUsage(state);
     }
 
     /// <summary>Toggle sidebar visibility (Ctrl+B).</summary>
@@ -222,15 +316,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Open command palette (Ctrl+P / Ctrl+Shift+P).</summary>
     [RelayCommand]
-    private void OpenCommandPalette() => IsCommandPaletteOpen = true;
+    private void OpenCommandPalette()
+    {
+        IsCommandPaletteOpen = true;
+        _overlayStack.Push("palette");
+    }
 
     /// <summary>Open settings dialog.</summary>
     [RelayCommand]
-    private void OpenSettings() => IsSettingsOpen = true;
+    private void OpenSettings()
+    {
+        IsSettingsOpen = true;
+        _overlayStack.Push("settings");
+    }
 
     /// <summary>Open provider browser.</summary>
     [RelayCommand]
-    private void OpenProviderBrowser() => IsProviderBrowserOpen = true;
+    private void OpenProviderBrowser()
+    {
+        IsProviderBrowserOpen = true;
+        _overlayStack.Push("providerBrowser");
+    }
 
     /// <summary>
     ///     Open the provider/model picker flyout. Wired to a click handler on
@@ -238,33 +344,99 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     ///     models without leaving the chat view.
     /// </summary>
     [RelayCommand]
-    private void OpenModelPicker() => IsModelPickerOpen = true;
+    private void OpenModelPicker()
+    {
+        IsModelPickerOpen = true;
+        _overlayStack.Push("modelPicker");
+    }
 
     /// <summary>Open diff view.</summary>
     [RelayCommand]
-    private void OpenDiff() => IsDiffOpen = true;
+    private void OpenDiff()
+    {
+        IsDiffOpen = true;
+        _overlayStack.Push("diff");
+    }
 
     /// <summary>Open token usage chart.</summary>
     [RelayCommand]
-    private void OpenTokenUsage() => IsTokenUsageOpen = true;
+    private void OpenTokenUsage()
+    {
+        IsTokenUsageOpen = true;
+        _overlayStack.Push("tokenUsage");
+    }
+
+    [RelayCommand]
+    private void ToggleFocusSession()
+    {
+        IsFocusSessionOpen = !IsFocusSessionOpen;
+        if (IsFocusSessionOpen)
+        {
+            FocusSession.Title = Sessions.ActiveSession?.Title ?? "Current Session";
+            FocusSession.Model = ModelLabel;
+            FocusSession.Provider = ProviderLabel;
+            FocusSession.Agent = AgentLabel;
+            FocusSession.MessageCount = MessageCount;
+            FocusSession.TokensIn = TokensIn;
+            FocusSession.TokensOut = TokensOut;
+            _overlayStack.Push("focusSession");
+        }
+    }
 
     /// <summary>Switch active main view to one of: chat, code, diff.</summary>
     /// <param name="view">View name.</param>
     [RelayCommand]
     private void SwitchView(string view) => ActiveView = view;
 
+    /// <summary>Toggle the right drawer. Pass a tab name to open that tab, or null to close.</summary>
+    /// <param name="tab">Tab name (Files, Terminal, History) or null.</param>
+    [RelayCommand]
+    private void ToggleRightDrawer(string? tab)
+    {
+        if (string.IsNullOrEmpty(tab))
+        {
+            IsRightDrawerOpen = false;
+            return;
+        }
+
+        RightDrawerTab = tab;
+        IsRightDrawerOpen = !IsRightDrawerOpen;
+    }
+
     /// <summary>Push a toast to the visible toast collection.</summary>
     /// <param name="toast">Toast notification.</param>
     public void AddToast(ToastNotification toast)
     {
-        _dispatcher.Post(() =>
+        Dispatcher.Post(() =>
         {
             Toasts.Add(toast);
-            // Auto-dismiss after 4 seconds.
             _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(_ =>
             {
-                _dispatcher.Post(() => Toasts.Remove(toast));
+                Dispatcher.Post(() => Toasts.Remove(toast));
             }, TaskScheduler.Default);
         });
+    }
+
+    private void CloseOverlay(string id)
+    {
+        switch (id)
+        {
+            case "palette":         IsCommandPaletteOpen = false; break;
+            case "settings":        IsSettingsOpen = false; break;
+            case "providerBrowser": IsProviderBrowserOpen = false; break;
+            case "modelPicker":     IsModelPickerOpen = false; break;
+            case "diff":            IsDiffOpen = false; break;
+            case "tokenUsage":      IsTokenUsageOpen = false; break;
+            case "focusSession":    IsFocusSessionOpen = false; break;
+        }
+    }
+
+    public override void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _durationTimer.Tick -= OnDurationTick;
+        _durationTimer.Stop();
+        base.Dispose();
     }
 }

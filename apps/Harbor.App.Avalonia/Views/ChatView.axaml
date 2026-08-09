@@ -3,6 +3,7 @@
              xmlns:uvm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             xmlns:comp="clr-namespace:Harbor.App.Avalonia.Views.Components"
              xmlns:da="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
              x:Class="Harbor.App.Avalonia.Views.ChatView"
              x:Name="Root">
@@ -26,88 +27,104 @@
 
         <!-- ════════════ Chat history ════════════ -->
         <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled" x:Name="ChatScrollViewer">
-            <StackPanel>
-                <!-- Tool-call cards (killer feature #2). -->
-                <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,8,12,4">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="uvm:ToolCallViewModel">
-                            <ctrl:ToolCallCardView />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+            <Grid PointerWheelChanged="ChatScrollViewer_PointerWheelChanged">
+                <Border x:Name="ScrollContentHost" RenderTransformOrigin="0.5,0">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="{Binding ContentScale}" ScaleY="{Binding ContentScale}" />
+                            <TranslateTransform Y="{Binding PullOffset}" />
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <StackPanel>
+                        <!-- Tool-call cards (killer feature #2). -->
+                        <ItemsControl ItemsSource="{Binding ToolCalls}" Padding="12,8,12,4">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="uvm:ToolCallViewModel">
+                                    <ctrl:ToolCallCardView />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                <!-- Text transcript (non-tool lines) — ORCA-style chat rows. -->
-                <ItemsControl ItemsSource="{Binding Lines}" Padding="12,4">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <VirtualizingStackPanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="da:ChatLineViewModel">
-                            <Grid Margin="0,6" ColumnDefinitions="100,*">
-                                <!-- Role pill (JetBrains Mono, accent color) -->
-                                <Border Grid.Column="0"
-                                        Background="{StaticResource MochaSurface0}"
-                                        CornerRadius="6"
-                                        Padding="8,3"
-                                        VerticalAlignment="Top"
-                                        HorizontalAlignment="Left"
-                                        BorderBrush="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"
-                                        BorderThickness="2,0,0,0">
-                                    <TextBlock Text="{Binding RoleLabel}" FontFamily="{StaticResource CodeFont}"
-                                               FontSize="11" FontWeight="SemiBold"
-                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
-                                </Border>
-                                <!-- Message body — plain TextBlock. (The MarkdownRenderer
-                                     control was stubbed out in another subagent's WIP but
-                                     doesn't compile under .NET 10 + Markdig 0.38 — restore
-                                     it once the markdig API migration is done.) -->
-                                <Border Grid.Column="1"
-                                        Background="{StaticResource MochaMantle}"
-                                        CornerRadius="8"
-                                        Padding="14,10"
-                                        Margin="10,0,0,0"
-                                        BorderBrush="{StaticResource BorderBrush}"
-                                        BorderThickness="1">
-                                    <TextBlock Text="{Binding Text}"
-                                               TextWrapping="Wrap"
-                                               FontFamily="{StaticResource UiFont}"
-                                               FontSize="14"
-                                               LineHeight="20"
-                                               Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
-                                </Border>
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
+                        <!-- Text transcript (non-tool lines) — ORCA-style chat rows. -->
+                        <ItemsControl ItemsSource="{Binding Lines}" Padding="12,4">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="da:ChatLineViewModel">
+                                    <Grid Margin="0,6" ColumnDefinitions="100,*">
+                                        <!-- Role pill (JetBrains Mono, accent color) -->
+                                        <Border Grid.Column="0"
+                                                Background="{DynamicResource BgSubtleBrush}"
+                                                CornerRadius="6"
+                                                Padding="8,3"
+                                                VerticalAlignment="Top"
+                                                HorizontalAlignment="Left"
+                                                BorderBrush="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}"
+                                                BorderThickness="2,0,0,0">
+                                            <TextBlock Text="{Binding RoleLabel}" FontFamily="{DynamicResource FontMono}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
+                                        </Border>
+                                        <!-- Message body — plain TextBlock. (The MarkdownRenderer
+                                             control was stubbed out in another subagent's WIP but
+                                             doesn't compile under .NET 10 + Markdig 0.38 — restore
+                                             it once the markdig API migration is done.) -->
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource BgRailBrush}"
+                                                CornerRadius="8"
+                                                Padding="14,10"
+                                                Margin="10,0,0,0"
+                                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                                BorderThickness="1">
+                                            <TextBlock Text="{Binding Text}"
+                                                       TextWrapping="Wrap"
+                                                       FontFamily="{DynamicResource FontUi}"
+                                                       FontSize="14"
+                                                       LineHeight="20"
+                                                       Foreground="{Binding BrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="PullIndicator"
+                        Height="60"
+                        VerticalAlignment="Top"
+                        IsVisible="{Binding ShowPullIndicator}"
+                        Opacity="{Binding PullProgress}">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                        <PathIcon Data="{StaticResource IcRefresh}"
+                              Width="20" Height="20"
+                              Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock Text="{Binding PullRefreshStatusText}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12"
+                                   FontFamily="{DynamicResource FontMono}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
         </ScrollViewer>
 
         <!-- ════════════ Empty-state placeholder ════════════
              Shown when there are no chat lines and no tool calls and the
-             agent isn't streaming/thinking. The placeholder makes it
-             OBVIOUS that the chat is the active view (rather than a blank
-             canvas that could be mistaken for a hidden view). -->
-        <Border Grid.Row="0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Padding="40"
-                IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}">
-            <StackPanel Spacing="12" HorizontalAlignment="Center">
-                <TextBlock Text="💬" FontSize="48" HorizontalAlignment="Center" Opacity="0.5" />
-                <TextBlock Text="Start a conversation" FontSize="20" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Foreground="{StaticResource TextBrush}" />
-                <TextBlock Text="Type a message below to begin chatting with the AI agent"
-                           FontSize="14" Opacity="0.6" HorizontalAlignment="Center"
-                           Foreground="{StaticResource TextMutedBrush}" />
-            </StackPanel>
-        </Border>
+             agent isn't streaming/thinking. -->
+        <comp:EmptyState Grid.Row="0"
+                         Title="Start a conversation"
+                         Subtitle="Type a message below to begin chatting with the AI agent"
+                         Icon="💬"
+                         Suggestions="{Binding ContextualSuggestions}"
+                         IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}" />
 
         <!-- ════════════ Streaming / thinking indicators ════════════
              All three indicators live in a StackPanel so they don't overlap.
@@ -118,54 +135,54 @@
         -->
         <StackPanel Grid.Row="1" Spacing="4">
             <!-- Agent-running banner -->
-            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+            <Border Background="{DynamicResource BgSubtleBrush}" CornerRadius="8"
                     Padding="14,10" Margin="12,4,12,4"
-                    BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
+                    BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2,0,0,0"
                     IsVisible="{Binding IsAgentRunning}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <Ellipse Width="10" Height="10" Classes="StreamingDot" VerticalAlignment="Center" />
                     <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource MochaBlue}" FontWeight="SemiBold"
-                               FontFamily="{StaticResource CodeFont}" FontSize="12"
+                               Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold"
+                               FontFamily="{DynamicResource FontMono}" FontSize="12"
                                VerticalAlignment="Center" />
-                    <TextBlock Text="●●●" Foreground="{StaticResource MochaBlue}" FontSize="10"
+                    <TextBlock Text="●●●" Foreground="{DynamicResource AccentBrush}" FontSize="10"
                                VerticalAlignment="Center" Opacity="0.7"
                                Classes="BlinkingCursor" />
                 </StackPanel>
             </Border>
 
             <!-- Streaming buffer — VERTICAL layout, wraps properly, no overflow -->
-            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+            <Border Background="{DynamicResource BgSubtleBrush}" CornerRadius="8"
                     Padding="14,10" Margin="12,4,12,4"
-                    BorderBrush="{StaticResource MochaPeach}" BorderThickness="2,0,0,0"
+                    BorderBrush="{DynamicResource StateWarningBrush}" BorderThickness="2,0,0,0"
                     IsVisible="{Binding IsStreaming}">
                 <StackPanel Spacing="6">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Ellipse Width="8" Height="8" Classes="StreamingDot" VerticalAlignment="Center" />
-                        <TextBlock Text="streaming" Foreground="{StaticResource MochaPeach}" FontWeight="SemiBold"
-                                   FontFamily="{StaticResource CodeFont}" FontSize="11"
+                        <TextBlock Text="streaming" Foreground="{DynamicResource StateWarningBrush}" FontWeight="SemiBold"
+                                   FontFamily="{DynamicResource FontMono}" FontSize="11"
                                    VerticalAlignment="Center" />
                     </StackPanel>
                     <!-- Streaming text: wraps, bounded width, no overflow -->
                     <TextBlock Text="{Binding StreamingBuffer}"
                                TextWrapping="Wrap"
-                               FontFamily="{StaticResource UiFont}"
+                               FontFamily="{DynamicResource FontUi}"
                                FontSize="14"
                                LineHeight="20"
-                               Foreground="{DynamicResource MochaText}"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
                                MaxWidth="800" />
                 </StackPanel>
             </Border>
 
             <!-- Thinking indicator -->
-            <Border Background="{StaticResource MochaSurface0}" CornerRadius="8"
+            <Border Background="{DynamicResource BgSubtleBrush}" CornerRadius="8"
                     Padding="14,8" Margin="12,4,12,4"
-                    BorderBrush="{StaticResource MochaBlue}" BorderThickness="2,0,0,0"
+                    BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2,0,0,0"
                     IsVisible="{Binding IsThinking}">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="🤔" VerticalAlignment="Center" FontSize="14" />
-                    <TextBlock Text="thinking…" Foreground="{StaticResource MochaBlue}"
-                               FontFamily="{StaticResource CodeFont}" FontSize="11"
+                    <TextBlock Text="thinking…" Foreground="{DynamicResource AccentBrush}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
                                VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
@@ -174,8 +191,8 @@
         <!-- ════════════ Input area (ORCA-style) ════════════
              IsVisible binds to #Root.ShowInputArea so the Orca shell can hide
              the inline input area when its own ComposerView takes over. -->
-        <Border Grid.Row="2" Background="{StaticResource MochaMantle}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="2" Background="{DynamicResource BgRailBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}" BorderThickness="0,1,0,0"
                 Padding="12,10"
                 IsVisible="{Binding #Root.ShowInputArea}">
             <Grid ColumnDefinitions="*,Auto,Auto">

@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.App.Avalonia.ViewModels.Shell;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Provider browser code-behind. Loads providers on first visibility —
@@ -69,12 +68,7 @@ public partial class ProviderBrowserView : UserControl
     {
         if (TopLevel.GetTopLevel(this) is Window window)
         {
-            return window.DataContext switch
-            {
-                MainViewModel vm => vm,
-                OrcaShellViewModel orca => orca.Main,
-                _ => null
-            };
+            return window.DataContext as MainViewModel;
         }
 
         return null;

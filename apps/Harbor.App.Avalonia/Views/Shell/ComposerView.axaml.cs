@@ -12,11 +12,9 @@ namespace Harbor.App.Avalonia.Views.Shell;
 /// </remarks>
 public partial class ComposerView : UserControl
 {
-    /// <summary>Construct the composer.</summary>
     public ComposerView()
     {
         InitializeComponent();
-        this.Loaded += (_, _) => InputBox.Focus();
     }
 
     private ChatViewModel? Vm => this.DataContext as ChatViewModel;
@@ -26,15 +24,11 @@ public partial class ComposerView : UserControl
         var vm = Vm;
         if (vm is null) return;
 
-        // Plain Enter (no Shift, no Ctrl) sends. Shift+Enter inserts newline
-        // (default TextBox behaviour). Ctrl+Enter also sends.
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
         if (isPlainEnter || isCtrlEnter)
         {
-            // Mark handled BEFORE invoking the command — prevents the TextBox
-            // from inserting a stray newline character.
             e.Handled = true;
 
             if (vm.SendCommand.CanExecute(null))

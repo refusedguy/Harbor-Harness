@@ -22,7 +22,18 @@ namespace Harbor.App.Avalonia.Tests;
 /// </summary>
 public class AppHostDiTests
 {
-    private static readonly Lazy<Task<IHost>> _hostLazy = new(() => AppHost.BuildAsync(Array.Empty<string>()));
+    private static readonly Lazy<Task<IHost>> _hostLazy = new(() =>
+    {
+        // Isolate test runs: point HOME to a temp directory so ~/.harbor/config.json
+        // on the dev machine (e.g. DefaultProvider="kilocode") doesn't leak into
+        // these pure-DI assertions. Without this, BuildAsync_Registers_CommonConfig
+        // fails on any machine whose saved config differs from the code default
+        // ("anthropic").
+        var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-di-tests-{Guid.NewGuid():N}");
+        Environment.SetEnvironmentVariable("HOME", tempHome);
+        Directory.CreateDirectory(tempHome);
+        return AppHost.BuildAsync(Array.Empty<string>());
+    });
 
     private static IServiceProvider Services => _hostLazy.Value.IsCompletedSuccessfully
         ? _hostLazy.Value.Result.Services

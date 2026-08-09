@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Components.StatusDot"
+             Width="8"
+             Height="8"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Center">
+
+    <Ellipse x:Name="Dot"
+             Classes="StatusDot"
+             Width="{Binding Width, RelativeSource={RelativeSource Self}}"
+             Height="{Binding Height, RelativeSource={RelativeSource Self}}" />
+</UserControl>

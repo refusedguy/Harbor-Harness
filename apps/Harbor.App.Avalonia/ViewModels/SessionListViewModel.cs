@@ -10,7 +10,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
 ///     Left-sidebar session list. Search, new, branch, delete, select.
 /// </summary>
-public sealed partial class SessionListViewModel : ObservableObject
+internal sealed partial class SessionListViewModel : ObservableObject
 {
     private readonly ISessionManager _sessionManager;
     private readonly IDispatcherAdapter _dispatcher;
@@ -131,9 +131,11 @@ public sealed partial class SessionListViewModel : ObservableObject
                 {
                     var item = new SessionItemViewModel(s.Id, s.Title, s.Agent, s.Model, s.ProviderId, s.UpdatedAt, s.Metadata.MessageCount, s.Directory);
                     item.Status = _sessionManager.GetStatus(s.Id);
-                    (string? branch, bool dirty) = _sessionManager.GetGitInfo(s.Id);
-                    item.GitBranch = branch;
-                    item.GitIsDirty = dirty;
+                    var git = _sessionManager.GetGitInfo(s.Id);
+                    item.GitBranch = git.Branch;
+                    item.GitIsDirty = git.IsDirty;
+                    item.GitDirtyCount = git.DirtyCount;
+                    item.GitLastCommit = git.LastCommit;
                     Sessions.Add(item);
                 }
                 if (_sessionManager.Active is { } active)

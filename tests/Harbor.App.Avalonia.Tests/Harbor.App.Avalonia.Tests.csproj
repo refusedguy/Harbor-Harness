@@ -1,18 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--
-    Harbor.App.Avalonia.Tests — DI registration tests for the Avalonia
-    composition root. Mirrors Harbor.App.Cli.Tests but exercises
-    Harbor.App.Avalonia.AppHost.BuildAsync(args).
-
-    Build note: the Avalonia project targets net10.0 (no -windows suffix),
-    so these tests run on Linux CI without the desktop workloads.
-  -->
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <IsTestProject>true</IsTestProject>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);CS1591;CA1707;S2931;S3881</NoWarn>
   </PropertyGroup>
@@ -23,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Avalonia.Headless"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
   </ItemGroup>
