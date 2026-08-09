@@ -4,7 +4,7 @@ namespace Harbor.Desktop.Animations;
 ///     platform app uses the <see cref="Apply" /> function to interpolate an
 ///     animation value; the named easing strings
 ///     (<see cref="EasingFunctions.CubicInOut" /> etc.) map to
-///     <see cref="Harbor.Desktop.DesignSystem.AnimationTokens" /> for serialization.
+///     <see cref="AnimationTokens" /> for serialization.
 /// </summary>
 public static class EasingFunctions
 {

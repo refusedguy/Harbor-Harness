@@ -128,3 +128,4 @@ BenchmarkDotNet.Artifacts/
 opencode.json
 #.ai-factory/
 /skills-lock.json
+temp/

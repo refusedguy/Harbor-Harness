@@ -1,7 +1,7 @@
 namespace Harbor.Desktop.Animations;
 /// <summary>
 ///     Standard animation durations shared by every desktop app. Mirror of
-///     <see cref="Harbor.Desktop.DesignSystem.AnimationTokens" /> durations
+///     <see cref="AnimationTokens" /> durations
 ///     (re-exported as <see cref="TimeSpan" /> for use in platform animation
 ///     APIs that take a TimeSpan rather than an int ms).
 /// </summary>

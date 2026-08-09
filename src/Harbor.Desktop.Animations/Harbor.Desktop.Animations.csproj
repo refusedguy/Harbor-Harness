@@ -23,13 +23,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
-    <!--
-      AnimationTokens (durations + easing-curve name constants) lives in
-      Harbor.Desktop.DesignSystem per the design-system README. Animations
-      re-exports them as TimeSpan via AnimationDurations and resolves the
-      easing-name strings to delegates via EasingFunctions.
-    -->
-    <ProjectReference Include="..\Harbor.Desktop.DesignSystem\Harbor.Desktop.DesignSystem.csproj"/>
   </ItemGroup>
 
 </Project>
