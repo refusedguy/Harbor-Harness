@@ -30,7 +30,7 @@
     <Grid Margin="0,6" ColumnDefinitions="100,*">
         <!-- Role pill (JetBrains Mono, accent color) -->
         <Border Grid.Column="0"
-                Background="{StaticResource MochaSurface0}"
+                Background="{DynamicResource BgSubtleBrush}"
                 CornerRadius="6"
                 Padding="8,3"
                 VerticalAlignment="Top"
@@ -38,7 +38,7 @@
                 BorderBrush="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
                 BorderThickness="2,0,0,0">
             <TextBlock Text="{Binding RoleLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                       FontFamily="{StaticResource CodeFont}"
+                       FontFamily="{DynamicResource FontMono}"
                        FontSize="11"
                        FontWeight="SemiBold"
                        Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
@@ -47,17 +47,17 @@
         <!-- Message body — plain TextBlock. (MarkdownRenderer integration
              pending — restore once markdig 0.38 API migration lands.) -->
         <Border Grid.Column="1"
-                Background="{StaticResource MochaMantle}"
+                Background="{DynamicResource BgRailBrush}"
                 CornerRadius="8"
                 Padding="14,10"
                 Margin="10,0,0,0"
-                BorderBrush="{StaticResource BorderBrush}"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
                 BorderThickness="1">
             <Grid RowDefinitions="Auto,Auto">
                 <TextBlock Grid.Row="0"
                            Text="{Binding Text, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            TextWrapping="Wrap"
-                           FontFamily="{StaticResource UiFont}"
+                           FontFamily="{DynamicResource FontUi}"
                            FontSize="14"
                            LineHeight="20"
                            Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
@@ -67,10 +67,10 @@
                 <TextBlock Grid.Row="1"
                            Text="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontSize="10"
-                           FontFamily="{StaticResource CodeFont}"
+                           FontFamily="{DynamicResource FontMono}"
                            HorizontalAlignment="Right"
                            Margin="0,6,0,0"
-                           Foreground="{StaticResource MochaOverlay2}"
+                           Foreground="{DynamicResource TextTertiaryBrush}"
                            IsVisible="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vw:StringNullOrEmptyToBoolConverter.Instance}}" />
             </Grid>
         </Border>

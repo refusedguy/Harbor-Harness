@@ -5,13 +5,13 @@
 
     <Border Background="#80000000" ZIndex="200"
             PointerPressed="Backdrop_Click">
-        <Border Background="{StaticResource MochaBase}" CornerRadius="8"
+        <Border Background="{DynamicResource BgAppBrush}" CornerRadius="8"
                 Width="900" Height="600" Padding="16">
             <Grid RowDefinitions="Auto,*,Auto">
 
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
                     <TextBlock Grid.Column="0" Text="Provider browser" FontSize="16" FontWeight="Bold"
-                               Foreground="{StaticResource MochaBlue}" />
+                               Foreground="{DynamicResource AccentBrush}" />
                     <Button Grid.Column="1" Classes="Subtle" Content="Close (Esc)" Click="Close_Click" />
                 </Grid>
 
@@ -35,12 +35,12 @@
                                                        TextTrimming="CharacterEllipsis" />
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <TextBlock Text="{Binding Id}" FontSize="10"
-                                                           FontFamily="{StaticResource CodeFont}"
-                                                           Foreground="{StaticResource TextMutedBrush}"
+                                                           FontFamily="{DynamicResource FontMono}"
+                                                           Foreground="{DynamicResource TextTertiaryBrush}"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="·" Foreground="{StaticResource TextMutedBrush}" />
+                                                <TextBlock Text="·" Foreground="{DynamicResource TextTertiaryBrush}" />
                                                 <TextBlock Text="{Binding Status}" FontSize="10"
-                                                           Foreground="{StaticResource MochaGreen}" />
+                                                           Foreground="{DynamicResource StateSuccessBrush}" />
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
@@ -57,14 +57,14 @@
                             <!-- Loading spinner + error message -->
                             <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
                                 <TextBlock Text="Loading models…" FontSize="11"
-                                           Foreground="{StaticResource MochaOverlay2}" />
+                                           Foreground="{DynamicResource TextTertiaryBrush}" />
                                 <ProgressBar IsIndeterminate="True" Height="2" />
                             </StackPanel>
-                            <Border Grid.Row="1" Background="{StaticResource MochaSurface0}"
+                            <Border Grid.Row="1" Background="{DynamicResource BgSubtleBrush}"
                                     CornerRadius="4" Padding="8" Margin="0,0,0,8"
                                     IsVisible="{Binding ErrorMessage}">
                                 <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
-                                           Foreground="{StaticResource MochaPeach}"
+                                           Foreground="{DynamicResource StateWarningBrush}"
                                            TextWrapping="Wrap" />
                             </Border>
 
@@ -72,17 +72,17 @@
                                 <ItemsControl ItemsSource="{Binding Models}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="vma:ModelRowViewModel">
-                                            <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
+                                            <Border Background="{DynamicResource BgRailBrush}" CornerRadius="6"
                                                     Padding="10" Margin="0,2">
                                                 <StackPanel Spacing="2">
                                                     <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding Id}"
-                                                               FontFamily="{StaticResource CodeFont}" FontSize="11"
-                                                               Foreground="{StaticResource MochaOverlay2}" />
+                                                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                                               Foreground="{DynamicResource TextTertiaryBrush}" />
                                                     <TextBlock Text="{Binding Features}" FontSize="11"
-                                                               Foreground="{StaticResource MochaGreen}" />
+                                                               Foreground="{DynamicResource StateSuccessBrush}" />
                                                     <TextBlock Text="{Binding PricingLabel}" FontSize="11"
-                                                               Foreground="{StaticResource MochaYellow}" />
+                                                               Foreground="{DynamicResource StateWarningBrush}" />
                                                 </StackPanel>
                                             </Border>
                                         </DataTemplate>

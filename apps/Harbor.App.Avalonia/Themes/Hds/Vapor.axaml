@@ -1,0 +1,149 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        HDS Vapor — dark vaporwave theme (purple / pink / cyan).
+        Same key set as CatppuccinMocha.axaml (enforced by ThemeParityTests).
+    -->
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ════════════ Vaporwave palette ════════════ -->
+    <Color x:Key="MochaBase">#0D002B</Color>
+    <Color x:Key="MochaMantle">#12003E</Color>
+    <Color x:Key="MochaCrust">#1A0045</Color>
+    <Color x:Key="MochaSurface0">#2A1A55</Color>
+    <Color x:Key="MochaSurface1">#3A2A75</Color>
+    <Color x:Key="MochaSurface2">#4A3A95</Color>
+
+    <Color x:Key="MochaText">#E8E8FF</Color>
+    <Color x:Key="MochaSubtext1">#D8D8FF</Color>
+    <Color x:Key="MochaSubtext0">#B8B8D8</Color>
+    <Color x:Key="MochaOverlay2">#9898B8</Color>
+    <Color x:Key="MochaOverlay1">#787898</Color>
+    <Color x:Key="MochaOverlay0">#686888</Color>
+
+    <Color x:Key="MochaBlue">#8B5CF7</Color>
+    <Color x:Key="MochaLavender">#A78BFA</Color>
+    <Color x:Key="MochaSapphire">#06B6D4</Color>
+    <Color x:Key="MochaSky">#06B6D4</Color>
+    <Color x:Key="MochaTeal">#14B8A8</Color>
+    <Color x:Key="MochaGreen">#22C5B8</Color>
+    <Color x:Key="MochaYellow">#FBBF24</Color>
+    <Color x:Key="MochaPeach">#FF9E9E</Color>
+    <Color x:Key="MochaMaroon">#EF4444</Color>
+    <Color x:Key="MochaRed">#EF4444</Color>
+    <Color x:Key="MochaMauve">#C084FC</Color>
+    <Color x:Key="MochaPink">#F973AB</Color>
+    <Color x:Key="MochaFlamingo">#FB7185</Color>
+    <Color x:Key="MochaRosewater">#FDA4AF</Color>
+
+    <!-- ════════════ Semantic colors ════════════ -->
+    <Color x:Key="AccentColor">#8B5CF7</Color>
+    <Color x:Key="AccentHoverColor">#A78BFA</Color>
+    <Color x:Key="AccentPressedColor">#C084FC</Color>
+    <Color x:Key="SuccessColor">#22C5B8</Color>
+    <Color x:Key="WarningColor">#FBBF24</Color>
+    <Color x:Key="ErrorColor">#EF4444</Color>
+    <Color x:Key="InfoColor">#06B6D4</Color>
+
+    <!-- ════════════ Chat role brushes ════════════ -->
+    <SolidColorBrush x:Key="ChatUserBrush" Color="{StaticResource MochaPink}" />
+    <SolidColorBrush x:Key="ChatAssistantBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="ChatThinkingBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="ChatToolBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="ChatToolResultBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="ChatSystemBrush" Color="{StaticResource MochaYellow}" />
+    <SolidColorBrush x:Key="ChatErrorBrush" Color="{StaticResource MochaRed}" />
+
+    <!-- ════════════ Background brushes ════════════ -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource MochaBase}" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="{StaticResource MochaCrust}" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="CardElevatedBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="HoverBackgroundBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="HoverStrongBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="SelectedBackgroundBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="SeparatorBrush" Color="{StaticResource MochaSurface0}" />
+
+    <!-- ════════════ Accent + state brushes ════════════ -->
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource MochaSapphire}" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource MochaLavender}" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#0D002B" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#0D002B" />
+    <FontFamily x:Key="FontUi">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource MochaPeach}" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="InfoBrush" Color="{StaticResource MochaSky}" />
+
+    <!-- ════════════ Text brushes ════════════ -->
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource MochaSubtext0}" />
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="{StaticResource MochaSubtext0}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource MochaOverlay1}" />
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="{StaticResource MochaOverlay1}" />
+
+    <!-- ════════════ Status brushes ════════════ -->
+    <SolidColorBrush x:Key="StatusIdleBrush" Color="{StaticResource MochaSubtext0}" />
+    <SolidColorBrush x:Key="StatusRunningBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="StatusSuccessBrush" Color="{StaticResource MochaGreen}" />
+
+    <!-- ════════════ State brushes (HDS token names) ════════════ -->
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="AccentHoverBrush_HDS" Color="{StaticResource MochaSapphire}" />
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource MochaBlue}" Opacity="0.1" />
+    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource MochaPeach}" />
+    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StateIdleBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="StateInfoBrush" Color="{StaticResource MochaSky}" />
+    <SolidColorBrush x:Key="StatePendingBrush" Color="{StaticResource MochaSubtext0}" />
+
+    <!-- ════════════ Surface semantic brushes ════════════ -->
+    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource MochaBase}" />
+    <SolidColorBrush x:Key="BgSubtleBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="BgOverlayBrush" Color="#80000000" />
+    <SolidColorBrush x:Key="BgGlassBrush" Color="#1A003E" />
+
+    <!-- ════════════ Legacy aliases (for Dark.axaml / HarborDark.axaml compat) ════════════ -->
+    <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgSelectedBrush" Color="{StaticResource MochaSurface1}" />
+
+    <!-- ════════════ Stepper brushes ════════════ -->
+    <SolidColorBrush x:Key="StepperActiveBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StepperDoneBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StepperPendingBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="StepperConnectorBrush" Color="{StaticResource MochaSurface1}" />
+
+    <!-- ════════════ Cost brushes ════════════ -->
+    <SolidColorBrush x:Key="CostLowBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="CostMidBrush" Color="{StaticResource MochaYellow}" />
+    <SolidColorBrush x:Key="CostHighBrush" Color="{StaticResource MochaRed}" />
+
+    <!-- ════════════ Cost text colors ════════════ -->
+    <Color x:Key="CostLowColor">#22C5B8</Color>
+    <Color x:Key="CostMidColor">#FBBF24</Color>
+    <Color x:Key="CostHighColor">#EF4444</Color>
+
+    <!-- ════════════ Window caption colors ════════════ -->
+    <Color x:Key="WindowCaptionHoverColor">#2A1A55</Color>
+    <Color x:Key="WindowCaptionActiveColor">#3A2A75</Color>
+
+</ResourceDictionary>

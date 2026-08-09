@@ -5,7 +5,7 @@
              Background="#60000000"
              PointerPressed="Backdrop_Click">
 
-    <Border Background="{StaticResource MochaCrust}"
+    <Border Background="{DynamicResource BgPanelBrush}"
             CornerRadius="8"
             Width="640" MaxHeight="480"
             VerticalAlignment="Top"
@@ -15,12 +15,12 @@
         <Grid RowDefinitions="Auto,Auto,*">
 
             <!-- Header -->
-            <Border Grid.Row="0" Background="{StaticResource MochaSurface0}" Padding="16,10">
+            <Border Grid.Row="0" Background="{DynamicResource BgSubtleBrush}" Padding="16,10">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="⌘" FontSize="16" Foreground="{StaticResource MochaBlue}"
+                    <TextBlock Text="⌘" FontSize="16" Foreground="{DynamicResource AccentBrush}"
                                VerticalAlignment="Center" FontWeight="Bold" />
                     <TextBlock Text="Command palette" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{StaticResource MochaBlue}" VerticalAlignment="Center" />
+                               Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
                 </StackPanel>
             </Border>
 
@@ -30,7 +30,7 @@
                      PlaceholderText="Type a command, /slash, or search…"
                      Padding="16,12"
                      BorderThickness="0,0,0,1"
-                     BorderBrush="{StaticResource BorderBrush}"
+                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                      Background="Transparent"
                      FontSize="14"
                      KeyDown="QueryBox_KeyDown" />
@@ -46,11 +46,11 @@
                     <DataTemplate DataType="vma:CommandResultViewModel">
                         <Grid ColumnDefinitions="24,*,Auto" Margin="0,2">
                             <TextBlock Grid.Column="0" Text="{Binding Icon}"
-                                       HorizontalAlignment="Center" FontFamily="{StaticResource CodeFont}" />
+                                       HorizontalAlignment="Center" FontFamily="{DynamicResource FontMono}" />
                             <TextBlock Grid.Column="1" Text="{Binding Label}" FontWeight="SemiBold"
                                        TextTrimming="CharacterEllipsis" />
                             <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="11"
-                                       Foreground="{StaticResource MochaOverlay2}" Margin="8,0,0,0" />
+                                       Foreground="{DynamicResource TextTertiaryBrush}" Margin="8,0,0,0" />
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

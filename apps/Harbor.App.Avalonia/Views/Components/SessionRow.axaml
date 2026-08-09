@@ -17,7 +17,7 @@
 
         The status dot color is resolved from app resources via
         BrushKeyConverter. The "dirty" indicator is a tiny dot in
-        MochaYellow when IsDirty is true.
+        MochaYellow when IsDirty is true (semantic: StateWarningBrush).
 
         Usage:
           <comp:SessionRow Title="{Binding Title}"
@@ -43,7 +43,7 @@
                 <TextBlock Text="*"
                            FontSize="11"
                            FontWeight="Bold"
-                           Foreground="{StaticResource MochaYellow}"
+                           Foreground="{DynamicResource StateWarningBrush}"
                            IsVisible="{Binding IsDirty, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            ToolTip.Tip="Working tree has uncommitted changes" />
             </StackPanel>
@@ -58,11 +58,11 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=UserControl}}"
                            FontSize="10"
-                           Foreground="{StaticResource MochaOverlay2}" />
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
                 <TextBlock
                     Text="{Binding MessageCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='{}{0} msgs'}"
                     FontSize="10"
-                    Foreground="{StaticResource MochaOverlay2}" />
+                    Foreground="{DynamicResource TextTertiaryBrush}" />
             </StackPanel>
         </StackPanel>
 

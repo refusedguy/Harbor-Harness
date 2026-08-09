@@ -90,11 +90,11 @@ public sealed partial class CodeBlock : UserControl
     private static IEnumerable<Inline> Tokenize(string code, string language)
     {
         var keywords = KeywordsFor(language);
-        var keywordBrush = TryFindBrush("MochaMauve", Brushes.Orchid);
-        var stringBrush = TryFindBrush("MochaGreen", Brushes.LightGreen);
-        var commentBrush = TryFindBrush("MochaOverlay2", Brushes.Gray);
-        var numberBrush = TryFindBrush("MochaPeach", Brushes.Orange);
-        var defaultBrush = TryFindBrush("MochaText", Brushes.White);
+        var keywordBrush = TryFindBrush("AccentPrimaryBrush", Brushes.Orchid);
+        var stringBrush = TryFindBrush("StateSuccessBrush", Brushes.LightGreen);
+        var commentBrush = TryFindBrush("TextTertiaryBrush", Brushes.Gray);
+        var numberBrush = TryFindBrush("StateWarningBrush", Brushes.Orange);
+        var defaultBrush = TryFindBrush("TextPrimaryBrush", Brushes.White);
         var codeFont = TryFindFont();
 
         int i = 0;
@@ -271,7 +271,7 @@ public sealed partial class CodeBlock : UserControl
 
     private static FontFamily TryFindFont()
     {
-        if (Application.Current?.Resources.TryGetResource("CodeFont", null, out object? r) == true && r is FontFamily f)
+        if (Application.Current?.Resources.TryGetResource("FontMono", null, out object? r) == true && r is FontFamily f)
         {
             return f;
         }

@@ -2,44 +2,20 @@
                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-        ORCA-level dark theme — Catppuccin-Mocha base with ORCA polish.
-        Merges Hds/BaseTokens.axaml for theme-independent structural tokens
-        (spacing, radius, shadow, motion, typography). This file defines the
-        Catppuccin-Mocha color palette + all semantic brushes used by both
-        the classic shell and the HDS component styles.
+        HDS Catppuccin Mocha — baseline dark theme.
+        Merges BaseTokens.axaml for structural tokens (spacing, radius,
+        shadow, motion, typography). Defines the full Catppuccin-Mocha
+        60-color palette + all semantic brushes (~50 keys).
 
-        Reference: https://github.com/stablyai/orca (Electron+Tailwind+shadcn)
-
-        Key ORCA visual elements applied here:
-          • Inter font for UI (bundled), JetBrains Mono for code (system fallback).
-          • Card-based layout with subtle shadows + 8–12px corner radius.
-          • Accent color = blue (#89b4fa); hover = sky (#74c7ec); pressed = deeper.
-          • Micro-interaction transitions (150ms brush, 200ms opacity).
-          • Status-bar separator color (subtle 1px between groups).
-          • Onboarding step dot accents.
+        This is the BASELINE for ThemeParityTests — every other HDS theme
+        must define the same key set.
     -->
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
     </ResourceDictionary.MergedDictionaries>
 
-    <!-- ════════════ Fonts ════════════
-         UiFont uses the bundled Inter package (real Inter TTF, no system
-         dependency). CodeFont prefers JetBrains Mono when installed (most
-         dev workstations have it), falling back to Cascadia Code (Win11+),
-         Menlo (macOS), Consolas, or DejaVu Sans Mono (Linux).
-
-         The JetBrainsMono Avalonia NuGet package was removed from nuget.org
-         for the 12.x line, so we rely on system installation + a broad
-         fallback chain. This keeps the build green on all platforms. -->
-    <FontFamily x:Key="UiFont">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
-    <FontFamily x:Key="CodeFont">JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, DejaVu Sans Mono, monospace</FontFamily>
-    <FontFamily x:Key="FontMono">JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, DejaVu Sans Mono, monospace</FontFamily>
-
-    <!-- ════════════ Catppuccin-Mocha palette ════════════
-         https://catppuccin.com/palette -->
-
-    <!-- Base background shades (deepest → lightest surface) -->
+    <!-- ════════════ Catppuccin-Mocha palette ════════════ -->
     <Color x:Key="MochaBase">#1E1E2E</Color>
     <Color x:Key="MochaMantle">#181825</Color>
     <Color x:Key="MochaCrust">#11111B</Color>
@@ -47,7 +23,6 @@
     <Color x:Key="MochaSurface1">#45475A</Color>
     <Color x:Key="MochaSurface2">#585B70</Color>
 
-    <!-- Text -->
     <Color x:Key="MochaText">#CDD6F4</Color>
     <Color x:Key="MochaSubtext1">#BAC2DE</Color>
     <Color x:Key="MochaSubtext0">#A6ADC8</Color>
@@ -55,7 +30,6 @@
     <Color x:Key="MochaOverlay1">#7F849C</Color>
     <Color x:Key="MochaOverlay0">#6C7086</Color>
 
-    <!-- Accents -->
     <Color x:Key="MochaBlue">#89B4FA</Color>
     <Color x:Key="MochaLavender">#B4BEFE</Color>
     <Color x:Key="MochaSapphire">#74C7EC</Color>
@@ -71,16 +45,16 @@
     <Color x:Key="MochaFlamingo">#F2CDCD</Color>
     <Color x:Key="MochaRosewater">#F5E0DC</Color>
 
-    <!-- ════════════ Semantic colors (ORCA convention) ════════════ -->
+    <!-- ════════════ Semantic colors ════════════ -->
     <Color x:Key="AccentColor">#89B4FA</Color>
     <Color x:Key="AccentHoverColor">#74C7EC</Color>
-    <Color x:Key="AccentPressedColor">#89B4FA</Color>
+    <Color x:Key="AccentPressedColor">#B4BEFE</Color>
     <Color x:Key="SuccessColor">#A6E3A1</Color>
     <Color x:Key="WarningColor">#FAB387</Color>
     <Color x:Key="ErrorColor">#F38BA8</Color>
     <Color x:Key="InfoColor">#89DCEB</Color>
 
-    <!-- ════════════ Chat role colors (semantic per role) ════════════ -->
+    <!-- ════════════ Chat role brushes ════════════ -->
     <SolidColorBrush x:Key="ChatUserBrush" Color="{StaticResource MochaSky}" />
     <SolidColorBrush x:Key="ChatAssistantBrush" Color="{StaticResource MochaText}" />
     <SolidColorBrush x:Key="ChatThinkingBrush" Color="{StaticResource MochaOverlay2}" />
@@ -104,65 +78,77 @@
     <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource MochaSurface1}" />
     <SolidColorBrush x:Key="SeparatorBrush" Color="{StaticResource MochaSurface0}" />
 
-    <!-- ════════════ Accent + semantic brushes ════════════ -->
+    <!-- ════════════ Accent + state brushes ════════════ -->
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource MochaBlue}" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource MochaSapphire}" />
     <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource MochaLavender}" />
     <SolidColorBrush x:Key="AccentForegroundBrush" Color="#11111B" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#11111B" />
+    <FontFamily x:Key="FontUi">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
     <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource MochaGreen}" />
     <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource MochaPeach}" />
     <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource MochaRed}" />
     <SolidColorBrush x:Key="InfoBrush" Color="{StaticResource MochaSky}" />
 
-    <!-- ════════════ Text brushes (hierarchy) ════════════ -->
+    <!-- ════════════ Text brushes ════════════ -->
     <SolidColorBrush x:Key="TextBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource MochaText}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource MochaSubtext0}" />
     <SolidColorBrush x:Key="TextSubtleBrush" Color="{StaticResource MochaSubtext0}" />
     <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource MochaOverlay1}" />
     <SolidColorBrush x:Key="TextDisabledBrush" Color="{StaticResource MochaOverlay1}" />
-    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#11111B" />
 
-    <!-- ════════════ Status bar state colors ════════════ -->
+    <!-- ════════════ Status brushes ════════════ -->
     <SolidColorBrush x:Key="StatusIdleBrush" Color="{StaticResource MochaSubtext0}" />
     <SolidColorBrush x:Key="StatusRunningBrush" Color="{StaticResource MochaBlue}" />
     <SolidColorBrush x:Key="StatusErrorBrush" Color="{StaticResource MochaRed}" />
     <SolidColorBrush x:Key="StatusSuccessBrush" Color="{StaticResource MochaGreen}" />
 
-    <!-- ════════════ Onboarding progress-stepper colors ════════════ -->
+    <!-- ════════════ State brushes (HDS token names) ════════════ -->
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="AccentHoverBrush_HDS" Color="{StaticResource MochaSapphire}" />
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource MochaBlue}" Opacity="0.1" />
+    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource MochaRed}" />
+    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource MochaPeach}" />
+    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource MochaBlue}" />
+    <SolidColorBrush x:Key="StateIdleBrush" Color="{StaticResource MochaOverlay2}" />
+    <SolidColorBrush x:Key="StateInfoBrush" Color="{StaticResource MochaSky}" />
+    <SolidColorBrush x:Key="StatePendingBrush" Color="{StaticResource MochaSubtext0}" />
+
+    <!-- ════════════ Surface semantic brushes (HDS token names) ════════════ -->
+    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource MochaBase}" />
+    <SolidColorBrush x:Key="BgSubtleBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource MochaSurface1}" />
+    <SolidColorBrush x:Key="BgOverlayBrush" Color="#80000000" />
+    <SolidColorBrush x:Key="BgGlassBrush" Color="#1A1A2E" />
+
+    <!-- ════════════ Legacy aliases (for Dark.axaml / HarborDark.axaml compat) ════════════ -->
+    <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource MochaMantle}" />
+    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource MochaSurface0}" />
+    <SolidColorBrush x:Key="BgSelectedBrush" Color="{StaticResource MochaSurface1}" />
+
+    <!-- ════════════ Stepper brushes ════════════ -->
     <SolidColorBrush x:Key="StepperActiveBrush" Color="{StaticResource MochaBlue}" />
     <SolidColorBrush x:Key="StepperDoneBrush" Color="{StaticResource MochaBlue}" />
     <SolidColorBrush x:Key="StepperPendingBrush" Color="{StaticResource MochaSurface1}" />
     <SolidColorBrush x:Key="StepperConnectorBrush" Color="{StaticResource MochaSurface1}" />
 
-    <!-- ════════════ Corner radius / input tokens (kept for
-         backward-compat with existing XAML that references them) ══ -->
-    <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="ButtonCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="InputCornerRadius">8</CornerRadius>
-    <CornerRadius x:Key="PillCornerRadius">12</CornerRadius>
+    <!-- ════════════ Cost brushes ════════════ -->
+    <SolidColorBrush x:Key="CostLowBrush" Color="{StaticResource MochaGreen}" />
+    <SolidColorBrush x:Key="CostMidBrush" Color="{StaticResource MochaYellow}" />
+    <SolidColorBrush x:Key="CostHighBrush" Color="{StaticResource MochaRed}" />
 
-    <!-- ════════════ HDS token compatibility brushes ════════════
-         These alias HDS-style names to Catppuccin-Mocha values so that
-         HDS component styles (HdsButton, HdsCard, etc.) resolve correctly
-         when the classic Catppuccin-Mocha theme is active. HarborDark.axaml
-         (loaded after this file) overrides these with its own values when
-         the Orca shell is active. -->
-    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource MochaText}" />
-    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource MochaSubtext0}" />
-    <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource MochaOverlay1}" />
+    <!-- ════════════ Cost text colors ════════════ -->
+    <Color x:Key="CostLowColor">#A6E3A1</Color>
+    <Color x:Key="CostMidColor">#F9E2AF</Color>
+    <Color x:Key="CostHighColor">#F38BA8</Color>
 
-    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource MochaBlue}" />
-    <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource MochaBlue}" Opacity="0.1" />
-
-    <SolidColorBrush x:Key="BgAppBrush" Color="{StaticResource MochaBase}" />
-    <SolidColorBrush x:Key="BgSubtleBrush" Color="{StaticResource MochaSurface0}" />
-    <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource MochaSurface0}" />
-    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource MochaSurface1}" />
-
-    <SolidColorBrush x:Key="StateErrorBrush" Color="{StaticResource MochaRed}" />
-    <SolidColorBrush x:Key="StateSuccessBrush" Color="{StaticResource MochaGreen}" />
-    <SolidColorBrush x:Key="StateWarningBrush" Color="{StaticResource MochaPeach}" />
-    <SolidColorBrush x:Key="StateRunningBrush" Color="{StaticResource MochaBlue}" />
-
-    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource MochaSurface0}" />
+    <!-- ════════════ Window caption colors ════════════ -->
+    <Color x:Key="WindowCaptionHoverColor">#1F1F1F</Color>
+    <Color x:Key="WindowCaptionActiveColor">#2A2A2A</Color>
 
 </ResourceDictionary>

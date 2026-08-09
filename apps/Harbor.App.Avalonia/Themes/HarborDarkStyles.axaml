@@ -15,8 +15,8 @@
     <!-- ════════════ Orca Button.Primary — amber fill, dark text ════════════ -->
     <Style Selector="Button.Primary">
         <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
-        <Setter Property="Foreground" Value="#0D0D0F" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="Padding" Value="16,8" />
@@ -40,8 +40,8 @@
     <!-- ════════════ Orca Button.Danger — danger-red fill ════════════ -->
     <Style Selector="Button.Danger">
         <Setter Property="Background" Value="{DynamicResource StateErrorBrush}" />
-        <Setter Property="Foreground" Value="#0D0D0F" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="Padding" Value="16,8" />

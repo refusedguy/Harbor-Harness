@@ -22,4 +22,10 @@ public interface IThemeService
 
     /// <summary>Toggle between dark and light.</summary>
     public void Toggle();
+
+    /// <summary>Apply an HDS palette by name (e.g. "CatppuccinMocha", "Vapor").</summary>
+    public void ApplyHds(string theme);
+
+    /// <summary>Set the base chrome variant (dark / light) without changing palette.</summary>
+    public void SetThemeVariant(bool isDark);
 }

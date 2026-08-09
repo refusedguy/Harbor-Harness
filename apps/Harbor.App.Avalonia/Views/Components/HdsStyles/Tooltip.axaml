@@ -1,0 +1,20 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Tooltip — HDS notification tooltip.
+         BgPanelElevated, RadiusSm, Space3/Space1 padding.
+         Fade-in 150ms via EaseNormal (TimeSpan token). -->
+
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource BgPanelElevatedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Padding" Value="{StaticResource Space3},{StaticResource Space1}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{StaticResource EaseFast}" />
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="Foreground" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+</Styles>

@@ -138,9 +138,9 @@ internal static class MarkdownBlockRenderer
 
             var bullet = new TextBlock
             {
-                FontFamily = MarkdownResourceResolver.TryFindFont("CodeFont", FontFamily.Default),
+                FontFamily = MarkdownResourceResolver.TryFindFont("FontMono", FontFamily.Default),
                 FontSize = 13,
-                Foreground = MarkdownResourceResolver.TryFindBrush("MochaPeach", Brushes.Orange),
+                Foreground = MarkdownResourceResolver.TryFindBrush("StateWarningBrush", Brushes.Orange),
                 VerticalAlignment = VerticalAlignment.Top,
                 Margin = new Thickness(0, 0, 8, 0),
                 Text = l.IsOrdered ? $"{orderedIndex}." : "\u2022"
@@ -182,7 +182,7 @@ internal static class MarkdownBlockRenderer
         }
         return new Border
         {
-            BorderBrush = MarkdownResourceResolver.TryFindBrush("MochaSurface2", Brushes.Gray),
+            BorderBrush = MarkdownResourceResolver.TryFindBrush("BgPanelBrush", Brushes.Gray),
             BorderThickness = new Thickness(3, 0, 0, 0),
             Padding = new Thickness(12, 6, 0, 6),
             Margin = new Thickness(0, 2),
@@ -195,7 +195,7 @@ internal static class MarkdownBlockRenderer
         return new Border
         {
             Height = 1,
-            Background = MarkdownResourceResolver.TryFindStaticBrush("MochaSurface1"),
+            Background = MarkdownResourceResolver.TryFindStaticBrush("BgPanelElevatedBrush"),
             Margin = new Thickness(0, 6)
         };
     }

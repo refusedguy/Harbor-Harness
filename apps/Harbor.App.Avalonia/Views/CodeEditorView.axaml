@@ -8,7 +8,7 @@
     <Grid RowDefinitions="Auto,*">
 
         <!-- Tab strip + toolbar -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Background="{StaticResource MochaMantle}">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Background="{DynamicResource BgRailBrush}">
             <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                 <ItemsControl ItemsSource="{Binding Tabs}">
                     <ItemsControl.ItemsPanel>
@@ -18,12 +18,12 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:EditorTabViewModel">
-                            <Border Padding="10,4" Background="{StaticResource MochaSurface0}" Margin="2,2,0,2"
+                            <Border Padding="10,4" Background="{DynamicResource BgSubtleBrush}" Margin="2,2,0,2"
                                     CornerRadius="4,4,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding FileName}" FontFamily="{StaticResource CodeFont}"
+                                    <TextBlock Text="{Binding FileName}" FontFamily="{DynamicResource FontMono}"
                                                FontSize="12" />
-                                    <TextBlock Text="●" Foreground="{StaticResource MochaYellow}" FontSize="9"
+                                    <TextBlock Text="●" Foreground="{DynamicResource StateWarningBrush}" FontSize="9"
                                                IsVisible="{Binding IsDirty}" />
                                     <Button Classes="Subtle" Content="×" Padding="6,2"
                                             Command="{Binding $parent[views:CodeEditorView].(UserControl.DataContext).CloseTabCommand}"
@@ -54,7 +54,7 @@
                     FontFamily="JetBrains Mono, Cascadia Code, monospace"
                     FontSize="13"
                     Background="Transparent"
-                    Foreground="{StaticResource MochaText}" />
+                    Foreground="{DynamicResource TextPrimaryBrush}" />
             </Grid>
         </Border>
     </Grid>

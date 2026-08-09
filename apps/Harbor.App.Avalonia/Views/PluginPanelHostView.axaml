@@ -7,8 +7,8 @@
         Production v0.5 will resolve registered panels from the IPanelRegistry and
         render them as tabbed content here. For v0.4 we keep this as a hidden dock.
     -->
-    <Border Background="{StaticResource MochaCrust}" Padding="8">
-        <TextBlock Text="Plugin panels (v0.5)" Foreground="{StaticResource MochaOverlay2}"
-                   FontFamily="{StaticResource CodeFont}" FontSize="11" />
+    <Border Background="{DynamicResource BgPanelBrush}" Padding="8">
+        <TextBlock Text="Plugin panels (v0.5)" Foreground="{DynamicResource TextTertiaryBrush}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="11" />
     </Border>
 </UserControl>

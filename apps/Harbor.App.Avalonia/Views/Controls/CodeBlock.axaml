@@ -13,14 +13,14 @@
             the build light and the headless test renderer happy).
 
         The whole card uses the existing `Border.CodeBlock` style from
-        AppStyles.axaml (MochaCrust background, 1px border, 8px radius).
+        AppStyles.axaml (BgPanelBrush background, 1px border, 8px radius).
     -->
 
-    <Border Background="{StaticResource MochaMantle}"
+    <Border Background="{DynamicResource BgRailBrush}"
             CornerRadius="8"
             Padding="12,10"
             Margin="0,4"
-            BorderBrush="{StaticResource BorderBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="1">
         <StackPanel Orientation="Vertical" Spacing="6">
             <!-- Header: language label + copy button -->
@@ -28,8 +28,8 @@
                 <TextBlock Grid.Column="0"
                            x:Name="LanguageLabel"
                            Text="{Binding Language, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=UserControl}}"
-                           Foreground="{StaticResource MochaBlue}"
-                           FontFamily="{StaticResource CodeFont}"
+                           Foreground="{DynamicResource AccentBrush}"
+                           FontFamily="{DynamicResource FontMono}"
                            FontSize="11"
                            FontWeight="SemiBold" />
                 <Button Grid.Column="1"
@@ -43,10 +43,10 @@
 
             <!-- Code body — TextBlock hosts the syntax-highlighted Inlines -->
             <TextBlock x:Name="CodeText"
-                       FontFamily="{StaticResource CodeFont}"
+                       FontFamily="{DynamicResource FontMono}"
                        FontSize="13"
                        TextWrapping="NoWrap"
-                       Foreground="{StaticResource MochaText}" />
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
         </StackPanel>
     </Border>
 </UserControl>

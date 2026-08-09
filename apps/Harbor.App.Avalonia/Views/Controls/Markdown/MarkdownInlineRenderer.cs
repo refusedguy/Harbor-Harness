@@ -85,10 +85,10 @@ internal static class MarkdownInlineRenderer
             case MdCodeInline code:
                 sink.Add(new Run(code.Content)
                 {
-                    FontFamily = MarkdownResourceResolver.TryFindFont("CodeFont", FontFamily.Default),
+                    FontFamily = MarkdownResourceResolver.TryFindFont("FontMono", FontFamily.Default),
                     FontSize = 12,
-                    Background = MarkdownResourceResolver.TryFindBrush("MochaSurface0", Brushes.DarkGray),
-                    Foreground = MarkdownResourceResolver.TryFindBrush("MochaPeach", Brushes.Orange)
+                    Background = MarkdownResourceResolver.TryFindBrush("BgSubtleBrush", Brushes.DarkGray),
+                    Foreground = MarkdownResourceResolver.TryFindBrush("StateWarningBrush", Brushes.Orange)
                 });
                 break;
             case MdLinkInline link:
@@ -106,7 +106,7 @@ internal static class MarkdownInlineRenderer
                 {
                     if (r is Run run)
                     {
-                        run.Foreground = MarkdownResourceResolver.TryFindBrush("MochaSapphire", Brushes.SkyBlue);
+                        run.Foreground = MarkdownResourceResolver.TryFindBrush("AccentHoverBrush", Brushes.SkyBlue);
                         run.TextDecorations = TextDecorations.Underline;
                     }
                 }
@@ -153,10 +153,10 @@ internal static class MarkdownInlineRenderer
             case MdCodeInline code:
                 sink.Add(new Run(code.Content)
                 {
-                    FontFamily = MarkdownResourceResolver.TryFindFont("CodeFont", FontFamily.Default),
+                    FontFamily = MarkdownResourceResolver.TryFindFont("FontMono", FontFamily.Default),
                     FontSize = 12,
-                    Background = MarkdownResourceResolver.TryFindStaticBrush("MochaSurface0"),
-                    Foreground = MarkdownResourceResolver.TryFindStaticBrush("MochaPeach")
+                    Background = MarkdownResourceResolver.TryFindStaticBrush("BgSubtleBrush"),
+                    Foreground = MarkdownResourceResolver.TryFindStaticBrush("StateWarningBrush")
                 });
                 break;
             case MdContainerInline ci:

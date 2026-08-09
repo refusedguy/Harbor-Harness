@@ -24,8 +24,8 @@
         <vw:BrushKeyConverter x:Key="BrushKey" />
     </UserControl.Resources>
 
-    <Border Background="{StaticResource MochaSurface0}"
-            BorderBrush="{StaticResource BorderBrush}"
+    <Border Background="{DynamicResource BgSubtleBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="1"
             CornerRadius="9"
             Padding="8,2"
@@ -37,7 +37,7 @@
                      IsVisible="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}}" />
             <TextBlock Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontSize="11"
-                       FontFamily="{StaticResource CodeFont}"
+                       FontFamily="{DynamicResource FontMono}"
                        VerticalAlignment="Center" />
         </StackPanel>
     </Border>

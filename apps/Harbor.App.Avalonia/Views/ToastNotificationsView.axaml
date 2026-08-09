@@ -4,28 +4,22 @@
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.ToastNotificationsView"
              Background="Transparent"
-             IsHitTestVisible="True">
+             IsHitTestVisible="True"
+             AutomationProperties.AutomationId="ToastNotifications">
 
     <!--
         Toast container — floating, bottom-right, ABOVE the status bar.
-
-        Parent (MainWindow.axaml) places this UserControl as a SIBLING of the
+        Parent (MainWindow.axaml) places this UserControl as a sibling of the
         main DockPanel inside the root <Grid> (no row defs) with:
-            ZIndex="1000"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Bottom"
-            Margin="0,0,16,48"   (48 = status bar height + breathing room)
-            IsHitTestVisible="True"
-            Background="Transparent"
-
-        So this UserControl just needs to stack the toasts vertically. We
-        also clamp the width so very long messages don't stretch across the
-        chat area, and align the stack to the right edge.
-
-        The UserControl itself has Background="Transparent" + IsHitTestVisible="True"
-        so the empty area around the toasts doesn't capture clicks (lets the
-        underlying UI receive them) while the toasts themselves remain
-        interactive (close button etc.).
+          - ZIndex="1000"
+          - HorizontalAlignment="Right"
+          - VerticalAlignment="Bottom"
+          - Margin="0,0,16,48" (48 = status bar height + breathing room)
+          - IsHitTestVisible="True"
+          - Background="Transparent"
+        Each toast: 3px colored left border (kind-based via ToastBrushConverter),
+        icon-header Path (IcCheck/IcWarning/IcError/IcInfo via ToastIconConverter),
+        message TextBlock. All colors/shadows via HDS theme tokens.
     -->
 
     <ItemsControl ItemsSource="{Binding Toasts}"
@@ -40,7 +34,7 @@
         <ItemsControl.ItemTemplate>
             <DataTemplate DataType="srv:ToastNotification">
                 <Border Classes="ToastCard"
-                        Background="{StaticResource MochaSurface0}"
+                        Background="{DynamicResource BgSubtleBrush}"
                         CornerRadius="8"
                         Padding="14,10"
                         BorderBrush="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}"
@@ -58,7 +52,7 @@
                                        Foreground="{Binding Kind, Converter={x:Static views:ToastBrushConverter.Instance}}" />
                         </StackPanel>
                         <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
-                                   Foreground="{StaticResource TextBrush}"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"
                                    FontSize="13" LineHeight="18" />
                     </StackPanel>
                 </Border>

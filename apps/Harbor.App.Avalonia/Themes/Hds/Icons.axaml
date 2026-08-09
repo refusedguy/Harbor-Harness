@@ -1,0 +1,186 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:geom="clr-namespace:Harbor.App.Avalonia.Views.Components;assembly=Harbor.App.Avalonia">
+
+    <!--
+        HDS Icons — StreamGeometry path data for all HDS icons.
+        Each icon uses a 24x24 coordinate grid (viewBox="0 0 24 24").
+        No emoji glyphs — pure geometry so they render crisply at any DPI.
+
+        Usage in XAML:
+            <Path Data="{StaticResource IcAdd}" Fill="{StaticResource AccentPrimaryBrush}" />
+
+        Icons:
+            IcAdd, IcSearch, IcSettings, IcSend, IcStop, IcTrash, IcChevronRight,
+            IcChevronDown, IcChevronUp, IcChevronLeft, IcHome, IcTerminal,
+            IcFileCode, IcMore, IcCheck, IcX, IcCopy, IcPaste, IcLoading,
+            IcPause, IcPlay, IcRefresh, IcDownload, IcUpload, IcLink,
+            IcExternalLink, IcInfo, IcWarning, IcError, IcSuccess, IcMenu,
+            IcClose, IcMinimize, IcMaximize, IcFolder, IcFolderOpen, IcBold,
+            IcItalic, IcCode, IcStrikethrough, IcArrowUp, IcArrowDown,
+            IcUser, IcBot, IcEye, IcEyeOff, IcEdit, IcPlus, IcMinus
+    -->
+
+    <!-- Add / Plus -->
+    <StreamGeometry x:Key="IcAdd">M11 4h2v7h7l-9 9-9-9h7z</StreamGeometry>
+
+    <!-- Search -->
+    <StreamGeometry x:Key="IcSearch">M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.16 16 9.5 16 5.91 12.09 2 8.5 2S1 5.91 1 9.5 4.91 17 8.5 17c1.66 0 3.04-.69 4.02-1.79l.27.28v.79l5 4.99L20.48 19l-4.99-5zm-7 0C7.89 14 5 11.95 5 9.5S7.05 5 9.5 5 14 7.05 14 9.5 11.95 14 9.5 14z</StreamGeometry>
+
+    <!-- Settings / Gear -->
+    <StreamGeometry x:Key="IcSettings">M19.14 12.94c.04-.3.06-.61.06-.93 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.47-.39h-3.84a.484.484 0 0 0-.47.39l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.01 1.53c-.05.26-.08.57-.08.89 0 .32.02.65.07.95l-2.03 1.59c-.22.17-.22.43-.07.65l1.93 3.31c.12.21.37.29.6.22l2.4-.96c.49.36 1.02.68 1.6.93l.36 2.54c.05.21.24.37.47.37h3.85c.22 0 .4-.17.45-.39l.36-2.54c.58-.25 1.12-.56 1.61-.93l2.41.96c.23.08.49.02.6-.21l1.92-3.32c.12-.22.07-.48-.12-.65l-2.01-1.53zM12 15.6c-1.98 0-3.6-1.61-3.6-3.6s1.61-3.6 3.6-3.6 3.6 1.61 3.6 3.6-1.61 3.6-3.6 3.6z</StreamGeometry>
+
+    <!-- Send / Arrow -->
+    <StreamGeometry x:Key="IcSend">M2.01 21L23 12 2.01 3 2 10l7 2-7 7v-6z</StreamGeometry>
+
+    <!-- Stop -->
+    <StreamGeometry x:Key="IcStop">M6 6h12v12H6z</StreamGeometry>
+
+    <!-- Trash / Delete -->
+    <StreamGeometry x:Key="IcTrash">M9 3v1H4.5v2H5v12c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V6h1.5v-2H15V3H9zm2 5h2v10h-2V8zm-4 0h2v10H7V8zm8 0h2v10h-2V8z</StreamGeometry>
+
+    <!-- Chevron Right -->
+    <StreamGeometry x:Key="IcChevronRight">M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z</StreamGeometry>
+
+    <!-- Chevron Down -->
+    <StreamGeometry x:Key="IcChevronDown">M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z</StreamGeometry>
+
+    <!-- Chevron Up -->
+    <StreamGeometry x:Key="IcChevronUp">M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z</StreamGeometry>
+
+    <!-- Chevron Left -->
+    <StreamGeometry x:Key="IcChevronLeft">M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z</StreamGeometry>
+
+    <!-- Home -->
+    <StreamGeometry x:Key="IcHome">M10 20v-6h4v6h6v-8h3L12 3 2 12h3v8z</StreamGeometry>
+
+    <!-- Terminal -->
+    <StreamGeometry x:Key="IcTerminal">M14 12H4v2h10v-2zm4-9v2h-2V3h2zM4 7.5h6v6H4V7.5zm16 13.5H4v-2h16v2z</StreamGeometry>
+
+    <!-- File Code -->
+    <StreamGeometry x:Key="IcFileCode">M9.4 16.6L6.8 14l2.6-2.6L8 10l-4 4 4 4 1.4-1.4zm5.2.6l2.6-2.6 2.6 2.6L18 17.2l2.6-2.6L18 12l2.6-2.6L18 8.8 15.4 11l-1.2-1.2L14 11l1.2 1.2-1.2 1.2L14 16l1.2-1.2 1.2 1.2-1.2 1.2zm1-7.4V4h5v10h-5v-2.8z</StreamGeometry>
+
+    <!-- More (three dots) -->
+    <StreamGeometry x:Key="IcMore">M12 8a4 4 0 1 1-4 4 4 4 0 0 1 4-4m0-2a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm8.25-3.75a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25zm-10.5 0a1.25 1.25 0 1 1-1.25 1.25 1.25 1.25 0 0 1 1.25-1.25z</StreamGeometry>
+
+    <!-- Check / Tick -->
+    <StreamGeometry x:Key="IcCheck">M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z</StreamGeometry>
+
+    <!-- X / Close -->
+    <StreamGeometry x:Key="IcX">M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 18.41 17.59 19 19 17.59 18.41 12z</StreamGeometry>
+
+    <!-- Copy -->
+    <StreamGeometry x:Key="IcCopy">M19 1.5H9.5C8.12 1.5 7 2.62 7 4V5h10a2 2 0 0 1 0 4H9.5C8.12 9 7 7.88 7 6.5H5c0 2.21 1.79 4 4 4h10c1.38 0 2.5-1.12 2.5-2.5V4c0-1.38-1.12-2.5-2.5-2.5H5c0 2.21 1.79 4 4 4h10c1.38 0 2.5-1.12 2.5-2.5z</StreamGeometry>
+
+    <!-- Paste -->
+    <StreamGeometry x:Key="IcPaste">M19 3h-1V2H6v1H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-2-4H7v-2h10v2zm0-4H7V7h10v2z</StreamGeometry>
+
+    <!-- Loading / Spinner (circle with gap) -->
+    <StreamGeometry x:Key="IcLoading">M12 4V1l3 2 2 3 0 4h-2l-2-2-2 2-2-2h2z</StreamGeometry>
+
+    <!-- Pause -->
+    <StreamGeometry x:Key="IcPause">M6 4h4v16H6V4zm8 0h4v16h-4V4z</StreamGeometry>
+
+    <!-- Play -->
+    <StreamGeometry x:Key="IcPlay">M10 4v16l11-8z</StreamGeometry>
+
+    <!-- Refresh / Reload -->
+    <StreamGeometry x:Key="IcRefresh">M12 6v3l4 2-4 2V6zm8 6c-1.66 0-3-1.34-3-3 0-.39.08-.76.21-1.11L9 15.9c-.63.84-.9 1.87-.9 2.1 0 2.21 1.79 4 4 4s4-1.79 4-4c0-.23-.06-.45-.14-.67.9-.53 1.66-1.45 1.96-2.54.03-.11.05-.22.05-.33 0-2.21-1.79-4-4-4s-4 1.79-4 4H8c0-3.31 2.69-6 6-6s6 2.69 6 6z</StreamGeometry>
+
+    <!-- Download -->
+    <StreamGeometry x:Key="IcDownload">M9 2h6v2h-1v5h-4V4H9zm-5 9v9h16v-9h-3.5l-1 1-2 2-2-2-1-1H4z</StreamGeometry>
+
+    <!-- Upload -->
+    <StreamGeometry x:Key="IcUpload">M9 2h6v2H9zm3 7h-2v5H9l3 3 3-3h-2V9zm-7 8v5h12v-5h-2v3H9v-3z</StreamGeometry>
+
+    <!-- Link / Chain -->
+    <StreamGeometry x:Key="IcLink">M3.05 8.05L3 12l.05 3.95h11.9c.03-1.01-.16-2.02-.53-2.94l-1.13-2.26a1 1 0 0 0-1.37-.53l-.07.05a1 1 0 0 0 .44 1.78 2.94 2.94 0 0 1 1.35-.36V8.05H3.05zm15.9 0v3.95c0 .41-.13.81-.35 1.16l2.34 2.34a1 1 0 0 1-1.41 1.41l-2.34-2.34a3 3 0 0 0-1.47.76l-.07.06h-.01c-.03.03-.05.05-.08.09V19h-2v-3.95c0-.41.13-.81.35-1.16l2.34-2.34a3 3 0 0 0 1.47-.76l.07-.06h.01c.03-.03.05-.05.08-.09V8.05h3.95c.03.01.05.02.08.05l-2.31.82a1 1 0 0 0 .76 1.28h.01zm-9.9-3.1a3 3 0 0 0 0 4.95l1.18-1.18a1 1 0 0 0-1.37-1.37l-1.18 1.18a3 3 0 0 0 1.37-.6z</StreamGeometry>
+
+    <!-- External Link (arrow-up-right) -->
+    <StreamGeometry x:Key="IcExternalLink">M20 4v9h-2V7.41l-5.29 5.29-1.41-1.41L17.59 6H16V4h4zm-2 16H4V6h7V4H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z</StreamGeometry>
+
+    <!-- Info -->
+    <StreamGeometry x:Key="IcInfo">M12 4C7.59 4 4 7.59 4 12s3.59 8 8 8 8-3.59 8-8-3.59-8-8-8zm1 13h-2v-6h2v6zm0-8h-2V7h2v2z</StreamGeometry>
+
+    <!-- Warning (triangle with exclamation) -->
+    <StreamGeometry x:Key="IcWarning">M1 21h22L12 2 1 21zm3.5-3h15l-7-12-7 12zm.5-1h13-13zm7-2h-1v-3h1v3zm0-4h-1V9h1v1z</StreamGeometry>
+
+    <!-- Error / Circle with X -->
+    <StreamGeometry x:Key="IcError">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z</StreamGeometry>
+
+    <!-- Success / Circle with check -->
+    <StreamGeometry x:Key="IcSuccess">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-7 7z</StreamGeometry>
+
+    <!-- Menu (hamburger) -->
+    <StreamGeometry x:Key="IcMenu">M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z</StreamGeometry>
+
+    <!-- Close (circle with X) -->
+    <StreamGeometry x:Key="IcCircleClose">M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 13.59L14.59 15 12 17.59 9.41 15 8 16.41 10.59 19 12 21.59l2.59-2.59L17 15.41 14.41 13l2.59-2.59L17 9.41 14.41 12 12 6.91l2.59-2.59L17 9.41 14.41 12z</StreamGeometry>
+
+    <!-- Minimize (window control) -->
+    <StreamGeometry x:Key="IcMinimizeWindow">M19 13H5v-2h14v2zm0 4H5v-2h14v2z</StreamGeometry>
+
+    <!-- Maximize (window control) -->
+    <StreamGeometry x:Key="IcMaximizeWindow">M3 3h18v12H3z</StreamGeometry>
+
+    <!-- Minimize (traffic light) -->
+    <StreamGeometry x:Key="IcMinimize">M4 11h16v2H4z</StreamGeometry>
+
+    <!-- Maximize (traffic light) -->
+    <StreamGeometry x:Key="IcMaximize">M4 4h16v16H4z</StreamGeometry>
+
+    <!-- Theme (moon) -->
+    <StreamGeometry x:Key="IcTheme">M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z</StreamGeometry>
+
+    <!-- Session / Board (layout grid) -->
+    <StreamGeometry x:Key="IcSession">M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z</StreamGeometry>
+
+    <!-- Diff (two opposing arrows) -->
+    <StreamGeometry x:Key="IcDiff">M16 3l5 5-5 5M3 16l5 5 5-5</StreamGeometry>
+
+    <!-- Folder -->
+    <StreamGeometry x:Key="IcFolder">M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z</StreamGeometry>
+
+    <!-- Folder Open -->
+    <StreamGeometry x:Key="IcFolderOpen">M19 19H5V8h14v11zm0-15h-8l-2-2H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z</StreamGeometry>
+
+    <!-- Bold -->
+    <StreamGeometry x:Key="IcBold">M6 4h2v16H6V4zm4 0h6v2h-2v12h2v2H10V4zm8 5h-2V4h2v5z</StreamGeometry>
+
+    <!-- Italic -->
+    <StreamGeometry x:Key="IcItalic">M10 4h2v8h-2V4zm6 0h2v8h-2V4z</StreamGeometry>
+
+    <!-- Code / Braces -->
+    <StreamGeometry x:Key="IcCode">M9.59 16.59L14.17 12 9.59 7.41 11 6l6 6-6 6-1.41-1.41z</StreamGeometry>
+
+    <!-- Strikethrough -->
+    <StreamGeometry x:Key="IcStrikethrough">M3 6h18v2H3V6zm4 8h10v-2H7v2zm10 0v2h-4v2h-2v-2H7v-2z</StreamGeometry>
+
+    <!-- Arrow Up -->
+    <StreamGeometry x:Key="IcArrowUp">M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z</StreamGeometry>
+
+    <!-- Arrow Down -->
+    <StreamGeometry x:Key="IcArrowDown">M11 4h2v10.59l5.59 5.59L12 20 3.41 14.59 9 10.59V4z</StreamGeometry>
+
+    <!-- User -->
+    <StreamGeometry x:Key="IcUser">M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z</StreamGeometry>
+
+    <!-- Bot / AI -->
+    <StreamGeometry x:Key="IcBot">M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2c-1.1 0-2 .9-2 2h4c0-1.1-.9-2-2-2zm-5 6h10c2.21 0 4 1.79 4 4v6c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1v-6c0-2.21 1.79-4 4-4z</StreamGeometry>
+
+    <!-- Eye (show) -->
+    <StreamGeometry x:Key="IcEye">M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10z</StreamGeometry>
+
+    <!-- Eye Off (hide) -->
+    <StreamGeometry x:Key="IcEyeOff">M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10z</StreamGeometry>
+
+    <!-- Edit / Pencil -->
+    <StreamGeometry x:Key="IcEdit">M3 17.25V21h3.75L17.81 14.94l-3.75-3.75L3 17.25zm2-.86l9.19-9.19 1.83 1.83L5 18.45V18.45l-.19-.19L3 17.25v-2.11zm13.35-2.35l-1.19-1.19 1.42-1.42 1.19 1.19-1.42 1.42z</StreamGeometry>
+
+    <!-- Plus (alternative to Add) -->
+    <StreamGeometry x:Key="IcPlus">M11 4h2v7h7l-9 9-9-9h7z</StreamGeometry>
+
+    <!-- Minus -->
+    <StreamGeometry x:Key="IcMinus">M4 11h16v2H4z</StreamGeometry>
+
+</ResourceDictionary>

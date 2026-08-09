@@ -60,6 +60,7 @@
     <SolidColorBrush x:Key="BgRailBrush" Color="{StaticResource BgRailColor}" />
     <SolidColorBrush x:Key="BgPanelBrush" Color="{StaticResource BgPanelColor}" />
     <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="{StaticResource BgPanelElevatedColor}" />
+    <SolidColorBrush x:Key="BgSubtleBrush" Color="{StaticResource BgPanelColor}" />
     <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}" />
     <SolidColorBrush x:Key="BgActiveBrush" Color="{StaticResource BgActiveColor}" />
     <SolidColorBrush x:Key="BgInputBrush" Color="{StaticResource BgInputColor}" />
@@ -69,10 +70,12 @@
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
     <SolidColorBrush x:Key="TextTertiaryBrush" Color="{StaticResource TextTertiaryColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextTertiaryColor}" />
     <SolidColorBrush x:Key="TextMonoBrush" Color="{StaticResource TextMonoColor}" />
     <SolidColorBrush x:Key="TextWarningBrush" Color="{StaticResource TextWarningColor}" />
     <SolidColorBrush x:Key="TextDangerBrush" Color="{StaticResource TextDangerColor}" />
     <SolidColorBrush x:Key="TextSuccessBrush" Color="{StaticResource TextSuccessColor}" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="{StaticResource BgAppColor}" />
     <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{StaticResource AccentPrimaryColor}" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
     <SolidColorBrush x:Key="AccentMutedBrush" Color="{StaticResource AccentMutedColor}" />
@@ -112,7 +115,7 @@
     <x:Double x:Key="ComposerMaxHeight">160</x:Double>
 
     <!-- ════════════ Corner radius ════════════ -->
-    <x:Double x:Key="RadiusSm">4</x:Double>
-    <x:Double x:Key="RadiusMd">6</x:Double>
-    <x:Double x:Key="RadiusLg">8</x:Double>
+    <CornerRadius x:Key="RadiusSm">4</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">8</CornerRadius>
 </ResourceDictionary>
