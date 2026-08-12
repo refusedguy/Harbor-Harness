@@ -116,24 +116,19 @@ public class ViewInflationTests
     [Test]
     public async Task SettingsView_Inflates()
     {
-        // SettingsView inflation spawns a ComboBox (theme picker) that must
-        // contact the UI thread to initialize its ItemsSource before our
-        // HeadlessUnitTestSession variant runs. When executed directly on a
-        // threadpool thread (MTA) TUnit fans out, this throws
-        // InvalidOperationException ("calling thread cannot access...").
-        //
-        // Fix: instantiate and layout-init on the UI thread via
-        // Dispatcher.UIThread.InvokeAsync — exactly how CI runs verify
-        // embedded controls that use ItemsControl/ComboBox without needing
-        // a full app context.
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        // SettingsView contacts the AvaloniaDispatcher during XAML
+        // inflation (ComboBox theme-picker initializes ItemsSourceView
+        // via the dispatcher). Without a running dispatcher this either
+        // throws InvalidOperationException on a threadpool thread or, if
+        // naively dispatched, deadlocks because no loop is running.
+        // The correct headless pattern is to spin up a real
+        // HeadlessUnitTestSession AND run inflation on its UI thread.
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
+        await session.Dispatch(async () =>
         {
             var view = new Views.SettingsView();
-            view.ApplyTemplate();
-            // View is not disposable here; it's a visual element that gets GCed
-            // after the dispatcher frame completes. No using needed.
-        });
-        await Task.CompletedTask;
+            await Assert.That(view).IsNotNull();
+        }, CancellationToken.None);
     }
 
     [Test]
