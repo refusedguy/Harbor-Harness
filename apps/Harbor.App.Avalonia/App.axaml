@@ -22,7 +22,6 @@
         <FluentTheme />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/Typography.axaml" />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/AppStyles.axaml" />
-        <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/HarborDarkStyles.axaml" />
         <!-- HDS component styles -->
         <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsButton.axaml" />
         <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsCard.axaml" />

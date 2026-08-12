@@ -181,6 +181,7 @@
     <StreamGeometry x:Key="IcPlus">M11 4h2v7h7l-9 9-9-9h7z</StreamGeometry>
 
     <!-- Minus -->
+    <StreamGeometry x:Key="IcClose">M6 6l12 12M18 6l-12 12</StreamGeometry>
     <StreamGeometry x:Key="IcMinus">M4 11h16v2H4z</StreamGeometry>
 
 </ResourceDictionary>

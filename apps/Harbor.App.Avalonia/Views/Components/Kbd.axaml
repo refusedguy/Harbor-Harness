@@ -6,7 +6,7 @@
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="1"
             CornerRadius="4"
-            Padding="8,3">
+             Padding="6,2">
         <TextBlock Text="{Binding Keys, RelativeSource={RelativeSource AncestorType=UserControl}}"
                    FontFamily="{DynamicResource FontMono}"
                    FontSize="10"
