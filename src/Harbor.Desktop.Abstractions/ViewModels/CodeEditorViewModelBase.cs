@@ -1,56 +1,85 @@
+using Harbor.Ui.Framework.Services;
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
-///     Base for the code-editor view-model. Holds the open file path,
-///     dirty flag, and document text. Platform VMs wire the actual editor
-///     control (AvaloniaEdit / AvalonEdit / Monaco / MAUI editor) and the
+///     Base for the multi-tab code-editor view-model. Holds the tab list and
+///     the active tab; platform VMs wire the actual editor control
+///     (AvaloniaEdit / AvalonEdit / Monaco / MAUI editor) and the
 ///     <c>IFilePicker</c> calls.
 /// </summary>
 public abstract partial class CodeEditorViewModelBase : ViewModelBase
 {
-
-    /// <summary>Absolute path of the open file, or null for an unsaved buffer.</summary>
+    /// <summary>The currently-focused tab (null when no tabs are open).</summary>
     [ObservableProperty]
-    private string? _filePath;
+    private EditorTabViewModelBase? _activeTab;
 
     /// <summary>True while a file is loading or saving.</summary>
     [ObservableProperty]
     private bool _isBusy;
 
-    /// <summary>True if the buffer has unsaved changes.</summary>
-    [ObservableProperty]
-    private bool _isDirty;
-
-    /// <summary>Language id for syntax highlighting (e.g. "csharp", "typescript").</summary>
-    [ObservableProperty]
-    private string _language = "plaintext";
-
-    /// <summary>Document text.</summary>
-    [ObservableProperty]
-    private string _text = string.Empty;
     /// <summary>Construct a <see cref="CodeEditorViewModelBase" />.</summary>
     protected CodeEditorViewModelBase(ILogger logger) : base(logger)
     {
     }
 
-    /// <summary>Display name (file name only, or "Untitled" if no path).</summary>
-    public string DisplayName => string.IsNullOrEmpty(FilePath)
-        ? "Untitled"
-        : Path.GetFileName(FilePath);
+    /// <summary>Open editor tabs.</summary>
+    public ObservableCollection<EditorTabViewModelBase> Tabs { get; } = new();
 
-    /// <summary>Open a file. Implemented by the platform VM via <c>IFilePicker</c>.</summary>
-    protected abstract Task OpenAsync(CancellationToken cancellationToken);
-
-    /// <summary>Save the buffer to <see cref="FilePath" /> (or Save-As if null). Implemented by the platform VM.</summary>
-    protected abstract Task SaveAsync(CancellationToken cancellationToken);
-
-    /// <summary>Mark the VM dirty when the text changes.</summary>
-    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    /// <summary>Close the given tab and activate the last remaining one when the active tab closes.</summary>
+    /// <param name="tab">Tab to close (no-op when null).</param>
+    protected void CloseTabCore(EditorTabViewModelBase? tab)
     {
-        base.OnPropertyChanged(e);
-        if (e.PropertyName == nameof(Text) || e.PropertyName == nameof(FilePath))
+        if (tab is null)
         {
-            IsDirty = true;
-            OnPropertyChanged(new PropertyChangedEventArgs(nameof(DisplayName)));
+            return;
+        }
+        Tabs.Remove(tab);
+        if (ActiveTab == tab)
+        {
+            ActiveTab = Tabs.LastOrDefault();
         }
     }
+}
+
+/// <summary>
+///     One editor tab — file path, name, extension, content, dirty flag.
+///     Framework-agnostic; the Avalonia-specific syntax-highlighting name
+///     (<c>SyntaxName</c>) lives on the platform subclass.
+/// </summary>
+public abstract partial class EditorTabViewModelBase : ViewModelBase
+{
+    [ObservableProperty]
+    private string _content;
+
+    [ObservableProperty]
+    private bool _isDirty;
+
+    /// <summary>Absolute file path on disk.</summary>
+    [ObservableProperty]
+    private string _filePath;
+
+    /// <summary>Short file name (no directory).</summary>
+    [ObservableProperty]
+    private string _fileName;
+
+    /// <summary>Construct an editor tab.</summary>
+    protected EditorTabViewModelBase(
+        string filePath,
+        string fileName,
+        string extension,
+        string content,
+        ILogger logger)
+        : base(logger)
+    {
+        _filePath = filePath;
+        _fileName = fileName;
+        Extension = extension;
+        _content = content;
+    }
+
+    /// <summary>File extension (no leading dot) — drives syntax highlighting.</summary>
+    public string Extension { get; }
+
+    /// <summary>Partial-patch setter: updates content + marks the tab dirty.</summary>
+    partial void OnContentChanged(string value) => IsDirty = true;
 }

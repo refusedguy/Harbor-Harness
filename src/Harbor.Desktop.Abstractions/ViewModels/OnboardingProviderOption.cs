@@ -1,14 +1,14 @@
-namespace Harbor.App.Avalonia.ViewModels;
+namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
 ///     One provider row on step 2 of the onboarding wizard. Pure view-model —
-///     no UI-framework dependency — extracted from <c>OnboardingViewModel.cs</c>
-///     so the same wizard shape can be reused by WPF/MAUI/Blazor onboarding
-///     views. <see cref="IsSelected" /> is a two-way checkbox; the wizard reads
-///     the checked set when the user clicks Next.
+///     no UI-framework dependency — so the same wizard shape can be reused by
+///     Avalonia/WPF/MAUI/Blazor onboarding views. <see cref="IsSelected" /> is
+///     a two-way checkbox; the wizard reads the checked set when the user
+///     clicks Next.
 /// </summary>
 public sealed partial class OnboardingProviderOption : ObservableObject
 {
-
     /// <summary>Two-way bound checkbox state.</summary>
     [ObservableProperty]
     private bool _isSelected;
@@ -23,6 +23,7 @@ public sealed partial class OnboardingProviderOption : ObservableObject
         DefaultModel = defaultModel;
         Icon = icon;
     }
+
     /// <summary>Provider id (matches <c>CommonConfig.ApiKeys</c> keys + provider JSON files).</summary>
     public string Id { get; }
 
