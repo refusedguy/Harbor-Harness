@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vma="clr-namespace:Harbor.App.Avalonia.ViewModels;assembly=Harbor.Desktop.Abstractions"
+        xmlns:vma="clr-namespace:Harbor.Desktop.Abstractions.ViewModels;assembly=Harbor.Desktop.Abstractions"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         x:Class="Harbor.App.Avalonia.Views.OnboardingWindow"
         Title="Harbor — Welcome"

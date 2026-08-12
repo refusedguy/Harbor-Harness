@@ -2,8 +2,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
-using Harbor.Ui.Framework.Services;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
 // ReSharper disable once CheckNamespace

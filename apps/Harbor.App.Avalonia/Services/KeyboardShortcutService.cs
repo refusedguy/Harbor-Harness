@@ -36,13 +36,12 @@ internal sealed class KeyboardShortcutService
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
-        // Esc closes the topmost overlay via the overlay stack.
+        // Esc → close the topmost overlay via the view-model's stack-aware
+        // close routine. The service itself does not inspect flags; MainViewModel
+        // owns the overlay lifecycle end to end.
         if (e.Key == Key.Escape)
         {
-            var popped = _overlayStack.PopTop();
-            if (popped is not null)
-                return true;
-            return false;
+            return vm.CloseTopOverlay();
         }
 
         // Ctrl+P / Ctrl+Shift+P → command palette.

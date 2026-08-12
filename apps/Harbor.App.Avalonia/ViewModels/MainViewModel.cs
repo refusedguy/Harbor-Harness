@@ -21,6 +21,31 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// </summary>
 internal sealed partial class MainViewModel : StoreSubscriberViewModel
 {
+    /// <summary>
+    ///     Central registry mapping an overlay id (the same id pushed onto
+    ///     <see cref="IOverlayStack" />) to the name of the boolean property
+    ///     that backs the overlay's <c>IsVisible</c> binding in MainWindow.axaml.
+    ///     Data, not tokens: <see cref="CloseOverlay" /> resolves the flag
+    ///     through this table instead of a string switch.
+    /// </summary>
+    private static readonly Dictionary<string, string> OverlayIdToFlagProperty = new()
+    {
+        ["palette"] = nameof(IsCommandPaletteOpen),
+        ["settings"] = nameof(IsSettingsOpen),
+        ["providerBrowser"] = nameof(IsProviderBrowserOpen),
+        ["modelPicker"] = nameof(IsModelPickerOpen),
+        ["diff"] = nameof(IsDiffOpen),
+        ["tokenUsage"] = nameof(IsTokenUsageOpen),
+        ["focusSession"] = nameof(IsFocusSessionOpen),
+    };
+
+    /// <summary>
+    ///     Lazily-built setters keyed by flag property name. Reflection is
+    ///     acceptable here: overlay close is user-input frequency (hot-key /
+    ///     Escape), never a hot path — and the delegate is cached per flag.
+    /// </summary>
+    private static readonly Dictionary<string, Action<MainViewModel, bool>> OverlayFlagSetters = new();
+
     private readonly TuiEffectHost _effects;
     private readonly IServiceProvider _services;
     private readonly IOverlayStack _overlayStack;
@@ -417,18 +442,44 @@ internal sealed partial class MainViewModel : StoreSubscriberViewModel
         });
     }
 
+    /// <summary>
+    ///     Close the overlay identified by <paramref name="id" /> by clearing
+    ///     its backing boolean flag. The id → property mapping lives in
+    ///     <see cref="OverlayIdToFlagProperty" />; the setter delegate is
+    ///     built once per flag and cached in <see cref="OverlayFlagSetters" />.
+    /// </summary>
     private void CloseOverlay(string id)
     {
-        switch (id)
+        if (!OverlayIdToFlagProperty.TryGetValue(id, out var propertyName))
+            return;
+
+        if (!OverlayFlagSetters.TryGetValue(propertyName, out var setter))
         {
-            case "palette":         IsCommandPaletteOpen = false; break;
-            case "settings":        IsSettingsOpen = false; break;
-            case "providerBrowser": IsProviderBrowserOpen = false; break;
-            case "modelPicker":     IsModelPickerOpen = false; break;
-            case "diff":            IsDiffOpen = false; break;
-            case "tokenUsage":      IsTokenUsageOpen = false; break;
-            case "focusSession":    IsFocusSessionOpen = false; break;
+            var property = typeof(MainViewModel).GetProperty(propertyName);
+            if (property?.SetMethod is null)
+                return;
+            setter = (vm, value) => property.SetValue(vm, value);
+            OverlayFlagSetters[propertyName] = setter;
         }
+
+        setter(this, false);
+    }
+
+    /// <summary>
+    ///     Close the topmost overlay, if any. Single mechanism used by
+    ///     Escape handling, backdrop clicks, and shell close buttons:
+    ///     peek the top id, clear its flag, then pop the stack.
+    /// </summary>
+    /// <returns>True if an overlay was closed; false when the stack is empty.</returns>
+    public bool CloseTopOverlay()
+    {
+        var top = _overlayStack.Current;
+        if (top is null)
+            return false;
+
+        CloseOverlay(top);
+        _overlayStack.PopTop();
+        return true;
     }
 
     public override void Dispose()

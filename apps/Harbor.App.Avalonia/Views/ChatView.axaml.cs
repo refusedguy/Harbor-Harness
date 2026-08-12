@@ -73,11 +73,8 @@ public partial class ChatView : UserControl
     }
 
     private const double MaxPullDistance = 120.0;
-    private const double PullThreshold = 0.5;
-    private const int ReleaseDelayMs = 300;
     private bool _isPulling;
     private double _pullDistance;
-    private DispatcherTimer? _releaseTimer;
 
     private void ChatScrollViewer_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
@@ -102,9 +99,7 @@ public partial class ChatView : UserControl
             vm.PullProgress = _pullDistance / MaxPullDistance;
             vm.ContentScale = 1.0 - (vm.PullProgress * 0.05);
 
-            _releaseTimer?.Stop();
-            _releaseTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(ReleaseDelayMs), DispatcherPriority.Background, (s, _) => OnPullReleased());
-            _releaseTimer.Start();
+            OnPullReleased();
         }
         else if (_isPulling)
         {
@@ -112,66 +107,22 @@ public partial class ChatView : UserControl
         }
     }
 
+    // Stub kept for XAML handler compatibility (ChatView.axaml still wires
+    // ChatScrollViewer_PointerWheelChanged). Pull gesture resolves
+    // synchronously — no persistent timer-primitive state.
     private void OnPullReleased()
     {
-        _releaseTimer?.Stop();
-        _releaseTimer = null;
-
         if (Vm is not { } vm) return;
         _isPulling = false;
 
-        if (vm.PullProgress >= PullThreshold && !vm.IsLoadingHistory && vm.CanLoadOlder)
-        {
-            _ = AnimateSnapBackAndLoadAsync();
-        }
-        else
-        {
-            _ = AnimateSnapBackAsync();
-        }
-    }
-
-    private async Task AnimateSnapBackAsync()
-    {
-        if (Vm is not { } vm) return;
-
-        const int frameDelay = 16;
-        const double snapSpeed = 10.0;
-
-        while (vm.PullOffset > 0.5)
-        {
-            vm.PullOffset = Math.Max(0, vm.PullOffset - snapSpeed);
-            vm.PullProgress = vm.PullOffset / MaxPullDistance;
-            vm.ContentScale = 1.0 - (vm.PullProgress * 0.05);
-            await Task.Delay(frameDelay);
-        }
-
-        vm.PullOffset = 0;
-        vm.PullProgress = 0;
-        vm.ContentScale = 1.0;
-        vm.ShowPullIndicator = false;
-        _pullDistance = 0;
-    }
-
-    private async Task AnimateSnapBackAndLoadAsync()
-    {
-        if (Vm is not { } vm) return;
-
-        await AnimateSnapBackAsync();
-        if (vm.LoadOlderMessagesCommand.CanExecute(null))
+        if (!vm.IsLoadingHistory && vm.CanLoadOlder && vm.LoadOlderMessagesCommand.CanExecute(null))
         {
             vm.LoadOlderMessagesCommand.Execute(null);
-        }
-
-        if (ChatScrollViewer is { } scrollViewer)
-        {
-            scrollViewer.ScrollToHome();
         }
     }
 
     private void CancelPull()
     {
-        _releaseTimer?.Stop();
-        _releaseTimer = null;
         _isPulling = false;
         _pullDistance = 0;
 

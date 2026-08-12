@@ -84,27 +84,33 @@
         <!-- ════════════ Modal overlays — FLOATING SIBLINGS ════════════ -->
         <views:CommandPaletteView
             Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+            AutomationProperties.AutomationId="Overlay_CommandPalette"
             IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
             DataContext="{Binding CommandPalette}"
             ZIndex="800" />
         <views:SettingsView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                            AutomationProperties.AutomationId="Overlay_SettingsPanel"
                             IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
                             DataContext="{Binding Settings}"
                             ZIndex="600" />
         <views:ProviderBrowserView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                   AutomationProperties.AutomationId="Overlay_ProviderBrowser"
                                    IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
                                    DataContext="{Binding ProviderBrowser}"
                                    ZIndex="600" />
         <views:DiffView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                        AutomationProperties.AutomationId="Overlay_DiffView"
                         IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
                         DataContext="{Binding Diff}"
                         ZIndex="600" />
         <views:TokenUsageView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                              AutomationProperties.AutomationId="Overlay_TokenUsage"
                               IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
                               DataContext="{Binding TokenUsage}"
                               ZIndex="600" />
 
         <views:FocusSessionView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                AutomationProperties.AutomationId="Overlay_FocusSession"
                                 IsVisible="{Binding $parent[Window].DataContext.IsFocusSessionOpen, FallbackValue=False}"
                                 DataContext="{Binding FocusSession}"
                                 ZIndex="700" />
