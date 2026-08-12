@@ -84,6 +84,8 @@
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- Centralized view-model / overlay / dialog locator set. -->
+    <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>

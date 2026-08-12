@@ -9,14 +9,18 @@ namespace Harbor.App.Avalonia.Views.Chrome;
 /// </summary>
 public partial class TitleBarView : UserControl
 {
+    private WindowChromeService? _chrome;
+
     private Window? HostWindow => TopLevel.GetTopLevel(this) as Window;
+
+    private WindowChromeService Chrome =>
+        _chrome ??= (App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService());
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (e.ClickCount == 2)
         {
-            var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
-            chrome.MaximizeOrRestore(HostWindow!);
+            Chrome.MaximizeOrRestore(HostWindow!);
             e.Handled = true;
             return;
         }
@@ -24,21 +28,9 @@ public partial class TitleBarView : UserControl
         HostWindow?.BeginMoveDrag(e);
     }
 
-    private void Minimize_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
-        chrome.Minimize(HostWindow!);
-    }
+    private void Minimize_Click(object? sender, RoutedEventArgs e) => Chrome.Minimize(HostWindow!);
 
-    private void Maximize_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
-        chrome.MaximizeOrRestore(HostWindow!);
-    }
+    private void Maximize_Click(object? sender, RoutedEventArgs e) => Chrome.MaximizeOrRestore(HostWindow!);
 
-    private void Close_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
-        chrome.Close(HostWindow!);
-    }
+    private void Close_Click(object? sender, RoutedEventArgs e) => Chrome.Close(HostWindow!);
 }

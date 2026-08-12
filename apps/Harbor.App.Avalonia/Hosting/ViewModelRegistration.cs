@@ -1,5 +1,6 @@
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Board;
+using Harbor.Desktop.Shared.Locators;
 using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Hosting;
 /// <summary>
@@ -30,11 +31,18 @@ internal static class ViewModelRegistration
     /// <summary>
     ///     Register every view-model on the DI container with the
     ///     appropriate lifetime (singleton for shell VMs, transient for
-    ///     edit-style VMs).
+    ///     edit-style VMs). Also registers the centralized
+    ///     <see cref="Harbor.Desktop.Shared.Locators.IViewModelLocator" />
+    ///     so code-behind, dialogs and shell VMs resolve through it instead
+    ///     of scattered <c>App.Services.GetService&lt;&gt;()</c> calls.
     /// </summary>
     /// <param name="services">The DI container.</param>
     public static void Register(IServiceCollection services)
     {
+        // One-time locator convention — view-models + overlays + dialogs
+        // resolve through it. No per-call-site AddSingleton<T> spread.
+        services.AddViewModelLocator();
+
         // Shared shell state (ObservableValidator) — single instance
         // so MainViewModel keeps it updated.
         services.AddSingleton<ShellStatus>();

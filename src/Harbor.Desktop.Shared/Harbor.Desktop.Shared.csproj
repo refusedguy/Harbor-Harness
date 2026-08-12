@@ -23,10 +23,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- Locators/IShowPlaceholderFactory references IOverlayStack (Ui.Framework.Services). -->
+    <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Markdig"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 

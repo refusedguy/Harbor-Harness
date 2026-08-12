@@ -4,6 +4,7 @@ using Avalonia.Interactivity;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Desktop.Shared.Locators;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views;
@@ -41,9 +42,14 @@ public partial class MainWindow : Window
 
     private MainViewModel? Vm => this.DataContext as MainViewModel;
 
+    private static T Locate<T>() where T : class, new() =>
+        App.Services is { } sp
+            ? sp.GetRequiredService<IViewModelLocator>().Get<T>()
+            : new T();
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        var keyboard = App.Services?.GetService<KeyboardShortcutService>() ?? new KeyboardShortcutService();
+        var keyboard = Locate<KeyboardShortcutService>();
         if (keyboard.HandleKeyDown(Vm, e))
         {
             e.Handled = true;
@@ -53,7 +59,7 @@ public partial class MainWindow : Window
 
     private void Quit_Click(object? sender, RoutedEventArgs e)
     {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+        var chrome = Locate<WindowChromeService>();
         chrome.Close(this);
     }
 
@@ -65,25 +71,25 @@ public partial class MainWindow : Window
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+        var chrome = Locate<WindowChromeService>();
         chrome.HandleTitleBarPointerPressed(this, e);
     }
 
     private void Minimize_Click(object? sender, RoutedEventArgs e)
     {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+        var chrome = Locate<WindowChromeService>();
         chrome.Minimize(this);
     }
 
     private void Maximize_Click(object? sender, RoutedEventArgs e)
     {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+        var chrome = Locate<WindowChromeService>();
         chrome.MaximizeOrRestore(this);
     }
 
     private void Close_Click(object? sender, RoutedEventArgs e)
     {
-        var chrome = App.Services?.GetService<WindowChromeService>() ?? new WindowChromeService();
+        var chrome = Locate<WindowChromeService>();
         chrome.Close(this);
     }
 

@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.Styling;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Desktop.Shared.Locators;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views.Shell;
@@ -17,27 +18,32 @@ public partial class ActivityRailView : UserControl
         MinWidth = 56;
     }
 
+    private static T Locate<T>() where T : class =>
+        App.Services is { } sp
+            ? sp.GetRequiredService<IViewModelLocator>().Get<T>()
+            : throw new InvalidOperationException("App.Services is not initialised.");
+
     private void Board_Click(object? sender, RoutedEventArgs e)
     {
-        var vm = App.Services?.GetService<MainViewModel>();
-        vm?.SwitchViewCommand.Execute("board");
+        var vm = Locate<MainViewModel>();
+        vm.SwitchViewCommand.Execute("board");
     }
 
     private void Search_Click(object? sender, RoutedEventArgs e)
     {
-        var vm = App.Services?.GetService<MainViewModel>();
-        vm?.OpenCommandPaletteCommand.Execute(null);
+        var vm = Locate<MainViewModel>();
+        vm.OpenCommandPaletteCommand.Execute(null);
     }
 
     private void Diff_Click(object? sender, RoutedEventArgs e)
     {
-        var vm = App.Services?.GetService<MainViewModel>();
-        vm?.ToggleRightDrawerCommand.Execute("Diff");
+        var vm = Locate<MainViewModel>();
+        vm.ToggleRightDrawerCommand.Execute("Diff");
     }
 
     private void Theme_Click(object? sender, RoutedEventArgs e)
     {
-        var themeService = App.Services.GetRequiredService<ThemeService>();
+        var themeService = Locate<ThemeService>();
         var themes = new[] { "CatppuccinMocha", "Vapor", "Lumen", "Paper", "Mono" };
 
         string current = themes[0];
@@ -68,7 +74,7 @@ public partial class ActivityRailView : UserControl
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
     {
-        var vm = App.Services?.GetService<MainViewModel>();
-        vm?.OpenSettingsCommand.Execute(null);
+        var vm = Locate<MainViewModel>();
+        vm.OpenSettingsCommand.Execute(null);
     }
 }
