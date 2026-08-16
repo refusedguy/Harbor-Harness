@@ -49,7 +49,7 @@ public class EventStreamingTests
         });
 
         // Give the subscription a moment to attach, then publish.
-        await Task.Delay(100, CancellationToken.None);
+        await client.SubscriptionReady;
         await eventBus.PublishAsync(new AgentStartEvent("test-session-id", Array.Empty<AgentMessage>(), null));
 
         var received = await enumerateTask.WaitAsync(TimeSpan.FromSeconds(3));
@@ -89,7 +89,7 @@ public class EventStreamingTests
             });
 
             // Give the subscription a moment to attach on the server side.
-            await Task.Delay(200, CancellationToken.None);
+            await server.SubscriptionReady;
             await eventBus.PublishAsync(new AgentStartEvent("test-session-id", Array.Empty<AgentMessage>(), null));
 
             var received = await enumerateTask.WaitAsync(TimeSpan.FromSeconds(5));
@@ -132,7 +132,7 @@ public class EventStreamingTests
                 return (Harbor.Ipc.HarborEvent?)null;
             });
 
-            await Task.Delay(200, CancellationToken.None);
+            await server.SubscriptionReady;
             var expectedResult = Harbor.Abstractions.Models.ToolResult.Success("file contents here");
             await eventBus.PublishAsync(new ToolExecutionEndEvent("tc-1", expectedResult, IsError: false));
 

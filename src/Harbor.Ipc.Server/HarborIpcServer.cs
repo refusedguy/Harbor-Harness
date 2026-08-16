@@ -59,6 +59,9 @@ public sealed class HarborIpcServer : IHarborServer
     /// <inheritdoc />
     public string Endpoint => _transport.Endpoint;
 
+    /// <summary>Completes when the first client subscribes to event streaming.</summary>
+    public Task SubscriptionReady => _broadcaster.SubscriptionReady;
+
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken ct = default)
     {

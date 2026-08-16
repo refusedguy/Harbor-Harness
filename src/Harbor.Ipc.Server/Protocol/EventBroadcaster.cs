@@ -36,6 +36,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private int _currentTurn;
     private int _disposed;
     private IDisposable? _eventBusSubscription;
+    private TaskCompletionSource<bool>? _subscriptionReady;
 
     /// <summary>
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
@@ -64,6 +65,20 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// <summary>Subscribe to the event bus and begin broadcasting.</summary>
     public void Start() => _eventBusSubscription = _eventBus.Subscribe(OnEventAsync);
 
+    /// <summary>Completes when the first client registers for event streaming.</summary>
+    public Task SubscriptionReady
+    {
+        get
+        {
+            if (_subscriptionReady is null)
+            {
+                Interlocked.CompareExchange(ref _subscriptionReady,
+                    new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), null);
+            }
+            return _subscriptionReady.Task;
+        }
+    }
+
     /// <summary>
     ///     Register a client stream to receive future events. The
     ///     <paramref name="writeLock" /> is the same lock the per-client
@@ -85,6 +100,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 }
             }
             _clients.Add(new ClientRegistration(clientStream, writeLock));
+            _subscriptionReady?.TrySetResult(true);
         }
     }
 

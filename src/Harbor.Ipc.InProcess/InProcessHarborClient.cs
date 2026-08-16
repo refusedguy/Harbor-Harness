@@ -50,6 +50,7 @@ public sealed class InProcessHarborClient : IHarborClient
     private readonly IToolRegistry _tools;
     private int _currentTurn;
     private int _disposed;
+    private TaskCompletionSource<bool>? _subscriptionReady;
 
     /// <summary>
     ///     Construct an in-process client wired to the supplied services.
@@ -98,6 +99,20 @@ public sealed class InProcessHarborClient : IHarborClient
 
     /// <inheritdoc />
     public Task DisconnectAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>Completes when the event subscription has started receiving events.</summary>
+    public Task SubscriptionReady
+    {
+        get
+        {
+            if (_subscriptionReady is null)
+            {
+                Interlocked.CompareExchange(ref _subscriptionReady,
+                    new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously), null);
+            }
+            return _subscriptionReady.Task;
+        }
+    }
 
     // ── Agent ──────────────────────────────────────────────────────────────
 
@@ -194,9 +209,14 @@ public sealed class InProcessHarborClient : IHarborClient
     public async IAsyncEnumerable<HarborEvent> SubscribeToEventsAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Ensure the TCS is created so callers awaiting SubscriptionReady
+        // don't race with this method.
+        var _ = SubscriptionReady;
+
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _eventBusCts.Token);
         await foreach (var evt in _eventChannel.Reader.ReadAllAsync(linked.Token).ConfigureAwait(false))
         {
+            _subscriptionReady?.TrySetResult(true);
             yield return evt;
         }
     }
