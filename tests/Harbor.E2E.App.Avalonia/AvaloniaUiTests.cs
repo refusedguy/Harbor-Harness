@@ -12,6 +12,8 @@ using Harbor.App.Avalonia.Views;
 using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
+using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.DependencyInjection;
 // See HeadlessAvaloniaDriver.cs for the rationale — the test namespace
 // Harbor.E2E.App.Avalonia shadows Harbor.App.Avalonia for name lookup,
@@ -939,7 +941,7 @@ public sealed class AvaloniaUiTests
     }
 
     /// <summary>
-    ///     Tool call card: a <see cref="ToolCallViewModel" /> added to
+    ///     Tool call card: a <see cref="ToolCallVm" /> added to
     ///     <c>Chat.ToolCalls</c> renders a tool-call card showing the tool
     ///     name and status. Captures <c>24-tool-call-card.png</c>.
     /// </summary>
@@ -953,7 +955,7 @@ public sealed class AvaloniaUiTests
         {
             if (Driver.MainWindow.DataContext is MainViewModel vm)
             {
-                var toolCall = new ToolCallViewModel
+                var toolCall = new ToolCallVm
                 {
                     ToolName = "read",
                     ArgsPreview = "path=/test.txt",
@@ -1214,14 +1216,14 @@ public sealed class AvaloniaUiTests
         {
             if (Driver.MainWindow.DataContext is MainViewModel vm)
             {
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 1: Hello"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 1"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 2: How are you?"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 2"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 3: What's up?"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 3"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.User, "Line 4: Goodbye"));
-                vm.Chat.Lines.Add(new ChatLineViewModel(ChatRole.Assistant, "Response 4"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 1: Hello"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 1"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 2: How are you?"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 2"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 3: What's up?"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 3"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 4: Goodbye"));
+                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 4"));
             }
         });
         // Poll for the chat lines to render instead of a fixed delay.

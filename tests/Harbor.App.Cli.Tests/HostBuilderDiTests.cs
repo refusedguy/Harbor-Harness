@@ -89,7 +89,7 @@ public class HostBuilderDiTests
     public async Task Build_Registers_OnboardingWizard() => await Assert.That(Services.GetService<OnboardingWizard>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ITokenEstimator() => await Assert.That(Services.GetService<ITokenEstimator>()).IsNotNull();
+    public async Task Build_Registers_ITokenTracker() => await Assert.That(Services.GetService<ITokenTracker>()).IsNotNull();
 
     [Test]
     public async Task Build_Registers_IEventBus() => await Assert.That(Services.GetService<IEventBus>()).IsNotNull();
@@ -165,7 +165,7 @@ public class HostBuilderDiTests
         var config = Services.GetService<CommonConfig>();
         await Assert.That(config).IsNotNull();
         await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
-        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+        await Assert.That(config.DefaultProvider).IsEqualTo("kilocode");
         await Assert.That(config.StorageBackend).IsEqualTo("jsonl");
     }
 
@@ -196,7 +196,7 @@ public class HostBuilderDiTests
             typeof(IConfigStore),
             typeof(AuthStore),
             typeof(OnboardingWizard),
-            typeof(ITokenEstimator),
+            typeof(ITokenTracker),
             typeof(IEventBus),
             typeof(ISystemPromptBuilder),
             typeof(MessageConverter),
@@ -267,7 +267,7 @@ public class HostBuilderDiTests
         // If any of these throw, the test fails fast.
         Resolve<IConfigStore>();
         Resolve<AuthStore>();
-        Resolve<ITokenEstimator>();
+        Resolve<ITokenTracker>();
         Resolve<IEventBus>();
         Resolve<IAgentLoop>();
         Resolve<IAgent>();

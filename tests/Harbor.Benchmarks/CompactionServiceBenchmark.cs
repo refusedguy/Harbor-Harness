@@ -63,7 +63,7 @@ public class CompactionServiceBenchmark
         _registry = new StubProviderRegistry(providerId, new StubSummarizingLlmClient(providerId));
 
         _service = new CompactionService(
-            new HeuristicTokenEstimator(),
+            new TokenTracker(),
             _registry,
             NullLogger<CompactionService>.Instance);
 

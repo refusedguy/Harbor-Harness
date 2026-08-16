@@ -10,6 +10,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
+using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
@@ -47,11 +48,13 @@ public class AgentLoopTests
         var bus = new InMemoryEventBus();
         var promptBuilder = new SystemPromptBuilder();
         var compaction = new CompactionService(
-            new HeuristicTokenEstimator(),
+            new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance);
         var permissions = new PermissionService(agents, NullLogger<PermissionService>.Instance);
         var converter = new MessageConverter();
+        var tokenTracker = new TokenTracker();
+        var retryPolicy = new RetryPolicy();
 
         var loop = new AgentLoop(
             providers,
@@ -59,7 +62,8 @@ public class AgentLoopTests
             agents,
             promptBuilder,
             compaction,
-            new HeuristicTokenEstimator(),
+            tokenTracker,
+            retryPolicy,
             bus,
             permissions,
             converter,

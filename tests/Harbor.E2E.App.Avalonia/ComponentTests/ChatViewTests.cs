@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Harbor.Abstractions.Models;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.State;
+using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
@@ -228,7 +229,7 @@ public sealed class ChatViewTests : ComponentTestBase
         UI(() =>
         {
             var chat = Vm.Chat;
-            chat.Lines.Add(new ChatLineViewModel(
+            chat.Lines.Add(new ChatLineVm(
                 ChatRole.Error,
                 "Something went wrong: provider returned 503 Service Unavailable"));
         });

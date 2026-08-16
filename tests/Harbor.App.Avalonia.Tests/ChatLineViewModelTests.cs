@@ -1,8 +1,10 @@
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
+using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 namespace Harbor.App.Avalonia.Tests;
 /// <summary>
-///     Unit tests for the platform-agnostic <see cref="ChatLineViewModel" />
+///     Unit tests for the platform-agnostic <see cref="ChatLineVm" />
 ///     record. Verifies that the role-to-brush-key / role-to-label /
 ///     timestamp-text / preview projections stay stable across UI
 ///     frameworks (the same VM is bound from Avalonia, WPF, MAUI, Blazor).
@@ -13,63 +15,63 @@ namespace Harbor.App.Avalonia.Tests;
 ///     updating the VM, or adding a new <c>ChatRole</c> value without
 ///     updating the switch expressions.
 /// </remarks>
-public class ChatLineViewModelTests
+public class ChatLineVmTests
 {
     // ── RoleBrushKey ───────────────────────────────────────────────
 
     [Test]
     public async Task RoleBrushKey_User_ReturnsChatUserBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi");
+        var vm = new ChatLineVm(ChatRole.User, "hi");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatUserBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_Assistant_ReturnsChatAssistantBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.Assistant, "hello");
+        var vm = new ChatLineVm(ChatRole.Assistant, "hello");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatAssistantBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_Thinking_ReturnsChatThinkingBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.Thinking, "hmm");
+        var vm = new ChatLineVm(ChatRole.Thinking, "hmm");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatThinkingBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_Tool_ReturnsChatToolBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.Tool, "executing");
+        var vm = new ChatLineVm(ChatRole.Tool, "executing");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatToolBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_ToolResult_ReturnsChatToolResultBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.ToolResult, "done");
+        var vm = new ChatLineVm(ChatRole.ToolResult, "done");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatToolResultBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_System_ReturnsChatSystemBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.System, "note");
+        var vm = new ChatLineVm(ChatRole.System, "note");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatSystemBrush");
     }
 
     [Test]
     public async Task RoleBrushKey_Error_ReturnsChatErrorBrush()
     {
-        var vm = new ChatLineViewModel(ChatRole.Error, "oops");
+        var vm = new ChatLineVm(ChatRole.Error, "oops");
         await Assert.That(vm.RoleBrushKey).IsEqualTo("ChatErrorBrush");
     }
 
     [Test]
     public async Task BrushKey_LegacyAlias_MatchesRoleBrushKey()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi");
+        var vm = new ChatLineVm(ChatRole.User, "hi");
         await Assert.That(vm.BrushKey).IsEqualTo(vm.RoleBrushKey);
     }
 
@@ -78,49 +80,49 @@ public class ChatLineViewModelTests
     [Test]
     public async Task RoleLabel_User_ReturnsUser()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi");
+        var vm = new ChatLineVm(ChatRole.User, "hi");
         await Assert.That(vm.RoleLabel).IsEqualTo("user");
     }
 
     [Test]
     public async Task RoleLabel_Assistant_ReturnsAssistant()
     {
-        var vm = new ChatLineViewModel(ChatRole.Assistant, "hello");
+        var vm = new ChatLineVm(ChatRole.Assistant, "hello");
         await Assert.That(vm.RoleLabel).IsEqualTo("assistant");
     }
 
     [Test]
     public async Task RoleLabel_Thinking_ReturnsThinking()
     {
-        var vm = new ChatLineViewModel(ChatRole.Thinking, "hmm");
+        var vm = new ChatLineVm(ChatRole.Thinking, "hmm");
         await Assert.That(vm.RoleLabel).IsEqualTo("thinking");
     }
 
     [Test]
     public async Task RoleLabel_Tool_ReturnsTool()
     {
-        var vm = new ChatLineViewModel(ChatRole.Tool, "executing");
+        var vm = new ChatLineVm(ChatRole.Tool, "executing");
         await Assert.That(vm.RoleLabel).IsEqualTo("tool");
     }
 
     [Test]
     public async Task RoleLabel_ToolResult_ReturnsToolResult()
     {
-        var vm = new ChatLineViewModel(ChatRole.ToolResult, "done");
+        var vm = new ChatLineVm(ChatRole.ToolResult, "done");
         await Assert.That(vm.RoleLabel).IsEqualTo("tool-result");
     }
 
     [Test]
     public async Task RoleLabel_System_ReturnsSystem()
     {
-        var vm = new ChatLineViewModel(ChatRole.System, "note");
+        var vm = new ChatLineVm(ChatRole.System, "note");
         await Assert.That(vm.RoleLabel).IsEqualTo("system");
     }
 
     [Test]
     public async Task RoleLabel_Error_ReturnsError()
     {
-        var vm = new ChatLineViewModel(ChatRole.Error, "oops");
+        var vm = new ChatLineVm(ChatRole.Error, "oops");
         await Assert.That(vm.RoleLabel).IsEqualTo("error");
     }
 
@@ -129,14 +131,14 @@ public class ChatLineViewModelTests
     [Test]
     public async Task TimestampText_Null_ReturnsEmpty()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi");
+        var vm = new ChatLineVm(ChatRole.User, "hi");
         await Assert.That(vm.TimestampText).IsEqualTo(string.Empty);
     }
 
     [Test]
     public async Task TimestampText_JustNow_ReturnsJustNow()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi")
+        var vm = new ChatLineVm(ChatRole.User, "hi")
         {
             TimestampUtc = DateTime.UtcNow.AddSeconds(5)
         };
@@ -146,7 +148,7 @@ public class ChatLineViewModelTests
     [Test]
     public async Task TimestampText_FiveMinutesAgo_Returns5mAgo()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi")
+        var vm = new ChatLineVm(ChatRole.User, "hi")
         {
             TimestampUtc = DateTime.UtcNow.AddMinutes(-5)
         };
@@ -158,7 +160,7 @@ public class ChatLineViewModelTests
     [Test]
     public async Task Preview_ShortText_ReturnsFullText()
     {
-        var vm = new ChatLineViewModel(ChatRole.User, "hi");
+        var vm = new ChatLineVm(ChatRole.User, "hi");
         await Assert.That(vm.Preview).IsEqualTo("hi");
     }
 
@@ -166,7 +168,7 @@ public class ChatLineViewModelTests
     public async Task Preview_LongText_TruncatesTo77CharsPlusEllipsis()
     {
         string longText = new('a', 100);
-        var vm = new ChatLineViewModel(ChatRole.User, longText);
+        var vm = new ChatLineVm(ChatRole.User, longText);
         await Assert.That(vm.Preview.Length).IsEqualTo(80);
         await Assert.That(vm.Preview).EndsWith("...");
     }
@@ -175,7 +177,7 @@ public class ChatLineViewModelTests
     public async Task Preview_Exactly80Chars_ReturnsFullText()
     {
         string text = new('a', 80);
-        var vm = new ChatLineViewModel(ChatRole.User, text);
+        var vm = new ChatLineVm(ChatRole.User, text);
         await Assert.That(vm.Preview).IsEqualTo(text);
     }
 }

@@ -84,8 +84,8 @@ public class AppDiTests
         => await Assert.That(Services.GetService<MessageConverter>()).IsNotNull();
 
     [Test]
-    public async Task BuildHost_Registers_ITokenEstimator()
-        => await Assert.That(Services.GetService<ITokenEstimator>()).IsNotNull();
+    public async Task BuildHost_Registers_ITokenTracker()
+        => await Assert.That(Services.GetService<ITokenTracker>()).IsNotNull();
 
     [Test]
     public async Task BuildHost_Registers_ISessionStore()
@@ -242,7 +242,7 @@ public class AppDiTests
             typeof(IEventBus),
             typeof(IPermissionService),
             typeof(MessageConverter),
-            typeof(ITokenEstimator),
+            typeof(ITokenTracker),
             typeof(ISessionStore),
             typeof(ISystemPromptBuilder),
             typeof(ICompactionService),

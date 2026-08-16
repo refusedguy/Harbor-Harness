@@ -97,7 +97,7 @@ public class ProgramDiTests
         var config = Services.GetService<CommonConfig>();
         await Assert.That(config).IsNotNull();
         await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
-        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+        await Assert.That(config.DefaultProvider).IsEqualTo("kilocode");
     }
 
     [Test]

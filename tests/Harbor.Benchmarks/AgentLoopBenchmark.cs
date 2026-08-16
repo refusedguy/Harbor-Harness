@@ -11,6 +11,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Core.Agents;
+using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
@@ -57,7 +58,8 @@ public class AgentLoopBenchmark
             1);
 
         var eventBus = new BenchEventBus();
-        var tokenEstimator = new BenchTokenEstimator();
+        var tokenTracker = new TokenTracker();
+        var retryPolicy = new RetryPolicy();
         var compaction = new BenchCompactionService();
         var promptBuilder = new BenchSystemPromptBuilder();
         var permission = new BenchPermissionService();
@@ -71,14 +73,14 @@ public class AgentLoopBenchmark
         var textProviders = new BenchProviderRegistry(providerId, textClient);
         _loopNoTool = new AgentLoop(
             textProviders, toolRegistry, agentRegistry, promptBuilder,
-            compaction, tokenEstimator, eventBus, permission, messageConverter, logger);
+            compaction, tokenTracker, retryPolicy, eventBus, permission, messageConverter, logger);
 
         // Tool-dispatch scenario: provider returns a client that emits a single tool call.
         var toolClient = new BenchToolLlmClient(providerId, model);
         var toolProviders = new BenchProviderRegistry(providerId, toolClient);
         _loopWithTool = new AgentLoop(
             toolProviders, toolRegistry, agentRegistry, promptBuilder,
-            compaction, tokenEstimator, eventBus, permission, messageConverter, logger);
+            compaction, tokenTracker, retryPolicy, eventBus, permission, messageConverter, logger);
     }
 
     /// <summary>
@@ -302,13 +304,16 @@ internal sealed class BenchCompactionService : ICompactionService
 }
 
 /// <summary>
-///     Minimal <see cref="ITokenEstimator" /> (not exercised on the single-turn stub path).
+///     Minimal <see cref="ITokenTracker" /> (not exercised on the single-turn stub path).
 /// </summary>
-internal sealed class BenchTokenEstimator : ITokenEstimator
+internal sealed class BenchTokenEstimator : ITokenTracker
 {
+    public void RecordTurnUsage(Usage usage) { }
     public int Estimate(string text) => 0;
     public int EstimateMessage(AgentMessage message) => 0;
-    public int EstimateMessages(IEnumerable<AgentMessage> messages) => 0;
+    public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => 0;
+    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => false;
+    public TokenStats GetStats() => new(0, 0, null, null, null);
 }
 
 /// <summary>

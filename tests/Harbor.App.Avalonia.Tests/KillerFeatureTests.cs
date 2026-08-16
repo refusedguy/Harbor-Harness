@@ -3,6 +3,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Controls;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.Logging.Abstractions;
 using ToastNotification = Harbor.Ui.Framework.Services.ToastNotification;
 using ToastKind = Harbor.Ui.Framework.Services.ToastKind;
@@ -12,7 +13,7 @@ namespace Harbor.App.Avalonia.Tests;
 ///     Unit tests for the Task R1 killer-feature controls. Covers:
 ///     <list type="bullet">
 ///         <item><see cref="Sparkline" /> — empty / single / multi-point inputs.</item>
-///         <item><see cref="ToolCallViewModel" /> — status pill, duration text, brush.</item>
+///         <item><see cref="ToolCallVm" /> — status pill, duration text, brush.</item>
 ///         <item><see cref="TypewriterStreamingText" /> — IsStreaming → cursor visibility.</item>
 ///         <item><see cref="TokenUsageViewModel" /> — RecentOutputTokens capping.</item>
 ///     </list>
@@ -64,12 +65,12 @@ public class KillerFeatureTests
         await Assert.That(ReferenceEquals(spark.StrokeBrush, brush)).IsTrue();
     }
 
-    // ── ToolCallViewModel ────────────────────────────────────────────
+    // ── ToolCallVm ────────────────────────────────────────────
 
     [Test]
-    public async Task ToolCallViewModel_Defaults_AreRunningState()
+    public async Task ToolCallVm_Defaults_AreRunningState()
     {
-        var vm = new ToolCallViewModel
+        var vm = new ToolCallVm
         {
             ToolName = "read",
             IconText = "📖"
@@ -81,9 +82,9 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_Complete_Success_UpdatesStatusAndDuration()
+    public async Task ToolCallVm_Complete_Success_UpdatesStatusAndDuration()
     {
-        var vm = new ToolCallViewModel
+        var vm = new ToolCallVm
         {
             ToolName = "bash",
             IconText = "🖥️"
@@ -99,9 +100,9 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_Complete_Error_UpdatesStatusPill()
+    public async Task ToolCallVm_Complete_Error_UpdatesStatusPill()
     {
-        var vm = new ToolCallViewModel { ToolName = "edit" };
+        var vm = new ToolCallVm { ToolName = "edit" };
         vm.Complete(
             ToolCallStatus.Error,
             "permission denied",
@@ -112,9 +113,9 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_DurationText_FormatsCorrectly()
+    public async Task ToolCallVm_DurationText_FormatsCorrectly()
     {
-        var vm = new ToolCallViewModel { ToolName = "t" };
+        var vm = new ToolCallVm { ToolName = "t" };
 
         // <1ms → empty
         vm.Duration = TimeSpan.Zero;
@@ -130,9 +131,9 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_StatusBrushKey_NotEmpty()
+    public async Task ToolCallVm_StatusBrushKey_NotEmpty()
     {
-        var vm = new ToolCallViewModel { ToolName = "t" };
+        var vm = new ToolCallVm { ToolName = "t" };
         // VM exposes a resource-key string instead of an IBrush so it can
         // stay platform-agnostic (reusable by WPF/MAUI/Blazor). The
         // concrete brush is resolved at bind time via BrushKeyConverter.
@@ -268,11 +269,11 @@ public class KillerFeatureTests
     }
 
     [Test]
-    public async Task ToolCallViewModel_IsExpanded_ToggleFlipsProperty()
+    public async Task ToolCallVm_IsExpanded_ToggleFlipsProperty()
     {
         // The slide-in card's expand chevron binds to IsExpanded.
         // Verify the toggle is observable so the Expander follows.
-        var vm = new ToolCallViewModel { ToolName = "bash" };
+        var vm = new ToolCallVm { ToolName = "bash" };
         await Assert.That(vm.IsExpanded).IsFalse();
         vm.IsExpanded = true;
         await Assert.That(vm.IsExpanded).IsTrue();

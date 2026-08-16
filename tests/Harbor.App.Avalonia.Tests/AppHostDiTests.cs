@@ -52,10 +52,10 @@ public class AppHostDiTests
     // ── Core services ─────────────────────────────────────────────────────
 
     [Test]
-    public async Task BuildAsync_Registers_ITokenEstimator()
+    public async Task BuildAsync_Registers_ITokenTracker()
     {
         await GetHostAsync();
-        await Assert.That(Services.GetService<ITokenEstimator>()).IsNotNull();
+        await Assert.That(Services.GetService<ITokenTracker>()).IsNotNull();
     }
 
     [Test]
@@ -274,7 +274,7 @@ public class AppHostDiTests
 
         var required = new[]
         {
-            typeof(ITokenEstimator),
+            typeof(ITokenTracker),
             typeof(IEventBus),
             typeof(ISystemPromptBuilder),
             typeof(MessageConverter),
