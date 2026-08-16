@@ -1,12 +1,23 @@
+using System.Collections.Immutable;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Abstractions.Providers;
 using Harbor.Desktop.Abstractions.Models;
+using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
+using Microsoft.Extensions.Logging;
+
 namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
 ///     Base for the settings view-model. Holds the user-editable settings
 ///     fields (theme, default provider, font size) and exposes Save / Reset
 ///     commands. The platform VM wires the actual config-persistence calls.
 /// </summary>
-public abstract partial class SettingsViewModelBase : ViewModelBase
+public abstract partial class SettingsViewModelBase : StoreSubscriberViewModel
 {
+    private readonly IThemeService _themeService;
+    private readonly IProviderRegistry _providers;
 
     /// <summary>Code font size in px. Default 13.</summary>
     [ObservableProperty]
@@ -31,9 +42,44 @@ public abstract partial class SettingsViewModelBase : ViewModelBase
     /// <summary>UI font size in px. Default 13.</summary>
     [ObservableProperty]
     private int _uiFontSize = 13;
+
+    /// <summary>Whether dark theme is currently active. Projected from <see cref="IThemeService" />.</summary>
+    [ObservableProperty]
+    private bool _isDarkTheme;
+
+    /// <summary>Registered provider IDs. Projected from <see cref="IProviderRegistry" />.</summary>
+    [ObservableProperty]
+    private ImmutableArray<string> _availableProviders = ImmutableArray<string>.Empty;
+
+    /// <summary>Whether the active session is authenticated.</summary>
+    [ObservableProperty]
+    private bool _isAuthenticated;
+
     /// <summary>Construct a <see cref="SettingsViewModelBase" />.</summary>
-    protected SettingsViewModelBase(ILogger logger) : base(logger)
+    /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="themeService">Theme service for projecting <see cref="IsDarkTheme" />.</param>
+    /// <param name="providers">Provider registry for projecting <see cref="AvailableProviders" />.</param>
+    protected SettingsViewModelBase(
+        IDispatcherAdapter dispatcher,
+        ILogger logger,
+        IThemeService themeService,
+        IProviderRegistry providers)
+        : base(dispatcher, logger)
     {
+        _themeService = themeService;
+        _providers = providers;
+
+        Select(state => _themeService.IsDark, v => IsDarkTheme = v);
+        Select(state => _providers.GetRegisteredProviderIds()
+            .Select(p => p.Value)
+            .ToImmutableArray(), v => AvailableProviders = v);
+    }
+
+    /// <summary>Apply all declared selectors against the current store snapshot.</summary>
+    protected override void OnStoreChanged(UiState state)
+    {
+        ApplySelectors(state);
     }
 
     /// <summary>Mark the VM dirty when a property changes.</summary>
@@ -41,7 +87,6 @@ public abstract partial class SettingsViewModelBase : ViewModelBase
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        // Skip the IsDirty flag itself to avoid infinite recursion.
         if (e.PropertyName != nameof(IsDirty) && e.PropertyName != nameof(IsSaving))
         {
             IsDirty = true;

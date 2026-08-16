@@ -1,4 +1,11 @@
+using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
+using Microsoft.Extensions.Logging;
+using ToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
+using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
@@ -20,14 +27,8 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///         <c>Harbor.Ui.Framework.ViewModels</c> (re-exported via this
 ///         assembly's global usings) — do not redeclare it here.
 ///     </para>
-///     <para>
-///         <b>Suggestions:</b> the contextual-suggestion record lives in the
-///         platform layer today (it carries an <c>ICommand</c>); the
-///         collection here is typed to it via a using-alias so the base
-///         compiles against net8.0 + the Avalonia app.
-///     </para>
 /// </remarks>
-public abstract partial class ChatViewModelBase : ViewModelBase
+public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
 {
     /// <summary>User input text bound to the chat input box.</summary>
     [ObservableProperty]
@@ -35,14 +36,17 @@ public abstract partial class ChatViewModelBase : ViewModelBase
 
     /// <summary>True while the agent loop is running (waiting for first token OR streaming).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InputPlaceholder))]
     private bool _isAgentRunning;
 
     /// <summary>True while tokens are actively arriving.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InputPlaceholder))]
     private bool _isStreaming;
 
     /// <summary>True while the agent is running but not yet streaming (thinking / tool-use).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(InputPlaceholder))]
     private bool _isThinking;
 
     /// <summary>
@@ -54,10 +58,12 @@ public abstract partial class ChatViewModelBase : ViewModelBase
 
     /// <summary>True while older history is being loaded (pull-to-refresh).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PullRefreshStatusText))]
     private bool _isLoadingHistory;
 
     /// <summary>Pull-to-refresh progress (0..1).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PullRefreshStatusText))]
     private double _pullProgress;
 
     /// <summary>Pull-to-refresh pixel offset.</summary>
@@ -81,15 +87,23 @@ public abstract partial class ChatViewModelBase : ViewModelBase
     private string _streamingBuffer = string.Empty;
 
     /// <summary>Construct a <see cref="ChatViewModelBase" />.</summary>
-    protected ChatViewModelBase(ILogger logger) : base(logger)
+    /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
+    /// <param name="logger">Logger.</param>
+    protected ChatViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
+        : base(dispatcher, logger)
     {
+        Select(state => state.IsStreaming, v => IsStreaming = v);
+        Select(state => state.IsAgentRunning, v => IsAgentRunning = v);
+        Select(state => state.Active.TextBuffer ?? string.Empty, v => StreamingBuffer = v);
+        Select(state => state.Input.Text, v => InputText = v);
+        Select(state => state.IsAgentRunning && !state.IsStreaming, v => IsThinking = v);
+        Select(state => state.IsAgentRunning
+            ? (state.IsStreaming ? "Streaming response…" : "Agent is running…")
+            : "Idle", v => StatusMessage = v);
     }
 
     /// <summary>Visible chat lines, projected for the view layer.</summary>
     public ObservableCollection<ChatLineViewModel> Lines { get; } = new();
-
-    /// <summary>Contextual quick-action suggestions shown above the composer.</summary>
-    public ObservableCollection<ChatSuggestion> ContextualSuggestions { get; } = new();
 
     /// <summary>
     ///     Visible tool-call cards (one per tool invocation). Updated
@@ -109,13 +123,6 @@ public abstract partial class ChatViewModelBase : ViewModelBase
     /// </summary>
     public string InputPlaceholder => GetPlaceholder();
 
-    partial void OnIsThinkingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-    partial void OnIsStreamingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-    partial void OnIsAgentRunningChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-
-    partial void OnIsLoadingHistoryChanged(bool value) => OnPropertyChanged(nameof(PullRefreshStatusText));
-    partial void OnPullProgressChanged(double value) => OnPropertyChanged(nameof(PullRefreshStatusText));
-
     private string GetPlaceholder()
     {
         if (IsThinking)
@@ -133,20 +140,148 @@ public abstract partial class ChatViewModelBase : ViewModelBase
         return "Ask Harbor anything…";
     }
 
-    /// <summary>
-    ///     Reset the chat state — clears lines + tool-call cards + streaming
-    ///     flags so the next render pass starts fresh. Called by the derived
-    ///     Clear command and when switching sessions.
-    /// </summary>
-    protected void ResetChatState()
+    /// <summary>Sync an <see cref="ObservableCollection{T}" /> from an <see cref="ImmutableArray{T}" />.</summary>
+    /// <typeparam name="T">Element type.</typeparam>
+    /// <param name="target">Collection to update in-place.</param>
+    /// <param name="source">Immutable source snapshot.</param>
+    protected void SyncCollection<T>(ObservableCollection<T> target, ImmutableArray<T> source)
+    {
+        target.Clear();
+        foreach (var item in source)
+            target.Add(item);
+    }
+
+    private void SyncLines(ImmutableArray<ChatLine> source)
     {
         Lines.Clear();
-        ToolCalls.Clear();
-        IsStreaming = false;
-        IsThinking = false;
-        IsAgentRunning = false;
-        StatusMessage = string.Empty;
-        StreamingBuffer = string.Empty;
+        foreach (var line in source)
+            Lines.Add(new ChatLineViewModel(line.Role, line.Text));
+    }
+
+    private void SyncToolCalls(UiState state)
+    {
+        var existingById = new Dictionary<string, ToolCallViewModel>(StringComparer.Ordinal);
+        for (int i = 0; i < ToolCalls.Count; i++)
+            existingById[ToolCalls[i].Id] = ToolCalls[i];
+
+        var ordered = new List<ToolCallViewModel>(state.Lines.Length);
+
+        for (int i = 0; i < state.Lines.Length; i++)
+        {
+            var line = state.Lines[i];
+            if (line.ToolCallId is null) continue;
+
+            if (line.Role == ChatRole.Tool)
+            {
+                var parsed = ParseToolLine(line.Text, line.ToolCallId);
+                if (parsed is null) continue;
+
+                if (existingById.TryGetValue(parsed.Id, out var existing))
+                {
+                    existing.ToolName = parsed.ToolName;
+                    existing.ArgsPreview = parsed.ArgsPreview;
+                    existing.IconText = parsed.IconText;
+                    if (parsed.IsDiffTool)
+                    {
+                        existing.IsDiffTool = true;
+                        existing.DiffFilePath = parsed.DiffFilePath;
+                        existing.DiffPreview = parsed.DiffPreview;
+                        existing.DiffFull = parsed.DiffFull;
+                    }
+                    ordered.Add(existing);
+                }
+                else
+                {
+                    ordered.Add(parsed);
+                }
+            }
+            else if (line.Role == ChatRole.ToolResult && existingById.TryGetValue(line.ToolCallId!, out var entry))
+            {
+                entry.Complete(
+                    line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallStatus.Error : ToolCallStatus.Success,
+                    FormatResultPreview(line.Text),
+                    TimeSpan.Zero);
+                ordered.Add(entry);
+            }
+        }
+
+        if (ToolCalls.Count != ordered.Count)
+        {
+            ToolCalls.Clear();
+            foreach (var tc in ordered)
+                ToolCalls.Add(tc);
+            return;
+        }
+
+        for (int i = 0; i < ToolCalls.Count; i++)
+        {
+            if (ToolCalls[i] != ordered[i])
+                ToolCalls[i] = ordered[i];
+        }
+    }
+
+    private static ToolCallViewModel? ParseToolLine(string text, string toolCallId)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length < 2 || text[0] != '→')
+            return null;
+
+        int spaceIdx = text.IndexOf(' ', 2);
+        string toolName;
+        string argsJson;
+        if (spaceIdx < 0)
+        {
+            toolName = text[2..];
+            argsJson = "{}";
+        }
+        else
+        {
+            toolName = text[2..spaceIdx];
+            argsJson = text[(spaceIdx + 1)..].TrimStart();
+        }
+
+        var vm = new ToolCallViewModel
+        {
+            Id = toolCallId,
+            ToolName = toolName,
+            ArgsPreview = argsJson == "{}" ? string.Empty : argsJson,
+            IconText = toolName switch
+            {
+                "edit" => "✎",
+                "write" => "✚",
+                "read" => "▸",
+                "patch" => "⌥",
+                "bash" => "$",
+                "grep" => "🔍",
+                "glob" => "🌐",
+                "ls" => "📁",
+                "task" => "☐",
+                "web_fetch" => "🌍",
+                _ => "?"
+            }
+        };
+
+        return vm;
+    }
+
+    private static string FormatResultPreview(string resultText)
+    {
+        if (string.IsNullOrEmpty(resultText))
+            return string.Empty;
+        if (resultText.Length >= 2 && (resultText[0] == '✓' || resultText[0] == '✗') && resultText[1] == ' ')
+            return resultText[2..];
+        return resultText;
+    }
+
+    /// <summary>
+    ///     Apply declared selectors against the new state snapshot and sync
+    ///     the observable chat-line / tool-call collections.
+    /// </summary>
+    /// <param name="state">The new <see cref="UiState" /> snapshot.</param>
+    protected override void OnStoreChanged(UiState state)
+    {
+        ApplySelectors(state);
+        SyncLines(state.Lines);
+        SyncToolCalls(state);
     }
 
     /// <summary>Resource-key lookup for the role's accent color.</summary>
@@ -164,13 +299,3 @@ public abstract partial class ChatViewModelBase : ViewModelBase
         _ => "ChatAssistantBrush"
     };
 }
-
-/// <summary>
-///     One contextual quick-action suggestion shown above the composer.
-///     UI-agnostic: carries label + prompt + the callback to run on activation
-///     (no <c>ICommand</c> so it stays net8.0-compatible for WPF/MAUI).
-/// </summary>
-/// <param name="Label">Short button label (e.g. "⚡ Explain this codebase").</param>
-/// <param name="Prompt">The prompt to submit when activated.</param>
-/// <param name="Run">Callback invoked on activation.</param>
-public sealed record ChatSuggestion(string Label, string Prompt, Action Run);

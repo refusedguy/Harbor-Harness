@@ -1,124 +1,95 @@
+using System.Collections.ObjectModel;
+using System.Collections.Immutable;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Providers;
-namespace Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.Logging;
+
+namespace Harbor.Desktop.Abstractions.ViewModels;
+
 /// <summary>
 ///     Browse providers + models with metadata. Read-only view; configuring a new
-///     provider is done in <see cref="SettingsViewModel" />.
+///     provider is done in <see cref="SettingsViewModel" />. Uses
+///     <see cref="AsyncFeed{T}" /> to own cancellation + timeout + state.
 /// </summary>
 public sealed partial class ProviderBrowserViewModel : ObservableObject
 {
-    /// <summary>
-    ///     Hard cap on how long a single model-list fetch may take. The
-    ///     default 100s HttpClient timeout made the UI feel frozen when a
-    ///     provider (typically Ollama) wasn't running. Five seconds is long
-    ///     enough for a healthy local provider to respond, short enough that
-    ///     the user doesn't think the app hung.
-    /// </summary>
     public static readonly TimeSpan ModelFetchTimeout = TimeSpan.FromSeconds(5);
+
     private readonly ILogger<ProviderBrowserViewModel> _logger;
-
     private readonly IProviderRegistry _providers;
+    private readonly AsyncFeed<IReadOnlyList<ModelRowViewModel>> _modelsFeed;
+    private string _currentProviderId = string.Empty;
 
-    /// <summary>
-    ///     Error message shown in the UI when a model fetch fails (e.g. "Ollama
-    ///     not running on http://localhost:11434 — start it with `ollama serve`.").
-    /// </summary>
     [ObservableProperty]
     private string _errorMessage = string.Empty;
 
     [ObservableProperty]
     private bool _isLoading;
-    private CancellationTokenSource? _loadCts;
 
     [ObservableProperty]
     private ProviderRowViewModel? _selectedProvider;
 
-    /// <summary>Construct the provider browser view-model.</summary>
     public ProviderBrowserViewModel(IProviderRegistry providers, ILogger<ProviderBrowserViewModel> logger)
     {
         _providers = providers;
         _logger = logger;
+        _modelsFeed = new AsyncFeed<IReadOnlyList<ModelRowViewModel>>(LoadModelsAsync, ModelFetchTimeout, _logger);
+        _modelsFeed.Changed += OnModelsChanged;
     }
 
-    /// <summary>Provider rows.</summary>
     public ObservableCollection<ProviderRowViewModel> Providers { get; } = new();
-
-    /// <summary>Models for the selected provider.</summary>
     public ObservableCollection<ModelRowViewModel> Models { get; } = new();
 
-    /// <summary>Load providers from the registry.</summary>
     [RelayCommand]
     private async Task LoadProvidersAsync()
     {
-        // Cancel any in-flight load (e.g. the user re-opened the browser
-        // while a previous fetch was still running).
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-        _loadCts = new CancellationTokenSource();
-
-        IsLoading = true;
-        ErrorMessage = string.Empty;
+        _currentProviderId = string.Empty;
         Providers.Clear();
-        foreach (string id in _providers.GetRegisteredProviderIds().Select(p => p.Value))
+        Models.Clear();
+        ErrorMessage = string.Empty;
+        IsLoading = true;
+
+        try
         {
-            Providers.Add(new ProviderRowViewModel(id, id, "ready"));
+            foreach (string id in _providers.GetRegisteredProviderIds().Select(p => p.Value))
+            {
+                Providers.Add(new ProviderRowViewModel(id, id, "ready"));
+            }
+            SelectedProvider = Providers.FirstOrDefault();
+            if (SelectedProvider is not null)
+            {
+                _currentProviderId = SelectedProvider.Id;
+                await _modelsFeed.RefreshAsync().ConfigureAwait(true);
+            }
         }
-        SelectedProvider = Providers.FirstOrDefault();
-        if (SelectedProvider is not null)
+        catch (Exception ex)
         {
-            await LoadModelsAsync(SelectedProvider);
+            _logger.LogError(ex, "LoadProvidersAsync exception");
+            ErrorMessage = ex.Message;
         }
-        IsLoading = false;
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
-    /// <summary>Load models for the selected provider, with a 5-second timeout.</summary>
-    /// <param name="row">The provider row to load models for. No-op when null.</param>
     [RelayCommand]
     private async Task LoadModelsAsync(ProviderRowViewModel? row)
     {
         if (row is null) return;
 
-        // Cancel any previous load. The shared CTS means opening the browser
-        // and then immediately picking a different provider cancels the first
-        // fetch — no orphaned Task.Runs piling up behind the UI.
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-
-        var cts = new CancellationTokenSource(ModelFetchTimeout);
-        _loadCts = cts;
-
-        IsLoading = true;
-        ErrorMessage = string.Empty;
+        SelectedProvider = row;
+        _currentProviderId = row.Id;
         Models.Clear();
+        ErrorMessage = string.Empty;
+        IsLoading = true;
+
         try
         {
-            var result = await _providers.GetAllModelsAsync(cts.Token).ConfigureAwait(true);
-            if (result.IsSuccess)
-            {
-                foreach (var m in result.Value.Where(m => m.ProviderId == row.Id))
-                {
-                    Models.Add(new ModelRowViewModel(
-                        m.Id, m.DisplayName, m.ContextWindow, m.MaxOutputTokens,
-                        m.SupportsReasoning, m.SupportsVision, m.SupportsToolUse,
-                        m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion));
-                }
-
-                if (Models.Count == 0)
-                {
-                    ErrorMessage = $"No models returned by provider '{row.Id}'. " +
-                                   "If this is a local provider (e.g. Ollama), make sure it's running.";
-                }
-            }
-            else
-            {
-                _logger.LogWarning("GetAllModelsAsync failed: {Error}", result.Error);
-                ErrorMessage = result.Error;
-            }
-        }
-        catch (OperationCanceledException ex) when (cts.IsCancellationRequested)
-        {
-            _logger.LogInformation(ex, "Model fetch for {Provider} cancelled/timed out after {Timeout}s",
-                row.Id, ModelFetchTimeout.TotalSeconds);
-            ErrorMessage = $"Timed out after {ModelFetchTimeout.TotalSeconds:F0}s — is '{row.Id}' running?";
+            await _modelsFeed.RefreshAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -128,8 +99,55 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
         finally
         {
             IsLoading = false;
-            cts.Dispose();
         }
+    }
+
+    private void OnModelsChanged(AsyncData<IReadOnlyList<ModelRowViewModel>> data)
+    {
+        switch (data.Status)
+        {
+            case AsyncStatus.Loading:
+            case AsyncStatus.Refreshing:
+                Models.Clear();
+                break;
+            case AsyncStatus.Success:
+                if (data.HasValue && data.Value is not null)
+                {
+                    Models.Clear();
+                    foreach (var m in data.Value)
+                        Models.Add(m);
+                    if (Models.Count == 0)
+                    {
+                        ErrorMessage = $"No models returned by provider '{_currentProviderId}'. " +
+                                       "If this is a local provider (e.g. Ollama), make sure it's running.";
+                    }
+                }
+                break;
+            case AsyncStatus.Error:
+                _logger.LogWarning("Model fetch error: {Error}", data.Error);
+                ErrorMessage = data.Error ?? "Unknown error";
+                break;
+        }
+    }
+
+    private async Task<Result<IReadOnlyList<ModelRowViewModel>>> LoadModelsAsync(CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_currentProviderId))
+            return Result.Failure<IReadOnlyList<ModelRowViewModel>>("No provider selected");
+
+        var result = await _providers.GetAllModelsAsync(ct).ConfigureAwait(true);
+        if (result.IsFailure)
+            return Result.Failure<IReadOnlyList<ModelRowViewModel>>(result.Error);
+
+        var models = result.Value
+            .Where(m => m.ProviderId == _currentProviderId)
+            .Select(m => new ModelRowViewModel(
+                m.Id, m.DisplayName, m.ContextWindow, m.MaxOutputTokens,
+                m.SupportsReasoning, m.SupportsVision, m.SupportsToolUse,
+                m.Pricing.InputPerMillion, m.Pricing.OutputPerMillion))
+            .ToImmutableArray();
+
+        return Result.Success<IReadOnlyList<ModelRowViewModel>>(models);
     }
 }
 
@@ -148,7 +166,6 @@ public sealed record ModelRowViewModel(
     decimal InputPerMillion,
     decimal OutputPerMillion)
 {
-    /// <summary>Compact feature summary.</summary>
     public string Features =>
         string.Join(", ", new[]
         {
@@ -157,6 +174,5 @@ public sealed record ModelRowViewModel(
             SupportsReasoning ? "reasoning" : null
         }.Where(s => s is not null)!) ?? "—";
 
-    /// <summary>Per-million pricing label.</summary>
     public string PricingLabel => $"${InputPerMillion:F2} in / ${OutputPerMillion:F2} out per 1M";
 }

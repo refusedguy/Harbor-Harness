@@ -1,70 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!--
-    Harbor.Ui.Framework — UI Framework (TEA + Panel system).
-
-    Contains the renderer-agnostic Elm/TEA (The Elm Architecture) state machine
-    plus the generic dockable-panel system. Used by BOTH terminal TUIs (Ansi,
-    Spectre, Plain, TerminalGui, RazorConsole, Termina, Sixel, Notifications,
-    SpectreTui, Spectre.Fullscreen) AND desktop GUIs (Avalonia, WPF, MAUI,
-    Blazor). Contains NO terminal / Spectre / console / widget-framework types.
-
-    Dependency policy (Clean Architecture — Domain layer):
-      ✅ Harbor.Abstractions           (Domain — AgentEvent, IAgentRunner, IPlugin)
-      ✅ Microsoft.Extensions.Logging.Abstractions
-      ✅ CSharpFunctionalExtensions    (Result<> on PanelRegistry.Register)
-      ❌ NO Harbor.Core / Application / Registries / Scripting
-      ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.*
-      ❌ NO Spectre / Terminal.Gui / Terminal color / ANSI / widget types
-      ✅ CommunityToolkit.Mvvm        (ViewModels use ObservableObject + [ObservableProperty])
-
-    Split out of Harbor.Tui.Abstractions (Task A2, R6). The old
-    `Harbor.Tui.Abstractions.State` namespace became `Harbor.Ui.Framework.State`,
-    `Harbor.Tui.Abstractions.Panels` became `Harbor.Ui.Framework.Panels`.
-    This is a breaking change — consumers must update `using` directives.
-
-    See docs/ARCHITECTURE_LAYERS.md §2 for the canonical reference matrix.
-  -->
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Ui.Framework</PackageId>
-    <Description>Harbor UI Framework — TEA state machine + dockable panel system, shared by terminal TUIs and desktop GUIs.</Description>
+    <Description>Harbor UI Framework — meta-package referencing all sub-modules (State, ViewModels, Services, Projection, Sessions, Abstractions).</Description>
     <PackageTags>harbor;ui;framework;tea;elm;panels;mvu</PackageTags>
     <NoWarn>$(NoWarn);MA0046</NoWarn>
   </PropertyGroup>
 
-  <!--
-    Expose the internal UiStore.Transition helper to Presentation-layer apps
-    that need to fold non-agent state transitions (e.g. inserting a user-input
-    line into the transcript before the agent emits a UserMessage event).
-    Harbor.App.Cli uses the agent loop's events to drive state, so it does not
-    need this; the desktop GUIs do.
-  -->
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.App.Avalonia"/>
-    <InternalsVisibleTo Include="Harbor.App.Wpf"/>
-    <InternalsVisibleTo Include="Harbor.App.Maui"/>
-    <InternalsVisibleTo Include="Harbor.App.Blazor"/>
-    <InternalsVisibleTo Include="Harbor.App.Cli"/>
-    <InternalsVisibleTo Include="Harbor.Tui.Termina"/>
-    <InternalsVisibleTo Include="Harbor.Tui.TerminalGui"/>
-    <InternalsVisibleTo Include="Harbor.Tui.RazorConsole"/>
-    <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
-    <InternalsVisibleTo Include="Harbor.E2E.App.Avalonia"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
-    <PackageReference Include="Microsoft.Extensions.Logging"/>
-    <PackageReference Include="CSharpFunctionalExtensions"/>
-    <PackageReference Include="CommunityToolkit.Mvvm"/>
-
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
   </ItemGroup>
 
 </Project>

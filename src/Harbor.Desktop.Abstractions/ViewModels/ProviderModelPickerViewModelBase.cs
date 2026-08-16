@@ -1,3 +1,9 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
+using Microsoft.Extensions.Logging;
+
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
 /// <summary>
@@ -21,7 +27,7 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///         with zero matching models are hidden while a search is active.
 ///     </para>
 /// </remarks>
-public abstract partial class ProviderModelPickerViewModelBase : ViewModelBase
+public abstract partial class ProviderModelPickerViewModelBase : StoreSubscriberViewModel
 {
     /// <summary>
     ///     Hard cap on how long the aggregated model-list fetch may take. Five
@@ -48,8 +54,12 @@ public abstract partial class ProviderModelPickerViewModelBase : ViewModelBase
     private string _searchText = string.Empty;
 
     /// <summary>Construct the picker base.</summary>
-    protected ProviderModelPickerViewModelBase(ILogger logger) : base(logger)
+    /// <param name="dispatcher">UI-thread marshaller and store binder.</param>
+    /// <param name="logger">Logger.</param>
+    protected ProviderModelPickerViewModelBase(IDispatcherAdapter dispatcher, ILogger logger)
+        : base(dispatcher, logger)
     {
+        Select(state => state.Model, v => CurrentModelLabel = v);
     }
 
     /// <summary>
@@ -60,4 +70,14 @@ public abstract partial class ProviderModelPickerViewModelBase : ViewModelBase
 
     /// <summary>Raise <see cref="ModelSelected" /> (called by the platform VM after persisting the choice).</summary>
     protected void RaiseModelSelected() => ModelSelected?.Invoke();
+
+    /// <summary>
+    ///     Called when the global <see cref="UiState" /> changes. Applies all
+    ///     declared selectors to project state slices into view-model properties.
+    /// </summary>
+    /// <param name="state">The current UI state snapshot.</param>
+    protected override void OnStoreChanged(UiState state)
+    {
+        ApplySelectors(state);
+    }
 }

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <PackageId>Harbor.Ui.Framework.Sessions</PackageId>
+    <Description>Harbor UI Framework — session orchestration, switcher, factory, git tracker.</Description>
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia"/>
+    <InternalsVisibleTo Include="Harbor.App.Wpf"/>
+    <InternalsVisibleTo Include="Harbor.App.Maui"/>
+    <InternalsVisibleTo Include="Harbor.App.Blazor"/>
+    <InternalsVisibleTo Include="Harbor.App.Cli"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Termina"/>
+    <InternalsVisibleTo Include="Harbor.Tui.TerminalGui"/>
+    <InternalsVisibleTo Include="Harbor.Tui.RazorConsole"/>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
+    <InternalsVisibleTo Include="Harbor.E2E.App.Avalonia"/>
+  </ItemGroup>
+
+</Project>

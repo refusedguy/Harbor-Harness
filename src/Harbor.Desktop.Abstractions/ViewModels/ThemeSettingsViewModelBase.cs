@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 
@@ -16,7 +17,7 @@ namespace Harbor.Desktop.Abstractions.ViewModels;
 ///     (Avalonia <c>IBrush</c>, WPF <c>Brush</c>) which must not leak into
 ///     this abstractions assembly.
 /// </remarks>
-public abstract partial class ThemeSettingsViewModelBase : ViewModelBase
+public abstract partial class ThemeSettingsViewModelBase : StoreSubscriberViewModel
 {
     private readonly IThemeService _themeService;
 
@@ -36,11 +37,27 @@ public abstract partial class ThemeSettingsViewModelBase : ViewModelBase
     private string _theme = "system";
 
     /// <summary>Construct a <see cref="ThemeSettingsViewModelBase" />.</summary>
-    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
+    /// <param name="dispatcher">UI-thread marshaller / store binder.</param>
     /// <param name="logger">Logger.</param>
-    protected ThemeSettingsViewModelBase(IThemeService themeService, ILogger logger) : base(logger)
+    /// <param name="themeService">The theme service that applies the theme to the running app.</param>
+    protected ThemeSettingsViewModelBase(
+        IDispatcherAdapter dispatcher,
+        ILogger logger,
+        IThemeService themeService)
+        : base(dispatcher, logger)
     {
         _themeService = themeService;
+
+        Select(state => _themeService.IsDark, v => IsDarkTheme = v);
+    }
+
+    /// <summary>
+    ///     Apply all declared selectors against the current store snapshot.
+    /// </summary>
+    /// <param name="state">The new <see cref="UiState" /> snapshot.</param>
+    protected override void OnStoreChanged(UiState state)
+    {
+        ApplySelectors(state);
     }
 
     /// <summary>

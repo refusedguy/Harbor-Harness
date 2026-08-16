@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <PackageId>Harbor.Ui.Framework.Reducers</PackageId>
+    <Description>Harbor UI Framework — pure reducers for sessions and UI state.</Description>
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+  </ItemGroup>
+
+</Project>
