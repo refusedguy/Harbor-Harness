@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -5,10 +6,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
-/// <summary>
-///     Generic OpenAI-compatible LLM client. Implements Strategy pattern (GOF).
-///     Covers OpenRouter, DeepSeek, Groq, Together, Mistral, xAI, Ollama, LM Studio, and dozens of others.
-/// </summary>
+
 public sealed class OpenAiCompatibleLlmClient : ILlmClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -21,6 +19,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
     private readonly HttpClient _http;
     private readonly ILogger<OpenAiCompatibleLlmClient> _logger;
     private readonly IModelCatalog _modelCatalog;
+
+    private static readonly ActivitySource Source = new("Harbor");
+    private const string ProviderNameTag = "gen_ai.provider.name";
+    private const string RequestModelTag = "gen_ai.request.model";
+    private const string PromptTokensTag = "gen_ai.prompt.tokens";
+    private const string CompletionTokensTag = "gen_ai.completion.tokens";
 
     public OpenAiCompatibleLlmClient(
         HttpClient http,
@@ -53,6 +57,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         _ = Task.Run(async () =>
         {
+            using var activity = Source.StartActivity("LLM.Call");
+            activity?.SetTag(ProviderNameTag, ProviderId.Value);
+            activity?.SetTag(RequestModelTag, request.Model);
             try
             {
                 var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
@@ -69,9 +76,12 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 {
                     response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                         .ConfigureAwait(false);
+                    activity?.SetTag("http.status_code", (int)response.StatusCode);
                 }
                 catch (Exception ex)
                 {
+                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                    activity?.AddException(ex);
                     await writer.WriteAsync(new ErrorEvent($"HTTP request failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
                     return;
                 }
@@ -80,6 +90,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 {
                     if (!response.IsSuccessStatusCode)
                     {
+                        activity?.SetTag("http.status_code", (int)response.StatusCode);
                         string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                         await writer.WriteAsync(new ErrorEvent($"API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
                         return;
@@ -109,21 +120,29 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                             return;
                         }
 
-                        foreach (var evt in MapChunk(data, indexToId))
+                        foreach (var evt in OpenAiSseParser.ParseChunk(data.AsSpan(), indexToId, _logger))
                         {
+                            if (evt is StepFinishEvent { Usage: not null } sfe)
+                            {
+                                activity?.SetTag(PromptTokensTag, sfe.Usage.InputTokens);
+                                activity?.SetTag(CompletionTokensTag, sfe.Usage.OutputTokens);
+                            }
                             await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
                         }
                     }
                 }
 
+                activity?.SetStatus(ActivityStatusCode.Ok);
                 await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Expected on cancel
+                activity?.SetStatus(ActivityStatusCode.Ok);
             }
             catch (Exception ex)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                activity?.AddException(ex);
                 await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
             }
             finally
@@ -269,108 +288,5 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         },
         _ => new { role = "user", content = "" }
     };
-
-    private IEnumerable<LlmEvent> MapChunk(string data, Dictionary<int, string> indexToId)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(data);
-            // Materialize immediately — JsonElement is invalid after JsonDocument is disposed
-            return MapChunkFromDocument(doc.RootElement, indexToId).ToList();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse chunk: {Data}", data);
-            // §ROP-004 (RESOLVED): previously returned Enumerable.Empty<LlmEvent>(),
-            // silently dropping the chunk and the parse error. Now surfaces an
-            // ErrorEvent so the agent loop can fail loudly instead of stalling.
-            return new[] { new ErrorEvent($"Parse failed: {ex.Message}") };
-        }
-    }
-
-    private IEnumerable<LlmEvent> MapChunkFromDocument(JsonElement root, Dictionary<int, string> indexToId)
-    {
-        var choices = root.TryGetProperty("choices", out var c) ? c.EnumerateArray().ToList() : new List<JsonElement>();
-        if (choices.Count == 0)
-        {
-            if (root.TryGetProperty("usage", out var usage))
-            {
-                int inputTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
-                int outputTokens = usage.TryGetProperty("completion_tokens", out var ct2) ? ct2.GetInt32() : 0;
-                yield return new StepFinishEvent(0, "stop", new Usage(inputTokens, outputTokens));
-            }
-            yield break;
-        }
-
-        var choice = choices[0];
-        var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
-
-        if (delta.ValueKind == JsonValueKind.Object)
-        {
-            if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-            {
-                string? text = content.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new TextDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-            {
-                string? text = reasoning.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new ThinkingDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("tool_calls", out var tcs) && tcs.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var tc in tcs.EnumerateArray())
-                {
-                    // OpenAI streams tool calls as an array; each entry carries a stable
-                    // `index` for the duration of the call. The `id` (and `name`) arrive only
-                    // in the first delta for that index; argument fragments follow in later
-                    // deltas with the same index but no id. Map by index so every fragment
-                    // shares one stable id.
-                    int index = tc.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number
-                        ? idxEl.GetInt32()
-                        : 0;
-
-                    string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
-                        ? idEl.GetString()!
-                        : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
-                    indexToId[index] = id;
-
-                    var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
-
-                    if (fn.ValueKind == JsonValueKind.Object)
-                    {
-                        string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
-                        if (!string.IsNullOrEmpty(name))
-                        {
-                            yield return new ToolCallStartEvent(id, name!);
-                        }
-
-                        if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
-                        {
-                            string? argsStr = args.GetString();
-                            if (!string.IsNullOrEmpty(argsStr))
-                                yield return new ToolCallDeltaEvent(id, argsStr);
-                        }
-                    }
-                }
-            }
-        }
-
-        if (finishReason is not null)
-        {
-            var usage = root.TryGetProperty("usage", out var u) ? u : default;
-            var usageObj = usage.ValueKind == JsonValueKind.Object
-                ? new Usage(
-                    usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
-                    usage.TryGetProperty("completion_tokens", out var ct2) ? ct2.GetInt32() : 0)
-                : null;
-
-            yield return new StepFinishEvent(0, finishReason, usageObj);
-        }
-    }
 }
+
