@@ -1,4 +1,5 @@
 ﻿using System.Collections.Immutable;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
@@ -32,6 +33,7 @@ internal class ChatViewProjector
     public string InputText { get => _chrome.InputText; set => _chrome.InputText = value; }
     public FocusMode Focus { get => _chrome.Focus; set => _chrome.Focus = value; }
     public string FooterText { get => _chrome.FooterText; set => _chrome.FooterText = value; }
+    public UiStatusBarModel StatusBar { get => _chrome.StatusBar; set => _chrome.StatusBar = value; }
 
     public string StreamBuffer
     {

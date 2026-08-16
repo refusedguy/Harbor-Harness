@@ -27,7 +27,6 @@
    13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
 -->
 <Project>
-
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
@@ -39,7 +38,6 @@
       transitive cannot sneak in via a deep dependency.
     -->
   </PropertyGroup>
-
   <ItemGroup>
     <!-- ── Microsoft.Extensions.* ────────────────────────────────────────── -->
     <!--
@@ -63,31 +61,24 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
-
     <!-- ── Microsoft.CodeAnalysis.* (Roslyn + analyzers) ─────────────────── -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
-
     <!-- ── Microsoft.Data.* (storage drivers) ────────────────────────────── -->
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
-
     <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-
     <!-- ── TUnit + Moq + NetArchTest (test framework + arch rules) ───────── -->
     <PackageVersion Include="TUnit" Version="1.61.0" />
     <PackageVersion Include="TUnit.Assertions" Version="1.61.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
-
     <!-- ── BenchmarkDotNet ───────────────────────────────────────────────── -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-
     <!-- ── CommunityToolkit.* (MVVM, HighPerformance) ────────────────────── -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
-
     <!-- ── Spectre.* (console + TUI) ─────────────────────────────────────── -->
     <!--
       Spectre.Console stays at 0.54.0 — the last version with Color/Decoration
@@ -102,7 +93,6 @@
     <PackageVersion Include="Spectre.Console" Version="0.54.0" />
     <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
     <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
-
     <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
     <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
     <PackageVersion Include="Termina" Version="0.15.0" />
@@ -129,7 +119,6 @@
     <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
     <PackageVersion Include="Dirkster.AvalonDock" Version="4.74.1" />
     <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
-
     <!-- ── .NET MAUI (workload-supplied; version matches the maui-windows
          workload pack installed on the build machine) ──────────────────── -->
     <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
@@ -138,17 +127,14 @@
     <PackageVersion Include="Microsoft.Maui.Core" Version="10.0.20" />
     <PackageVersion Include="Microsoft.Maui.Resizetizer" Version="10.0.20" />
     <PackageVersion Include="Microsoft.Maui.Controls.Build.Tasks" Version="10.0.20" />
-
     <!-- ── Scripting engines ─────────────────────────────────────────────── -->
     <PackageVersion Include="Jint" Version="4.13.0" />
-
     <!-- ── Roslyn analyzers (consumed via Directory.Build.props) ─────────── -->
     <PackageVersion Include="Roslynator.Analyzers" Version="4.15.0" />
     <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.29.0.143774" />
     <PackageVersion Include="AsyncFixer" Version="2.1.0" />
     <PackageVersion Include="ReflectionAnalyzers" Version="0.3.1" />
     <PackageVersion Include="Meziantou.Analyzer" Version="3.0.123" />
-
     <!-- ── Performance / collections / serialization ─────────────────────── -->
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />
@@ -158,7 +144,6 @@
     <PackageVersion Include="KZDev.PerfUtils" Version="3.0.1" />
     <PackageVersion Include="MemoryPack" Version="1.21.4" />
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
-
     <!-- ── MessagePack (cross-platform binary serialization for IPC) ───────── -->
     <!--
       MessagePack 2.5.x has known advisories (NU1902/NU1903) but they all
@@ -167,13 +152,10 @@
       Suppressed per-project in Harbor.Ipc.* via <NoWarn>NU1902;NU1903</NoWarn>.
     -->
     <PackageVersion Include="MessagePack" Version="3.1.8" />
-
     <!-- ── SQLite native driver ──────────────────────────────────────────── -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
-
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
     <PackageVersion Include="Termina.Generators" Version="0.15.0" />
-
     <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
     <!--
       NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/
@@ -183,7 +165,6 @@
       would otherwise reject NUKE's generated code.
     -->
     <PackageVersion Include="Nuke.Common" Version="10.1.0" />
-
     <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
     <!--
       DependencyInjection.Lifetime.Analyzers (DI001–DI005) detects captive
@@ -199,12 +180,11 @@
     <PackageVersion Include="DependencyInjection.Lifetime.Analyzers" Version="2.18.24" />
     <PackageVersion Include="Excubo.Analyzers.DependencyInjectionValidation" Version="1.0.33" />
     <PackageVersion Include="Excubo.Analyzers.Annotations" Version="1.0.1" />
-      <!-- Serilog — structured logging with file, console, and rolling sinks -->
+    <!-- Serilog — structured logging with file, console, and rolling sinks -->
     <PackageVersion Include="Serilog" Version="4.3.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
-</ItemGroup>
-
+  </ItemGroup>
 </Project>

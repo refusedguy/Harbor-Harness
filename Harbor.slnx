@@ -39,6 +39,12 @@
         <Project Path="src/Harbor.Core/Harbor.Core.csproj"/>
         <Project Path="src/Harbor.Registries/Harbor.Registries.csproj"/>
         <Project Path="src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj"/>
+        <Project Path="src/Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj"/>
     </Folder>
 
     <Folder Name="/src/Providers/">

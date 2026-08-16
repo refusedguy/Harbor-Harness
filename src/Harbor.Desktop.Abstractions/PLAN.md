@@ -6,7 +6,7 @@ Shared view-model base classes + service interfaces for all Harbor desktop apps 
 
 ## Done
 
-- [x] `ViewModelBase` - shared observable base
+- [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels)
 - [x] 10 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ...
 - [x] Service interfaces: `IDispatcherAdapter`, `IThemeService`, `IFilePicker`, `IDialogService`, `IToastService`
 - [x] Harbor.Tui.Abstractions integration (UiStore observable -> VM updates)

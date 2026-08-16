@@ -1,4 +1,6 @@
-﻿using Harbor.Ui.Framework.State;
+﻿using System.Collections.Immutable;
+using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.State;
 using Spectre.Console;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.View;
@@ -22,18 +24,51 @@ internal sealed class ChatChromeView
     /// <summary>Optional override from ChatScreen (key help). Empty → default short footer.</summary>
     public string FooterText { get; set; } = string.Empty;
 
+    public UiStatusBarModel StatusBar { get; set; } = new UiStatusBarModel(ImmutableArray<UiStatusSegment>.Empty);
+
     public IWidget BuildHeader()
     {
-        string route = string.IsNullOrEmpty(Provider) ? "Harbor" : $"{Provider}/{Model}";
-        string agent = string.IsNullOrEmpty(Agent) ? "" : $" · {Agent}";
-        string usage = $"{TokensIn}↑ {TokensOut}↓ · ${Cost:F4}";
-        string left = ChatMarkup.Truncate($"⚓ {route}{agent}", 48);
-        string pill = ChatMarkup.StatusPill(Status);
+        if (StatusBar.Segments.Count == 0)
+        {
+            string route = string.IsNullOrEmpty(Provider) ? "Harbor" : $"{Provider}/{Model}";
+            string agent = string.IsNullOrEmpty(Agent) ? "" : $" · {Agent}";
+            string usage = $"{TokensIn}↑ {TokensOut}↓ · ${Cost:F4}";
+            string left = ChatMarkup.Truncate($"⚓ {route}{agent}", 48);
+            string pill = ChatMarkup.StatusPill(Status);
+            var paragraph = new Paragraph().Alignment(Justify.Left);
+            paragraph.Lines.Add(TextLine.FromMarkup(
+                $"[bold cyan]{ChatMarkup.Escape(left)}[/]  [grey]{ChatMarkup.Escape(usage)}[/]  {pill}"));
+            return paragraph;
+        }
 
-        var p = new Paragraph().Alignment(Justify.Left);
-        p.Lines.Add(TextLine.FromMarkup(
-            $"[bold cyan]{ChatMarkup.Escape(left)}[/]  [grey]{ChatMarkup.Escape(usage)}[/]  {pill}"));
-        return p;
+        var leftSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Left).OrderBy(s => s.Importance).ToList();
+        var centerSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Center).OrderBy(s => s.Importance).ToList();
+        var rightSegments = StatusBar.Segments.Where(s => s.Align == Alignment.Right).OrderByDescending(s => s.Importance).ToList();
+
+        string routeText = string.Join(" ", leftSegments.Select(s => s.Text));
+        string statusText = centerSegments.FirstOrDefault() is { } c ? c.Text : string.Empty;
+        string status = ExtractStatus(statusText);
+        var headerRight = rightSegments.Where(s => s.Importance > 0).ToList();
+        string agentText = headerRight.FirstOrDefault(s => s.Text.StartsWith("agent ", StringComparison.Ordinal)) is { } a ? a.Text["agent ".Length..] : string.Empty;
+        var nonAgentRight = headerRight.Where(s => !s.Text.StartsWith("agent ", StringComparison.Ordinal)).Select(s => s.Text);
+
+        string leftPart = string.IsNullOrEmpty(agentText)
+            ? ChatMarkup.Truncate($"⚓ {routeText}", 48)
+            : ChatMarkup.Truncate($"⚓ {routeText} · {agentText}", 48);
+        string usageText = string.Join(" · ", nonAgentRight);
+        string statusPill = ChatMarkup.StatusPill(status);
+
+        var paragraph2 = new Paragraph().Alignment(Justify.Left);
+        paragraph2.Lines.Add(TextLine.FromMarkup(
+            $"[bold cyan]{ChatMarkup.Escape(leftPart)}[/]  [grey]{ChatMarkup.Escape(usageText)}[/]  {statusPill}"));
+        return paragraph2;
+    }
+
+    private static string ExtractStatus(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return "idle";
+        int lastSpace = text.LastIndexOf(' ');
+        return lastSpace >= 0 ? text[(lastSpace + 1)..] : text;
     }
 
     public IWidget BuildStreamBar(string streamBuffer, string thinkBuffer)

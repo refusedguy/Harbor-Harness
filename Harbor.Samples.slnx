@@ -1,0 +1,47 @@
+<Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/Harbor.App.Blazor/Harbor.App.Blazor.csproj" />
+    <Project Path="apps/Harbor.App.Maui/Harbor.App.Maui.csproj" />
+    <Project Path="apps/Harbor.App.Wpf/Harbor.App.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Harbor.Abstractions/Harbor.Abstractions.csproj" />
+    <Project Path="src/Harbor.Application/Harbor.Application.csproj" />
+    <Project Path="src/Harbor.CodeGen/Harbor.CodeGen.csproj" />
+    <Project Path="src/Harbor.Core/Harbor.Core.csproj" />
+    <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj" />
+    <Project Path="src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj" />
+    <Project Path="src/Harbor.Domain/Harbor.Domain.csproj" />
+    <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj" />
+    <Project Path="src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj" />
+    <Project Path="src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj" />
+    <Project Path="src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj" />
+    <Project Path="src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj" />
+    <Project Path="src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj" />
+    <Project Path="src/Harbor.Plugins.Runtime/Harbor.Plugins.Runtime.csproj" />
+    <Project Path="src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj" />
+    <Project Path="src/Harbor.Registries/Harbor.Registries.csproj" />
+    <Project Path="src/Harbor.Scripting.Abstractions/Harbor.Scripting.Abstractions.csproj" />
+    <Project Path="src/Harbor.Scripting.Bridge/Harbor.Scripting.Bridge.csproj" />
+    <Project Path="src/Harbor.Scripting.Compilation/Harbor.Scripting.Compilation.csproj" />
+    <Project Path="src/Harbor.Scripting.Engines/Harbor.Scripting.Engines.csproj" />
+    <Project Path="src/Harbor.Scripting.Hosting/Harbor.Scripting.Hosting.csproj" />
+    <Project Path="src/Harbor.Scripting.Storage/Harbor.Scripting.Storage.csproj" />
+    <Project Path="src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj" />
+    <Project Path="src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj" />
+    <Project Path="src/Harbor.Tui.Ansi/Harbor.Tui.Ansi.csproj" />
+    <Project Path="src/Harbor.Tui.RazorConsole/Harbor.Tui.RazorConsole.csproj" />
+    <Project Path="src/Harbor.Tui.Sixel/Harbor.Tui.Sixel.csproj" />
+    <Project Path="src/Harbor.Tui.Spectre.Fullscreen/Harbor.Tui.Spectre.Fullscreen.csproj" />
+    <Project Path="src/Harbor.Tui.Termina/Harbor.Tui.Termina.csproj" />
+    <Project Path="src/Harbor.Tui.TerminalGui/Harbor.Tui.TerminalGui.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.Reducers/Harbor.Ui.Framework.Reducers.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj" />
+    <Project Path="src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj" />
+    <Project Path="src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj" />
+  </Folder>
+</Solution>

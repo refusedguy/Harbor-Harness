@@ -17,17 +17,11 @@ internal sealed class SpectreUiViewport : IUiViewport
 
     public void Apply(UiScreenModel screen)
     {
-        _layout.Model = screen.Header.Model;
-        _layout.Provider = screen.Header.Provider;
-        _layout.Agent = screen.Header.AgentName;
-        _layout.Status = screen.Header.IsAgentRunning ? "running" : "idle";
-        _layout.TokensIn = (int)screen.Header.Cost.TokensIn;
-        _layout.TokensOut = (int)screen.Header.Cost.TokensOut;
-        _layout.Cost = screen.Header.Cost.CostUsd;
         _layout.IsStreaming = screen.Header.IsStreaming;
+        _layout.IsReadingInput = !screen.Header.IsAgentRunning;
         _layout.StreamBuffer = GetStreamingText(screen);
         _layout.ThinkBuffer = GetThinkingText(screen);
-        _layout.IsReadingInput = !screen.Header.IsAgentRunning;
+        _layout.StatusBar = screen.StatusBar;
 
         var lines = ExtractLines(screen);
         _layout.SetLines(lines, screen.Header.IsStreaming, ActiveMessage.Empty, 80 - 2);

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Audit: Harbor.Desktop.Abstractions</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 0 auto; padding: 24px; color: #1a1a1a; }
+  h1 { font-size: 1.4em; border-bottom: 2px solid #111; padding-bottom: 8px; }
+  h2 { font-size: 1.15em; margin-top: 28px; }
+  .summary { background: #f6f8fa; border-left: 4px solid #0969da; padding: 14px 18px; margin: 16px 0; }
+  .file { border: 1px solid #d0d7de; border-radius: 8px; padding: 16px; margin: 16px 0; }
+  .file h3 { margin: 0 0 10px; font-size: 1.05em; }
+  .issue { margin: 8px 0; padding: 10px 12px; border-radius: 6px; }
+  .issue.severe { background: #ffebe9; border-left: 4px solid #cf222e; }
+  .issue.moderate { background: #fff8c5; border-left: 4px solid #9a6700; }
+  .issue.info { background: #dafbe1; border-left: 4px solid #1a7f37; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; margin-right: 6px; }
+  .tag.srp { background: #ffdce0; color: #cf222e; }
+  .tag.rop { background: #eaeef2; color: #57606a; }
+  .tag.gof { background: #d4eeff; color: #0969da; }
+  .tag.dep { background: #fff8c5; color: #9a6700; }
+  .tag.empty { background: #ffebe9; color: #cf222e; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #d0d7de; font-size: 0.95em; }
+  th { background: #f6f8fa; }
+</style>
+</head>
+<body>
+
+<h1>Аудит архитектуры: Harbor.Desktop.Abstractions</h1>
+<p><strong>Дата:</strong> 2026-08-12 &nbsp;|&nbsp; <strong>Объект:</strong> <code>src/Harbor.Desktop.Abstractions/</strong></p>
+
+<div class="summary">
+  <strong>Executive Summary</strong><br>
+  Слой абстракций десктопа в целом соответствует контракту «UI-framework-agnostic»: ни в одном файле не обнаружено утечек платформо-специфичных типов (Avalonia/WPF/MAUI/Blazor). 
+  Критическая проблема — <strong>God Class</strong> в <code>MainViewModelBase</code> (27+ observable-свойств, 8 relay-команд, анимация стоимости, стек оверлеев и проекция статусбара в одном классе). 
+  Дополнительно обнаружен <strong>полностью пустой файл</strong> <code>OnboardingViewModelBase.cs</code>, что является архитектурным мусором. 
+  Замечаний по принципам <strong>ROP</strong>, <strong>Newtonsoft.Json</strong>, <strong>EF Core</strong> и <strong>unsafe</strong> нет. Найдено 0 <code>TODO(principles)</code>.
+</div>
+
+<h2>Сводная таблица</h2>
+<table>
+  <tr><th>Файл</th><th>SRP</th><th>Платформа</th><th>ROP</th><th>GoF</th><th>Примечание</th></tr>
+  <tr>
+    <td>MainViewModelBase.cs</td>
+    <td><span class="tag severe">SEVERE</span></td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>Strategy, Observer</td>
+    <td>God Class; 27+ свойств, стек оверлеев, команды, анимация</td>
+  </tr>
+  <tr>
+    <td>ChatViewModelBase.cs</td>
+    <td><span class="tag moderate">MODERATE</span></td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>Observer (partial INPC)</td>
+    <td>Смешение контента, жестов (pull-to-refresh) и зума</td>
+  </tr>
+  <tr>
+    <td>CodeEditorViewModelBase.cs</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>—</td>
+    <td>Чистая абстракция, без проблем</td>
+  </tr>
+  <tr>
+    <td>CommandPaletteViewModelBase.cs</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td><span class="tag moderate">WARN</span></td>
+    <td>Command</td>
+    <td>Fuzzy-фильтр на UI-потоке; молчаливое swallowed exceptions</td>
+  </tr>
+  <tr>
+    <td>OnboardingViewModelBase.cs</td>
+    <td><span class="tag severe">SEVERE</span></td>
+    <td>—</td>
+    <td>—</td>
+    <td>—</td>
+    <td>Пустой файл — архитектурный мусор</td>
+  </tr>
+  <tr>
+    <td>OnboardingProviderOption.cs</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>Value Object</td>
+    <td>Чистый record, без проблем</td>
+  </tr>
+  <tr>
+    <td>*.csproj</td>
+    <td>—</td>
+    <td>OK</td>
+    <td>OK</td>
+    <td>—</td>
+    <td>Зависимости в порядке; suppressed MA0046 оправдан комментарием</td>
+  </tr>
+</table>
+
+<h2>Per-file findings</h2>
+
+<div class="file">
+  <h3>MainViewModelBase.cs</h3>
+  <div class="issue severe">
+    <span class="tag srp">SRP</span> <strong>God Class (SEVERE).</strong> 
+    Класс одновременно является: (1) проекцией статусбара, (2) менеджером стеков оверлеев, (3) флагами sidebar/drawer, (4) hosting-ом 8 relay-команд, (5) аниматором стоимости/длительности, (6) хранителем истории токенов, (7) toggle-ом темы. 
+    Рекомендация: разбить на <code>ShellOverlayState</code> (стек + флаги), <code>StatusBarProjection</code> (статус/токены/стоимость) и <code>ShellCommands</code> (только команды).
+  </div>
+  <div class="issue moderate">
+    <span class="tag gof">GoF</span> <strong>Strategy через словарь.</strong> 
+    <code>OverlayIdToFlagProperty</code> + <code>OverlayFlagSetters</code> — это data-driven Strategy, что приемлемо, но инкапсулировано как package-private статические словари. 
+    Если набор оверлеев будет расти, лучше вынести в <code>IOverlayDescriptorRegistry</code>.
+  </div>
+  <div class="issue info">
+    <span class="tag rop">ROP</span> Исключений нет, но метод <code>CloseOverlayViaFlag</code> возвращает <code>void</code> и молча игнорирует неизвестные id. 
+    Для базового класса это допустимо, но derived VM не узнаёт об ошибке.
+  </div>
+</div>
+
+<div class="file">
+  <h3>ChatViewModelBase.cs</h3>
+  <div class="issue moderate">
+    <span class="tag srp">SRP</span> <strong>Смешение ответственностей (MODERATE).</strong> 
+    В одном классе ужимаются: (1) контент чата (<code>Lines</code>, <code>ToolCalls</code>, <code>StreamingBuffer</code>), (2) UX-жесты (<code>PullProgress</code>, <code>PullOffset</code>, <code>IsLoadingHistory</code>), (3) зум (<code>ContentScale</code>), (4) контекстные suggestions. 
+    Жесты и зум — это скорее ответственность <code>ChatViewShell</code> или отдельного <code>ChatGestureViewModel</code>.
+  </div>
+  <div class="issue info">
+    <span class="tag gof">GoF</span> Partial-method <code>OnIsThinkingChanged</code> и т.д. — это lawful использование source-gen Observer из CommunityToolkit.Mvvm, без проблем.
+  </div>
+</div>
+
+<div class="file">
+  <h3>CodeEditorViewModelBase.cs</h3>
+  <div class="issue info">Классы минимальные и сфокусированные. Нарушений не обнаружено. Документация корректно отмечает, что синтаксис-подсветка живёт в platform-подклассе.</div>
+</div>
+
+<div class="file">
+  <h3>CommandPaletteViewModelBase.cs</h3>
+  <div class="issue moderate">
+    <span class="tag rop">ROP</span> <strong>Молчаливое swallowed exceptions.</strong> 
+    <code>InvokeSelected</code> оборачивает <code>cmd.Action.Invoke()</code> в try/catch и только логирует. 
+    В UI-контексте это нормально, но запись <code>CommandResultViewModel</code> с типом <code>Action</code> не позволяет derived VM вернуть <code>Result</code> или показать ошибку пользователю через binding. 
+    Рекомендация: заменить <code>Action</code> на <code>Func&lt;Result&gt;</code> или <code>Func&lt;Task&lt;Result&gt;&gt;</code>.
+  </div>
+  <div class="issue moderate">
+    <span class="tag dep">PERF</span> <strong>Fuzzy-фильтр на UI-потоке.</strong> 
+    <code>Refilter</code> выполняется внутри <code>_dispatcher.Post</code>. При 1000+ командах это блокирует рендер. 
+    Рекомендация: вынести фильтрацию и сортировку в фоновый поток, а в <code>Post</code> — только финальное обновление <code>Results</code>.
+  </div>
+</div>
+
+<div class="file">
+  <h3>OnboardingViewModelBase.cs</h3>
+  <div class="issue severe">
+    <span class="tag empty">EMPTY</span> <strong>Полностью пустой файл (SEVERE).</strong> 
+    0 строк кода. Если класс задуман как future placeholder, это архитектурный мусор, который загрязняет индексацию и CI- coverage. 
+    Рекомендация: удалить файл до появления реализации, или добавить минимальный abstract-класс с комментарием <code>TODO(principles)</code>.
+  </div>
+</div>
+
+<div class="file">
+  <h3>OnboardingProviderOption.cs</h3>
+  <div class="issue info">Чистый record с иммутабельными свойствами. Нарушений нет. Использует <code>ObservableObject</code> для <code>IsSelected</code>, что оправдано для checkbox-привязки.</div>
+</div>
+
+<div class="file">
+  <h3>Harbor.Desktop.Abstractions.csproj</h3>
+  <div class="issue info">
+    <strong>Зависимости:</strong> <code>Harbor.Abstractions</code>, <code>Harbor.Core</code>, <code>Harbor.Terminal.Abstractions</code> + <code>CommunityToolkit.Mvvm</code>, <code>Microsoft.Extensions.Logging.Abstractions</code>, <code>CSharpFunctionalExtensions</code>. 
+    Направление зависимостей соответствует заявленному контракту. 
+    <code>AllowUnsafeBlocks=false</code> + подавление <code>MA0046</code> — оба оправданы комментариями.
+  </div>
+</div>
+
+<h2>Рекомендации по исправлению (приоритет)</h2>
+<ol>
+  <li><strong>P0 — Удалить пустой файл</strong> <code>OnboardingViewModelBase.cs</code> или реализовать минимальный abstract class.</li>
+  <li><strong>P1 — Разбить MainViewModelBase</strong> на 2–3 класса по SRP (OverlayState, StatusBarProjection, ShellCommands). Это уберёт God Class и упростит unit-тестирование.</li>
+  <li><strong>P2 — Разделить ChatViewModelBase</strong>: вынести pull-to-refresh и content-scale в отдельный <code>ChatGestureViewModel</code>.</li>
+  <li><strong>P3 — Refactor CommandPalette</strong>: заменить <code>Action</code> на <code>Func&lt;Result&gt;</code> и вынести fuzzy-фильтрацию за пределы UI-потока.</li>
+</ol>
+
+<h2>Что проверялось</h2>
+<ul>
+  <li>SOLID (особенно SRP) — по фактуResponsibilities каждого класса</li>
+  <li>Платформо-специфичные зависимости (Avalonia/WPF/MAUI/Blazor) — только комментарии, кода нет</li>
+  <li>TODO(principles) — 0 найдено</li>
+  <li>Запрещённые паттерны: Newtonsoft.Json — нет; EF Core — нет; unsafe — нет</li>
+  <li>GoF паттерны: Strategy, Observer, Command, Value Object</li>
+  <li>ROP: исключения vs Result&lt;T&gt; — критичных нарушений нет</li>
+</ul>
+
+</body>
+</html>

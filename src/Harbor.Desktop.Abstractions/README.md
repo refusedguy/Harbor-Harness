@@ -5,12 +5,14 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
 
 ## What's shared
 
-- **Base view-models** (`ViewModels/`): `ViewModelBase`, `ChatViewModelBase`,
+- **Base view-models** (`ViewModels/`): `ChatViewModelBase`,
   `SessionListViewModelBase`, `ProviderBrowserViewModelBase`,
   `SettingsViewModelBase`, `CodeEditorViewModelBase`, `DiffViewModelBase`,
   `TokenUsageViewModelBase`, `CommandPaletteViewModelBase`,
   `ToastNotificationViewModelBase`. Each holds the observable state for its
   screen; platform VMs derive from these and add platform-specific bindings.
+  All derive from <see cref="Harbor.Ui.Framework.ViewModels.StoreSubscriberViewModel" />,
+  which provides store-subscription + selector-based projection.
 - **Service interfaces** (`Services/`): `IDispatcherAdapter`, `IThemeService`,
   `IFilePicker`, `IDialogService`, `IToastService`. Each platform implements
   these with its own native primitive.
@@ -39,7 +41,6 @@ public sealed partial class ChatViewModel : ChatViewModelBase
 {
     private readonly UiStore _store;
     private readonly TuiEffectHost _effects;
-    private readonly IDispatcherAdapter _dispatcher;
     private readonly IToastService _toasts;
 
     public ChatViewModel(
@@ -48,11 +49,10 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         IDispatcherAdapter dispatcher,
         IToastService toasts,
         ILogger<ChatViewModel> logger)
-        : base(logger)
+        : base(dispatcher, logger)
     {
         _store = store;
         _effects = effects;
-        _dispatcher = dispatcher;
         _toasts = toasts;
     }
 

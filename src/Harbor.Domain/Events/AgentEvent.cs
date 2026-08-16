@@ -120,6 +120,11 @@ public sealed record SessionStatsEvent(
     SessionMetadata Metadata) : AgentEvent;
 
 /// <summary>
+///     Emitted when the active session changes (user switches context).
+/// </summary>
+public sealed record SessionChangedEvent(string SessionId) : AgentEvent;
+
+/// <summary>
 ///     Streaming event from LLM provider. Mapped to <see cref="MessageUpdateEvent" /> by agent loop.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
