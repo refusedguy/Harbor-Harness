@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Sessions;
+using Harbor.Core.Sessions;
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
@@ -65,20 +67,20 @@ public sealed class CompactionService : ICompactionService
     private readonly ILogger<CompactionService> _logger;
     private readonly IProviderRegistry _providers;
 
-    private readonly ITokenEstimator _tokenEstimator;
+    private readonly ITokenTracker _tokenTracker;
 
     /// <summary>
     ///     Construct a <see cref="CompactionService" /> wired to the supplied services.
     /// </summary>
-    /// <param name="tokenEstimator">The token estimator used to decide when to compact.</param>
+    /// <param name="tokenTracker">The token tracker used to estimate tokens and decide when to compact.</param>
     /// <param name="providers">The provider registry for invoking the summarization LLM call.</param>
     /// <param name="logger">The logger.</param>
     public CompactionService(
-        ITokenEstimator tokenEstimator,
+        ITokenTracker tokenTracker,
         IProviderRegistry providers,
         ILogger<CompactionService> logger)
     {
-        _tokenEstimator = tokenEstimator;
+        _tokenTracker = tokenTracker;
         _providers = providers;
         _logger = logger;
     }
@@ -101,7 +103,7 @@ public sealed class CompactionService : ICompactionService
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
-        int estimated = _tokenEstimator.EstimateMessages(messages);
+        int estimated = _tokenTracker.EstimateTokens(messages);
         return estimated > model.ContextWindow - ReserveTokens;
     }
 
@@ -167,9 +169,9 @@ public sealed class CompactionService : ICompactionService
             int headTokens = 0;
             for (int i = 0; i < tailStart; i++)
             {
-                headTokens += _tokenEstimator.EstimateMessage(messages[i]);
+                headTokens += _tokenTracker.EstimateMessage(messages[i]);
             }
-            int summaryTokens = _tokenEstimator.Estimate(summary);
+            int summaryTokens = _tokenTracker.Estimate(summary);
             int tokensSaved = headTokens - summaryTokens;
 
             // 5. Capture first kept (tail) message id (if any) without allocating a Skip().FirstOrDefault().
@@ -219,7 +221,7 @@ public sealed class CompactionService : ICompactionService
 
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            int msgTokens = _tokenEstimator.EstimateMessage(messages[i]);
+            int msgTokens = _tokenTracker.EstimateMessage(messages[i]);
             if (tailTokens + msgTokens > keepRecentTokens)
             {
                 break;

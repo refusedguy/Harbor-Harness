@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Agents;
@@ -41,6 +42,9 @@ namespace Harbor.Core.Agents;
 /// </remarks>
 internal sealed class ToolDispatcher
 {
+    private static readonly ActivitySource Source = new("Harbor");
+    private const string ToolNameTag = "gen_ai.tool.name";
+
     private readonly IEventBus _eventBus;
 #pragma warning disable S6672 // Logger category should match enclosing type — ToolDispatcher is internal, sharing AgentLoop's logger is fine
     private readonly ILogger<AgentLoop> _logger;
@@ -159,6 +163,8 @@ internal sealed class ToolDispatcher
         AgentDefinition agent,
         CancellationToken ct)
     {
+        using var activity = Source.StartActivity("Tool.Execute");
+        activity?.SetTag(ToolNameTag, toolCall.ToolName);
         var toolNameResult = ToolName.TryCreate(toolCall.ToolName);
         if (toolNameResult.IsFailure)
         {
@@ -205,6 +211,7 @@ internal sealed class ToolDispatcher
             var validation = tool.ValidateArguments(toolCall.Args);
             if (validation.IsFailure)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
                 var invalid = ToolResult.Error(validation.Error);
                 await _eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, invalid, true), ct).ConfigureAwait(false);
@@ -217,6 +224,7 @@ internal sealed class ToolDispatcher
 
             if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
                 var denied = ToolResult.Error("Permission denied");
                 await _eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, denied, true), ct).ConfigureAwait(false);
@@ -282,6 +290,8 @@ internal sealed class ToolDispatcher
         }
         catch (Exception ex)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
             _logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             var errored = ToolResult.Error($"Tool execution failed: {ex.Message}");
             await _eventBus.PublishAsync(new ToolExecutionEndEvent(

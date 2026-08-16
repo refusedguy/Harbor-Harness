@@ -1,4 +1,7 @@
+using Harbor.Abstractions.Sessions;
+using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
+using Harbor.Core.Telemetry;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Agents;
 /// <summary>
@@ -23,9 +26,10 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ILogger<AgentLoop> _logger;
     private readonly MessageConverter _messageConverter;
     private readonly IPermissionService _permissions;
+    private readonly IRetryPolicy _retryPolicy;
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
-    private readonly ITokenEstimator _tokenEstimator;
+    private readonly ITokenTracker _tokenTracker;
     private readonly ToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
 
@@ -38,7 +42,8 @@ public sealed class AgentLoop : IAgentLoop
         IAgentRegistry agents,
         ISystemPromptBuilder promptBuilder,
         ICompactionService compaction,
-        ITokenEstimator tokenEstimator,
+        ITokenTracker tokenTracker,
+        IRetryPolicy retryPolicy,
         IEventBus eventBus,
         IPermissionService permissions,
         MessageConverter messageConverter,
@@ -49,7 +54,8 @@ public sealed class AgentLoop : IAgentLoop
         _agents = agents;
         _promptBuilder = promptBuilder;
         _compaction = compaction;
-        _tokenEstimator = tokenEstimator;
+        _tokenTracker = tokenTracker;
+        _retryPolicy = retryPolicy;
         _eventBus = eventBus;
         _permissions = permissions;
         _messageConverter = messageConverter;
@@ -68,6 +74,9 @@ public sealed class AgentLoop : IAgentLoop
     /// <returns>Success on normal completion, or failure with an error message.</returns>
     public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
     {
+        using var activity = HarborTelemetry.Source.StartActivity("Agent.Run");
+        activity?.SetTag(GenAiTags.AgentName, agent.Name.Value);
+        activity?.SetTag(GenAiTags.RequestModel, agent.Model);
         try
         {
             _logger.LogInformation("Agent loop starting: agent={Agent}", agent.Name.Value);
@@ -101,8 +110,9 @@ public sealed class AgentLoop : IAgentLoop
                 await _eventBus.PublishAsync(new TurnStartEvent(turn), ct).ConfigureAwait(false);
 
                 // 2. Compaction check
-                if (_compaction.ShouldCompact(session.Messages, model))
+                if (_tokenTracker.ShouldCompact(session.Messages, model))
                 {
+                    using var compactionActivity = HarborTelemetry.Source.StartActivity("Compaction");
                     _logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
                     await _eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
                     var compactionResult = await _compaction.CompactAsync(session.Session.Id, session.Messages, model, ct).ConfigureAwait(false);
@@ -284,6 +294,7 @@ public sealed class AgentLoop : IAgentLoop
                 await session.AppendMessageAsync(partial, ct).ConfigureAwait(false);
                 if (finalUsage != null)
                 {
+                    _tokenTracker.RecordTurnUsage(finalUsage);
                     await session.UpdateStatsAsync(finalUsage, ct).ConfigureAwait(false);
                 }
 
@@ -332,6 +343,7 @@ public sealed class AgentLoop : IAgentLoop
         }
         catch (Exception ex)
         {
+            activity?.AddException(ex);
             _logger.LogError(ex, "Agent loop failed");
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
