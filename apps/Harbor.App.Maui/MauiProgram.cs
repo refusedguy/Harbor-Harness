@@ -80,7 +80,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPermissionService, PermissionService>();
         builder.Services.AddSingleton<ISessionStore, MemorySessionStore>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
-        builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
+        builder.Services.AddSingleton<ITokenTracker, TokenTracker>();
         builder.Services.AddSingleton<MessageConverter>();
         builder.Services.AddSingleton<ICompactionService, CompactionService>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();

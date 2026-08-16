@@ -1,15 +1,24 @@
+using Harbor.App.Avalonia.Navigation;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Board;
 using Harbor.Desktop.Shared.Locators;
+using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Ui.Framework.Animation;
+using Harbor.Ui.Framework.Navigation;
+using Harbor.Ui.Framework.Overlays;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using CommunityToolkit.Mvvm.Messaging;
 namespace Harbor.App.Avalonia.Hosting;
 /// <summary>
 ///     View-model registration — long-lived shell VMs are Singletons so
 ///     that resolves are stable across the app lifetime. Transient
 ///     resolution of MainViewModel was a DeepSeek-flagged bug:
-///     CommandPaletteViewModel resolves MainViewModel on every command
-///     invocation, and a transient MainViewModel meant each invocation got
-///     a fresh shell with no bound ChatViewModel/Sessions/etc.
+///     CommandPaletteViewModel has a direct constructor dependency on
+///     MainViewModel (via DI), and a transient MainViewModel meant each
+///     invocation got a fresh shell with no bound ChatViewModel/Sessions/etc.
+///     The MainViewModel↔CommandPaletteViewModel cycle is broken via
+///     Lazy&lt;CommandPaletteViewModel&gt; in MainViewModel.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -24,6 +33,13 @@ namespace Harbor.App.Avalonia.Hosting;
 ///         a singleton because MainViewModel pushes RecordUsage calls on
 ///         every UiStore transition and SessionManager resolves the same
 ///         instance to call Clear() on session switch.
+///     </para>
+///     <para>
+///         <see cref="IContentHost"/> is the renderer-agnostic contract from
+///         <see cref="Harbor.Ui.Framework.Navigation"/>. The Avalonia
+///         implementation (<see cref="AvaloniaContentHost"/>) aggregates the
+///         shell view-models so <see cref="MainViewModel"/> no longer needs
+///         11 individual constructor parameters.
 ///     </para>
 /// </remarks>
 internal static class ViewModelRegistration
@@ -47,31 +63,44 @@ internal static class ViewModelRegistration
         // so MainViewModel keeps it updated.
         services.AddSingleton<ShellStatus>();
 
-        // Singleton cluster — shell VMs reference each other.
+        services.AddSingleton<OverlayController>();
+        services.AddSingleton<CostAnimator>();
+
+        services.AddSingleton<IContentHost, AvaloniaContentHost>();
+        services.AddSingleton<AvaloniaContentHost>();
+
+        services.AddSingleton(sp => new ShellInfrastructure(
+            sp.GetRequiredService<IDispatcherAdapter>(),
+            sp.GetRequiredService<ILogger<MainViewModel>>(),
+            sp.GetRequiredService<IThemeService>(),
+            sp.GetRequiredService<IToastService>(),
+            sp.GetRequiredService<TuiEffectHost>(),
+            sp.GetRequiredService<OverlayController>(),
+            sp.GetRequiredService<CostAnimator>(),
+            sp.GetRequiredService<IMessenger>(),
+            sp.GetRequiredService<ShellStatus>()));
+
+        // ContentHost aggregates shell VMs so MainViewModel only needs
+        // one navigation dependency instead of 11 individual view-model
+        // parameters. Register the host BEFORE MainViewModel so DI can
+        // resolve its constructor.
+        // ShellInfrastructure groups the remaining shell services.
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<ChatViewModel>();
         services.AddSingleton<SessionListViewModel>();
         services.AddSingleton<CommandPaletteViewModel>();
         services.AddSingleton<BoardViewModel>();
 
-        // Transient — per-document VMs the user may discard on close.
-        services.AddTransient<ProviderBrowserViewModel>();
-        services.AddTransient<ProviderModelPickerViewModel>();
-        services.AddTransient<SettingsViewModel>();
-        services.AddTransient<CodeEditorViewModel>();
-        services.AddTransient<DiffViewModel>();
+        services.AddSingleton<Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel>();
+        services.AddSingleton<Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel>();
+        services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<CodeEditorViewModel>();
+        services.AddSingleton<Harbor.Desktop.Abstractions.ViewModels.DiffViewModel>();
 
-        // Singleton: MainViewModel holds the instance and pushes RecordUsage
-        // calls on every UiStore transition. SessionManager resolves the
-        // same instance to call Clear() on session switch so the chart
-        // reflects only the active session's tokens (Task S2 / Problem 3).
         services.AddSingleton<TokenUsageViewModel>();
 
-        // Onboarding VM is transient — created fresh each time the wizard runs
-        // (first launch, or re-run from Settings). Holds per-run state (current
-        // step, typed API key) that we explicitly want to discard on close.
-        services.AddTransient<OnboardingViewModel>();
+        services.AddTransient<Harbor.App.Avalonia.ViewModels.OnboardingViewModel>();
 
-        services.AddTransient<FocusSessionViewModel>();
+        services.AddSingleton<Harbor.App.Avalonia.ViewModels.FocusSessionViewModel>();
     }
 }

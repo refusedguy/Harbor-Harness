@@ -58,7 +58,7 @@ internal static class AppHost
     /// <returns>A started <see cref="IHost" />. Dispose on shutdown.</returns>
     // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
     // (EDI01–EDI04) and exercised at runtime by Harbor.App.Avalonia.Tests/AppHostDiTests.cs.
-    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(ITokenTracker))]
     [Exposes(typeof(IEventBus))]
     [Exposes(typeof(ISystemPromptBuilder))]
     [Exposes(typeof(MessageConverter))]

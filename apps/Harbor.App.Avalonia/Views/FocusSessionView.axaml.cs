@@ -2,7 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 
 public partial class FocusSessionView : UserControl
@@ -24,14 +25,9 @@ public partial class FocusSessionView : UserControl
 
     private void CloseModal()
     {
-        if (ResolveMainViewModel() is { } main)
-            main.IsFocusSessionOpen = false;
+        ShellChrome.CloseOverlay("focusSession");
     }
 
-    private MainViewModel? ResolveMainViewModel()
-    {
-        if (TopLevel.GetTopLevel(this) is Window window)
-            return window.DataContext as MainViewModel;
-        return null;
-    }
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }

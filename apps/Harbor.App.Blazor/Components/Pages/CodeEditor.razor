@@ -1,4 +1,5 @@
 @page "/code"
+@using Harbor.Desktop.Abstractions.ViewModels
 @inject HarborJsInterop Js
 
 <h1>Code Editor</h1>
@@ -6,7 +7,7 @@
 
 <div class="editor-toolbar">
     <label>Language:
-        <select class="select-input" @bind="_language">
+        <select class="select-input" @bind="VM.Language">
             <option value="markdown">Markdown</option>
             <option value="csharp">C#</option>
             <option value="typescript">TypeScript</option>
@@ -22,8 +23,8 @@
 </div>
 
 <MonacoEditor @ref="_editor"
-              Value="@_value"
-              Language="@_language"
+              Value="@VM.Content"
+              Language="@VM.Language"
               Theme="vs-dark"
               Height="560px"/>
 
@@ -43,26 +44,7 @@
 
 @code {
 private MonacoEditor? _editor;
-private string _value = @"// Welcome to the Harbor code editor.
-// This wraps the Monaco editor via JS interop.
-
-using System;
-
-Console.WriteLine(""Hello, Harbor!"");
-
-public static class Fibonacci
-{
-    public static IEnumerable<int> Stream()
-    {
-        int a = 0, b = 1;
-        while (true)
-        {
-            yield return a;
-            (a, b) = (b, a + b);
-        }
-    }
-}";
-private string _language = "csharp";
+private readonly MonacoEditorViewModel VM = new();
 
 protected override async Task OnAfterRenderAsync(bool firstRender)
 {
@@ -70,7 +52,7 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Wait a tick to ensure Monaco has initialised.
         await Task.Delay(100);
-        await _editor.SetLanguageAsync(_language);
+        await _editor.SetLanguageAsync(VM.Language);
     }
 }
 
@@ -78,13 +60,15 @@ private async Task SaveAsync()
 {
     if (_editor is null) return;
     var current = await _editor.GetValueAsync().ConfigureAwait(false);
-    _value = current;
+    VM.Content = current;
+    await VM.SaveAsync().ConfigureAwait(false);
 }
 
 private async Task CopyAsync()
 {
     if (_editor is null) return;
     var current = await _editor.GetValueAsync().ConfigureAwait(false);
-    await Js.CopyToClipboardAsync(current).ConfigureAwait(false);
+    VM.Content = current;
+    await VM.CopyAsync(text => Js.CopyToClipboardAsync(text).AsTask()).ConfigureAwait(false);
 }
 }

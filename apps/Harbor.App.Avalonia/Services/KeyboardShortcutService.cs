@@ -1,6 +1,5 @@
 using Avalonia.Input;
-using Harbor.App.Avalonia.ViewModels;
-using Harbor.Ui.Framework.Services;
+using Harbor.Ui.Framework.Navigation;
 namespace Harbor.App.Avalonia.Services;
 /// <summary>
 ///     Centralised keyboard-shortcut dispatcher for the main window. Every
@@ -15,74 +14,67 @@ namespace Harbor.App.Avalonia.Services;
 ///     <see cref="HandleKeyDown" /> with a synthetic <see cref="KeyEventArgs" />
 ///     instead of driving a real Avalonia input pump.
 /// </remarks>
-internal sealed class KeyboardShortcutService
+public sealed class KeyboardShortcutService
 {
-    private readonly IOverlayStack _overlayStack;
+    private readonly IShellChrome _shellChrome;
+    private readonly IWorkspaceCommands _workspaceCommands;
 
-    public KeyboardShortcutService()
-        : this(new OverlayStackService())
+    public KeyboardShortcutService(IShellChrome shellChrome, IWorkspaceCommands workspaceCommands)
     {
+        _shellChrome = shellChrome;
+        _workspaceCommands = workspaceCommands;
     }
 
-    public KeyboardShortcutService(IOverlayStack overlayStack)
+    public bool HandleKeyDown(KeyEventArgs e)
     {
-        _overlayStack = overlayStack;
-    }
-
-    public bool HandleKeyDown(MainViewModel? vm, KeyEventArgs e)
-    {
-        if (vm is null) return false;
-
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
-        // Esc → close the topmost overlay via the view-model's stack-aware
-        // close routine. The service itself does not inspect flags; MainViewModel
-        // owns the overlay lifecycle end to end.
+        // Esc → close the topmost overlay via the shell chrome.
         if (e.Key == Key.Escape)
         {
-            return vm.CloseTopOverlay();
+            return _shellChrome.CloseTopOverlay();
         }
 
         // Ctrl+P / Ctrl+Shift+P → command palette.
         if (ctrl && e.Key == Key.P)
         {
-            vm.OpenCommandPaletteCommand.Execute(null);
+            _shellChrome.OpenOverlay("palette");
             return true;
         }
 
         // Ctrl+B → toggle sidebar.
         if (ctrl && e.Key == Key.B)
         {
-            vm.ToggleSidebarCommand.Execute(null);
+            _shellChrome.ToggleSidebar();
             return true;
         }
 
         // Ctrl+Shift+T → toggle theme.
         if (ctrl && shift && e.Key == Key.T)
         {
-            vm.ToggleThemeCommand.Execute(null);
+            _shellChrome.ToggleTheme();
             return true;
         }
 
         // Ctrl+O → open file.
         if (ctrl && e.Key == Key.O)
         {
-            _ = vm.CodeEditor.OpenFileCommand.ExecuteAsync(null);
+            _ = _workspaceCommands.OpenFileAsync();
             return true;
         }
 
         // Ctrl+S → save file.
         if (ctrl && e.Key == Key.S)
         {
-            _ = vm.CodeEditor.SaveCommand.ExecuteAsync(null);
+            _ = _workspaceCommands.SaveFileAsync();
             return true;
         }
 
         // Ctrl+L → clear chat.
         if (ctrl && e.Key == Key.L)
         {
-            vm.Chat.ClearCommand.Execute(null);
+            _workspaceCommands.ClearChat();
             return true;
         }
 

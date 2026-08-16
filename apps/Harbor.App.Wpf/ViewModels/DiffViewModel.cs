@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Side-by-side diff view model. Renders a list of hunks; each hunk has
@@ -71,19 +72,16 @@ public sealed partial class DiffViewModel : ObservableObject
 }
 
 /// <summary>
-///     A single diff hunk (a contiguous block of changed lines).
+///     A single line in a diff hunk. Platform extension of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.DiffLineViewModel" /> record —
+///     adds the WPF <see cref="Brush" />es for the line (the canonical color key
+///     lives on the shared record as <c>LineBrushKey</c>).
 /// </summary>
-/// <param name="Header">Hunk header (e.g. <c>@@ -10,5 +10,7 @@</c>).</param>
-/// <param name="Lines">Lines in the hunk.</param>
-public sealed record DiffHunkViewModel(string Header, IReadOnlyList<DiffLineViewModel> Lines);
-
-/// <summary>
-///     A single line in a diff hunk.
-/// </summary>
-/// <param name="Text">Line text.</param>
-/// <param name="Kind">Line kind (added, removed, context).</param>
-public sealed record DiffLineViewModel(string Text, DiffLineKind Kind)
+public sealed partial class DiffLineViewModel : Harbor.Desktop.Abstractions.ViewModels.DiffLineViewModel
 {
+    /// <summary>Construct a <see cref="DiffLineViewModel" />.</summary>
+    public DiffLineViewModel(string text, DiffLineKind kind) : base(text, kind) { }
+
     /// <summary>Background brush for the line based on its kind.</summary>
     public Brush LineBackground => Kind switch
     {
@@ -101,15 +99,16 @@ public sealed record DiffLineViewModel(string Text, DiffLineKind Kind)
     };
 }
 
-/// <summary>Kind of diff line.</summary>
-public enum DiffLineKind
+/// <summary>
+///     A single diff hunk (a contiguous block of changed lines). Platform
+///     projection of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.DiffHunkViewModel" /> record (kept
+///     in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it). The
+///     canonical data lives on the shared record.
+/// </summary>
+public sealed class DiffHunkViewModel : Harbor.Desktop.Abstractions.ViewModels.DiffHunkViewModel
 {
-    /// <summary>Unchanged context line.</summary>
-    Context,
-
-    /// <summary>Added line (appears only on the right side).</summary>
-    Added,
-
-    /// <summary>Removed line (appears only on the left side).</summary>
-    Removed
+    /// <summary>Construct a <see cref="DiffHunkViewModel" />.</summary>
+    public DiffHunkViewModel(string header, IReadOnlyList<DiffLineViewModel> lines)
+        : base(header, lines) { }
 }

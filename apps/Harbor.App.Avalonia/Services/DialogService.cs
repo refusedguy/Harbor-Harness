@@ -196,7 +196,7 @@ public sealed class ToastService : IToastService
     /// <param name="kind">Toast kind (Info, Success, Warning, Error).</param>
     public void Show(string message, ToastKind kind = ToastKind.Info)
     {
-        var toast = new ToastNotification(Guid.NewGuid(), message, kind, DateTimeOffset.UtcNow);
+        var toast = new ToastNotification(message, kind);
         _logger.LogInformation("Toast [{Kind}]: {Message}", kind, message);
         ToastAdded?.Invoke(this, toast);
     }

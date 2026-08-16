@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels;
@@ -33,10 +34,8 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         _dispatcher = dispatcher;
     }
 
-    /// <summary>Open editor tabs.</summary>
     public ObservableCollection<EditorTabViewModel> Tabs { get; } = new();
 
-    /// <summary>Open a file picker and load the chosen file into a new tab.</summary>
     [RelayCommand]
     private async Task OpenFileAsync()
     {
@@ -48,8 +47,6 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
     }
 
-    /// <summary>Load a specific file path into a new tab.</summary>
-    /// <param name="path">File path to load.</param>
     public async Task LoadFileAsync(string path)
     {
         try
@@ -77,7 +74,6 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
     }
 
-    /// <summary>Save the active tab to disk.</summary>
     [RelayCommand]
     private async Task SaveAsync()
     {
@@ -96,7 +92,6 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         }
     }
 
-    /// <summary>Save the active tab under a new file name.</summary>
     [RelayCommand]
     private async Task SaveAsAsync()
     {
@@ -108,7 +103,6 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         await SaveAsync();
     }
 
-    /// <summary>Close the active tab.</summary>
     [RelayCommand]
     private void CloseTab(EditorTabViewModel? tab)
     {
@@ -121,35 +115,15 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     }
 }
 
-/// <summary>One editor tab — file path, name, extension, content, dirty flag.</summary>
-public sealed partial class EditorTabViewModel : ObservableObject
+/// <summary>One editor tab — file path, name, extension, content, dirty flag. Inherits shared model; adds AvaloniaEdit-specific SyntaxName.</summary>
+public sealed partial class EditorTabViewModel : Harbor.Desktop.Abstractions.ViewModels.EditorTabViewModel
 {
-
-    [ObservableProperty]
-    private string _content;
-
-    [ObservableProperty]
-    private bool _isDirty;
-    /// <summary>Construct an editor tab.</summary>
     public EditorTabViewModel(string filePath, string fileName, string extension, string content)
+        : base(filePath, fileName, extension, content)
     {
-        FilePath = filePath;
-        FileName = fileName;
-        Extension = extension;
-        _content = content;
     }
 
-    /// <summary>Absolute file path on disk.</summary>
-    public string FilePath { get; set; }
-
-    /// <summary>Short file name (no directory).</summary>
-    public string FileName { get; set; }
-
-    /// <summary>File extension (no leading dot) — drives syntax highlighting.</summary>
-    public string Extension { get; }
-
-    /// <summary>The AvaloniaEdit syntax-highlighting definition name.</summary>
-    public string SyntaxName => Extension.ToLowerInvariant() switch
+    public string SyntaxName => (Extension ?? string.Empty).ToLowerInvariant() switch
     {
         "cs" => "C#",
         "ts" or "tsx" or "js" or "jsx" => "JavaScript",
@@ -167,7 +141,4 @@ public sealed partial class EditorTabViewModel : ObservableObject
         "sh" or "bash" => "Bash",
         _ => "C#"
     };
-
-    /// <summary>Partial-patch setter: updates content + marks the tab dirty.</summary>
-    partial void OnContentChanged(string value) => IsDirty = true;
 }

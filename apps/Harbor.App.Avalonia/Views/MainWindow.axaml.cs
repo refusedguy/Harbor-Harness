@@ -1,10 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.Desktop.Shared.Locators;
+using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views;
@@ -27,9 +26,24 @@ namespace Harbor.App.Avalonia.Views;
 /// </remarks>
 public partial class MainWindow : Window
 {
-    public MainWindow()
+    private readonly MainViewModel _vm;
+    private readonly KeyboardShortcutService _keyboard;
+    private readonly WindowChromeService _chrome;
+    private readonly IShellChrome _shellChrome;
+
+    [ActivatorUtilitiesConstructor]
+    public MainWindow(
+        MainViewModel vm,
+        KeyboardShortcutService keyboard,
+        WindowChromeService chrome,
+        IShellChrome shellChrome)
     {
+        _vm = vm;
+        _keyboard = keyboard;
+        _chrome = chrome;
+        _shellChrome = shellChrome;
         InitializeComponent();
+        DataContext = vm;
 
         this.Closing += (_, _) =>
         {
@@ -40,72 +54,49 @@ public partial class MainWindow : Window
         };
     }
 
-    private MainViewModel? Vm => this.DataContext as MainViewModel;
-
-    private static T Locate<T>() where T : class, new() =>
-        App.Services is { } sp
-            ? sp.GetRequiredService<IViewModelLocator>().Get<T>()
-            : new T();
+    public WindowChromeService ChromeService => _chrome;
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        var keyboard = Locate<KeyboardShortcutService>();
-        if (keyboard.HandleKeyDown(Vm, e))
+        if (_keyboard.HandleKeyDown(e))
         {
             e.Handled = true;
         }
         base.OnKeyDown(e);
     }
 
-    private void Quit_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = Locate<WindowChromeService>();
-        chrome.Close(this);
-    }
+    private void Quit_Click(object? sender, RoutedEventArgs e) => _chrome.Close(this);
 
     private void ViewChat_Click(object? sender, RoutedEventArgs e) =>
-        Vm?.SwitchViewCommand.Execute("chat");
+        _vm.SwitchViewCommand.Execute("chat");
 
     private void ViewCode_Click(object? sender, RoutedEventArgs e) =>
-        Vm?.SwitchViewCommand.Execute("code");
+        _vm.SwitchViewCommand.Execute("code");
 
     private void TitleBar_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        var chrome = Locate<WindowChromeService>();
-        chrome.HandleTitleBarPointerPressed(this, e);
+        _chrome.HandleTitleBarPointerPressed(this, e);
     }
 
-    private void Minimize_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = Locate<WindowChromeService>();
-        chrome.Minimize(this);
-    }
+    private void Minimize_Click(object? sender, RoutedEventArgs e) => _chrome.Minimize(this);
 
-    private void Maximize_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = Locate<WindowChromeService>();
-        chrome.MaximizeOrRestore(this);
-    }
+    private void Maximize_Click(object? sender, RoutedEventArgs e) => _chrome.MaximizeOrRestore(this);
 
-    private void Close_Click(object? sender, RoutedEventArgs e)
-    {
-        var chrome = Locate<WindowChromeService>();
-        chrome.Close(this);
-    }
+    private void Close_Click(object? sender, RoutedEventArgs e) => _chrome.Close(this);
 
     private void PickerBackdrop_Click(object? sender, PointerPressedEventArgs e)
     {
-        if (ReferenceEquals(e.Source, sender) && Vm is { } vm)
+        if (ReferenceEquals(e.Source, sender) && _vm is { } vm)
         {
-            vm.IsModelPickerOpen = false;
+            _shellChrome.CloseOverlay("modelPicker");
         }
     }
 
     private void PickerClose_Click(object? sender, RoutedEventArgs e)
     {
-        if (Vm is { } vm)
+        if (_vm is { } vm)
         {
-            vm.IsModelPickerOpen = false;
+            _shellChrome.CloseOverlay("modelPicker");
         }
     }
 }

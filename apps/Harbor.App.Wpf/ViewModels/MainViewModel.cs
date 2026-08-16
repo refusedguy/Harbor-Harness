@@ -26,13 +26,13 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
 
     /// <summary>Active model id (status bar).</summary>
-    [ObservableProperty] private string _model = "claude-3-5-sonnet-20241022";
+    [ObservableProperty] private string _model = "—";
 
     /// <summary>Active provider id (status bar).</summary>
-    [ObservableProperty] private string _provider = "anthropic";
+    [ObservableProperty] private string _provider = "ollama";
 
     /// <summary>Status text shown in the status bar.</summary>
-    [ObservableProperty] private string _statusText = "Ready";
+    [ObservableProperty] private string _statusText = "idle";
 
     /// <summary>Window title.</summary>
     [ObservableProperty] private string _title = "Harbor";
@@ -80,9 +80,9 @@ public sealed partial class MainViewModel : ObservableObject
 
         ActivePanel = Panels[0];
         Title = "Harbor — AI Coding Agent";
-        Provider = "anthropic";
-        Model = "claude-3-5-sonnet-20241022";
-        StatusText = "Ready";
+        Provider = "ollama";
+        Model = "—";
+        StatusText = "idle";
         TokenCount = "0 in / 0 out";
         CostText = "$0.0000";
     }

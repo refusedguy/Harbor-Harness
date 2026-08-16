@@ -6,6 +6,8 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;
 using ToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
+using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
+using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 
 namespace Harbor.App.Avalonia.Services;
 
@@ -43,7 +45,11 @@ public sealed class UiRenderEngine
 
     private static void ReconcileToolCalls(UiState state, ChatViewModel vm)
     {
-        var toolCalls = new Dictionary<string, (int Index, ToolCallViewModel Vm)>(StringComparer.Ordinal);
+        var existingById = new Dictionary<string, ToolCallViewModel>(StringComparer.Ordinal);
+        for (int i = 0; i < vm.ToolCalls.Count; i++)
+            existingById[vm.ToolCalls[i].Id] = vm.ToolCalls[i];
+
+        var ordered = new List<ToolCallViewModel>(state.Lines.Length);
 
         for (int i = 0; i < state.Lines.Length; i++)
         {
@@ -53,44 +59,76 @@ public sealed class UiRenderEngine
             if (line.Role == ChatRole.Tool)
             {
                 var parsed = ParseToolLine(line.Text, line.ToolCallId);
-                if (parsed is not null)
+                if (parsed is null) continue;
+
+                if (existingById.TryGetValue(parsed.Id, out var existing))
                 {
-                    if (toolCalls.TryGetValue(line.ToolCallId, out var existing))
+                    existing.ToolName = parsed.ToolName;
+                    existing.ArgsPreview = parsed.ArgsPreview;
+                    existing.IconText = parsed.IconText;
+                    if (parsed.IsDiffTool)
                     {
-                        existing.Vm.ToolName = parsed.ToolName;
-                        existing.Vm.ArgsPreview = parsed.ArgsPreview;
-                        existing.Vm.IconText = parsed.IconText;
-                        if (parsed.IsDiffTool)
-                        {
-                            existing.Vm.IsDiffTool = true;
-                            existing.Vm.DiffFilePath = parsed.DiffFilePath;
-                            existing.Vm.DiffPreview = parsed.DiffPreview;
-                            existing.Vm.DiffFull = parsed.DiffFull;
-                        }
+                        existing.IsDiffTool = true;
+                        existing.DiffFilePath = parsed.DiffFilePath;
+                        existing.DiffPreview = parsed.DiffPreview;
+                        existing.DiffFull = parsed.DiffFull;
                     }
-                    else
-                    {
-                        toolCalls[line.ToolCallId] = (i, parsed);
-                    }
+                    ordered.Add(existing);
+                }
+                else
+                {
+                    ordered.Add(parsed);
                 }
             }
-            else if (line.Role == ChatRole.ToolResult && toolCalls.TryGetValue(line.ToolCallId, out var entry))
+            else if (line.Role == ChatRole.ToolResult && existingById.TryGetValue(line.ToolCallId!, out var entry))
             {
-                entry.Vm.Complete(
+                entry.Complete(
                     line.Text.StartsWith("✗", StringComparison.Ordinal) ? ToolCallStatus.Error : ToolCallStatus.Success,
                     FormatResultPreview(line.Text),
                     TimeSpan.Zero);
+                ordered.Add(entry);
             }
         }
 
-        var ordered = toolCalls.Values.OrderBy(t => t.Index).Select(t => t.Vm).ToList();
+        int currentCount = vm.ToolCalls.Count;
+        int targetCount = ordered.Count;
 
-        if (vm.ToolCalls.Count != ordered.Count || !vm.ToolCalls.SequenceEqual(ordered, new ToolCallViewModelComparer()))
+        if (currentCount != targetCount)
         {
             vm.ToolCalls.Clear();
             foreach (var tc in ordered)
                 vm.ToolCalls.Add(tc);
+            return;
         }
+
+        for (int i = 0; i < currentCount; i++)
+        {
+            if (vm.ToolCalls[i] != ordered[i])
+                vm.ToolCalls[i] = ordered[i];
+        }
+    }
+
+    private static void ReconcileLines(UiState state, ChatViewModel vm)
+    {
+        var lines = vm.Lines;
+        int n = state.Lines.Length;
+
+        for (int i = 0; i < n; i++)
+        {
+            var src = state.Lines[i];
+            if (i < lines.Count)
+            {
+                var cur = lines[i];
+                if (cur.Role != src.Role || !string.Equals(cur.Text, src.Text, StringComparison.Ordinal))
+                    lines[i] = new ChatLineViewModel(src.Role, src.Text);
+            }
+            else
+            {
+                lines.Add(new ChatLineViewModel(src.Role, src.Text));
+            }
+        }
+        for (int i = lines.Count - 1; i >= n; i--)
+            lines.RemoveAt(i);
     }
 
     private static ToolCallViewModel? ParseToolLine(string text, string toolCallId)
@@ -157,53 +195,5 @@ public sealed class UiRenderEngine
     public SessionStatus DeriveStatus(UiState state)
     {
         return _presenter.DeriveStatus(state);
-    }
-
-    private static void ReconcileLines(UiState state, ChatViewModel vm)
-    {
-        var newLines = ImmutableArray.CreateBuilder<ChatLineViewModel>();
-        foreach (var line in state.Lines)
-        {
-            newLines.Add(new ChatLineViewModel(line.Role, line.Text));
-        }
-
-        var newArray = newLines.ToImmutable();
-        if (vm.Lines.Count != newArray.Length || !vm.Lines.SequenceEqual(newArray, new ChatLineViewModelComparer()))
-        {
-            vm.Lines.Clear();
-            foreach (var line in newArray)
-                vm.Lines.Add(line);
-        }
-    }
-}
-
-file sealed class ToolCallViewModelComparer : IEqualityComparer<ToolCallViewModel>
-{
-    public bool Equals(ToolCallViewModel? x, ToolCallViewModel? y)
-    {
-        if (x is null || y is null) return x is null && y is null;
-        return x.Id == y.Id && x.ToolName == y.ToolName && x.Status == y.Status
-            && x.ArgsPreview == y.ArgsPreview && x.ResultPreview == y.ResultPreview
-            && x.IsDiffTool == y.IsDiffTool && x.DiffFilePath == y.DiffFilePath
-            && x.DiffPreview == y.DiffPreview && x.DiffFull == y.DiffFull;
-    }
-
-    public int GetHashCode(ToolCallViewModel obj)
-    {
-        return HashCode.Combine(obj.Id, obj.ToolName, obj.Status, obj.ArgsPreview, obj.ResultPreview);
-    }
-}
-
-file sealed class ChatLineViewModelComparer : IEqualityComparer<ChatLineViewModel>
-{
-    public bool Equals(ChatLineViewModel? x, ChatLineViewModel? y)
-    {
-        if (x is null || y is null) return x is null && y is null;
-        return x.Role == y.Role && x.Text == y.Text;
-    }
-
-    public int GetHashCode(ChatLineViewModel obj)
-    {
-        return HashCode.Combine(obj.Role, obj.Text);
     }
 }

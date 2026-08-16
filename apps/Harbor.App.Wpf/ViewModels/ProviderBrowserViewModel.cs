@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Provider + model browser view model. Lists known providers, their
@@ -68,38 +69,30 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
 }
 
 /// <summary>
-///     One provider in the browser.
+///     One provider in the browser. Platform projection of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.ProviderEntryViewModel" /> record
+///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it).
+///     <see cref="Models" /> is re-exposed with the WPF <see cref="ModelEntryViewModel" />
+///     element type because the base record types it with the shared element.
 /// </summary>
-/// <param name="Id">Provider id.</param>
-/// <param name="DisplayName">Human-readable name.</param>
-/// <param name="Description">One-line description.</param>
-/// <param name="Models">Models offered by this provider.</param>
-public sealed record ProviderEntryViewModel(
-    string Id,
-    string DisplayName,
-    string Description,
-    IReadOnlyList<ModelEntryViewModel> Models);
+public sealed class ProviderEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.ProviderEntryViewModel
+{
+    /// <summary>Construct a <see cref="ProviderEntryViewModel" />.</summary>
+    public ProviderEntryViewModel(string id, string displayName, string description, IReadOnlyList<ModelEntryViewModel> models)
+        : base(id, displayName, description, models) { }
+
+    /// <summary>Models offered by this provider, typed with the WPF element.</summary>
+    public new IReadOnlyList<ModelEntryViewModel> Models => (IReadOnlyList<ModelEntryViewModel>)(object)base.Models!;
+}
 
 /// <summary>
-///     One model offered by a provider.
+///     One model offered by a provider. Platform projection of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.ModelEntryViewModel" /> record
+///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it).
 /// </summary>
-/// <param name="Id">Model id.</param>
-/// <param name="DisplayName">Human-readable name.</param>
-/// <param name="ContextWindow">Max input tokens.</param>
-/// <param name="MaxOutputTokens">Max output tokens.</param>
-/// <param name="SupportsVision">Whether the model accepts image inputs.</param>
-/// <param name="SupportsTools">Whether the model supports tool calls.</param>
-public sealed record ModelEntryViewModel(
-    string Id,
-    string DisplayName,
-    int ContextWindow,
-    int MaxOutputTokens,
-    bool SupportsVision,
-    bool SupportsTools)
+public sealed class ModelEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.ModelEntryViewModel
 {
-    /// <summary>Summary text for display.</summary>
-    public string Summary =>
-        $"{ContextWindow / 1000}K ctx · {MaxOutputTokens / 1000}K out" +
-        (SupportsVision ? " · vision" : "") +
-        (SupportsTools ? " · tools" : "");
+    /// <summary>Construct a <see cref="ModelEntryViewModel" />.</summary>
+    public ModelEntryViewModel(string id, string displayName, int contextWindow, int maxOutputTokens, bool supportsVision, bool supportsTools)
+        : base(id, displayName, contextWindow, maxOutputTokens, supportsVision, supportsTools) { }
 }

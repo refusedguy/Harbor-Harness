@@ -10,7 +10,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
 ///     Left-sidebar session list. Search, new, branch, delete, select.
 /// </summary>
-internal sealed partial class SessionListViewModel : ObservableObject
+public sealed partial class SessionListViewModel : ObservableObject
 {
     private readonly ISessionManager _sessionManager;
     private readonly IDispatcherAdapter _dispatcher;
@@ -57,6 +57,8 @@ internal sealed partial class SessionListViewModel : ObservableObject
         // ObservableCollection bound to the sidebar ListBox.
         _sessionManager.StatusChanged += OnSessionStatusChanged;
         _sessionManager.MessageCountChanged += OnSessionMessageCountChanged;
+
+        _ = RefreshAsync();
     }
 
     /// <summary>All sessions visible in the sidebar.</summary>

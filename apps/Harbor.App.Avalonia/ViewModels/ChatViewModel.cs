@@ -1,16 +1,12 @@
 using System.Collections.ObjectModel;
-using Avalonia.Threading;
-using CommunityToolkit.Mvvm.ComponentModel;
+using ChatLineViewModel = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Components;
-using Harbor.Ui.Framework.Rendering;
-using Harbor.Ui.Framework.Sessions;
-using Harbor.Ui.Framework.Services;
-using Harbor.Ui.Framework.State;
-using Harbor.Ui.Framework.ViewModels;
+using Harbor.Desktop.Abstractions.ViewModels;
 using Microsoft.Extensions.Logging;
+using System.ComponentModel;
 
 namespace Harbor.App.Avalonia.ViewModels;
 
@@ -29,7 +25,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///         + commands for the view to bind against.
 ///     </para>
 /// </remarks>
-internal sealed partial class ChatViewModel : StoreSubscriberViewModel
+public sealed partial class ChatViewModel : ChatViewModelBase
 {
     private readonly TuiEffectHost _effects;
     private readonly UiRenderEngine _renderEngine;
@@ -38,83 +34,7 @@ internal sealed partial class ChatViewModel : StoreSubscriberViewModel
     private readonly IToastService _toasts;
     private UiStore _store;
 
-    [ObservableProperty]
-    private string _inputText = string.Empty;
-
-    /// <summary>
-    ///     True while the agent loop is running (waiting for first token OR
-    ///     streaming). Mirrors <see cref="UiState.IsAgentRunning" />. Bound to
-    ///     the chat area's "Agent is running…" indicator + the Stop button's
-    ///     IsVisible. Distinct from <see cref="IsStreaming" /> (only true while
-    ///     tokens are actively arriving) and <see cref="IsThinking" /> (true
-    ///     while running but not yet streaming).
-    /// </summary>
-    [ObservableProperty]
-    private bool _isAgentRunning;
-
-    [ObservableProperty]
-    private bool _isStreaming;
-
-    [ObservableProperty]
-    private bool _isThinking;
-
-    /// <summary>
-    ///     Human-readable status message shown in the chat area while the
-    ///     agent is running (e.g. <c>"Agent is running…"</c>). Cleared on
-    ///     completion. Bound to the streaming-indicator border's TextBlock.
-    /// </summary>
-    [ObservableProperty]
-    private string _statusMessage = string.Empty;
-
-    [ObservableProperty]
-    private bool _isLoadingHistory;
-
-    [ObservableProperty]
-    private double _pullProgress;
-
-    [ObservableProperty]
-    private double _pullOffset;
-
-    [ObservableProperty]
-    private double _contentScale = 1.0;
-
-    [ObservableProperty]
-    private bool _canLoadOlder = true;
-
-    [ObservableProperty]
-    private bool _showPullIndicator;
-
     public ObservableCollection<Suggestion> ContextualSuggestions { get; } = new();
-
-    partial void OnIsThinkingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-    partial void OnIsStreamingChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-    partial void OnIsAgentRunningChanged(bool value) => OnPropertyChanged(nameof(InputPlaceholder));
-
-    partial void OnIsLoadingHistoryChanged(bool value) => OnPropertyChanged(nameof(PullRefreshStatusText));
-    partial void OnPullProgressChanged(double value) => OnPropertyChanged(nameof(PullRefreshStatusText));
-
-    public string PullRefreshStatusText => IsLoadingHistory ? "Loading older messages..."
-        : PullProgress >= 0.5 ? "Release to refresh" : "Pull to load older messages";
-
-    /// <summary>
-    ///     Context-aware placeholder for the composer input. Changes based on
-    ///     the current agent state so the user always knows what's happening.
-    /// </summary>
-    public string InputPlaceholder => GetPlaceholder();
-
-    private string GetPlaceholder()
-    {
-        if (IsThinking)
-            return "Agent is thinking…";
-        if (IsStreaming)
-            return "Receiving response…";
-        if (IsAgentRunning)
-            return "Agent is running…";
-        return "Ask Harbor anything…";
-    }
-
-    [ObservableProperty]
-    private string _streamingBuffer = string.Empty;
 
     /// <summary>Construct the chat view-model.</summary>
     public ChatViewModel(
@@ -136,49 +56,34 @@ internal sealed partial class ChatViewModel : StoreSubscriberViewModel
         _renderEngine = renderEngine;
     }
 
-    /// <summary>Visible chat lines.</summary>
-    public ObservableCollection<ChatLineViewModel> Lines { get; } = new();
-
     /// <summary>
-    ///     Visible tool-call cards (one per tool invocation). Updated
-    ///     incrementally as <see cref="ChatRole.Tool" /> /
-    ///     <see cref="ChatRole.ToolResult" /> lines arrive.
+    ///     Called after all selectors have been applied and INPC notifications raised.
+    ///     Performs Avalonia-specific UI updates (rendering, session status) on the
+    ///     UI thread after the state projection is complete.
     /// </summary>
-    public ObservableCollection<ToolCallViewModel> ToolCalls { get; } = new();
-
-    /// <summary>The role-color lookup for the view.</summary>
-    public static string RoleBrushKey(ChatRole role) => role switch
+    /// <param name="state">The new <see cref="UiState" /> snapshot.</param>
+    protected override void OnAfterSelectorsApplied(UiState state)
     {
-        ChatRole.User => "ChatUserBrush",
-        ChatRole.Assistant => "ChatAssistantBrush",
-        ChatRole.Thinking => "ChatThinkingBrush",
-        ChatRole.Tool => "ChatToolBrush",
-        ChatRole.ToolResult => "ChatToolResultBrush",
-        ChatRole.System => "ChatSystemBrush",
-        ChatRole.Error => "ChatErrorBrush",
-        _ => "ChatAssistantBrush"
-    };
-
-    protected override void OnStoreChanged(UiState state)
-    {
-        Logger.LogDebug("OnStoreChanged: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
-            state.Lines.Length, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
-
-        _renderEngine.Render(state, this);
-
-        if (_sessionManager?.Active is { } activeSession)
+        Dispatcher.Post(() =>
         {
-            _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
-            _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
-        }
+            Logger.LogDebug("OnAfterSelectorsApplied: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
+                state.Lines.Length, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
+
+            _renderEngine.Render(state, this);
+
+            if (_sessionManager?.Active is { } activeSession)
+            {
+                _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
+                _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
+            }
+        });
     }
 
     /// <summary>Submit the current input text. Plain Enter (handled in view) triggers this.</summary>
     /// <remarks>
     ///     Task U4 — CanExecute wiring. <see cref="CanSend" /> gates the Send
     ///     button so it greys out when the input is empty. The
-    ///     <see cref="OnInputTextChanged" /> partial (generated by
-    ///     <c>[ObservableProperty]</c>) calls
+    ///     <see cref="OnPropertyChanged" /> override calls
     ///     <see cref="SendCommand.NotifyCanExecuteChanged" /> on every keystroke
     ///     so the button reflects the current InputText immediately.
     /// </remarks>
@@ -218,14 +123,12 @@ internal sealed partial class ChatViewModel : StoreSubscriberViewModel
     /// <returns>True if <see cref="InputText" /> has non-whitespace content.</returns>
     private bool CanSend() => !string.IsNullOrWhiteSpace(InputText);
 
-    /// <summary>
-    ///     Source-generated partial invoked by <c>[ObservableProperty]</c>
-    ///     whenever <see cref="InputText" /> changes. Forwards to
-    ///     <see cref="SendCommand.NotifyCanExecuteChanged" /> so the Send
-    ///     button's enabled state tracks the input live (every keystroke).
-    /// </summary>
-    /// <param name="value">The new InputText value.</param>
-    partial void OnInputTextChanged(string value) => SendCommand.NotifyCanExecuteChanged();
+    protected override void OnPropertyChanged(PropertyChangedEventArgs? e)
+    {
+        base.OnPropertyChanged(e!);
+        if (e?.PropertyName == nameof(InputText))
+            SendCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>Abort the running agent (Ctrl+C in input or Stop button).</summary>
     [RelayCommand]
@@ -349,11 +252,6 @@ internal sealed partial class ChatViewModel : StoreSubscriberViewModel
     {
         Lines.Clear();
         ToolCalls.Clear();
-        IsStreaming = false;
-        IsThinking = false;
-        IsAgentRunning = false;
-        StatusMessage = string.Empty;
-        StreamingBuffer = string.Empty;
         UpdateContextualSuggestions();
     }
 
@@ -404,11 +302,6 @@ internal sealed partial class ChatViewModel : StoreSubscriberViewModel
 
             Lines.Clear();
             ToolCalls.Clear();
-            IsStreaming = false;
-            IsThinking = false;
-            IsAgentRunning = false;
-            StatusMessage = string.Empty;
-            StreamingBuffer = string.Empty;
 
             _store = newStore;
             _effects.RebindStore(newStore);

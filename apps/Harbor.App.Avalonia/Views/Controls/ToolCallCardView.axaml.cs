@@ -1,6 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
+using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 namespace Harbor.App.Avalonia.Views.Controls;
 /// <summary>
 ///     Collapsible tool-call card. Pure view — all state lives in
@@ -17,18 +20,12 @@ public partial class ToolCallCardView : UserControl
 
     private void DiffCompact_ExpandRequested(object? sender, EventArgs e)
     {
-        if (DataContext is not ToolCallViewModel vm || vm.DiffFull is null)
+        if (DataContext is not ToolCallVm vm || vm.DiffFull is null)
             return;
 
-        if (TopLevel.GetTopLevel(this) is not Window window)
-            return;
-
-        if (window.DataContext is not MainViewModel main)
-            return;
-
-        main.ActiveDiffText = vm.DiffFull;
-        main.ActiveDiffTitle = vm.DiffFilePath ?? "diff";
-        main.RightDrawerTab = "diff";
-        main.IsRightDrawerOpen = true;
+        ShellChrome.OpenOverlay("diff");
     }
+
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }

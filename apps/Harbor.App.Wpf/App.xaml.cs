@@ -106,7 +106,7 @@ public partial class App : Application
     [Exposes(typeof(IEventBus))]
     [Exposes(typeof(IPermissionService))]
     [Exposes(typeof(MessageConverter))]
-    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(ITokenTracker))]
     [Exposes(typeof(ISessionStore))]
     [Exposes(typeof(ISystemPromptBuilder))]
     [Exposes(typeof(ICompactionService))]
@@ -176,7 +176,7 @@ public partial class App : Application
         services.AddSingleton<IEventBus, InMemoryEventBus>();
         services.AddSingleton<IPermissionService, PermissionService>();
         services.AddSingleton<MessageConverter>();
-        services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
+        services.AddSingleton<ITokenTracker, TokenTracker>();
 
         // Session store — in-memory for the standalone desktop shell.
         // Swap to JsonlSessionStore / SqliteSessionStore if you want durable

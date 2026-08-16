@@ -1,37 +1,37 @@
-using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
 ///     Command palette (cmdk-style) view-model. Fuzzy-searches across:
 ///     slash commands, sessions, recently opened files, view switches, settings actions.
+///     Inherits the shared fuzzy-filter + selection logic from
+///     <see cref="CommandPaletteViewModelBase" />; this class only wires the
+///     platform-specific command callbacks (which bounce through the shell VM).
 /// </summary>
-public sealed partial class CommandPaletteViewModel : ObservableObject
+public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBase
 {
-    private readonly List<CommandResultViewModel> _allCommands;
-    private readonly IDispatcherAdapter _dispatcher;
+    private readonly IShellChrome _shellChrome;
+    private readonly IWorkspaceCommands _workspaceCommands;
+    private readonly TuiEffectHost _effects;
     private readonly ILogger<CommandPaletteViewModel> _logger;
-    private readonly IServiceProvider _services;
-
-    [ObservableProperty]
-    private string _query = string.Empty;
-
-    [ObservableProperty]
-    private int _selectedIndex;
 
     /// <summary>Construct the palette view-model.</summary>
     public CommandPaletteViewModel(
-        IServiceProvider services,
+        IDispatcherAdapter dispatcher,
         ILogger<CommandPaletteViewModel> logger,
-        IDispatcherAdapter dispatcher)
+        IShellChrome shellChrome,
+        IWorkspaceCommands workspaceCommands,
+        TuiEffectHost effects)
+        : base(dispatcher, logger)
     {
-        _services = services;
+        _shellChrome = shellChrome;
+        _workspaceCommands = workspaceCommands;
+        _effects = effects;
         _logger = logger;
-        _dispatcher = dispatcher;
-        // Build the command list inside the constructor (instance methods are valid here).
-        _allCommands = new List<CommandResultViewModel>
+        // Build the command list (platform callbacks) and run the initial filter.
+        AllCommands.AddRange(new CommandResultViewModel[]
         {
             new("command", "Switch to chat", "ChatView", SwitchToChat),
             new("command", "Switch to code editor", "CodeEditorView", SwitchToCode),
@@ -60,104 +60,29 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
             new("slash", "/tui", "Slash command", () => RunSlash("/tui")),
             new("slash", "/storage", "Slash command", () => RunSlash("/storage")),
             new("slash", "/clear", "Slash command", () => RunSlash("/clear"))
-        };
-        Results = new ObservableCollection<CommandResultViewModel>(_allCommands);
-        SelectedIndex = 0;
-    }
-
-    /// <summary>Visible search results.</summary>
-    public ObservableCollection<CommandResultViewModel> Results { get; }
-
-    // ── Command implementations — they resolve the MainViewModel from DI and invoke its commands. ──
-
-    private MainViewModel Main => _services.GetRequiredService<MainViewModel>();
-
-    /// <summary>Recompute results when the query changes.</summary>
-    partial void OnQueryChanged(string value)
-    {
-        _dispatcher.Post(() =>
-        {
-            Results.Clear();
-            string q = (value ?? string.Empty).Trim().ToLowerInvariant();
-            var matches = string.IsNullOrEmpty(q)
-                ? _allCommands
-                : _allCommands
-                    .Where(c => c.Label.ToLowerInvariant().Contains(q) || c.Hint.ToLowerInvariant().Contains(q))
-                    .OrderByDescending(c => FuzzyScore(c.Label.ToLowerInvariant(), q))
-                    .ToList();
-            foreach (var m in matches)
-            {
-                Results.Add(m);
-            }
-            SelectedIndex = Results.Count > 0 ? 0 : -1;
         });
+        Refilter(string.Empty);
     }
 
-    /// <summary>Simple subsequence-match score. Higher = better match.</summary>
-    private static int FuzzyScore(string text, string query)
-    {
-        if (string.IsNullOrEmpty(query)) return 0;
-        if (text.Contains(query, StringComparison.OrdinalIgnoreCase)) return 100 - text.Length;
-        int ti = 0, qi = 0, score = 0;
-        while (ti < text.Length && qi < query.Length)
-        {
-            if (text[ti] == query[qi])
-            {
-                score += 1;
-                qi++;
-            }
-            ti++;
-        }
-        return qi == query.Length ? score - (text.Length - query.Length) : -1;
-    }
-
-    /// <summary>Run the command at the given index.</summary>
-    public void InvokeSelected()
-    {
-        if (SelectedIndex < 0 || SelectedIndex >= Results.Count) return;
-        var cmd = Results[SelectedIndex];
-        try
-        {
-            cmd.Action.Invoke();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Command '{Label}' threw", cmd.Label);
-        }
-    }
-
-    /// <summary>Move selection up by one.</summary>
-    public void MoveUp()
-    {
-        if (SelectedIndex > 0) SelectedIndex--;
-    }
-
-    /// <summary>Move selection down by one.</summary>
-    public void MoveDown()
-    {
-        if (SelectedIndex < Results.Count - 1) SelectedIndex++;
-    }
-
-    private void SwitchToChat() => Main.SwitchViewCommand.Execute("chat");
-    private void SwitchToCode() => Main.SwitchViewCommand.Execute("code");
-    private void OpenSettings() => Main.IsSettingsOpen = true;
-    private void OpenProviderBrowser() => Main.IsProviderBrowserOpen = true;
-    private void OpenDiff() => Main.IsDiffOpen = true;
-    private void OpenTokenUsage() => Main.IsTokenUsageOpen = true;
-    private void ToggleSidebar() => Main.ToggleSidebarCommand.Execute(null);
-    private void ToggleTheme() => Main.ToggleThemeCommand.Execute(null);
-    private void NewSession() => _ = Main.Sessions.NewSessionCommand.ExecuteAsync(null);
-    private void BranchSession() => _ = Main.Sessions.BranchCommand.ExecuteAsync(null);
-    private void OpenFile() => _ = Main.CodeEditor.OpenFileCommand.ExecuteAsync(null);
-    private void SaveFile() => _ = Main.CodeEditor.SaveCommand.ExecuteAsync(null);
-    private void StopAgent() => Main.Chat.StopCommand.Execute(null);
-    private void ClearChat() => Main.Chat.ClearCommand.Execute(null);
-    private void RefreshSessions() => _ = Main.Sessions.RefreshCommand.ExecuteAsync(null);
+    private void SwitchToChat() => _shellChrome.Navigate("chat");
+    private void SwitchToCode() => _shellChrome.Navigate("code");
+    private void OpenSettings() => _shellChrome.OpenOverlay("settings");
+    private void OpenProviderBrowser() => _shellChrome.OpenOverlay("providerBrowser");
+    private void OpenDiff() => _shellChrome.OpenOverlay("diff");
+    private void OpenTokenUsage() => _shellChrome.OpenOverlay("tokenUsage");
+    private void ToggleSidebar() => _shellChrome.ToggleSidebar();
+    private void ToggleTheme() => _shellChrome.ToggleTheme();
+    private void NewSession() => _workspaceCommands.NewSession();
+    private void BranchSession() => _workspaceCommands.BranchSession();
+    private void OpenFile() => _ = _workspaceCommands.OpenFileAsync();
+    private void SaveFile() => _ = _workspaceCommands.SaveFileAsync();
+    private void StopAgent() => _workspaceCommands.StopAgent();
+    private void ClearChat() => _workspaceCommands.ClearChat();
+    private void RefreshSessions() => _workspaceCommands.RefreshSessions();
 
     private void RunSlash(string command)
     {
-        var effects = _services.GetRequiredService<TuiEffectHost>();
-        effects.Run(new TuiEffect.RunSlash(command));
-        Main.IsCommandPaletteOpen = false;
+        _effects.Run(new TuiEffect.RunSlash(command));
+        _shellChrome.CloseOverlay("palette");
     }
 }

@@ -1,5 +1,5 @@
 @page "/diff"
-@using System.Text
+@using Harbor.Desktop.Abstractions.ViewModels
 @inject HarborJsInterop Js
 
 <h1>Diff Viewer</h1>
@@ -9,11 +9,11 @@
 <div class="diff-shell">
     <div class="diff-pane">
         <h3>Before</h3>
-        <textarea @bind="_before" @bind:event="oninput" spellcheck="false"></textarea>
+        <textarea @bind="VM.Before" @bind:event="oninput" spellcheck="false"></textarea>
     </div>
     <div class="diff-pane">
         <h3>After</h3>
-        <textarea @bind="_after" @bind:event="oninput" spellcheck="false"></textarea>
+        <textarea @bind="VM.After" @bind:event="oninput" spellcheck="false"></textarea>
     </div>
 </div>
 
@@ -22,9 +22,9 @@
     <button class="btn-secondary" @onclick="CopyDiff">Copy diff</button>
 </div>
 
-@if (!string.IsNullOrEmpty(_diff))
+@if (!string.IsNullOrEmpty(VM.DiffText))
 {
-    <pre class="diff-output">@_diff</pre>
+    <pre class="diff-output">@VM.DiffText</pre>
 }
 
 <style>
@@ -47,38 +47,9 @@
 </style>
 
 @code {
-private string _before = "Hello, world!\nThis is the original.";
-private string _after = "Hello, Harbor!\nThis is the original.\nWith a new line.";
-private string? _diff;
+private readonly DiffViewModel VM = new();
 
-private void Compare()
-{
-    var beforeLines = _before.Split('\n');
-    var afterLines = _after.Split('\n');
-    var sb = new StringBuilder();
-    var max = Math.Max(beforeLines.Length, afterLines.Length);
-    for (var i = 0; i < max; i++)
-    {
-        var b = i < beforeLines.Length ? beforeLines[i] : string.Empty;
-        var a = i < afterLines.Length ? afterLines[i] : string.Empty;
-        if (b == a)
-        {
-            sb.AppendLine("  " + a);
-        }
-        else
-        {
-            if (i < beforeLines.Length) sb.AppendLine("- " + b);
-            if (i < afterLines.Length) sb.AppendLine("+ " + a);
-        }
-    }
-    _diff = sb.ToString();
-}
+private void Compare() => VM.ComputeDiff();
 
-private async Task CopyDiff()
-{
-    if (!string.IsNullOrEmpty(_diff))
-    {
-        await Js.CopyToClipboardAsync(_diff).ConfigureAwait(false);
-    }
-}
+private Task CopyDiff() => VM.CopyAsync(text => Js.CopyToClipboardAsync(text).AsTask());
 }

@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.App.Avalonia.Views.Overlays;
 
@@ -23,8 +25,10 @@ public partial class ModalHostView : UserControl
     {
         if (e.Source == sender)
         {
-            if (DataContext is ViewModels.MainViewModel vm)
-                vm.OverlayPopCommand?.Execute(null);
+            ShellChrome.CloseTopOverlay();
         }
     }
+
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }

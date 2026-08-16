@@ -1,26 +1,10 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using Harbor.Desktop.Abstractions.ViewModels;
+
 namespace Harbor.App.Avalonia.ViewModels;
 
-public sealed partial class FocusSessionViewModel : ObservableObject
+#pragma warning disable S2094
+/// <summary>Avalonia-specific focus-session view-model. Extends the shared base with platform bindings.</summary>
+public sealed class FocusSessionViewModel : Harbor.Desktop.Abstractions.ViewModels.FocusSessionViewModel
 {
-    [ObservableProperty]
-    private string _title = "Focus Session";
-
-    [ObservableProperty]
-    private string _model = string.Empty;
-
-    [ObservableProperty]
-    private string _provider = string.Empty;
-
-    [ObservableProperty]
-    private string _agent = string.Empty;
-
-    [ObservableProperty]
-    private int _messageCount;
-
-    [ObservableProperty]
-    private long _tokensIn;
-
-    [ObservableProperty]
-    private long _tokensOut;
 }
+#pragma warning restore S2094

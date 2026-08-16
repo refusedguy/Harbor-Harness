@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Sidebar session list. Supports search, fork/branch, and switching the
@@ -57,13 +58,12 @@ public sealed partial class SessionListViewModel : ObservableObject
     {
         var parent = FindSelected();
         if (parent is null) return;
-        var fork = parent with
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            Title = parent.Title + " (fork)",
-            UpdatedAt = DateTimeOffset.UtcNow,
-            ParentId = parent.Id
-        };
+        var fork = new SessionEntryViewModel(
+            Guid.NewGuid().ToString("N"),
+            parent.Title + " (fork)",
+            parent.AgentName,
+            DateTimeOffset.UtcNow,
+            parent.Id);
         _allSessions.Add(fork);
         ReapplyFilter();
         SelectedSessionId = fork.Id;
@@ -116,26 +116,15 @@ public sealed partial class SessionListViewModel : ObservableObject
 }
 
 /// <summary>
-///     Sidebar entry for a session.
+///     Sidebar entry for a session. Platform projection of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.SessionEntryViewModel" /> record
+///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings and the
+///     <c>with</c>-expression in <see cref="SessionListViewModel" /> resolve to it).
+///     The canonical data lives on the shared record.
 /// </summary>
-/// <param name="Id">Stable session id.</param>
-/// <param name="Title">Human-readable title.</param>
-/// <param name="AgentName">Bound agent name.</param>
-/// <param name="UpdatedAt">Last activity timestamp (UTC).</param>
-/// <param name="ParentId">Parent session id when this is a fork; otherwise <see langword="null" />.</param>
-public sealed record SessionEntryViewModel(
-    string Id,
-    string Title,
-    string AgentName,
-    DateTimeOffset UpdatedAt,
-    string? ParentId)
+public sealed class SessionEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.SessionEntryViewModel
 {
-    /// <summary>Relative-formatted timestamp for display.</summary>
-    public string DisplayTime => UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
-
-    /// <summary>Whether this is a fork.</summary>
-    public bool IsFork => ParentId is not null;
-
-    /// <summary>Short badge text for the tab.</summary>
-    public string Badge => IsFork ? "⑂" : AgentName[..1];
+    /// <summary>Construct a <see cref="SessionEntryViewModel" />.</summary>
+    public SessionEntryViewModel(string id, string title, string agentName, DateTimeOffset updatedAt, string? parentId)
+        : base(id, title, agentName, updatedAt, parentId) { }
 }

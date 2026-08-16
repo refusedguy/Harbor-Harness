@@ -2,7 +2,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.Messaging;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Desktop.Abstractions.Messages;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Onboarding wizard window. Shown on first launch (or whenever the user
@@ -54,18 +56,14 @@ public partial class OnboardingWindow : Window
     public void Bind(OnboardingViewModel viewModel)
     {
         this.DataContext = viewModel;
-        viewModel.Completed += (_, _) =>
+
+        WeakReferenceMessenger.Default.Register<OnboardingCompletedMessage>(this, (_, msg) =>
         {
-            // Close on the next loop pass so the await chain in FinishAsync /
-            // Skip can finish unwinding. Closing synchronously inside the
-            // event handler can leave the await continuation orphaned. The
-            // result distinguishes finish (Completed) from skip (Skipped) so
-            // App.axaml.cs knows whether to persist OnboardingCompleted=true.
-            var result = viewModel.IsCompleted
+            var result = msg.IsCompleted
                 ? OnboardingResult.Completed
                 : OnboardingResult.Skipped;
             Dispatcher.UIThread.Post(() => this.Close(result));
-        };
+        });
     }
 
     /// <summary>Refresh CanAdvance + SelectedProvider when a step-2 checkbox toggles.</summary>

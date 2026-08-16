@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              x:Class="Harbor.App.Avalonia.Views.DiffView">
 

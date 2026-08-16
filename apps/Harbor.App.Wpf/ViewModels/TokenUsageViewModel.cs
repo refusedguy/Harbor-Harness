@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Token usage charts. Plots cumulative input/output tokens over the
@@ -74,32 +75,26 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 }
 
 /// <summary>
-///     One bar in the token usage chart.
+///     One bar in the token usage chart. Platform extension of the shared
+///     <see cref="Harbor.Desktop.Abstractions.ViewModels.TokenBarViewModel" /> record —
+///     adds the WPF <see cref="Brush" />es for each bar (the canonical color keys
+///     live on the shared record as <c>InputBrushKey</c> / <c>OutputBrushKey</c>).
+///     <see cref="Label" />, <see cref="InputHeight" /> and <see cref="OutputHeight" />
+///     are inherited from the shared record.
 /// </summary>
-public sealed partial class TokenBarViewModel : ObservableObject
+public sealed partial class TokenBarViewModel : Harbor.Desktop.Abstractions.ViewModels.TokenBarViewModel
 {
-
     /// <summary>Input-bar fill brush.</summary>
-    [ObservableProperty] private Brush _inputBrush = Brushes.CornflowerBlue;
-
-    /// <summary>Input-bar height in pixels.</summary>
-    [ObservableProperty] private double _inputHeight;
-    /// <summary>X-axis label (turn number).</summary>
-    [ObservableProperty] private string _label = string.Empty;
+    public Brush InputBrush { get; set; } = Brushes.CornflowerBlue;
 
     /// <summary>Output-bar fill brush.</summary>
-    [ObservableProperty] private Brush _outputBrush = Brushes.MediumSeaGreen;
-
-    /// <summary>Output-bar height in pixels.</summary>
-    [ObservableProperty] private double _outputHeight;
+    public Brush OutputBrush { get; set; } = Brushes.MediumSeaGreen;
 
     /// <summary>Construct a <see cref="TokenBarViewModel" />.</summary>
     public TokenBarViewModel(string label, double inputHeight, double outputHeight, Brush inputBrush, Brush outputBrush)
+        : base(label, inputHeight, outputHeight)
     {
-        _label = label;
-        _inputHeight = inputHeight;
-        _outputHeight = outputHeight;
-        _inputBrush = inputBrush;
-        _outputBrush = outputBrush;
+        InputBrush = inputBrush;
+        OutputBrush = outputBrush;
     }
 }

@@ -155,7 +155,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             ProviderConfigs.Add(new ProviderConfigViewModel(
                 id, displayName, apiKey, requiresKey, authenticated,
-                _commonStore, _providers, _authResolver, _toasts,
+                _commonStore, _providers, _toasts,
                 _loggerFactory.CreateLogger<ProviderConfigViewModel>()));
         }
     }

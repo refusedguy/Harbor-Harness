@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+        xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
         xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
         xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
         xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
@@ -13,10 +13,7 @@
         MinWidth="720" MinHeight="600"
         Background="{DynamicResource BgAppBrush}"
         WindowStartupLocation="CenterScreen"
-        FontFamily="{DynamicResource FontUi}"
-        ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaTitleBarHeightHint="44"
-        WindowDecorations="None">
+        FontFamily="{DynamicResource FontUi}">
 
     <Window.Resources>
         <views:BrushKeyConverter x:Key="BrushKeyConv" />
@@ -41,7 +38,8 @@
 
         <!-- ════════════ Activity rail ════════════ -->
         <shell:ActivityRailView Grid.Row="1" Grid.Column="0"
-                                VerticalAlignment="Stretch"/>
+                                VerticalAlignment="Stretch"
+                                DataContext="{Binding}"/>
 
         <!-- ════════════ Main content area ════════════ -->
         <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
@@ -54,7 +52,7 @@
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}" />
                 <RadioButton Classes="TabButton" Content="Code" GroupName="MainView"
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}" />
-                <RadioButton Classes="TabButton" Content="Board" GroupName="MainView"
+                <RadioButton Classes="TabButton" Content="Sessions" GroupName="MainView"
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=board}" />
             </StackPanel>
 
@@ -114,6 +112,12 @@
                                 IsVisible="{Binding $parent[Window].DataContext.IsFocusSessionOpen, FallbackValue=False}"
                                 DataContext="{Binding FocusSession}"
                                 ZIndex="700" />
+
+        <shell:SessionsFlyoutView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                 AutomationProperties.AutomationId="Overlay_SessionsFlyout"
+                                 IsVisible="{Binding $parent[Window].DataContext.IsSessionsFlyoutOpen, FallbackValue=False}"
+                                 DataContext="{Binding Sessions}"
+                                 ZIndex="500" />
 
         <!-- Toast container -->
         <views:ToastNotificationsView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"

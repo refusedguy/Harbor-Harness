@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Streaming chat view model. Maintains the message list and the active
@@ -108,35 +109,17 @@ public sealed partial class ChatViewModel : ObservableObject
 }
 
 /// <summary>
-///     View model for a single chat message (user / assistant / tool).
+///     View model for a single chat message (user / assistant / tool). Platform
+///     extension of the shared <see cref="Harbor.Desktop.Abstractions.ViewModels.ChatMessageViewModel" />
+///     record — adds the WPF <see cref="Brush" /> for the role label (the
+///     canonical color key lives on the shared record as
+///     <c>RoleBrushKey</c>).
 /// </summary>
-/// <param name="Role">Message role: user, assistant, tool, etc.</param>
-/// <param name="Content">Markdown-formatted content.</param>
-/// <param name="Timestamp">UTC timestamp of the message.</param>
-public sealed partial class ChatMessageViewModel : ObservableObject
+public sealed partial class ChatMessageViewModel : Harbor.Desktop.Abstractions.ViewModels.ChatMessageViewModel
 {
-
-    /// <summary>Markdown-formatted content.</summary>
-    [ObservableProperty] private string _content;
-    /// <summary>The role string (user, assistant, tool, tool_result, error).</summary>
-    [ObservableProperty] private string _role;
-
-    /// <summary>UTC timestamp of the message.</summary>
-    [ObservableProperty] private DateTimeOffset _timestamp;
-
     /// <summary>Construct a <see cref="ChatMessageViewModel" />.</summary>
     public ChatMessageViewModel(string role, string content, DateTimeOffset timestamp)
-    {
-        _role = role;
-        _content = content;
-        _timestamp = timestamp;
-    }
-
-    /// <summary>Local time string for display.</summary>
-    public string DisplayTime => Timestamp.ToLocalTime().ToString("HH:mm");
-
-    /// <summary>Whether this message is from the user.</summary>
-    public bool IsUser => Role == "user";
+        : base(role, content, timestamp) { }
 
     /// <summary>Foreground brush for the role label (Catppuccin Mocha).</summary>
     public Brush RoleForeground => Role switch

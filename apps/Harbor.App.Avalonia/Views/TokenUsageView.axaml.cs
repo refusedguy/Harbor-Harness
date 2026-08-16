@@ -2,7 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Token usage view code-behind. Closes itself via the parent MainViewModel.
@@ -31,17 +32,9 @@ public partial class TokenUsageView : UserControl
 
     private void CloseModal()
     {
-        if (ResolveMainViewModel() is { } main)
-            main.IsTokenUsageOpen = false;
+        ShellChrome.CloseOverlay("tokenUsage");
     }
 
-    private MainViewModel? ResolveMainViewModel()
-    {
-        if (TopLevel.GetTopLevel(this) is Window window)
-        {
-            return window.DataContext as MainViewModel;
-        }
-
-        return null;
-    }
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }

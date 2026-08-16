@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Harbor.Desktop.Abstractions.Models;
+using Harbor.Desktop.Abstractions.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Toast notification queue. Toasts slide in from the top-right, auto-
@@ -97,50 +99,4 @@ public sealed partial class ToastNotificationViewModel : ObservableObject
             }
         }
     }
-}
-
-/// <summary>
-///     Single toast notification view model.
-/// </summary>
-public sealed partial class ToastViewModel : ObservableObject
-{
-
-    /// <summary>Creation timestamp.</summary>
-    [ObservableProperty] private DateTimeOffset _createdAt;
-    /// <summary>Unique id.</summary>
-    [ObservableProperty] private string _id = string.Empty;
-
-    /// <summary>Toast kind (controls accent color).</summary>
-    [ObservableProperty] private ToastKind _kind = ToastKind.Info;
-
-    /// <summary>Body text.</summary>
-    [ObservableProperty] private string _message = string.Empty;
-
-    /// <summary>How long the toast stays visible.</summary>
-    [ObservableProperty] private TimeSpan _timeToLive = TimeSpan.FromSeconds(4);
-
-    /// <summary>Icon glyph based on kind.</summary>
-    public string Icon => Kind switch
-    {
-        ToastKind.Success => "✓",
-        ToastKind.Warning => "▲",
-        ToastKind.Error => "✕",
-        _ => "ℹ"
-    };
-}
-
-/// <summary>Toast kind.</summary>
-public enum ToastKind
-{
-    /// <summary>Informational toast (blue accent).</summary>
-    Info,
-
-    /// <summary>Success toast (green accent).</summary>
-    Success,
-
-    /// <summary>Warning toast (yellow accent).</summary>
-    Warning,
-
-    /// <summary>Error toast (red accent, longer TTL).</summary>
-    Error
 }

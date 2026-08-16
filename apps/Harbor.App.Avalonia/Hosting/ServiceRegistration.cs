@@ -7,10 +7,14 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Services;
 using Harbor.Core.Agents;
 using Harbor.Core.Permissions;
+using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
 using Harbor.Core.Tools;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
+using Harbor.Ui.Framework.Navigation;
+using Harbor.Ui.Framework.Overlays;
+using CommunityToolkit.Mvvm.Messaging;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Sessions;
@@ -53,12 +57,13 @@ internal static class ServiceRegistration
     public static void Register(IServiceCollection services)
     {
         // Core services — same as Harbor.Cli.Hosting.HostBuilder.RegisterCore.
-        services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
+        services.AddSingleton<ITokenTracker, TokenTracker>();
         services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(
             sp.GetRequiredService<ILogger<InMemoryEventBus>>()));
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(
             sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         services.AddSingleton<MessageConverter>();
+        services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<IAgent, DefaultAgent>();
         // Forward IAgentRunner → IAgent so DI resolution (and the Excubo
@@ -95,7 +100,7 @@ internal static class ServiceRegistration
     {
         // Compaction + permissions.
         services.AddSingleton<ICompactionService>(sp => new CompactionService(
-            sp.GetRequiredService<ITokenEstimator>(),
+            sp.GetRequiredService<ITokenTracker>(),
             providerRegistry,
             sp.GetRequiredService<ILogger<CompactionService>>()));
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
@@ -143,6 +148,7 @@ internal static class ServiceRegistration
     /// <param name="services">The DI container.</param>
     public static void RegisterAppServices(IServiceCollection services)
     {
+        services.AddSingleton<IMessenger, WeakReferenceMessenger>();
         services.AddSingleton<ThemeService>();
         services.AddSingleton<IThemeService>(sp => sp.GetRequiredService<ThemeService>());
         services.AddSingleton<DialogService>();
@@ -158,6 +164,8 @@ internal static class ServiceRegistration
         services.AddSingleton<IOverlayStack>(sp => sp.GetRequiredService<OverlayStackService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
+        services.AddSingleton<IShellChrome, AvaloniaShellChrome>();
+        services.AddSingleton<IWorkspaceCommands, AvaloniaWorkspaceCommands>();
         services.AddSingleton<DefaultUiProjector>();
         services.AddSingleton<AvaloniaUiViewport>();
         services.AddSingleton<ChatStreamingPresenter>();

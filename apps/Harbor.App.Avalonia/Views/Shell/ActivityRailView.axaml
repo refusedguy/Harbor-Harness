@@ -16,7 +16,7 @@
             <StackPanel DockPanel.Dock="Top" Spacing="4" HorizontalAlignment="Center">
                 <Button Classes="RailButton RailButtonActive" Name="Rail_BoardButton"
                         AutomationProperties.AutomationId="Rail_BoardButton"
-                        ToolTip.Tip="Sessions (Ctrl+B)" Click="Board_Click">
+                        ToolTip.Tip="Sessions" Click="Board_Click">
                     <PathIcon Data="{StaticResource IcSession}" Width="20" Height="20"/>
                 </Button>
                 <Button Classes="RailButton" Name="Rail_SearchButton"

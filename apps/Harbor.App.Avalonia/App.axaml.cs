@@ -156,10 +156,7 @@ public partial class App : Application
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
-        var mainWindow = new MainWindow
-        {
-            DataContext = mainViewModel
-        };
+        var mainWindow = ActivatorUtilities.CreateInstance<MainWindow>(Services);
         desktop.MainWindow = mainWindow;
 
         var onboardingVm = Services.GetRequiredService<OnboardingViewModel>();
@@ -227,10 +224,7 @@ public partial class App : Application
         var toastService = Services.GetRequiredService<ToastService>();
         toastService.ToastAdded += (_, toast) => mainViewModel.AddToast(toast);
 
-        var mainWindow = new MainWindow
-        {
-            DataContext = mainViewModel
-        };
+        var mainWindow = ActivatorUtilities.CreateInstance<MainWindow>(Services);
         desktop.MainWindow = mainWindow;
 
         // Initialize session + load existing sessions.

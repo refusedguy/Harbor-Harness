@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:vm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
              x:Class="Harbor.App.Avalonia.Views.TokenUsageView">
 
     <Border Background="#80000000" ZIndex="200"

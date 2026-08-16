@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Harbor.Desktop.Abstractions.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Provider browser code-behind. Loads providers on first visibility —
@@ -60,19 +63,11 @@ public partial class ProviderBrowserView : UserControl
 
     private void CloseModal()
     {
-        if (ResolveMainViewModel() is { } main)
-            main.IsProviderBrowserOpen = false;
+        ShellChrome.CloseOverlay("providerBrowser");
     }
 
-    private MainViewModel? ResolveMainViewModel()
-    {
-        if (TopLevel.GetTopLevel(this) is Window window)
-        {
-            return window.DataContext as MainViewModel;
-        }
-
-        return null;
-    }
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 
     private void Provider_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {

@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:uvm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:uvm="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
              xmlns:comp="clr-namespace:Harbor.App.Avalonia.Views.Components"
-             xmlns:da="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework"
+             xmlns:da="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
              x:Class="Harbor.App.Avalonia.Views.ChatView"
              x:Name="Root">
 

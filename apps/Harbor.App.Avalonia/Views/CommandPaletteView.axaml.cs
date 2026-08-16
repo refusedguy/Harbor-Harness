@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Command palette view code-behind. Handles keyboard navigation
@@ -51,8 +53,7 @@ public partial class CommandPaletteView : UserControl
 
     private void ClosePalette()
     {
-        if (ResolveMainViewModel() is { } main)
-            main.OverlayPopCommand.Execute(null);
+        ShellChrome.CloseTopOverlay();
     }
 
     private void Backdrop_Click(object? sender, PointerPressedEventArgs e)
@@ -63,13 +64,6 @@ public partial class CommandPaletteView : UserControl
         }
     }
 
-    private MainViewModel? ResolveMainViewModel()
-    {
-        if (TopLevel.GetTopLevel(this) is Window window)
-        {
-            return window.DataContext as MainViewModel;
-        }
-
-        return null;
-    }
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }

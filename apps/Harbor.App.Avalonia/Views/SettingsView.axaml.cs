@@ -4,6 +4,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.Ui.Framework.Navigation;
+using Microsoft.Extensions.DependencyInjection;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Settings dialog code-behind.
@@ -18,8 +20,7 @@ public partial class SettingsView : UserControl
 
     private void Close_Click(object? sender, RoutedEventArgs e)
     {
-        if (ResolveMainViewModel() is { } main)
-            main.IsSettingsOpen = false;
+        ShellChrome.CloseOverlay("settings");
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
@@ -45,8 +46,7 @@ public partial class SettingsView : UserControl
 
     private void CloseModal()
     {
-        if (ResolveMainViewModel() is { } main)
-            main.IsSettingsOpen = false;
+        ShellChrome.CloseOverlay("settings");
     }
 
     private void OnThemePreviewClick(object? sender, PointerPressedEventArgs e)
@@ -64,13 +64,6 @@ public partial class SettingsView : UserControl
         }
     }
 
-    private MainViewModel? ResolveMainViewModel()
-    {
-        if (TopLevel.GetTopLevel(this) is Window window)
-        {
-            return window.DataContext as MainViewModel;
-        }
-
-        return null;
-    }
+    private IShellChrome? _shellChrome;
+    private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 }
