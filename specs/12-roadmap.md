@@ -1,6 +1,8 @@
 # 12 — Roadmap
 
 > Документ: план разработки. MVP → v1 → v2. Конкретные milestones, что в каком релизе, оценки времени, приоритеты.
+>
+> **CURRENT STATE (v0.4.0-alpha, R31):** MVP done, v0.2 done, v0.3 done (plugins + scripting), v0.4 in progress (UI decomposition + concurrent agents). See [docs/ROADMAP.md](../docs/ROADMAP.md) for the live status board with checkboxes; this spec is the original design intent. Major delta from original plan: v0.4 scope expanded to include cross-platform UI components (Avalonia/Blazor/WPF) + god-object decomposition work that wasn't originally planned.
 
 ## 1. Принципы
 

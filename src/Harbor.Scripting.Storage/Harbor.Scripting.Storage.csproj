@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Scripting.Storage — concrete IScriptStore implementations.
+
+    Backends:
+      - FileSystemScriptStore  (reads .ts/.js from a local filesystem directory)
+      - InMemoryScriptStore    (tests + ephemeral scripts)
+
+    Depends only on Harbor.Scripting.Abstractions.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Scripting.Storage</PackageId>
+    <Description>Harbor script storage backends — filesystem and in-memory IScriptStore implementations.</Description>
+    <PackageTags>harbor;scripting;storage;filesystem</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Scripting.Abstractions\Harbor.Scripting.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

@@ -46,7 +46,7 @@ public class CompactionServiceTests
         var providers = new ProviderRegistry();
         providers.Register(ProviderId.Create("test"), () => client ?? new SummaryLlmClient("summary"));
         return new CompactionService(
-            new HeuristicTokenEstimator(),
+            new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance);
     }

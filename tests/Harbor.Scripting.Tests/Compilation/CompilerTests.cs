@@ -1,8 +1,6 @@
 // Compilation layer tests — PassThroughCompiler + TscCompiler.
-using Harbor.Scripting.Compilation;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Compilation;
-
 public class PassThroughCompilerTests
 {
     [Test]

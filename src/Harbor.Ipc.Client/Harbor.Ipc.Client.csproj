@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Ipc.Client — out-of-process IHarborClient implementation.
+    Talks to a remote HarborIpcServer via MessagePack-over-pipe (Windows)
+    or MessagePack-over-Unix-domain-socket (Linux/Mac). Used when
+    HARBOR_MODE=ipc-client.
+
+    Layer: Application — same as Harbor.Ipc.Server. Depends on:
+      * Harbor.Ipc.Abstractions — protocol contract.
+      * Harbor.Abstractions — for the domain types returned by the API
+        surface (Session, AgentMessage, ToolDescriptor, etc.).
+      * NO dependency on Harbor.Application / Harbor.Registries — the
+        client never instantiates the agent loop or registries. That's the
+        whole point: a UI process can be ~5 MB instead of ~150 MB.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Ipc.Client</PackageId>
+    <Description>Harbor IPC client — out-of-process IHarborClient implementation that talks to a remote HarborIpcServer via MessagePack-over-pipe / Unix-domain-socket. Used when HARBOR_MODE=ipc-client.</Description>
+    <PackageTags>harbor;ipc;client;messagepack;rpc;remote</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

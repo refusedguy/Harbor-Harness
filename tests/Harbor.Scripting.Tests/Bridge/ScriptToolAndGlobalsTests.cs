@@ -1,8 +1,7 @@
 // Bridge layer tests — ScriptTool + ScriptGlobals + ScriptGlobalsExtensions.
-using Harbor.Scripting.Bridge;
-using Harbor.Abstractions.Models;
+using Harbor.Scripting.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Bridge;
-
 public class ScriptGlobalsTests
 {
     [Test]
@@ -16,7 +15,7 @@ public class ScriptGlobalsTests
             Tools = new ToolRegistry(),
             Providers = new ProviderRegistry(),
             Agents = new AgentRegistry(),
-            Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance
+            Logger = NullLogger.Instance
         };
 
         await Assert.That(globals.Tools).IsNotNull();
@@ -29,7 +28,7 @@ public class ScriptGlobalsTests
         var globals = new ScriptGlobals
         {
             Tools = new ToolRegistry(),
-            Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance
+            Logger = NullLogger.Instance
         };
 
         await Assert.That(globals.Providers).IsNull();
@@ -43,7 +42,7 @@ public class ScriptGlobalsTests
             .WithTools(new ToolRegistry())
             .WithProviders(new ProviderRegistry())
             .WithAgents(new AgentRegistry())
-            .WithLogger(Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance)
+            .WithLogger(NullLogger.Instance)
             .Build();
 
         await Assert.That(globals.Tools).IsNotNull();
@@ -57,26 +56,26 @@ public class ScriptToolTests
     private static JsonDocument Schema => JsonDocument.Parse("{\"type\":\"object\",\"properties\":{}}");
 
     private static ToolContext NewContext(CancellationToken? abort = null) => new(
-        SessionId: "s1",
-        MessageId: "m1",
-        CallId: "c1",
-        Agent: "default",
-        Abort: abort ?? CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, PersistDecision: false)),
-        Services: null!);
+        "s1",
+        "m1",
+        "c1",
+        "default",
+        abort ?? CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 
     [Test]
     public async Task ExecuteAsync_DelegatesToSuppliedExecuteDelegate()
     {
         var tool = new ScriptTool(
-            name: "echo",
-            displayName: "Echo",
-            description: "Echoes back the input",
-            schema: Schema,
-            executionMode: ExecutionMode.Parallel,
-            execute: (args, ct) => Task.FromResult(ToolResult.Success("echoed")));
+            "echo",
+            "Echo",
+            "Echoes back the input",
+            Schema,
+            ExecutionMode.Parallel,
+            (args, ct) => Task.FromResult(ToolResult.Success("echoed")));
 
         var result = await tool.ExecuteAsync(JsonDocument.Parse("{}").RootElement, NewContext());
 
@@ -88,12 +87,12 @@ public class ScriptToolTests
     public async Task ExecuteAsync_PassesThroughError_FromExecuteDelegate()
     {
         var tool = new ScriptTool(
-            name: "fail",
-            displayName: "Fail",
-            description: "Always fails",
-            schema: Schema,
-            executionMode: ExecutionMode.Sequential,
-            execute: (_, _) => Task.FromResult(ToolResult.Error("boom")));
+            "fail",
+            "Fail",
+            "Always fails",
+            Schema,
+            ExecutionMode.Sequential,
+            (_, _) => Task.FromResult(ToolResult.Error("boom")));
 
         var result = await tool.ExecuteAsync(JsonDocument.Parse("{}").RootElement, NewContext());
 
@@ -152,12 +151,12 @@ public class ScriptToolTests
         try
         {
             _ = new ScriptTool(
-                name: "x",
-                displayName: "X",
-                description: "d",
-                schema: Schema,
-                executionMode: ExecutionMode.Parallel,
-                execute: null!);
+                "x",
+                "X",
+                "d",
+                Schema,
+                ExecutionMode.Parallel,
+                null!);
         }
         catch (Exception ex)
         {

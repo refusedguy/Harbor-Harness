@@ -1,18 +1,17 @@
+using System.Text.Json;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
+using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 namespace Harbor.Plugins.Runtime.Tests.Registration;
-
 /// <summary>
 ///     Tests for the Registration layer: <see cref="PluginRegistrar" /> and
-/// <see cref="SafePluginRegistrar" />.
+///     <see cref="SafePluginRegistrar" />.
 /// </summary>
 public sealed class RegistrationLayerTests
 {
@@ -29,13 +28,13 @@ public sealed class RegistrationLayerTests
             NullLogger<PluginRegistrar>.Instance);
         var plugin = new FakeToolPlugin("reg-tool-1", "tool_reg_1");
         var loaded = new LoadedPlugin(
-            Instance: plugin,
-            Name: plugin.Name,
-            Version: plugin.Version,
-            PluginType: plugin.GetType(),
-            SourcePath: "/home/me/.harbor/plugins/reg1.cs",
-            SourceHash: "abc",
-            LoadedFromCache: false);
+            plugin,
+            plugin.Name,
+            plugin.Version,
+            plugin.GetType(),
+            "/home/me/.harbor/plugins/reg1.cs",
+            "abc",
+            false);
 
         var result = registrar.Register(loaded, host);
 
@@ -55,13 +54,13 @@ public sealed class RegistrationLayerTests
         var throwing = new ThrowingRegistrar();
         var safe = new SafePluginRegistrar(throwing, NullLogger.Instance);
         var loaded = new LoadedPlugin(
-            Instance: new FakeToolPlugin("reg-throw", "tool_throw"),
-            Name: "reg-throw",
-            Version: new Version(1, 0, 0),
-            PluginType: typeof(object),
-            SourcePath: "/x.cs",
-            SourceHash: "x",
-            LoadedFromCache: false);
+            new FakeToolPlugin("reg-throw", "tool_throw"),
+            "reg-throw",
+            new Version(1, 0, 0),
+            typeof(object),
+            "/x.cs",
+            "x",
+            false);
 
         var result = safe.Register(loaded, host);
 
@@ -82,13 +81,13 @@ public sealed class RegistrationLayerTests
             NullLogger<PluginRegistrar>.Instance);
         var plugin = new ThrowingInitializePlugin();
         var loaded = new LoadedPlugin(
-            Instance: plugin,
-            Name: plugin.Name,
-            Version: plugin.Version,
-            PluginType: plugin.GetType(),
-            SourcePath: "/x.cs",
-            SourceHash: "x",
-            LoadedFromCache: false);
+            plugin,
+            plugin.Name,
+            plugin.Version,
+            plugin.GetType(),
+            "/x.cs",
+            "x",
+            false);
 
         var result = registrar.Register(loaded, host);
 
@@ -110,13 +109,13 @@ public sealed class RegistrationLayerTests
             NullLogger<PluginRegistrar>.Instance);
         var plugin = new ContextCapturingPlugin("capture-1");
         var loaded = new LoadedPlugin(
-            Instance: plugin,
-            Name: plugin.Name,
-            Version: plugin.Version,
-            PluginType: plugin.GetType(),
-            SourcePath: "/home/me/.harbor/plugins/cap1.cs",
-            SourceHash: "x",
-            LoadedFromCache: false);
+            plugin,
+            plugin.Name,
+            plugin.Version,
+            plugin.GetType(),
+            "/home/me/.harbor/plugins/cap1.cs",
+            "x",
+            false);
 
         registrar.Register(loaded, host);
 
@@ -133,32 +132,32 @@ public sealed class RegistrationLayerTests
             Name = name;
             _toolName = toolName;
         }
+        public bool WasInitialized { get; private set; }
         public string Name { get; }
         public Version Version => new(1, 0, 0);
         public Version RequiredHarborVersion => new(0, 4, 0);
         public string Description => "fake";
-        public bool WasInitialized { get; private set; }
-        public void Initialize(PluginContext context) { WasInitialized = true; }
+        public void Initialize(PluginContext context) => WasInitialized = true;
         public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool(new FakeTool(_toolName));
         public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed class FakeTool : Harbor.Abstractions.Tools.ITool
+    private sealed class FakeTool : ITool
     {
-        public FakeTool(string name) { Name = Harbor.Abstractions.Models.Identifiers.ToolName.Create(name); }
-        public Harbor.Abstractions.Models.Identifiers.ToolName Name { get; }
+        public FakeTool(string name) { Name = ToolName.Create(name); }
+        public ToolName Name { get; }
         public string DisplayName => "fake";
         public string Description => "fake";
-        public System.Text.Json.JsonDocument ParameterSchema =>
-            System.Text.Json.JsonDocument.Parse("{\"type\":\"object\"}");
-        public Harbor.Abstractions.Tools.ExecutionMode ExecutionMode => Harbor.Abstractions.Tools.ExecutionMode.Parallel;
+        public JsonDocument ParameterSchema =>
+            JsonDocument.Parse("{\"type\":\"object\"}");
+        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
         public string? PromptSnippet => null;
         public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-        public Task<Harbor.Abstractions.Models.ToolResult> ExecuteAsync(
-            System.Text.Json.JsonElement args,
-            Harbor.Abstractions.Tools.ToolContext context,
+        public Task<ToolResult> ExecuteAsync(
+            JsonElement args,
+            ToolContext context,
             CancellationToken cancellationToken = default)
-            => Task.FromResult(Harbor.Abstractions.Models.ToolResult.Success("ok"));
+            => Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class ThrowingInitializePlugin : IPlugin
@@ -174,12 +173,12 @@ public sealed class RegistrationLayerTests
     private sealed class ContextCapturingPlugin : IPlugin
     {
         public ContextCapturingPlugin(string name) { Name = name; }
+        public PluginContext? CapturedContext { get; private set; }
         public string Name { get; }
         public Version Version => new(1, 0, 0);
         public Version RequiredHarborVersion => new(0, 4, 0);
         public string Description => "captures context";
-        public PluginContext? CapturedContext { get; private set; }
-        public void Initialize(PluginContext context) { CapturedContext = context; }
+        public void Initialize(PluginContext context) => CapturedContext = context;
         public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 

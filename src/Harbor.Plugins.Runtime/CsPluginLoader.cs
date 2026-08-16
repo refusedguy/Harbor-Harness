@@ -1,33 +1,31 @@
-using System.Reflection;
-using Harbor.Abstractions.Plugins;
-using Harbor.Plugins.Runtime.Compilation;
-using Harbor.Plugins.Runtime.Hosting;
-using Harbor.Plugins.Runtime.Instantiation;
-using Harbor.Plugins.Runtime.Registration;
-using Harbor.Plugins.Runtime.Storage;
+using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Compilation;
+using Harbor.Plugins.Hosting;
+using Harbor.Plugins.Instantiation;
+using Harbor.Plugins.Registration;
+using Harbor.Plugins.Storage;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Runtime;
-
 /// <summary>
 ///     <b>Obsolete facade.</b> Thin wrapper around <see cref="PluginHost" /> that
-/// preserves the original <c>CsPluginLoader</c> API for one release while callers
-/// migrate to the layered architecture.
+///     preserves the original <c>CsPluginLoader</c> API for one release while callers
+///     migrate to the layered architecture.
 /// </summary>
 /// <remarks>
 ///     <para>
 ///         The original <c>CsPluginLoader</c> mixed 7+ responsibilities (discovery,
 ///         hashing, caching, Roslyn compilation, reflection instantiation,
 ///         initialization, registration). The runtime is now split into five layers:
-/// <see cref="Storage" /> → <see cref="Compilation" /> →
-/// <see cref="Instantiation" /> → <see cref="Registration" /> →
-/// <see cref="Hosting" />. New code should depend on the layer interfaces directly
+///         <see cref="Storage" /> → <see cref="Compilation" /> →
+///         <see cref="Instantiation" /> → <see cref="Registration" /> →
+///         <see cref="Hosting" />. New code should depend on the layer interfaces directly
 ///         and compose them via <see cref="PluginHostBuilder" />.
 ///     </para>
 ///     <para>
 ///         This facade exists solely to keep the existing <c>Harbor.Cli</c> HostBuilder
 ///         and the existing test suite running without changes. It will be removed in
-/// v0.5.
+///         v0.5.
 ///     </para>
 /// </remarks>
 // S1133 fires on [Obsolete] asking "remember to remove this deprecated code someday".
@@ -39,12 +37,12 @@ public sealed class CsPluginLoader
 {
     private const string PluginsSubDir = "plugins";
     private const string CacheSubDir = "cache";
+    private readonly string _cacheDir;
+    private readonly string _globalPluginsDir;
 
     private readonly IPluginLoadHost _host;
     private readonly ILogger<CsPluginLoader> _logger;
-    private readonly string _globalPluginsDir;
     private readonly string _projectPluginsDir;
-    private readonly string _cacheDir;
     private readonly PluginAssemblyReferences _references;
 
     /// <summary>
@@ -105,12 +103,12 @@ public sealed class CsPluginLoader
         foreach (var lp in result.Value)
         {
             compiled.Add(new CompiledPlugin(
-                Instance: lp.Instance,
-                Name: lp.Name,
-                Version: lp.Version,
-                SourcePath: lp.SourcePath,
-                SourceHash: lp.SourceHash,
-                LoadedFromCache: lp.LoadedFromCache));
+                lp.Instance,
+                lp.Name,
+                lp.Version,
+                lp.SourcePath,
+                lp.SourceHash,
+                lp.LoadedFromCache));
         }
         return Result.Success<IReadOnlyList<CompiledPlugin>>(compiled);
     }
@@ -157,12 +155,12 @@ public sealed class CsPluginLoader
         // For backwards-compat with single-plugin files, return the first one.
         var lp = result.Value[0];
         return PluginCompilationResult.Success(new CompiledPlugin(
-            Instance: lp.Instance,
-            Name: lp.Name,
-            Version: lp.Version,
-            SourcePath: lp.SourcePath,
-            SourceHash: lp.SourceHash,
-            LoadedFromCache: lp.LoadedFromCache));
+            lp.Instance,
+            lp.Name,
+            lp.Version,
+            lp.SourcePath,
+            lp.SourceHash,
+            lp.LoadedFromCache));
     }
 
     /// <summary>
@@ -198,12 +196,12 @@ public sealed class CsPluginLoader
         foreach (var lp in result.Value)
         {
             compiled.Add(new CompiledPlugin(
-                Instance: lp.Instance,
-                Name: lp.Name,
-                Version: lp.Version,
-                SourcePath: lp.SourcePath,
-                SourceHash: lp.SourceHash,
-                LoadedFromCache: lp.LoadedFromCache));
+                lp.Instance,
+                lp.Name,
+                lp.Version,
+                lp.SourcePath,
+                lp.SourceHash,
+                lp.LoadedFromCache));
         }
         return Result.Success<IReadOnlyList<CompiledPlugin>>(compiled);
     }

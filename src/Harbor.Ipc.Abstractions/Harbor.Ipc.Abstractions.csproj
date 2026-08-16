@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Ipc.Abstractions — shared contract for the IPC layer.
+
+    This is the single assembly that BOTH the in-process client and the
+    MessagePack-over-pipe IPC client/server reference. It declares:
+      * IHarborClient — the interface every UI layer talks to.
+      * IHarborServer — the interface the host side implements.
+      * HarborEvent — discriminated union of streaming events.
+      * Protocol records (HarborRequest / HarborResponse unions) — the
+        MessagePack wire contract.
+
+    Dependencies:
+      * Harbor.Abstractions — for domain types (Session, AgentMessage,
+        ToolDescriptor, ProviderId, ModelInfo) used in the IHarborClient
+        surface. These are reference-only; no Harbor.Application /
+        Harbor.Registries dependency.
+      * MessagePack — for [MessagePackObject] / [Union] on protocol records.
+      * CSharpFunctionalExtensions — for Result<T>.
+
+    Layer: Application (use-case vocabulary). Same layer as
+    Harbor.Application — but it does NOT depend on Harbor.Application,
+    only on Harbor.Abstractions (domain).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Ipc.Abstractions</PackageId>
+    <Description>Harbor IPC abstractions — IHarborClient/IHarborServer interfaces + MessagePack protocol records. Shared contract for in-process and IPC modes.</Description>
+    <PackageTags>harbor;ipc;abstractions;messagepack;protocol</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!--
+      MessagePack's source-generator analyzers (MessagePackAnalyzer) emit
+      MPK#### diagnostics. We keep them as warnings (not errors) so a
+      missing [Key] doesn't break the build during protocol iteration.
+      MsgPack007 (no public constructor) + MsgPack017 (init initializer
+      reset) are also downgraded — they fire on every positional record
+      even after the parameterless ctor shim is added, and the runtime
+      behavior is correct.
+    -->
+    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903;MsgPack007;MsgPack017</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack"/>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+</Project>

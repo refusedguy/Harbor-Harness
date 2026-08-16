@@ -1,13 +1,29 @@
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.Ansi;
 /// <summary>
 ///     ANSI-based TUI renderer with full color/style support.
 ///     Implements Strategy pattern (GOF) via BaseTuiRenderer.
 /// </summary>
-public sealed class AnsiTuiRenderer : BaseTuiRenderer
+/// <remarks>
+///     <para>
+///         <b>Inheritance is intentional:</b> this class is unsealed so that
+///         specialized renderers (e.g. <c>SixelTuiRenderer</c> in
+///         <c>Harbor.Tui.Sixel</c>) can extend it and reuse the streaming
+///         token feed while adding image-emission hooks. We chose inheritance
+///         over composition here because the Sixel renderer needs to override
+///         <see cref="RenderAsync" /> with minimal logic — calling
+///         <c>base.RenderAsync</c> for the common case and only intercepting
+///         <c>ToolExecutionEndEvent</c> payloads that may carry image bytes.
+///         Composition would force a wider surface area (re-declaring
+///         <c>Context</c>, <c>ReadLineAsync</c>, <c>WriteAsync</c>, etc.) for
+///         no decoupling benefit since the Sixel renderer is fundamentally an
+///         ANSI renderer with one extra behavior.
+///     </para>
+/// </remarks>
+public class AnsiTuiRenderer : BaseTuiRenderer
 {
 
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger) : base(logger)

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Desktop.Shared — cross-platform implementations built on top of
+    Harbor.Desktop.Abstractions. No UI-framework references; depends on Markdig
+    (already used by every desktop app) and Microsoft.Extensions.Logging.Abstractions.
+
+    Dependency rule (enforced by Harbor.Architecture.Tests):
+      ✅ Harbor.Desktop.Abstractions
+      ✅ Markdig (for MarkdownToPlainTextService)
+      ✅ Microsoft.Extensions.Logging.Abstractions
+      ❌ NO Avalonia / WPF / MAUI / Blazor
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Desktop.Shared</PackageId>
+    <Description>Harbor desktop shared — cross-platform services and command catalogs for Avalonia/WPF/MAUI/Blazor apps.</Description>
+    <PackageTags>harbor;desktop;shared;cross-platform</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- Locators/IShowPlaceholderFactory references IOverlayStack (Ui.Framework.Services). -->
+    <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Markdig"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

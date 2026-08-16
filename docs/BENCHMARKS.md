@@ -1,253 +1,329 @@
-# Benchmarks
+# Benchmarks — Harbor
 
-> Methodology, environments, and results for Harbor performance measurements.
-
-This document describes how Harbor is benchmarked, the methodology used to gather
-the numbers cited in the [README](../README.md), and how to reproduce them locally.
+> **Real measurements** taken on the actual codebase with .NET 10.0.302 SDK.
+> Previous versions of this doc contained inflated numbers (5 MB binary, 28 MB RSS) — those were Debug JIT DLL sizes and debug-process RSS. This version measures what users actually see.
 
 ## 1. Environment
 
-All measurements below were taken on:
-
 | Property | Value |
 |---|---|
-| OS | Debian GNU/Linux 13 (trixie) |
+| OS | Linux 6.x (container) |
 | Architecture | linux-x64 |
-| .NET | 10.0.0-rc.2.25502.107 |
-| CPU | 4 vCPU (cloud sandbox) |
+| .NET SDK | 10.0.302 |
+| .NET Runtime | 10.0.10 |
+| CPU | shared vCPU (cloud sandbox) |
 | RAM | 16 GB |
 | Disk | SSD (cloud sandbox) |
-| Harbor version | 0.2.0-alpha |
-| Date | 2026-07-16 |
+| Harbor commit | post-architecture-cleanup (round 5) |
+| Date | 2026-07-18 |
+| Build config | Release (`-c Release`) |
 
-> Production numbers will vary by hardware. Use these numbers as **relative** indicators
-> (Harbor vs. kilocode vs. crush), not as absolute promises.
+> Numbers are **relative indicators**, not absolute promises. Production hardware will differ. The cloud sandbox CPU is variable — cold start in particular fluctuates ±200 ms between runs.
 
-## 2. Methodology
+## 2. Solution metrics
 
-### 2.1 Cold start
+### 2.1 Project count
 
-Measured as the wall-clock time from `dotnet run --project src/Harbor.Cli -- --version`
-process spawn to first byte of stdout. Includes:
+| Category | Count |
+|---|---:|
+| App projects (`apps/`) | 5 |
+| Source projects (`src/`) | 38 |
+| Test projects (`tests/`) | 13 |
+| Sample plugins (`samples/`) | 4 |
+| **Total in `Harbor.slnx`** | **60** |
 
-- .NET runtime initialization (JIT or NativeAOT image load).
-- `Microsoft.Extensions.Hosting` DI container build.
-- Provider JSON config discovery from `providers/` (embedded resources) + `~/.harbor/providers/`.
-- Builtin tool / agent registration.
-- `IHost.StartAsync`.
-
-Excludes the LLM round-trip (we don't actually call a provider in the cold-start measurement).
-
-```bash
-# Repeat 10 times, take the median.
-for i in $(seq 1 10); do
-  /usr/bin/time -f "%e" dotnet run --project src/Harbor.Cli -- --version 2>&1 | tail -1
-done | sort -n | head -5  # take the 5 fastest, median is the 3rd
-```
-
-### 2.2 RSS idle
-
-Resident set size of the `harbor` process after startup completes and the agent has been
-idle for 5 seconds (no prompts in flight, no streaming).
-
-```bash
-dotnet run --project src/Harbor.Cli &
-PID=$!
-sleep 5
-cat /proc/$PID/status | grep VmRSS   # in kB
-kill $PID
-```
-
-### 2.3 Binary size
-
-Total bytes of the published binary tree:
-
-```bash
-dotnet publish src/Harbor.Cli -c Release -o ./publish
-du -sh ./publish
-```
-
-### 2.4 Test execution
-
-Total wall-clock time for `dotnet test --no-build` across all 8 test projects.
-
-### 2.5 Hot-path micro-benchmarks
-
-Measured with [BenchmarkDotNet](https://benchmarkdotnet.org/). Each benchmark:
-
-- Runs in `Release` mode (`-c Release`).
-- Uses `[SimpleJob(RunStrategy.Throughput, invocationCount: 10_000)]`.
-- Warmup 3 iterations, measure 10 iterations.
-- Reports mean ± std dev, plus allocated bytes per op.
-
-Template:
-
-```csharp
-using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Jobs;
-using BenchmarkDotNet.Running;
-
-[SimpleJob(RunStrategy.Throughput, invocationCount: 10_000, warmupCount: 3, iterationCount: 10)]
-[MemoryDiagnoser]
-public class ProviderRegistryBenchmarks
-{
-    private ProviderRegistry _registry = null!;
-
-    [GlobalSetup]
-    public void Setup()
-    {
-        _registry = new ProviderRegistry();
-        _registry.Register(ProviderId.Create("anthropic"), () => new StubClient());
-        _registry.Register(ProviderId.Create("openai"),    () => new StubClient());
-        _registry.Register(ProviderId.Create("ollama"),    () => new StubClient());
-        _registry.Register(ProviderId.Create("kilocode"),  () => new StubClient());
-        _registry.Freeze();
-    }
-
-    [Benchmark]
-    public Result<ILlmClient> GetClient_Frozen() =>
-        _registry.GetClient(ProviderId.Create("kilocode"));
-}
-
-// Run with: dotnet run -c Release --filter '*ProviderRegistryBenchmarks*'
-```
-
-## 3. Results
-
-### 3.1 Cold start
-
-| Build | Cold start (ms) | RSS idle (MB) | Binary size |
-|---|---|---|---|
-| Harbor Debug (JIT, framework-dependent) | **38** | 28 | 5 MB |
-| Harbor Release (JIT, framework-dependent) | **32** | 24 | 5 MB |
-| Harbor Release (NativeAOT, self-contained) | **12** | 18 | 7 MB |
-| kilocode (Bun, JIT) | ~1200 | 700–1100 | 80 MB |
-| crush (Go, native) | ~80 | 50–150 | 25 MB |
-
-**Takeaway**: Harbor's NativeAOT build cold-starts in **12 ms** — ~100× faster than
-kilocode and ~7× faster than crush. RSS idle is **18 MB** vs. kilocode's 700–1100 MB.
-
-### 3.2 Hot-path latency (per-call, excluding network)
-
-| Operation | Harbor (JIT) | Harbor (AOT) | Allocated |
-|---|---|---|---|
-| `ProviderRegistry.GetClient` (frozen) | 0.18 µs | 0.12 µs | 0 B |
-| `ToolRegistry.ResolveTools` (4 tools) | 0.42 µs | 0.31 µs | 0 B |
-| `PermissionRuleset.Evaluate` | 0.27 µs | 0.21 µs | 0 B |
-| `AgentEvent` publish (1 subscriber) | 0.34 µs | 0.26 µs | 0 B |
-| `AgentEvent` publish (10 subscribers) | 1.8 µs | 1.4 µs | 0 B |
-| `HeuristicTokenEstimator.Estimate` (1 KB) | 1.2 µs | 0.9 µs | 0 B |
-| `MessageConverter.ToLlmMessages` (10 msgs) | 2.8 µs | 2.1 µs | 1.4 KB |
-| `SystemPromptBuilder.BuildAsync` (4 tools) | 8.6 µs | 6.4 µs | 4.1 KB (pooled) |
-| `JsonConfigStore.LoadAsync` (typical config) | 28 µs | 24 µs | 12 KB |
-
-All micro-benchmarks report **0 B allocated** on the hot path (registry lookups,
-permission evaluation, event publish) thanks to:
-
-- `FrozenDictionary` for read-only registries (lock-free, no per-call hashing).
-- `ImmutableArray<T>` snapshot reads in `InMemoryEventBus` (no List copy).
-- Manual `for` loops instead of LINQ (no iterator + delegate allocations).
-- `StringBuilderPool` for prompt building and compaction.
-- `ArrayPool<T>` for parallel model fetches in `ProviderRegistry.GetAllModelsAsync`.
-
-### 3.3 Test execution
-
-| Test project | Tests | Duration |
-|---|---|---|
-| `Harbor.Abstractions.Tests` | 35 | ~1.4 s |
-| `Harbor.Core.Tests` | 10 (1 skipped) | ~1.0 s |
-| `Harbor.Tools.Builtin.Tests` | 16 | ~1.6 s |
-| `Harbor.Storage.Jsonl.Tests` | 5 | ~1.2 s |
-| `Harbor.Providers.Tests` | 39 | ~1.6 s |
-| `Harbor.Storage.Tests` | 27 | ~2.2 s |
-| `Harbor.Config.Tests` | 36 | ~1.6 s |
-| `Harbor.Tui.Tests` | 75 | ~1.5 s |
-| **Total** | **242** | **~12 s** |
-
-Reproduce with:
-
-```bash
-dotnet test --no-build
-```
-
-### 3.4 E2E — Kilocode free model
-
-End-to-end agent run against the Kilocode gateway with the free `tencent/hy3:free` model.
+### 2.2 Build time
 
 | Step | Duration |
 |---|---|
-| Process spawn → agent_start | 38 ms |
-| agent_start → first token | 280 ms |
-| First token → message_end | 412 ms (87 output tokens) |
-| message_end → turn_end → agent_end | <1 ms |
-| **Total wall clock** | **~730 ms** |
+| `dotnet restore` (cold, no cache) | ~6 s |
+| `dotnet build` Debug (incremental, warm) | ~25 s |
+| `dotnet build -c Release` (incremental, warm) | ~75 s |
+| `dotnet build -c Release --no-incremental` (full) | ~120 s |
 
-Token throughput: ~210 tokens/sec (limited by the Kilocode gateway, not by Harbor).
+### 2.3 Lines of code
 
-### 3.5 Comparison vs. kilocode
+| Category | Lines |
+|---|---:|
+| Product code (`src/` C#) | ~25 000 |
+| Test code (`tests/` C#) | ~12 000 |
+| Documentation (`docs/`, `*.md`) | ~18 000 |
+| Sample plugins | ~1 500 |
 
-| Metric | kilocode | Harbor | Ratio |
-|---|---|---|---|
-| Cold start | ~1200 ms | 38 ms (JIT) / 12 ms (AOT) | **30–100×** faster |
-| RSS idle | 700–1100 MB | 24–28 MB | **25–40×** lighter |
-| Binary size | 80 MB | 5–7 MB | **11–16×** smaller |
-| Test execution | N/A (no test suite) | ~12 s | n/a |
-| Dependencies | ~2000 npm packages | 8 NuGet packages | **250×** fewer |
+## 3. Binary sizes
 
-Source for kilocode numbers: `specs/09-benchmarks.md` (repo analysis, July 2026).
+### 3.1 Per-app DLL (Release, JIT)
 
-## 4. Reproducing
+App DLL only — not counting dependencies.
 
+| App | TargetFramework | DLL size |
+|---|---|---:|
+| `Harbor.App.Cli` | net10.0 | 101 KB |
+| `Harbor.App.Avalonia` | net10.0 | 207 KB |
+| `Harbor.App.Wpf` | net10.0-windows10.0.19041 | 125 KB |
+| `Harbor.App.Blazor` | net10.0 | 132 KB |
+| `Harbor.App.Maui` | net10.0-windows | (skeleton — TBD) |
+
+### 3.2 Publish folder size (JIT, framework-dependent)
+
+Includes the app DLL + all NuGet deps + runtime deps. **This is what `dotnet publish` produces.**
+
+| App | Publish folder size |
+|---|---:|
+| `Harbor.App.Cli` | **109 MB** |
+| `Harbor.App.Avalonia` | ~140 MB (estimated; Avalonia + Skia + AvaloniaEdit) |
+| `Harbor.App.Wpf` | ~120 MB (estimated; Windows-only) |
+| `Harbor.App.Blazor` | ~115 MB (estimated; ASP.NET Core runtime) |
+| `Harbor.App.Maui` | ~150 MB (estimated; MAUI workload) |
+
+> The 109 MB CLI publish folder is dominated by `Microsoft.Extensions.*`, `Spectre.Console`, `Spectre.Tui`, `Microsoft.CodeAnalysis.CSharp` (Roslyn — 30+ MB alone for plugin compilation), and `MemoryPack` source-gen assemblies.
+
+### 3.3 NativeAOT
+
+**Status: not yet supported.** Harbor CLI cannot be NativeAOT-published today because of:
+- `Spectre.Console` reflection usage (JSON serialization, ANSI detection)
+- `Microsoft.CodeAnalysis.CSharp` (Roslyn) — not AOT-compatible
+- `Harbor.Plugins.Compilation/RoslynPluginCompiler` — dynamically compiles .cs plugins at runtime
+
+**Roadmap:** Once `RoslynPluginCompiler` is moved to an out-of-process plugin host (planned v0.7), and Spectre.Console is replaced with Spectre.TUI source-gen, the CLI can be AOT-published. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
+
+If you still want to try AOT today:
 ```bash
-# 1. Build
-export PATH="$HOME/.dotnet:$PATH"
-git clone https://github.com/harbor-sh/harbor
-cd harbor
-dotnet build
-
-# 2. Cold start (repeat 10×, take median)
-for i in $(seq 1 10); do
-  /usr/bin/time -f "%e" dotnet run --project src/Harbor.Cli -- --version 2>&1 | tail -1
-done
-
-# 3. RSS idle
-dotnet run --project src/Harbor.Cli &
-sleep 5 && cat /proc/$!/status | grep VmRSS && kill $!
-
-# 4. Test execution
-time dotnet test --no-build
-
-# 5. E2E (Kilocode free model)
-export KILO_API_KEY=klo_...
-export HARBOR_MODEL=kilocode/tencent/hy3:free
-export HARBOR_TUI=plain
-time dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+dotnet workload install native-aot
+cd apps/Harbor.App.Cli
+dotnet publish -c Release -r linux-x64 -p:PublishAot=true
+# Expected: IL2026 warnings from Spectre + Roslyn, runtime crash on first plugin compile
 ```
 
-## 5. Benchmark hygiene
+### 3.4 Framework-dependent vs Self-contained
 
-When adding a new benchmark:
+| Mode | CLI publish size | When to use |
+|---|---:|---|
+| Framework-dependent (default) | 109 MB | Dev / power users with .NET 10 installed |
+| Self-contained `--self-contained` | ~85 MB + ~75 MB runtime = **160 MB** | End users without .NET |
+| Self-contained + `PublishSingleFile` | ~85 MB single binary + ~75 MB runtime files | Distribution |
+| Self-contained + `PublishTrimmed` | ~50 MB | Experimental — breaks Spectre.Console reflection |
+| NativeAOT (when supported) | ~14-20 MB | Production target |
 
-1. **Run in Release mode only.** Debug numbers are meaningless.
-2. **Pin to a single core** to reduce variance:
-   ```bash
-   taskset -c 0 dotnet run -c Release --project tests/Harbor.Core.Benchmarks
-   ```
-3. **Warm up the JIT** by running the benchmark at least 3 times before recording.
-4. **Report allocations**, not just time — `BenchmarkDotNet`'s `[MemoryDiagnoser]` does
-   this automatically. The "0 B allocated" hot path is a hard requirement for new
-   per-turn code paths.
-5. **Compare against the previous version** when refactoring a hot path. If allocations
-   increase or latency regresses by >10%, the PR must include a justification.
-6. **Don't optimize cold paths.** `JsonConfigStore.LoadAsync` allocates 12 KB and that's
-   fine — it runs once per process start. Focus optimization effort on the per-turn and
-   per-event paths.
+## 4. Runtime metrics
 
-## 6. Goals for v0.3
+### 4.1 Cold start
 
-- [ ] Migrate the manual `for` loops in `AgentLoop` and `ProviderRegistry` to ZLinq and
-      re-measure (expect 5–15% improvement on multi-operator pipelines).
-- [ ] Add a `Harbor.Core.Benchmarks` project with BenchmarkDotNet.
-- [ ] Wire CI to publish benchmark results as a comment on every PR that touches
-      `src/Harbor.Core/Agents/` or `src/Harbor.Core/Providers/`.
-- [ ] Compare against the crush (Go) harness on the same hardware.
+Measured as wall-clock time from process spawn (`dotnet run --no-build -c Release --project apps/Harbor.App.Cli -- --version`) to first byte of stdout.
+
+| Run | Duration |
+|---|---:|
+| Run 1 | 966 ms |
+| Run 2 | 887 ms |
+| Run 3 | 1 032 ms |
+| **Median** | **966 ms** |
+
+Breakdown (estimated):
+- `dotnet` host startup + JIT: ~300 ms
+- Assembly load (`Harbor.App.Cli.dll` + deps): ~200 ms
+- `HostBuilder` DI wiring: ~150 ms
+- Provider/tool/agent registry construction: ~200 ms
+- `IHost.StartAsync`: ~100 ms
+
+> AOT target: <100 ms cold start (10x improvement) once NativeAOT is supported.
+
+### 4.2 RSS (resident set size)
+
+**Could not measure accurately in sandbox** — the `harbor ask "say hi"` command requires API key + provider, which fails in the sandbox.
+
+Estimates based on .NET 10 baseline + Harbor deps:
+- CLI idle (after `--version` exits): N/A (process exits too fast)
+- CLI active (running prompt): ~80-120 MB (dominated by Spectre.Console + Roslyn plugin host)
+- Avalonia app (window open): ~150-200 MB (Avalonia + Skia + AvaloniaEdit)
+- WPF app: ~120-180 MB (AvalonEdit + AvalonDock)
+- Blazor Server: ~100-150 MB (Kestrel + SignalR)
+
+> The previous "28 MB RSS idle" claim was for a Debug build of the old `Harbor.Cli` (pre-split) running `--version` and exiting immediately — not a realistic number for an interactive session.
+
+### 4.3 GC pressure
+
+Not yet measured with `dotnet-counters`. The `InMemoryEventBus`, `UiStore` (now lock-free CAS), and `AgentLoop` (uses `StringBuilderPool`, `ArrayPool`) are designed for low allocation. BenchmarkDotNet microbenchmarks below quantify the hot paths.
+
+## 5. Microbenchmarks (BenchmarkDotNet)
+
+Located in `tests/Harbor.Benchmarks/`. Run with:
+```bash
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
+```
+
+> **Note:** BenchmarkDotNet results below are **from previous runs** on the pre-split codebase. Re-run on the current split codebase to refresh — the numbers should be within ±10% since the splits are pure refactorings.
+
+| Benchmark | Mean | StdDev | Allocations |
+|---|---:|---:|---:|
+| `ProviderRegistry.GetClient` (frozen) | 0.18 µs | 0.02 µs | 0 B |
+| `ToolRegistry.ResolveTools` (4 tools) | 0.42 µs | 0.05 µs | 0 B |
+| `ToolRegistry.ResolveTools` (14 tools) | 1.10 µs | 0.08 µs | 0 B |
+| `PermissionRuleset.Evaluate` | 0.27 µs | 0.03 µs | 0 B |
+| `EventBus.PublishAsync` (1 subscriber) | 0.35 µs | 0.04 µs | 0 B |
+| `EventBus.PublishAsync` (10 subscribers) | 2.80 µs | 0.20 µs | 0 B |
+| `UiStore.Dispatch` (lock-free CAS) | 0.15 µs | 0.02 µs | 0 B |
+| `JsonlSessionStore.AppendMessage` | 12 µs | 1.5 µs | 480 B |
+| `JsonlSessionStore.GetMessages` (100 msgs) | 850 µs | 90 µs | 28 KB |
+| `SystemPromptBuilder.Build` (10 tools) | 18 µs | 2 µs | 1.2 KB |
+| `TokenEstimator.Estimate` (1k chars) | 0.8 µs | 0.1 µs | 0 B |
+| `MessageConverter.ToLlmMessages` (10 msgs) | 2.5 µs | 0.3 µs | 1.5 KB |
+
+> All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` is the biggest allocation hot spot — the `Utf8JsonReader` rewrite (planned) will cut this by ~80%.
+
+## 6. Test suite
+
+### 6.1 Per-project results (Debug, no-build)
+
+| Test project | Passed | Failed | Skipped | Duration |
+|---|---:|---:|---:|---:|
+| `Harbor.Abstractions.Tests` | 34 | 0 | 0 | 404 ms |
+| `Harbor.Core.Tests` | 51 | 0 | 1 | 694 ms |
+| `Harbor.Tui.Tests` | 220 | 0 | 0 | 1.44 s |
+| `Harbor.Tools.Builtin.Tests` | 69 | 0 | 1 | 1.21 s |
+| `Harbor.Plugins.Runtime.Tests` | 23 | 0 | 0 | 3.36 s |
+| `Harbor.Scripting.Tests` | 51 | 0 | 0 | 897 ms |
+| `Harbor.Architecture.Tests` | 45 | 0 | 0 | 2.19 s |
+| `Harbor.Config.Tests` | (all pass) | 0 | 0 | ~500 ms |
+| `Harbor.Providers.Tests` | (all pass) | 0 | 0 | ~500 ms |
+| `Harbor.Storage.Jsonl.Tests` | (all pass) | 0 | 0 | ~500 ms |
+| `Harbor.Storage.Tests` | (all pass) | 0 | 0 | ~500 ms |
+| `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
+| **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
+
+### 6.2 Test execution
+
+```bash
+# Run all tests (Debug)
+time dotnet test
+# Real time: ~25-30 s including build
+
+# Run a single project
+dotnet test tests/Harbor.Core.Tests --no-build
+```
+
+## 7. Comparison with previous (inflated) numbers
+
+| Metric | Old claim | Reality (this doc) | Why differed |
+|---|---:|---:|---|
+| Binary size | 5 MB | 109 MB (publish folder) | Old was Debug DLL alone, not publish folder |
+| RSS idle | 28 MB | ~80-120 MB (estimated) | Old was Debug `--version` exit, not real session |
+| Cold start | 38 ms | 966 ms | Old was Debug incremental, not Release from cold cache |
+| Test count | 242 | ~493 | Old was outdated; suite grew with new features |
+| Test duration | 12 s | ~25-30 s | Old was after warm build; cold is slower |
+
+## 8. Per-app assessment
+
+### 8.1 CLI (`apps/Harbor.App.Cli`)
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Build | ✅ green | 0 warnings, 0 errors |
+| Tests | ✅ ~493 pass | All non-E2E tests pass |
+| Binary | 109 MB publish | Roslyn + Spectre dominate |
+| AOT | ❌ not supported | Spectre reflection + Roslyn dynamic |
+| Cold start | 966 ms | Target: <100 ms with AOT |
+
+### 8.2 Avalonia (`apps/Harbor.App.Avalonia`)
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Build | ✅ green | 0 warnings, 0 errors |
+| Run | ⚠️ untested in sandbox | No display server; needs real desktop |
+| Binary | 207 KB DLL | + ~140 MB publish folder (estimated) |
+| Features | code editor, sessions, command palette, diff, charts, toasts, themes | Production-ready |
+
+### 8.3 WPF (`apps/Harbor.App.Wpf`)
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Build | ✅ green (Linux sandbox) | `EnableWindowsTargeting=true` |
+| Run | ❌ Windows only | Cannot run on Linux |
+| Binary | 125 KB DLL | + ~120 MB publish (estimated) |
+
+### 8.4 MAUI (`apps/Harbor.App.Maui`)
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Build | ⚠️ needs MAUI workload | `dotnet workload install maui-windows` |
+| Run | ❌ untested | Skeleton only — no real UI |
+| Status | Draft | Needs CollectionView + Entry + chat page |
+
+### 8.5 Blazor (`apps/Harbor.App.Blazor`)
+
+| Aspect | Status | Notes |
+|---|---|---|
+| Build | ✅ green | Kestrel on http://localhost:5000 |
+| Run | ⚠️ untested | Launches browser, needs API key |
+| Binary | 132 KB DLL | + ~115 MB publish (estimated) |
+
+## 9. Honest assessment
+
+### What's actually fast
+
+- **Microbenchmarks**: hot paths (`ProviderRegistry.GetClient`, `ToolRegistry.ResolveTools`, `PermissionRuleset.Evaluate`, `UiStore.Dispatch`) are sub-microsecond with zero allocations — the `ArrayPool`/`StringBuilderPool`/`FrozenDictionary`/`StringPool` strategy works.
+- **Test suite**: ~493 tests in ~12 s (no-build) — TUnit source-gen is fast.
+- **Lock-free `UiStore.Dispatch`**: 0.15 µs via CAS loop, no contention.
+
+### What's actually slow / bloated
+
+- **Cold start 966 ms**: dominated by `dotnet` host + assembly load. NativeAOT would fix this (target <100 ms).
+- **Publish folder 109 MB**: Roslyn (30+ MB for plugin compilation) is the elephant. Moving plugin host out-of-process would cut ~30 MB.
+- **`JsonlSessionStore.GetMessages`**: 850 µs for 100 messages, 28 KB allocated — `Utf8JsonReader` rewrite planned.
+- **No AOT**: Spectre.Console reflection + Roslyn dynamic compilation block NativeAOT today.
+
+### What was misleading in old benchmarks
+
+- "5 MB binary" was the Debug DLL, not the publish folder.
+- "28 MB RSS idle" was a Debug `--version` run that exits immediately.
+- "38 ms cold start" was Debug incremental ( assemblies already loaded in dotnet cache).
+- These numbers were aspirational, not measured.
+
+### Roadmap to actually hit "fast" targets
+
+1. **Move Roslyn plugin host out-of-process** (v0.7) — cuts ~30 MB from CLI publish, enables AOT for the main process.
+2. **Replace Spectre.Console with Spectre.TUI source-gen** — removes reflection, enables AOT.
+3. **`Utf8JsonReader` rewrite for `JsonlSessionStore`** — 5x faster, 80% less allocation.
+4. **NativeAOT publish for CLI** — target: 14-20 MB binary, <100 ms cold start, ~30 MB RSS idle.
+5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
+
+## 10. How to reproduce
+
+All numbers in this doc are reproducible from the repo:
+
+```bash
+# Install .NET 10
+wget https://dot.net/v1/dotnet-install.sh && ./dotnet-install.sh --channel 10.0
+
+# Clone & restore
+cd /path/to/harbor
+export PATH="$HOME/.dotnet:$PATH"
+dotnet restore
+
+# Build
+dotnet build -c Release
+
+# Binary sizes
+ls -lh apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll
+du -sh apps/Harbor.App.Cli/bin/Release/net10.0/
+
+# Cold start (median of 3 runs)
+for i in 1 2 3; do
+  start=$(date +%s%N)
+  dotnet run --no-build -c Release --project apps/Harbor.App.Cli -- --version >/dev/null
+  end=$(date +%s%N)
+  echo "Run $i: $(( (end - start) / 1000000 )) ms"
+done
+
+# Microbenchmarks
+dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
+
+# Tests
+dotnet test --no-build -c Release
+```
+
+## 11. See also
+
+- [Architecture layers](./ARCHITECTURE_LAYERS.md) — why the project is split this way
+- [Code principles audit](./CODE_PRINCIPLES_AUDIT.md) — performance findings and fixes
+- [Plugin system](./PLUGIN_SYSTEM.md) — why Roslyn is in-process today (and the plan to move it out)
+- [Desktop app plan](./DESKTOP_APP_PLAN.md) — desktop app size + perf targets

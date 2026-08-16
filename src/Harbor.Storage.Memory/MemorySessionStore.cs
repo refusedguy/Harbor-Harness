@@ -109,6 +109,16 @@ public sealed class MemorySessionStore : ISessionStore
         return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
     }
 
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    {
+        if (_sessions.ContainsKey(session.Id))
+        {
+            _sessions[session.Id] = session;
+            return Task.FromResult(Result.Success());
+        }
+                return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
+    }
+
     public void Clear()
     {
         _sessions.Clear();

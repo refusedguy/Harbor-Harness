@@ -10,12 +10,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
 </Project>

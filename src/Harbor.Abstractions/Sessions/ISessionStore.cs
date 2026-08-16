@@ -82,6 +82,14 @@ public interface ISessionStore
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Update a session's metadata (e.g. title).
+    /// </summary>
+    /// <param name="session">The updated session record.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success, or failure if the session does not exist.</returns>
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default);
+
+    /// <summary>
     ///     Get aggregated stats for a session.
     /// </summary>
     /// <param name="sessionId">The session id.</param>

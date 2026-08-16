@@ -22,13 +22,36 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  PRESENTATION (UI / CLI)                                        │
-│  - Harbor.Cli                                                   │
-│  - Harbor.Tui.Ansi / Plain / Spectre / Spectre.Fullscreen /     │
-│    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel /  │
-│    Notifications                                                │
-│  - Harbor.Tui.Wpf / Avalonia / Maui / Blazor                    │
-│  Depends on: Application + Abstractions (Composition Root OK)   │
+│  PRESENTATION (UI / CLI — composition roots)                    │
+│  - Harbor.App.Cli                                               │
+│  - Harbor.App.Avalonia (cross-platform desktop GUI)             │
+│  - Harbor.App.Wpf (Windows desktop GUI)                         │
+│  - Harbor.App.Maui (WinUI/Android/iOS/Mac Catalyst)             │
+│  - Harbor.App.Blazor (Blazor Server — web)                      │
+│  - Harbor.Tui.Ansi / Plain / Spectre / .Fullscreen /            │
+│    SpectreTui / TerminalGui / Termina / RazorConsole /          │
+│    Sixel / Notifications                                        │
+│  Depends on: Application + Ui.Framework + Abstractions          │
+└─────────────────────────────────────────────────────────────────┘
+                                  ▲
+                                  │ uses
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  UI FRAMEWORK (TEA + reusable VMs + components)                 │
+│  - Harbor.Ui.Framework                                          │
+│    State/      (UiStore, UiReducer, UiMsg, UiState — TEA)       │
+│    ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, ...)      │
+│    Converters/ (StatusMappers — platform-agnostic helpers)      │
+│    Rendering/  (ChatMessageRenderer, ChatStreamingPresenter)    │
+│    Sessions/   (SessionFactory, SessionSwitcher, SessionContext,│
+│                 SessionGitTracker, IChatViewBinder,              │
+│                 ICommonConfigReader)                            │
+│    Panels/     (dockable panel system)                          │
+│    Services/   (IDispatcherAdapter, IThemeService, IToastService,│
+│                 GitService, SessionStatusTracker)               │
+│    Configuration/ (ICommonConfigReader)                         │
+│  Depends on: Abstractions + Desktop.Abstractions                │
+│              (circular-dep workaround: ICommonConfigReader)     │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ uses
@@ -39,10 +62,15 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │                 AgentRegistry, ToolRegistry, ProviderRegistry,  │
 │                 InMemoryEventBus, SystemPromptBuilder,          │
 │                 MessageConverter, OnboardingWizard, HarborConfig)│
+│  - Harbor.Application (Sessions, Agents, Configuration,         │
+│                        Permissions, Onboarding)                 │
 │  - Harbor.Plugins.Runtime (PluginHost, PluginHostBuilder)       │
+│  - Harbor.Plugins.Compilation (RoslynPluginCompiler + cache)    │
 │  - Harbor.Scripting (ScriptHost, Bridge/ScriptGlobals)          │
+│  - Harbor.Ipc.{Abstractions, InProcess, Server, Client}         │
+│  - Harbor.Logging (Serilog per-run timestamped files)           │
 │  Depends on: Abstractions ONLY (Harbor.Abstractions +           │
-│              Harbor.Tui.Abstractions, both Domain)              │
+│              Harbor.Desktop.Abstractions, both Domain)          │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements
@@ -52,35 +80,61 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Storage.Jsonl / Memory / Sqlite                       │
 │  - Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI /     │
 │    Ollama                                                       │
-│  - Harbor.Tools.Builtin                                         │
-│  - Harbor.Plugins.Runtime/Compilation (Roslyn — already in      │
-│    the Plugins.Runtime project; that project is Application     │
-│    because it also hosts the PluginHost orchestrator; the       │
-│    Compilation subfolder is the Infrastructure-flavored part)   │
-│  - Harbor.Scripting/Engines (SharpTS/Jint — same pattern:       │
-│    Scripting project is Application because it hosts            │
-│    ScriptHost; the Engines subfolder is the Infrastructure-     │
-│    flavored part)                                               │
-│  Depends on: Abstractions ONLY (NOT Harbor.Core, NOT other      │
-│              Application projects)                              │
+│  - Harbor.Tools.{Read, Write, Edit, Bash, Grep, Glob, Ls,       │
+│                  Task, WebFetch, Patch, Notebook, RipGrep,      │
+│                  Tree, Mcp, Builtin}                            │
+│  - Harbor.Desktop.DesignSystem (ThemeManager, palette tokens)   │
+│  Depends on: Abstractions ONLY                                  │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ declares
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  DOMAIN / ABSTRACTIONS (the hexagon core)                       │
-│  - Harbor.Abstractions (interfaces, models, events, value objs, │
+│  - Harbor.Abstractions (interfaces, events, value objs,         │
 │    IAgent, IAgentLoop, ITool, IToolRegistry, ILlmClient,        │
 │    ISessionStore, IProviderRegistry, IAgentRegistry,            │
 │    IEventBus, IPermissionService, ICompactionService,           │
 │    PermissionRuleset, Session, Messages, Identifiers, …)        │
-│  - Harbor.Tui.Abstractions (TUI interfaces, UiState, UiReducer, │
-│    ViewRegistry, IPanels, ITuiViewModel, ITuiView, ITuiPlugin)  │
+│  - Harbor.Domain (Models: Session, ContentPart, ToolResult,     │
+│    Usage, Pricing, etc. — namespace `Harbor.Abstractions.Models`│
+│    but physically in Harbor.Domain.dll)                         │
+│  - Harbor.Desktop.Abstractions (Configuration: CommonConfig,    │
+│    ICommonConfigStore; base VMs for cross-platform reuse)       │
+│  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
 │  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
 │              Microsoft.Extensions.Logging.Abstractions etc. —   │
 │              no other Harbor project)                           │
+│  EXCEPTION: Harbor.Desktop.Abstractions → Harbor.Ui.Framework   │
+│             (via Harbor.Terminal.Abstractions). Worked around   │
+│             via ICommonConfigReader in Ui.Framework.            │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Why so many projects in the Domain layer?
+
+| Project | Why it's separate | Why it's in Domain (not Application) |
+|---|---|---|
+| `Harbor.Abstractions` | Pure contract surface for the agent harness (LLM, tools, sessions, events, permissions). A headless consumer (CLI script, MCP bridge, test harness) can reference just this. | Zero dependencies — only BCL + CSharpFunctionalExtensions. |
+| `Harbor.Domain` | Holds the concrete model types (`Session`, `ContentPart`, `ToolResult`, `Usage`, etc.). They declare `namespace Harbor.Abstractions.Models` so consumers don't need a second `using`, but the assembly is separate to keep Abstractions.dll small. | Pure data — no behaviour, no I/O. |
+| `Harbor.Desktop.Abstractions` | Cross-platform contracts shared by every desktop app (Avalonia / WPF / MAUI / Blazor): `CommonConfig`, `ICommonConfigStore`, base VMs. | Configuration schema + VM contracts are stable across platforms. |
+| `Harbor.Terminal.Abstractions` | TUI contracts: `ITuiRenderer`, `ITuiPlugin`, panel system entry points. Kept separate from `Harbor.Ui.Framework` because terminal vocabulary (Spectre, ANSI) is not relevant to desktop GUIs. | Used by both `Harbor.Ui.Framework` (panel system) and concrete TUI renderers. |
+
+### Circular-dependency workaround: `ICommonConfigReader`
+
+```
+Harbor.Ui.Framework
+  ↓ (needs to read config for SessionFactory)
+Harbor.Desktop.Abstractions (has ICommonConfigStore + CommonConfig)
+  ↓ (uses Ui.Framework.ViewModels via GlobalUsings)
+Harbor.Terminal.Abstractions (references Ui.Framework)
+  ↓
+Harbor.Ui.Framework  ← CYCLE!
+```
+
+**Fix**: declared `ICommonConfigReader` in `Harbor.Ui.Framework/Configuration/` with a narrow
+contract (just `TryReadProviderModelAsync`). Each platform app implements it as an adapter
+over its own `ICommonConfigStore` (e.g. `CommonConfigReaderAdapter` in Avalonia).
 
 ### Mermaid diagram
 

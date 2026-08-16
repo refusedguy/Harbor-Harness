@@ -1,0 +1,14 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.PluginPanelHostView">
+
+    <!--
+        Plugin panel host — right-dock placeholder for IPanelProvider contributions.
+        Production v0.5 will resolve registered panels from the IPanelRegistry and
+        render them as tabbed content here. For v0.4 we keep this as a hidden dock.
+    -->
+    <Border Background="{DynamicResource BgPanelBrush}" Padding="8">
+        <TextBlock Text="Plugin panels (v0.5)" Foreground="{DynamicResource TextTertiaryBrush}"
+                   FontFamily="{DynamicResource FontMono}" FontSize="11" />
+    </Border>
+</UserControl>

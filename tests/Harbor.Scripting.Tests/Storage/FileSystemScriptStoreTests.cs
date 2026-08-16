@@ -1,12 +1,10 @@
 // Storage layer tests — FileSystemScriptStore (uses a temp directory).
-using Harbor.Scripting.Storage;
 namespace Harbor.Scripting.Tests.Storage;
-
 public class FileSystemScriptStoreTests
 {
     private static string NewTempDir()
     {
-        var path = Path.Combine(Path.GetTempPath(), "harbor-fs-store-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(Path.GetTempPath(), "harbor-fs-store-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -14,7 +12,7 @@ public class FileSystemScriptStoreTests
     [Test]
     public async Task ListAsync_EmptyDir_ReturnsEmptyList()
     {
-        var dir = NewTempDir();
+        string dir = NewTempDir();
         try
         {
             var store = new FileSystemScriptStore(dir);
@@ -26,14 +24,17 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
     [Test]
     public async Task WriteAsync_CreatesTsFile_OnFirstWrite()
     {
-        var dir = NewTempDir();
+        string dir = NewTempDir();
         try
         {
             var store = new FileSystemScriptStore(dir);
@@ -48,20 +49,23 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
     [Test]
     public async Task ListAsync_PicksUpJsAndTsFiles()
     {
-        var dir = NewTempDir();
+        string dir = NewTempDir();
         try
         {
             File.WriteAllText(Path.Combine(dir, "a.ts"), "x");
             File.WriteAllText(Path.Combine(dir, "b.js"), "y");
             File.WriteAllText(Path.Combine(dir, "c.txt"), "ignored");
-            var store = new FileSystemScriptStore(dir, createRoot: false);
+            var store = new FileSystemScriptStore(dir, false);
 
             var result = await store.ListAsync();
 
@@ -72,18 +76,21 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
     [Test]
     public async Task DeleteAsync_RemovesFile()
     {
-        var dir = NewTempDir();
+        string dir = NewTempDir();
         try
         {
             File.WriteAllText(Path.Combine(dir, "temp.ts"), "x");
-            var store = new FileSystemScriptStore(dir, createRoot: false);
+            var store = new FileSystemScriptStore(dir, false);
 
             var result = await store.DeleteAsync("temp");
 
@@ -92,17 +99,20 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
     [Test]
     public async Task ReadAsync_MissingScript_ReturnsFailure()
     {
-        var dir = NewTempDir();
+        string dir = NewTempDir();
         try
         {
-            var store = new FileSystemScriptStore(dir, createRoot: false);
+            var store = new FileSystemScriptStore(dir, false);
 
             var result = await store.ReadAsync("nonexistent");
 
@@ -111,20 +121,23 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 
     [Test]
     public async Task ListAsync_FirstRootWinsOnNameCollision()
     {
-        var dir1 = NewTempDir();
-        var dir2 = NewTempDir();
+        string dir1 = NewTempDir();
+        string dir2 = NewTempDir();
         try
         {
             File.WriteAllText(Path.Combine(dir1, "tool.ts"), "from-dir1");
             File.WriteAllText(Path.Combine(dir2, "tool.js"), "from-dir2");
-            var store = new FileSystemScriptStore((IEnumerable<string>)new[] { dir1, dir2 }, createRoots: false);
+            var store = new FileSystemScriptStore(new[] { dir1, dir2 }, false);
 
             var list = await store.ListAsync();
             var read = await store.ReadAsync("tool");
@@ -135,8 +148,14 @@ public class FileSystemScriptStoreTests
         }
         finally
         {
-            try { Directory.Delete(dir1, true); } catch { /* swallow */ }
-            try { Directory.Delete(dir2, true); } catch { /* swallow */ }
+            try { Directory.Delete(dir1, true); }
+            catch
+            { /* swallow */
+            }
+            try { Directory.Delete(dir2, true); }
+            catch
+            { /* swallow */
+            }
         }
     }
 }

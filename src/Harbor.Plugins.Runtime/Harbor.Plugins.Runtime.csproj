@@ -1,23 +1,39 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Harbor.Plugins.Runtime — THIN FACADE.
+
+    This project is kept for backward compatibility only. It contains:
+      - CsPluginLoader          ([Obsolete] wrapper around PluginHostBuilder/PluginHost)
+      - CompiledPlugin          (legacy record type returned by CsPluginLoader)
+      - PluginCompilationResult (legacy result struct)
+
+    New code should depend on the layered projects directly:
+      Harbor.Plugins.Abstractions / Storage / Compilation / Instantiation /
+      Registration / Hosting.
+
+    The facade will be removed in v0.5. See docs/PLUGIN_SYSTEM.md.
+  -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Plugins.Runtime</PackageId>
-    <Description>Harbor plugin runtime — Roslyn-based CS-source plugin loader.</Description>
-    <PackageTags>harbor;ai;agent;plugins;roslyn;runtime</PackageTags>
+    <Description>Harbor plugin runtime — backward-compat facade over Harbor.Plugins.Hosting.</Description>
+    <PackageTags>harbor;ai;agent;plugins;runtime;facade</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <!-- Facade depends on Hosting (which transitively pulls in Abstractions,
+         Storage, Compilation, Instantiation, Registration). -->
+    <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+    <!-- Tui.Abstractions is needed because CsPluginLoader.cs references
+         Harbor.Terminal.Abstractions.Plugins.ITuiPlugin for legacy logging. -->
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
 </Project>

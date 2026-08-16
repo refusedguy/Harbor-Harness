@@ -16,12 +16,12 @@ window and wants to be notified when the agent needs attention.
 
 ## Platform support
 
-| OS       | Backend                                | Notes                                   |
-|----------|----------------------------------------|-----------------------------------------|
-| Linux    | `notify-send` (libnotify)              | Install with `apt install libnotify-bin`|
-| macOS    | `osascript` (Notification Center)      | Built-in, no install needed             |
-| Windows  | `msg.exe` (modal dialog)               | Swap in `snoretoast.exe` for toasts     |
-| Other    | Null backend (silent)                  | Logs a warning, never throws            |
+| OS      | Backend                           | Notes                                    |
+|---------|-----------------------------------|------------------------------------------|
+| Linux   | `notify-send` (libnotify)         | Install with `apt install libnotify-bin` |
+| macOS   | `osascript` (Notification Center) | Built-in, no install needed              |
+| Windows | `msg.exe` (modal dialog)          | Swap in `snoretoast.exe` for toasts      |
+| Other   | Null backend (silent)             | Logs a warning, never throws             |
 
 ## Dependencies
 
@@ -44,12 +44,12 @@ out to the OS notification tool.
 
 ## Event → notification mapping
 
-| Agent event                       | Notification            |
-|-----------------------------------|-------------------------|
-| `AgentErrorEvent`                 | "Harbor — error" (red)  |
-| `AgentEndEvent`                   | "Harbor — done"         |
-| `CompactionCompletedEvent`        | "Harbor — compacted"    |
-| `ToolExecutionEndEvent` (error)   | "Harbor — tool <name> failed" |
+| Agent event                     | Notification                  |
+|---------------------------------|-------------------------------|
+| `AgentErrorEvent`               | "Harbor — error" (red)        |
+| `AgentEndEvent`                 | "Harbor — done"               |
+| `CompactionCompletedEvent`      | "Harbor — compacted"          |
+| `ToolExecutionEndEvent` (error) | "Harbor — tool <name> failed" |
 
 Successful tool calls do not fire notifications (too noisy).
 

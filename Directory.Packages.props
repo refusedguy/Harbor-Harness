@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Directory.Packages.props — Central Package Management (CPM) for the Harbor solution.
+
+  Every NuGet package consumed by any project in the repo has its version pinned
+  here. Individual .csproj files declare only `<PackageReference Include="..." />`
+  (no Version attribute) and inherit the version from this file.
+
+  See docs/CENTRAL_PACKAGE_MANAGEMENT.md for the full guide.
+
+  CPM is enabled by `<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>`
+  in /Directory.Build.props.
+
+  Grouping convention (top→bottom):
+    1. Microsoft.Extensions.*  (logging, DI, hosting, options, http, configuration)
+    2. Microsoft.CodeAnalysis.* (Roslyn, analyzers, banned-api)
+    3. Microsoft.Data.*        (storage drivers)
+    4. Microsoft.NET.* / test SDK
+    5. TUnit + Moq + NetArchTest (test framework + architecture rules)
+    6. CommunityToolkit.*      (MVVM, HighPerformance)
+    7. Spectre.*               (console + TUI libraries)
+    8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
+    9. Jint                     (scripting engine)
+   10. Roslyn analyzers         (Roslynator, Sonar, Meziantou, AsyncFixer, Reflection)
+   11. Performance              (ZLinq, DotNext, NonBlocking, KZDev, MemoryPack, CSharpFunctionalExtensions)
+   12. SQLite drivers
+   13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
+-->
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+    <!--
+      NuGet 6.0+ supports central package management. When a project declares a
+      <PackageReference Include="X" /> (no Version), NuGet resolves the version
+      from this file. <CentralPackageTransitivePinningEnabled> additionally
+      pins transitive dependencies to the versions declared here, so a vulnerable
+      transitive cannot sneak in via a deep dependency.
+    -->
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- ── Microsoft.Extensions.* ────────────────────────────────────────── -->
+    <!--
+      All Microsoft.Extensions.* packages are pinned to the latest 10.0.10
+      servicing release. Transitive dependencies (e.g. Terminal.Gui →
+      Configuration.Binder 10.0.7, Termina → Hosting.Abstractions 10.0.8)
+      require >= 10.0.7 / 10.0.8 / 10.0.9 depending on the chain; pinning
+      to 10.0.10 satisfies all transitive minimums and CentralPackageTransitivePinningEnabled
+      keeps them locked to this version.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
+    <!-- ── Microsoft.CodeAnalysis.* (Roslyn + analyzers) ─────────────────── -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
+    <!-- ── Microsoft.Data.* (storage drivers) ────────────────────────────── -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <!-- ── TUnit + Moq + NetArchTest (test framework + arch rules) ───────── -->
+    <PackageVersion Include="TUnit" Version="1.61.0" />
+    <PackageVersion Include="TUnit.Assertions" Version="1.61.0" />
+    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <!-- ── BenchmarkDotNet ───────────────────────────────────────────────── -->
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- ── CommunityToolkit.* (MVVM, HighPerformance) ────────────────────── -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+    <!-- ── Spectre.* (console + TUI) ─────────────────────────────────────── -->
+    <!--
+      Spectre.Console stays at 0.54.0 — the last version with Color/Decoration
+      types in the main Spectre.Console assembly. From 0.55 onward these
+      types moved to Spectre.Console.Ansi without type forwarders, which
+      breaks RazorConsole.Core 0.6.0-alpha (which has a hard dependency on
+      Spectre.Console 0.54.0 and whose source generator emits
+      `Spectre.Console.Color` references). Upgrading RazorConsole to a
+      newer release is blocked until RazorConsole publishes a build that
+      targets Spectre.Console 0.55+.
+    -->
+    <PackageVersion Include="Spectre.Console" Version="0.54.0" />
+    <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
+    <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
+    <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
+    <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
+    <PackageVersion Include="Termina" Version="0.15.0" />
+    <PackageVersion Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409" />
+    <!-- Avalonia 12.1.x — latest stable line (released 2026-Q3). Brings the
+         new Win32 chrome renderer (ExtendClientAreaChromeHints), fixed
+         Dispatcher.MainLoop PlatformNotSupportedException on Windows without
+         a RID, and Skia 3.x. Avalonia.AvaloniaEdit 12.0.0 is the matched
+         code-editor build. Avalonia.Diagnostics stays on 11.3.x because the
+         diagnostics inspector was not published for the 12.x line yet. -->
+    <PackageVersion Include="Avalonia" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <!-- Avalonia.Headless — in-process off-screen renderer for E2E tests with screenshot capture. -->
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.0" />
+    <!-- Avalonia.Skia — software renderer used by Avalonia.Headless when
+         UseHeadlessDrawing=false. Required for CaptureRenderedFrame() to
+         produce a real Bitmap we can save as PNG. -->
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.18" />
+    <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
+    <PackageVersion Include="Markdig" Version="1.3.2" />
+    <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageVersion Include="Dirkster.AvalonDock" Version="4.74.1" />
+    <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
+    <!-- ── .NET MAUI (workload-supplied; version matches the maui-windows
+         workload pack installed on the build machine) ──────────────────── -->
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Xaml" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Essentials" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Core" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Resizetizer" Version="10.0.20" />
+    <PackageVersion Include="Microsoft.Maui.Controls.Build.Tasks" Version="10.0.20" />
+    <!-- ── Scripting engines ─────────────────────────────────────────────── -->
+    <PackageVersion Include="Jint" Version="4.13.0" />
+    <!-- ── Roslyn analyzers (consumed via Directory.Build.props) ─────────── -->
+    <PackageVersion Include="Roslynator.Analyzers" Version="4.15.0" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.29.0.143774" />
+    <PackageVersion Include="AsyncFixer" Version="2.1.0" />
+    <PackageVersion Include="ReflectionAnalyzers" Version="0.3.1" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.123" />
+    <!-- ── Performance / collections / serialization ─────────────────────── -->
+    <PackageVersion Include="ZLinq" Version="1.5.6" />
+    <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />
+    <PackageVersion Include="DotNext" Version="6.4.1" />
+    <PackageVersion Include="DotNext.Threading" Version="6.4.1" />
+    <PackageVersion Include="NonBlocking" Version="2.1.2" />
+    <PackageVersion Include="KZDev.PerfUtils" Version="3.0.1" />
+    <PackageVersion Include="MemoryPack" Version="1.21.4" />
+    <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
+    <!-- ── MessagePack (cross-platform binary serialization for IPC) ───────── -->
+    <!--
+      MessagePack 2.5.x has known advisories (NU1902/NU1903) but they all
+      concern the typeless deserialization path, which the IPC layer only
+      uses on locally-trusted payloads (same-machine pipe/socket transport).
+      Suppressed per-project in Harbor.Ipc.* via <NoWarn>NU1902;NU1903</NoWarn>.
+    -->
+    <PackageVersion Include="MessagePack" Version="3.1.8" />
+    <!-- ── SQLite native driver ──────────────────────────────────────────── -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
+    <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
+    <PackageVersion Include="Termina.Generators" Version="0.15.0" />
+    <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
+    <!--
+      NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/
+      project uses a local Directory.Build.props that disables analyzers,
+      TreatWarningsAsErrors, and CPM-transitive pinning so the bootstrap
+      project can build cleanly even when the solution-wide strict settings
+      would otherwise reject NUKE's generated code.
+    -->
+    <PackageVersion Include="Nuke.Common" Version="10.1.0" />
+    <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
+    <!--
+      DependencyInjection.Lifetime.Analyzers (DI001–DI005) detects captive
+      dependencies, lifetime mismatches, and circular DI graphs at compile time.
+      Consumed solution-wide via Directory.Build.props so every project that
+      references Microsoft.Extensions.DependencyInjection gets checked.
+
+      Excubo.Analyzers.DependencyInjectionValidation (DIV0xx) provides
+      `[Exposes(typeof(T))]` attribute validation: declares which services a
+      composition root should register and fails build if any are missing.
+      The matching Excubo.Analyzers.Annotations package contains the attribute.
+    -->
+    <PackageVersion Include="DependencyInjection.Lifetime.Analyzers" Version="2.18.24" />
+    <PackageVersion Include="Excubo.Analyzers.DependencyInjectionValidation" Version="1.0.33" />
+    <PackageVersion Include="Excubo.Analyzers.Annotations" Version="1.0.1" />
+    <!-- Serilog — structured logging with file, console, and rolling sinks -->
+    <PackageVersion Include="Serilog" Version="4.3.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
+  </ItemGroup>
+</Project>

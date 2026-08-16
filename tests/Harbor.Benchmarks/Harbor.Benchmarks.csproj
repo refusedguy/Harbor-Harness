@@ -22,13 +22,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.0"/>
+    <PackageReference Include="BenchmarkDotNet"/>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Domain\Harbor.Domain.csproj"/>
   </ItemGroup>
 
 </Project>

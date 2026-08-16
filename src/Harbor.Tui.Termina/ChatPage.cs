@@ -1,3 +1,6 @@
+using Harbor.Tui.Termina.Views;
+using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using R3;
 using Termina.Input;
@@ -5,47 +8,79 @@ using Termina.Layout;
 using Termina.Reactive;
 using Termina.Terminal;
 namespace Harbor.Tui.Termina;
+
 /// <summary>
-///     Reactive view model for the Termina chat page. Holds the streamed output as an
-///     <see cref="Observable{T}" /> of text tokens and funnels user-submitted prompts to the agent.
+///     Reactive view model for the Termina chat page. Projects <see cref="UiState" />
+///     changes from the TEA store into an observable stream of display lines that
+///     the page appends to its <c>StreamingTextNode</c>.
 /// </summary>
 public sealed class ChatViewModel : ReactiveViewModel
 {
-    private readonly ChatBridge _bridge;
+    private readonly TerminaTeaBridge _bridge;
     private readonly ILogger? _logger;
-    private readonly Subject<ChatLine> _stream = new();
+    private readonly Subject<string> _output = new();
+    private readonly ChatView _chatView = new();
+    private readonly DefaultUiProjector _projector = new();
+    private readonly StatusBarView _statusBarView = new();
+    private int _lastLineCount;
+    private int _lastTextLen;
+    private int _lastThinkLen;
 
-    public ChatViewModel(ChatBridge bridge, ILogger? logger = null)
+    public ChatViewModel(TerminaTeaBridge bridge, ILogger? logger = null)
     {
         _bridge = bridge;
         _logger = logger;
     }
 
-    public Observable<ChatLine> Stream => _stream;
+    public Observable<string> Output => _output;
 
-    public string Model { get; private set; } = string.Empty;
-
-    public string Provider { get; private set; } = string.Empty;
-
-    public string AgentName { get; private set; } = string.Empty;
+    public TerminaTeaBridge Bridge => _bridge;
 
     public override void OnActivated()
     {
         _logger?.LogInformation("ChatViewModel.OnActivated called");
-        var agent = _bridge.Agent;
-        if (agent is not null)
+        var state = _bridge.Store.State;
+        _output.OnNext($"Harbor: connected to {state.Provider}/{state.Model} (agent: {state.AgentName}). Type a message, or /help. Esc to quit.");
+
+        _bridge.Store.Changed += OnStoreChanged;
+    }
+
+    private void OnStoreChanged(object? sender, EventArgs e)
+    {
+        var state = _bridge.Store.State;
+        var screen = _projector.Project(state);
+        var lines = _chatView.Build(screen);
+
+        if (lines.Count > _lastLineCount)
         {
-            Model = agent.State.Agent.Model;
-            Provider = agent.State.Agent.ProviderId;
-            AgentName = agent.State.Agent.Name.Value;
-            _stream.OnNext(new ChatLine(
-                $"Harbor: connected to {Provider}/{Model} (agent: {AgentName}). Type a message, or /help. Esc to quit.\n",
-                Color.Cyan, true));
+            for (int i = _lastLineCount; i < lines.Count; i++)
+                _output.OnNext(lines[i]);
+            _lastLineCount = lines.Count;
+            _lastTextLen = 0;
+            _lastThinkLen = 0;
+        }
+
+        if (state.IsStreaming)
+        {
+            if (state.Active.ThinkBuffer.Length > _lastThinkLen)
+            {
+                _output.OnNext(state.Active.ThinkBuffer[_lastThinkLen..]);
+                _lastThinkLen = state.Active.ThinkBuffer.Length;
+            }
+            if (state.Active.TextBuffer.Length > _lastTextLen)
+            {
+                _output.OnNext(state.Active.TextBuffer[_lastTextLen..]);
+                _lastTextLen = state.Active.TextBuffer.Length;
+            }
         }
         else
         {
-            _stream.OnNext(new ChatLine("Harbor: ready.\n", Color.Cyan, true));
+            _lastTextLen = 0;
+            _lastThinkLen = 0;
         }
+
+        if (state.ShouldQuit)
+            this.RequestShutdown();
     }
 
     public void HandleSubmit(string prompt)
@@ -59,30 +94,33 @@ public sealed class ChatViewModel : ReactiveViewModel
             return;
         }
 
-        _stream.OnNext(new ChatLine($"You: {prompt}\n", Color.Green, true));
         _bridge.Submit(prompt);
     }
 
     public override void Dispose()
     {
-        _stream.Dispose();
+        _bridge.Store.Changed -= OnStoreChanged;
+        _output.Dispose();
         base.Dispose();
     }
 }
 
 /// <summary>
-///     Full-screen interactive chat page. Builds a header, a scrolling streaming text panel, and a
-///     text input field. User input is forwarded to the view model; streaming agent output arrives
-///     through the shared <see cref="ChatBridge" />.
+///     Full-screen interactive chat page. Builds a header, a scrolling streaming text panel,
+///     a status bar, and a text input field. User input is forwarded to the view model;
+///     state projections arrive through the TEA store.
 /// </summary>
 public sealed class ChatPage : ReactivePage<ChatViewModel>
 {
-    private readonly ChatBridge _bridge;
+    private readonly TerminaTeaBridge _bridge;
     private readonly ILogger? _logger;
     private TextInputNode? _input;
     private StreamingTextNode? _output;
+    private StreamingTextNode? _statusNode;
+    private readonly StatusBarView _statusBarView = new();
+    private readonly DefaultUiProjector _projector = new();
 
-    public ChatPage(ChatBridge bridge, ILogger? logger = null)
+    public ChatPage(TerminaTeaBridge bridge, ILogger? logger = null)
     {
         _bridge = bridge;
         _logger = logger;
@@ -96,22 +134,26 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
             .WithPrefix("  ", Color.DarkGray)
             .WithScrollbar();
 
+        _statusNode = StreamingTextNode.Create();
+
         _input = new TextInputNode()
             .WithPlaceholder("Type a message… (Esc to quit)")
             .WithForeground(Color.Cyan)
             .WithHistory();
 
-        this.ViewModel.Stream
-            .Subscribe(line => AppendLine(line))
+        this.ViewModel.Output
+            .Subscribe(line => _output?.Append(line + "\n", Color.Default))
             .DisposeWith(this.Subscriptions);
 
-        _bridge.OutputStream
-            .Subscribe(line =>
+        _bridge.Store.Changed += (_, _) =>
+        {
+            if (_statusNode is not null)
             {
-                _logger?.LogDebug("OutputStream received token: {TokenLength} chars", line.Text.Length);
-                AppendLine(line);
-            })
-            .DisposeWith(this.Subscriptions);
+                _statusNode.Buffer.Clear();
+                var screen = _projector.Project(_bridge.Store.State);
+                _statusNode.Append(_statusBarView.Build(screen), Color.Gray);
+            }
+        };
 
         _input.Submitted
             .Subscribe(text =>
@@ -122,17 +164,18 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
             })
             .DisposeWith(this.Subscriptions);
 
-        // Pattern 2 (always-visible input): route every key from the ViewModel's
-        // input observable into the TextInputNode so it can handle character input,
-        // backspace, cursor movement and history. Escape is intercepted here to quit.
         this.ViewModel.Input
             .OfType<IInputEvent, KeyPressed>()
             .Subscribe(key =>
             {
-                _logger?.LogDebug("Key pressed: {Key}", key.KeyInfo.Key);
                 if (key.KeyInfo.Key == ConsoleKey.Escape)
                 {
                     this.ViewModel.RequestShutdown();
+                    return;
+                }
+                if (key.KeyInfo.Key == ConsoleKey.F12)
+                {
+                    _bridge.DumpDiagnostics();
                     return;
                 }
 
@@ -143,20 +186,11 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
         _logger?.LogInformation("ChatPage.OnBound completed — subscriptions wired");
     }
 
-    private void AppendLine(ChatLine line)
-    {
-        if (_output is null) return;
-        if (line.NewLineBefore)
-            _output.Append("\n", Color.Default);
-        _output.Append(line.Text, line.Color ?? Color.Default);
-    }
-
     public override void OnNavigatedTo()
     {
         _logger?.LogInformation("ChatPage.OnNavigatedTo called");
         base.OnNavigatedTo();
         this.FocusPolicy = FocusPolicy.FirstFocusable;
-        _logger?.LogInformation("FocusPolicy set to FirstFocusable");
     }
 
     public override ILayoutNode BuildLayout()
@@ -164,7 +198,7 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
         _logger?.LogInformation("ChatPage.BuildLayout called");
         return Layouts.Vertical()
             .WithChild(new TextNode("💬 Harbor").WithForeground(Color.Cyan).Bold().Height(1))
-            .WithChild(new EmptyNode().Height(1))
+            .WithChild(_statusNode!.Height(1))
             .WithChild(new PanelNode().WithTitle("Messages").WithContent(_output!.Fill()).Fill())
             .WithChild(new EmptyNode().Height(1))
             .WithChild(_input!.Height(1));

@@ -16,12 +16,12 @@ Sixel-capable terminals draw the image inline.
 
 ## Platform support
 
-| OS       | Sixel-capable terminals                                   |
-|----------|-----------------------------------------------------------|
-| Linux    | xterm (`+vt_sixel`), wezterm, foot, mlterm, alacritty†    |
-| macOS    | wezterm, mlterm, RLogin, xterm (XQuartz + vt_sixel)       |
-| Windows  | wezterm, RLogin, mintty (recent)                          |
-| Any      | Falls back to a `[image] <filename>` placeholder          |
+| OS      | Sixel-capable terminals                                |
+|---------|--------------------------------------------------------|
+| Linux   | xterm (`+vt_sixel`), wezterm, foot, mlterm, alacritty† |
+| macOS   | wezterm, mlterm, RLogin, xterm (XQuartz + vt_sixel)    |
+| Windows | wezterm, RLogin, mintty (recent)                       |
+| Any     | Falls back to a `[image] <filename>` placeholder       |
 
 > † Alacritty has no upstream Sixel support; the `alacritty_sixel` fork does.
 

@@ -27,16 +27,62 @@ one for your workflow.
 | `Plain`                 | `plain`          | Any (no ANSI)                   | Streaming     | ~1 MB         | none                              | Piping to other commands, accessibility, no-color logs.              |
 | `Spectre`               | `spectre`        | Any terminal (color)            | Streaming     | ~10 MB        | `Spectre.Console`                 | Rich panels, tables, markup. CI dashboards.                          |
 | `Spectre.Fullscreen`    | `fullscreen`     | Any terminal (alt screen)       | Full-screen   | ~15 MB        | `Spectre.Console`                 | Full-screen spectre rendering with mouse support.                    |
-| `SpectreTui`            | `spectre-tui`    | Any terminal (alt screen)       | Full-screen   | ~50 MB        | `Spectre.Tui`                     | Default interactive. Live layout, scroll, panels.                    |
-| `TerminalGui`           | `terminal-gui`   | Any terminal                    | Full-screen   | ~20 MB        | `Terminal.Gui v2`                 | Mature terminal GUI library. Mouse, menus, dialogs.                  |
-| `Termina`               | `termina`        | Any terminal                    | Full-screen   | ~20 MB        | `Termina`                         | Experimental terminal framework.                                     |
-| `RazorConsole`          | `razor`          | Any terminal                    | Full-screen   | ~30 MB        | `RazorConsole.Core`               | Blazor-for-terminal: Razor components in the console.                |
+| `SpectreTui`            | `spectre-tui`    | Any terminal (alt screen)       | Full-screen   | ~50 MB        | `Spectre.Tui`                     | **Default interactive.** Live layout, scroll, panels, command palette. |
+| `TerminalGui`           | `terminal-gui`   | Any terminal                    | Full-screen   | ~20 MB        | `Terminal.Gui v2`                 | **Mature widget set.** Mouse, menus, dialogs. Classic full-screen TUI like `tig`/`htop`. |
+| `Termina`               | `termina`        | Any terminal                    | Full-screen   | ~20 MB        | `Termina`                         | **ANSI precision.** 24-bit true color, Kitty keyboard, DCS sync output. Reactive MVVM. |
+| `RazorConsole`          | `razor`          | Any terminal                    | Full-screen   | ~30 MB        | `RazorConsole.Core`               | **Component model.** `.razor` files, hot reload, React-like composition. |
 | **`Wpf`** ⭐ new         | `wpf`            | Windows only                    | Desktop GUI   | ~80 MB        | .NET 10 Desktop Runtime, WPF      | Real Windows desktop window with XAML designer + Hot Reload.         |
-| **`Avalonia`** ⭐ new    | `avalonia`       | Windows / Linux / macOS         | Desktop GUI   | ~60 MB        | Avalonia 11.2 + Skia              | Cross-platform desktop GUI. Same XAML story as WPF.                  |
+| **`Avalonia`** ⭐ new    | `avalonia`       | Windows / Linux / macOS         | Desktop GUI   | ~60 MB        | Avalonia 12.1 + Skia              | Cross-platform desktop GUI. Same XAML story as WPF. Custom Windows chrome via `ExtendClientAreaToDecorationsHint`. |
 | **`Maui`** ⭐ new        | `maui`           | WinUI / Android / iOS / macOS   | Mobile+Desktop| ~90 MB desktop / 30–50 MB mobile | MAUI workload, platform SDKs | Phone + tablet + Mac Catalyst support. Touch-friendly layout.       |
 | **`Blazor`** ⭐ new      | `blazor`         | Any browser (server runs anywhere) | Web UI     | ~50 MB + ~10 MB / client | ASP.NET Core, Kestrel, SignalR | Run on a server, view from any browser. Remote access, mobile web.   |
 | **`Sixel`** ⭐ new       | `sixel`          | Sixel-capable terminals         | Streaming     | ~1 MB         | (inherits Ansi)                  | Inline image rendering (PNG/JPEG → Sixel) in supported terminals.    |
 | **`Notifications`** ⭐ new | `notifications` | Any (uses OS notif)             | Non-interactive | ~2 MB      | OS notif tool (notify-send etc.)  | Background agents / CI / watch loops — fire-and-forget notifications.|
+
+---
+
+## 1a. Interactive TUI 4-way comparison (SpectreTui vs Termina vs Terminal.Gui vs RazorConsole)
+
+All four interactive renderers implement the same 13-feature surface:
+streaming chat with role colors, role headers, markdown rendering, GFM
+tables, scrollable history, multi-line input with history + autocomplete,
+status bar, stream bar, hotkeys, session sidebar, command palette, toast
+notifications, and TEA integration via the shared `UiStore` / `UiReducer`
+/ `TuiEffectHost`. Pick the one whose **killer feature** matches your
+workflow.
+
+| Dimension                     | `SpectreTui`                       | `Termina`                                       | `TerminalGui`                                | `RazorConsole`                              |
+|-------------------------------|------------------------------------|--------------------------------------------------|----------------------------------------------|---------------------------------------------|
+| **HARBOR_TUI value**          | `spectre-tui`                      | `termina`                                        | `terminal-gui`                               | `razor`                                     |
+| **Underlying library**        | `Spectre.Tui` v0.50                | `Termina` v0.15                                  | `Terminal.Gui` v2.4                          | `RazorConsole.Core`                         |
+| **Programming model**         | Screen + KeyMessage event loop     | R3-reactive MVVM (`ReactivePage` + `Subject`)    | `Application.Init()` event-driven Toplevel   | `.razor` components (Blazor-for-terminal)   |
+| **Killer feature**            | Official Spectre widget framework  | **ANSI precision**: 24-bit true color, Kitty kbd, DCS sync | **Complete widget set**: Window/Menu/Dialog/TextView/TreeView/BarChart | **Component model**: `.razor` files, hot reload, React-like composition |
+| **Color support**             | 256-color Spectre palette          | 24-bit true color (`<ESC>[38;2;R;G;Bm`)          | 16-color + bright (`Terminal.Gui.Drawing.Color`) | Spectre 256-color via `<Markup>` component  |
+| **Layout engine**             | `Layout` tree (Rows/Columns)       | `Layouts.Vertical().WithChild(…)`                | `Pos`/`Dim` absolute + `Dim.Fill()`/`Dim.Percent()` | `<Rows>`/`<Columns>`/`<Panel>` Razor tags   |
+| **Mouse support**             | Yes (via `MouseMessage`)           | Planned (Kitty mouse protocol)                   | Yes (out of the box)                         | No (stream-based repaint)                   |
+| **Hot reload**                | No (recompile to refresh)          | No                                               | No                                           | **Yes** (`dotnet watch run` reloads `.razor`)|
+| **Memory (RSS)**              | ~50 MB                             | ~20 MB                                           | ~20 MB                                       | ~30 MB (Razor SDK adds ~6 MB tooling)       |
+| **Maturity**                  | Stable (default)                   | Experimental                                     | Mature (since 2014)                          | Experimental                                |
+| **Trade-off**                 | Heaviest of the four (~50 MB)      | More code for less (no widget zoo)               | Synchronous `Application.Run` blocks calling thread; fights async IAgent | Stream-based repaint (no differential); slower build (Razor codegen) |
+| **Best for**                  | Default everyday chat              | Power users on modern terminals (Kitty/WezTerm/Ghostty) | Classic full-screen TUI apps (tig/htop/lazygit style) | Web devs moving to TUI; reusable component libraries |
+| **Status**                    | **Default**                        | Competitive                                      | Competitive                                  | Competitive                                 |
+
+### Quick picker
+
+- **Just want it to work?** → `HARBOR_TUI=spectre-tui` (default).
+- **On Kitty/WezTerm/Ghostty and want pixel-perfect color?** → `HARBOR_TUI=termina`
+- **Want menus, dialogs, mouse, classic TUI feel?** → `HARBOR_TUI=terminal-gui`
+- **Coming from Blazor and want `.razor` hot reload?** → `HARBOR_TUI=razor`
+
+### Status-bar / hotkey parity
+
+All four renderers ship the **same hotkey table** (Enter submit, Esc
+abort/quit, Ctrl+L clear, Ctrl+C abort, F2 toggle focus, ↑/↓ line scroll,
+PgUp/PgDn page scroll, Home/End top/bottom, Alt+↑/↓ input history, Tab
+slash autocomplete, Ctrl+P command palette, Alt+1..9 toggle Nth panel,
+Ctrl+Tab cycle panel focus, ? toggle help). The **status bar** shows
+`provider/model/agent · tokens↑↓ · $cost · status · scroll%` in all
+four. The **stream bar** shows `▌ generating... N chars` or
+`▌ thinking... N chars` during streaming in all four.
 
 ---
 
@@ -666,5 +712,16 @@ through `TuiEffect`.
   a 5-second window.
 - **MAUI manifests.** Add `AndroidManifest.xml`, `Info.plist` so mobile builds
   actually package.
-- **Avalonia 11.2 bring-up.** Validate the `AppBuilder.AfterSetup` signature
-  against the installed Avalonia version.
+- **Avalonia 12.1 bring-up (DONE in Task U1).** Upgraded from 11.2.7 → 12.1.0.
+  Notable breaking changes handled: `TextBox.Watermark` → `TextBox.PlaceholderText`
+  across 7 view files; `AVLN2100` (missing `x:DataType` on compiled bindings) was
+  promoted from warning → error — disabled project-wide via
+  `<AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>`
+  in `Harbor.App.Avalonia.csproj` so reflection bindings stay the default until
+  the ORCA UI redesign (Task U2) adds `x:DataType` per view. `Avalonia.Diagnostics`
+  stays on `11.3.x` because the diagnostics inspector package has not been
+  published for the 12.x line yet. Added a custom-drawn Windows title bar
+  (`ExtendClientAreaToDecorationsHint=True` + `ExtendClientAreaChromeHints=PreferNone`)
+  with VS Code-style caption buttons (`Button.WindowButton` classes in
+  `Themes/AppStyles.axaml`) so the default white Windows bar no longer "kills
+  everything" — the chrome now matches the Catppuccin-Mocha theme.

@@ -1,0 +1,49 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- HdsChip — theme-aware chip control.
+         Uses RadiusSm, Space2 tokens. Transitions: EaseNormal.
+         Selected state: Accent fill with TextOnAccentBrush.
+         All colors via DynamicResource — no hardcoded hex. -->
+
+    <Style Selector="Button.hds-chip">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingChip}" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="Foreground" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="BorderBrush" Duration="{StaticResource EaseNormal}" />
+                <DoubleTransition Property="Opacity" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.hds-chip:hover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="Button.hds-chip.selected">
+        <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+    </Style>
+
+    <Style Selector="Button.hds-chip.selected:hover">
+        <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+    </Style>
+
+    <Style Selector="Button.hds-chip:disabled">
+        <Setter Property="Opacity" Value="0.5" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    </Style>
+</Styles>

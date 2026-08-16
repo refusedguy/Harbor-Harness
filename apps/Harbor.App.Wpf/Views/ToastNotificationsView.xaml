@@ -1,0 +1,44 @@
+<UserControl x:Class="Harbor.App.Wpf.Views.ToastNotificationsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Wpf.ViewModels"
+             Background="Transparent"
+             IsHitTestVisible="False">
+    <ItemsControl ItemsSource="{Binding Toasts}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Vertical" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:ToastViewModel}">
+                <Border Background="{DynamicResource App.Surface}"
+                        BorderBrush="{Binding AccentBrush}"
+                        BorderThickness="3,0,0,0"
+                        CornerRadius="6"
+                        Padding="12,8"
+                        Margin="0,0,12,8"
+                        MinWidth="280" MaxWidth="380"
+                        HorizontalAlignment="Right"
+                        RenderTransformOrigin="1,0">
+                    <Border.RenderTransform>
+                        <TranslateTransform X="0" Y="0" />
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect Color="Black" BlurRadius="12" ShadowDepth="2" Opacity="0.5" />
+                    </Border.Effect>
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}"
+                                   Foreground="{Binding AccentBrush}"
+                                   FontSize="16" FontWeight="Bold"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock Text="{Binding Message}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource App.Text}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

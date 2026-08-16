@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- Typography — JetBrains Mono for code, Inter for UI text. Falls back
+         gracefully when fonts are not installed (WPF font fallback chain). -->
+    <FontFamily x:Key="App.FontFamily.Mono">JetBrains Mono, Cascadia Code, Consolas, Menlo, monospace</FontFamily>
+    <FontFamily x:Key="App.FontFamily.Sans">Inter, Segoe UI, SF Pro Text, system-ui, sans-serif</FontFamily>
+    <FontFamily x:Key="App.FontFamily.Display">Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+
+    <sys:Double x:Key="App.FontSize.Caption">11</sys:Double>
+    <sys:Double x:Key="App.FontSize.Small">12</sys:Double>
+    <sys:Double x:Key="App.FontSize.Body">13</sys:Double>
+    <sys:Double x:Key="App.FontSize.BodyLarge">14</sys:Double>
+    <sys:Double x:Key="App.FontSize.Heading">18</sys:Double>
+    <sys:Double x:Key="App.FontSize.Title">22</sys:Double>
+    <sys:Double x:Key="App.FontSize.Hero">28</sys:Double>
+
+    <!-- Reusable text styles -->
+    <Style x:Key="App.Text.Body" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Sans}" />
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Body}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.Text}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="App.Text.Caption" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Caption}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.TextMuted}" />
+    </Style>
+
+    <Style x:Key="App.Text.Heading" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Heading}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="App.Text.Title" TargetType="TextBlock" BasedOn="{StaticResource App.Text.Body}">
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Title}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Code block style (used by markdown renderer) -->
+    <Style x:Key="App.Text.Code" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource App.FontFamily.Mono}" />
+        <Setter Property="FontSize" Value="{StaticResource App.FontSize.Small}" />
+        <Setter Property="Foreground" Value="{DynamicResource App.Text}" />
+        <Setter Property="Background" Value="{DynamicResource App.SurfaceAlt}" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+</ResourceDictionary>

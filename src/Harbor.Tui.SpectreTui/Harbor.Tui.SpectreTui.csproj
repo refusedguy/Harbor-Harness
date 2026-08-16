@@ -8,12 +8,15 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Spectre.Tui" Version="0.14.0"/>
-    <PackageReference Include="Spectre.Tui.App" Version="0.14.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="Spectre.Tui"/>
+    <PackageReference Include="Spectre.Tui.App"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>

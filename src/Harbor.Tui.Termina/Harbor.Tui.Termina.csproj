@@ -8,13 +8,16 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Termina" Version="0.15.0"/>
-    <PackageReference Include="Termina.Generators" Version="0.15.0" PrivateAssets="all"/>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
+    <PackageReference Include="Termina"/>
+    <PackageReference Include="Termina.Generators" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.Tests"/>

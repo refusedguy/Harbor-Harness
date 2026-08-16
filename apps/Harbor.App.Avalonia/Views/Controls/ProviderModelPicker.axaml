@@ -1,0 +1,143 @@
+<UserControl x:Name="Root"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vma="clr-namespace:Harbor.Desktop.Abstractions.ViewModels;assembly=Harbor.Desktop.Abstractions"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Controls.ProviderModelPicker">
+
+    <!--
+        ProviderModelPicker — reusable picker control.
+
+        Layout:
+          • Search box at top — filters by provider name OR model id/name.
+          • Scrollable provider list with expandable rows:
+              - Each Expander header shows the provider display name + auth badge.
+              - The Expander body shows the auth status text + setup hint +
+                the model list (each row: name, features, pricing — click to
+                select).
+          • A loading bar + error banner surface state.
+
+        The control is host-agnostic: it's embedded both in the MainWindow
+        flyout (click the status-bar model label) and inside the Settings
+        "Provider Configuration" section. The host is responsible for
+        instantiating / disposing the view-model and for closing any popup
+        after a selection (via the VM's ModelSelected event).
+    -->
+
+    <UserControl.Resources>
+        <views:BrushKeyConverter x:Key="BrushKeyConv" />
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource BgAppBrush}" CornerRadius="8" Padding="12">
+        <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+            <!-- Search -->
+            <TextBox Grid.Row="0"
+                     PlaceholderText="Search models or providers…"
+                     Text="{Binding SearchText, Mode=TwoWay}"
+                     Margin="0,0,0,8" />
+
+            <!-- Loading bar -->
+            <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,6" IsVisible="{Binding IsLoading}">
+                <TextBlock Text="Loading providers + models…" FontSize="11"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                <ProgressBar IsIndeterminate="True" Height="2" />
+            </StackPanel>
+
+            <!-- Error banner -->
+            <Border Grid.Row="2" Background="{DynamicResource BgSubtleBrush}"
+                    CornerRadius="4" Padding="8" Margin="0,0,0,8"
+                    IsVisible="{Binding ErrorMessage}">
+                <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
+                           Foreground="{DynamicResource StateWarningBrush}"
+                           TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Provider list -->
+            <ScrollViewer Grid.Row="3" MaxHeight="420"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding FilteredProviders}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vma:ProviderGroupViewModel">
+                            <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                                      Margin="0,2"
+                                      Padding="0">
+                                <Expander.Header>
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                        <StackPanel Grid.Column="0" Spacing="1">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Id}" FontSize="10"
+                                                       FontFamily="{DynamicResource FontMono}"
+                                                       Foreground="{StaticResource TextMutedBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1"
+                                                Background="{DynamicResource BgSubtleBrush}"
+                                                CornerRadius="4" Padding="6,2"
+                                                VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding AuthStatusIcon}"
+                                                           FontFamily="{DynamicResource FontMono}"
+                                                           FontSize="12"
+                                                           Foreground="{Binding AuthStatusBrushKey, Converter={StaticResource BrushKeyConv}}" />
+                                                <TextBlock Text="{Binding AuthStatusText}" FontSize="10"
+                                                           Foreground="{StaticResource TextMutedBrush}" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Expander.Header>
+
+                                <StackPanel Spacing="6" Margin="0,4,0,6">
+                                    <!-- Setup hint link (only when present) -->
+                                    <TextBlock Text="{Binding SetupHint}" FontSize="10"
+                                               Foreground="{DynamicResource AccentHoverBrush}"
+                                               TextWrapping="Wrap"
+                                               IsVisible="{Binding SetupHint}" />
+
+                                    <!-- Model list -->
+                                    <ItemsControl ItemsSource="{Binding Models}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="vma:PickerModelViewModel">
+                                                <Button Classes="Subtle"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Left"
+                                                        Padding="8,6" Margin="0,1"
+                                                        Command="{Binding DataContext.SelectModelCommand, ElementName=Root}"
+                                                        CommandParameter="{Binding}">
+                                                    <StackPanel Spacing="2">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding FeaturesText}" FontSize="10"
+                                                                       Foreground="{DynamicResource StateSuccessBrush}" />
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{Binding Id}" FontSize="10"
+                                                                       FontFamily="{DynamicResource FontMono}"
+                                                                       Foreground="{DynamicResource TextTertiaryBrush}"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding PricingText}" FontSize="10"
+                                                                       Foreground="{DynamicResource StateWarningBrush}" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Empty state -->
+                                    <TextBlock Text="No models returned — provider may not be running."
+                                               FontSize="11"
+                                               Foreground="{StaticResource TextMutedBrush}"
+                                               IsVisible="{Binding !HasModels}" />
+                                </StackPanel>
+                            </Expander>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>

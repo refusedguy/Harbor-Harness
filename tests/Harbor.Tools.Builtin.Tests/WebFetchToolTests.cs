@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
@@ -48,13 +50,13 @@ public class WebFetchToolTests
     [Test]
     public async Task ExecuteAsync_FetchesHtml_AndConvertsToMarkdown()
     {
-        var html = """
-                   <html><body>
-                   <h1>Title</h1>
-                   <p>Hello <a href="https://example.com">world</a>.</p>
-                   <pre><code>var x = 1;</code></pre>
-                   </body></html>
-                   """;
+        string html = """
+                      <html><body>
+                      <h1>Title</h1>
+                      <p>Hello <a href="https://example.com">world</a>.</p>
+                      <pre><code>var x = 1;</code></pre>
+                      </body></html>
+                      """;
         var tool = NewTool(_ => NewResponse(HttpStatusCode.OK, html, "text/html"));
         var args = JsonDocument.Parse("""{"url":"https://example.com/"}""").RootElement;
 
@@ -143,14 +145,14 @@ public class WebFetchToolTests
         new()
         {
             StatusCode = status,
-            Content = new StringContent(body, System.Text.Encoding.UTF8, contentType)
+            Content = new StringContent(body, Encoding.UTF8, contentType)
         };
 
     private static HttpResponseMessage NewResponse(HttpStatusCode status, byte[] bytes, string contentType)
     {
         var msg = new HttpResponseMessage { StatusCode = status };
         msg.Content = new ByteArrayContent(bytes);
-        msg.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
         return msg;
     }
 

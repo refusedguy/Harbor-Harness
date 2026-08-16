@@ -1,0 +1,39 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- HdsCard — theme-aware card container styles.
+         hds-card: BgPanelElevated, RadiusLg, no border, ShadowSm.
+         hds-card.hoverable: ShadowMd via :pointerover trigger.
+         hds-card-elevated: raised variant with ShadowLg.
+         Transitions: BrushTransition for background (theme changes).
+         No Style.Animations — uses Style.Transitions + triggers. -->
+
+    <Style Selector="Border.hds-card">
+        <Setter Property="Background" Value="{DynamicResource BgPanelElevatedBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingCardDefault}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="BoxShadow" Value="{StaticResource ShadowSm}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border.hds-card.hoverable:pointerover">
+        <Setter Property="BoxShadow" Value="{StaticResource ShadowMd}" />
+    </Style>
+
+    <Style Selector="Border.hds-card-elevated">
+        <Setter Property="Background" Value="{DynamicResource BgAppBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingCardElevated}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="BoxShadow" Value="{StaticResource ShadowLg}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+</Styles>

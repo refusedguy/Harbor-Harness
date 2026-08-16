@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- S6444 (pass a timeout to limit execution time) is downgraded because
+         HttpClient calls in WebFetchTool are governed by the HttpClient.Timeout
+         already configured at construction (10s default), so adding a
+         per-call CancellationToken would be redundant. -->
+    <NoWarn>$(NoWarn);S6444</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    §ARCH-003: Infrastructure references Domain (Harbor.Abstractions) ONLY.
+    This is one of 14 leaf tool projects split out of the Harbor.Tools.Builtin
+    god-project. The facade (Harbor.Tools.Builtin) still references all 14
+    leaves so consumers of the old single-project API keep compiling.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

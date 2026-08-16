@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Components.ChatBubble">
+
+    <!--
+        ChatBubble — reusable chat row with role pill + message body.
+
+        Bindable properties (set on the control itself):
+          - RoleLabel   (string)  — "user" / "assistant" / "system" / "tool"
+          - Text        (string)  — the message body (plain text; Markdown
+                                    rendering should be added later via a
+                                    MarkdownRenderer child)
+          - BrushKey    (string)  — resource key for the role accent color
+                                    (resolves role-pill border + body text)
+          - Timestamp   (string?) — optional, shown right-aligned in muted
+          - IsCompact   (bool)    — true = tighter padding for tool/system
+
+        Usage:
+          <comp:ChatBubble RoleLabel="{Binding RoleLabel}"
+                           Text="{Binding Text}"
+                           BrushKey="{Binding BrushKey}"
+                           Timestamp="{Binding TimestampText}"/>
+    -->
+
+    <UserControl.Resources>
+        <vw:BrushKeyConverter x:Key="BrushKey" />
+    </UserControl.Resources>
+
+    <Grid Margin="0,6" ColumnDefinitions="100,*">
+        <!-- Role pill (JetBrains Mono, accent color) -->
+        <Border Grid.Column="0"
+                Background="{DynamicResource BgSubtleBrush}"
+                CornerRadius="6"
+                Padding="8,3"
+                VerticalAlignment="Top"
+                HorizontalAlignment="Left"
+                BorderBrush="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                BorderThickness="2,0,0,0">
+            <TextBlock Text="{Binding RoleLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       FontFamily="{DynamicResource FontMono}"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+        </Border>
+
+        <!-- Message body — plain TextBlock. (MarkdownRenderer integration
+             pending — restore once markdig 0.38 API migration lands.) -->
+        <Border Grid.Column="1"
+                Background="{DynamicResource BgRailBrush}"
+                CornerRadius="8"
+                Padding="14,10"
+                Margin="10,0,0,0"
+                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                BorderThickness="1">
+            <Grid RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0"
+                           Text="{Binding Text, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           TextWrapping="Wrap"
+                           FontFamily="{DynamicResource FontUi}"
+                           FontSize="14"
+                           LineHeight="20"
+                           Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <!-- Optional timestamp (right-aligned, muted). Hidden when
+                     the bound value is null/empty (StringNullOrEmptyToBoolConverter
+                     + InverseBoolConverter for IsVisible). -->
+                <TextBlock Grid.Row="1"
+                           Text="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="10"
+                           FontFamily="{DynamicResource FontMono}"
+                           HorizontalAlignment="Right"
+                           Margin="0,6,0,0"
+                           Foreground="{DynamicResource TextTertiaryBrush}"
+                           IsVisible="{Binding Timestamp, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vw:StringNullOrEmptyToBoolConverter.Instance}}" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

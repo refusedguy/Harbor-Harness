@@ -1,6 +1,5 @@
 using Microsoft.CodeAnalysis;
 namespace Harbor.Plugins.Runtime;
-
 /// <summary>
 ///     Result of compiling a single CS-source plugin. Success carries the live
 ///     <see cref="CompiledPlugin" />; failure carries the Roslyn diagnostics as a
@@ -8,8 +7,8 @@ namespace Harbor.Plugins.Runtime;
 /// </summary>
 public readonly record struct PluginCompilationResult
 {
-    private readonly Result<CompiledPlugin> _result;
     private readonly IReadOnlyList<Diagnostic>? _diagnostics;
+    private readonly Result<CompiledPlugin> _result;
 
     private PluginCompilationResult(Result<CompiledPlugin> result, IReadOnlyList<Diagnostic>? diagnostics)
     {

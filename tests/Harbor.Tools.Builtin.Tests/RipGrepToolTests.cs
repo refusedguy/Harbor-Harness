@@ -1,10 +1,8 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Core;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
 ///     Tests for <see cref="RipGrepTool" />. The tool wraps the external <c>rg</c> binary;
@@ -41,7 +39,9 @@ public class RipGrepToolTests
             {
                 if (File.Exists(Path.Combine(dir.Trim(), name))) return true;
             }
-            catch { /* skip malformed entries */ }
+            catch
+            { /* skip malformed entries */
+            }
         }
         return false;
     }

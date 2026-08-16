@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!--
+        HDS Elevation — shadow tokens (BoxShadows).
+        Merged into BaseTokens.axaml so all shadow keys resolve in the same
+        dictionary cascade. Colors are structural (semi-transparent black) and
+        independent of the active palette.
+    -->
+
+    <BoxShadows x:Key="ShadowNone">0 0 0 0 #00000000</BoxShadows>
+    <BoxShadows x:Key="ShadowSm">0 2 8 0 #20000000</BoxShadows>
+    <BoxShadows x:Key="ShadowMd">0 4 12 0 #30000000</BoxShadows>
+    <BoxShadows x:Key="ShadowLg">0 8 24 0 #40000000</BoxShadows>
+    <BoxShadows x:Key="ShadowXl">0 12 32 0 #50000000</BoxShadows>
+
+</ResourceDictionary>

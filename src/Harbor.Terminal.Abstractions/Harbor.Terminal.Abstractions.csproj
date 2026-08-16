@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Terminal.Abstractions — Terminal UI contracts.
+
+    Contains the terminal-specific abstractions: ITuiRenderer, BaseTuiRenderer,
+    ITuiRenderContext (TuiColor / TuiStyle), ViewRegistry, ITuiView +
+    TuiViewBase + TuiViewPlacement, ITuiViewModel + the builtin view models,
+    ITuiPlugin (terminal-side plugin contract), and the GFM table renderer.
+
+    Used ONLY by the Harbor.Tui.* terminal renderers (Ansi, Spectre, Plain,
+    TerminalGui, RazorConsole, Termina, Sixel, Notifications, SpectreTui,
+    Spectre.Fullscreen). Desktop GUIs (Avalonia/WPF/MAUI/Blazor) consume
+    Harbor.Ui.Framework directly and do NOT reference this project.
+
+    Dependency policy (Clean Architecture — Domain/Presentation abstraction):
+      ✅ Harbor.Ui.Framework            (TEA + Panels — the generic UI framework)
+      ✅ Harbor.Abstractions            (Domain — AgentEvent, KeyPress)
+      ✅ CommunityToolkit.Mvvm          (ObservableObject for builtin view models)
+      ✅ Microsoft.Extensions.Logging.Abstractions
+      ❌ NO Harbor.Core / Application / Registries / Scripting
+      ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.*
+      ❌ NO Spectre.Console / Terminal.Gui / GUI framework types
+
+    Split out of Harbor.Tui.Abstractions (Task A2, R6). The old root
+    `Harbor.Tui.Abstractions` namespace (terminal types at the root) became
+    `Harbor.Terminal.Abstractions`; `Harbor.Tui.Abstractions.Renderers` became
+    `Harbor.Terminal.Abstractions.Renderers`, and similarly for Views /
+    ViewModels / Plugins / Rendering. This is a breaking change — consumers
+    must update `using` directives.
+
+    See docs/ARCHITECTURE_LAYERS.md §2 for the canonical reference matrix.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Terminal.Abstractions</PackageId>
+    <Description>Harbor Terminal UI abstractions — terminal-specific renderer / view / view-model / plugin contracts and GFM table rendering.</Description>
+    <PackageTags>harbor;terminal;tui;abstractions;renderers;views;mvvm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

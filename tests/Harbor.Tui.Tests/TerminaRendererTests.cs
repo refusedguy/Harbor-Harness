@@ -2,7 +2,6 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.Termina;
 using Microsoft.Extensions.Logging.Abstractions;
-using R3;
 namespace Harbor.Tui.Tests;
 public class TerminaRendererTests
 {
@@ -133,81 +132,73 @@ public class TerminaRendererTests
     }
 }
 
-public class TerminaChatBridgeTests
+public class TerminaTeaBridgeTests
 {
     [Test]
-    public async Task Push_FormatsAgentStartEvent()
+    public async Task Push_AgentEnd_SetsIdleStatus()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
-        var userMsg = new UserMessage("u1", "s1", DateTimeOffset.UtcNow, "Hello", "code", "claude");
-        using var subscription = bridge.OutputStream.Subscribe(output => { });
-        bridge.Push(new AgentStartEvent("s1", new AgentMessage[] { userMsg }));
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
+        bridge.Push(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await Assert.That(bridge.Store.State.Status).IsEqualTo("idle");
     }
 
     [Test]
-    public async Task Push_FormatsTextDeltaEvent()
+    public async Task Push_TextDelta_AccumulatesInActiveBuffer()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
-        bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), AssistantMessage.Empty("s1", "m")));
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
+        var partial = AssistantMessage.Empty("s1", "m");
+        bridge.Push(new MessageStartEvent(partial));
+        bridge.Push(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial));
+        await Assert.That(bridge.Store.State.Active.TextBuffer).IsEqualTo("Hello");
     }
 
     [Test]
-    public async Task Push_FormatsToolExecutionEndEvent()
+    public async Task Push_ToolExecutionEnd_AddsLine()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         var result = new ToolResult("output text", false);
         bridge.Push(new ToolExecutionEndEvent("tc1", result, false));
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
+        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        await Assert.That(allText).Contains("output text");
     }
 
     [Test]
-    public async Task Push_FormatsAgentErrorEvent()
+    public async Task Push_AgentError_AddsErrorLine()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new AgentErrorEvent("something failed"));
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
+        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        await Assert.That(allText).Contains("something failed");
     }
 
     [Test]
-    public async Task Push_FormatsCompactionCompletedEvent()
+    public async Task Push_CompactionCompleted_AddsSystemLine()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Push(new CompactionCompletedEvent("s1", "summary", 5, 500, TimeSpan.FromSeconds(1)));
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
+        var allText = string.Join("", bridge.Store.State.Lines.Select(l => l.Text));
+        await Assert.That(allText).Contains("compacted");
     }
 
     [Test]
-    public async Task PushLine_EmitsText()
+    public async Task PushLine_AddsSystemLine()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
-        string? received = null;
-        using var sub = bridge.OutputStream.Subscribe(line => received = line.Text);
+        var agent = TestAgentFactory.Create();
+        using var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.PushLine("test line");
-        await Task.Delay(50);
-        await Assert.That(received).IsEqualTo("test line");
-        bridge.Dispose();
+        await Assert.That(bridge.Store.State.Lines[^1].Text).IsEqualTo("test line");
     }
 
     [Test]
-    public async Task Submit_WithNullAgent_DoesNotThrow()
+    public async Task Dispose_DoesNotThrow()
     {
-        var bridge = new ChatBridge(NullLogger.Instance);
-        bridge.Submit("hello");
-        await Assert.That(true).IsTrue();
-        bridge.Dispose();
-    }
-
-    [Test]
-    public async Task Dispose_DisposesOutputStream()
-    {
-        var bridge = new ChatBridge(NullLogger.Instance);
+        var agent = TestAgentFactory.Create();
+        var bridge = new TerminaTeaBridge(agent, null, NullLogger.Instance);
         bridge.Dispose();
         await Assert.That(true).IsTrue();
     }

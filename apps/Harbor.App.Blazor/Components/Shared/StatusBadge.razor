@@ -1,0 +1,33 @@
+@* StatusBadge - colored dot + label pill.
+
+    Platform-agnostic Blazor equivalent of the Avalonia
+    Harbor.App.Avalonia.Views.Components.StatusBadge control.
+    Same props, same look, same resource-key lookup pattern, just
+    Blazor-flavoured.
+*@
+
+<div class="status-badge @($"dot-{BrushKey.ToLowerInvariant()}")">
+    @if (ShowDot)
+    {
+        <span class="status-badge-dot @($"brush-{BrushKey.ToLowerInvariant()}")"></span>
+    }
+    <span class="status-badge-label">@StatusText</span>
+</div>
+
+@code {
+/// <summary>Label text shown inside the badge.</summary>
+[Parameter]
+public string StatusText { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Resource key for the dot fill. Mirrors the Avalonia control —
+    ///     same keys ("StatusIdleBrush", "MochaYellow", etc.) so CSS rules
+    ///     can stay in sync with the AXAML resource dictionary.
+    /// </summary>
+    [Parameter]
+public string BrushKey { get; set; } = "StatusIdleBrush";
+
+/// <summary>Toggle the leading dot.</summary>
+[Parameter]
+public bool ShowDot { get; set; } = true;
+}

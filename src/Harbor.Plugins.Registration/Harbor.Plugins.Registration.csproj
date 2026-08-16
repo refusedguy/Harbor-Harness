@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Plugins.Registration — concrete IPluginRegistrar implementations.
+
+    Implementations:
+      - PluginRegistrar             (dispatches IPlugin.Initialize + Register*
+                                     methods into IPluginLoadHost)
+      - SafePluginRegistrar         (try/catch decorator over any IPluginRegistrar)
+      - PanelRegistryPluginAdapter  (internal adapter that lets an
+                                     ITuiPanelPlugin forward Register calls
+                                     into IPluginLoadHost.RegisterPanelProvider)
+
+    Depends on Harbor.Plugins.Abstractions (for IPluginRegistrar,
+    LoadedPlugin, IPluginLoadHost) and Harbor.Abstractions (for IPlugin,
+    ITool, AgentDefinition, etc.).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugins.Registration</PackageId>
+    <Description>Harbor plugin registration — IPluginRegistrar implementation that wires live plugins into the host's registries.</Description>
+    <PackageTags>harbor;ai;agent;plugins;registration;wiring</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <!--
+      Registration depends on Instantiation for PluginLifecycle (BuildContext,
+      Initialize, ShutdownAsync helpers). PluginLifecycle is the only type
+      pulled from Instantiation — a future refactor could move it into
+      Abstractions to break this edge, but for now Registration → Instantiation
+      is a one-way edge with no cycle.
+    -->
+    <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

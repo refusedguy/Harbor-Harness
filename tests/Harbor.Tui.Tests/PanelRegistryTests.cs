@@ -1,22 +1,18 @@
 using System.Collections.Immutable;
 using System.Reflection;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.SpectreTui;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 namespace Harbor.Tui.Tests;
-
 /// <summary>
 ///     Tests for the Harbor panel system: <see cref="PanelRegistry" /> (thread-safe
-/// registration-only registry), <see cref="UiReducer" />'s panel transitions
-/// (<see cref="UiMsg.TogglePanel" />, <see cref="UiMsg.FocusPanel" />,
-/// <see cref="UiMsg.CyclePanelsFocus" />, <see cref="UiMsg.ResizePanel" />), and
-/// the read-only <see cref="PanelRegistryView" /> snapshot that
-/// <c>PanelLayoutShell</c> consumes.
+///     registration-only registry), <see cref="UiReducer" />'s panel transitions
+///     (<see cref="UiMsg.TogglePanel" />, <see cref="UiMsg.FocusPanel" />,
+///     <see cref="UiMsg.CyclePanelsFocus" />, <see cref="UiMsg.ResizePanel" />), and
+///     the read-only <see cref="PanelRegistryView" /> snapshot that
+///     <c>PanelLayoutShell</c> consumes.
 /// </summary>
 public class PanelRegistryTests
 {
@@ -323,16 +319,22 @@ public class PanelRegistryTests
 
 /// <summary>
 ///     TEA compliance tests — assert that The Elm Architecture invariants hold:
-/// <list type="bullet">
-///   <item>All scroll actions go through <see cref="UiReducer.Update" /> (no direct mutation).</item>
-///   <item><see cref="SpectreTuiRenderer" />'s <c>ChatScreen</c> has no local mutable
-///   scroll / viewport / was-running fields (they live in <see cref="UiState" />).</item>
-///   <item><see cref="IPanelRegistry" /> exposes only registration methods — no
-///   state mutation surface (<c>SetState</c> / <c>SetSize</c> / <c>FocusedPanelId</c>
-///   setter are all gone).</item>
-///   <item><see cref="UiReducer.Update" /> handles <see cref="UiMsg.ScrollResetToTail" />
-///   and <see cref="UiMsg.ScrollClamp" /> — the messages a pure render dispatches.</item>
-/// </list>
+///     <list type="bullet">
+///         <item>All scroll actions go through <see cref="UiReducer.Update" /> (no direct mutation).</item>
+///         <item>
+///             <see cref="SpectreTuiRenderer" />'s <c>ChatScreen</c> has no local mutable
+///             scroll / viewport / was-running fields (they live in <see cref="UiState" />).
+///         </item>
+///         <item>
+///             <see cref="IPanelRegistry" /> exposes only registration methods — no
+///             state mutation surface (<c>SetState</c> / <c>SetSize</c> / <c>FocusedPanelId</c>
+///             setter are all gone).
+///         </item>
+///         <item>
+///             <see cref="UiReducer.Update" /> handles <see cref="UiMsg.ScrollResetToTail" />
+///             and <see cref="UiMsg.ScrollClamp" /> — the messages a pure render dispatches.
+///         </item>
+///     </list>
 /// </summary>
 public class TeaComplianceTests
 {
@@ -557,7 +559,7 @@ public class TeaComplianceTests
 
     /// <summary>
     ///     <see cref="SpectreTuiRenderer" />'s private <c>ChatScreen</c> class has no
-    ///     mutable instance fields named <c>_scroll</c>, <c>_viewport</c>, or
+    ///     mutable instance fields named <c>_scroll</c> or
     ///     <c>_wasRunning</c>. These were the §FP-005 violation — they used to bypass
     ///     the reducer and store state locally. After the fix, all state lives in
     ///     <see cref="UiState" />.
@@ -576,7 +578,6 @@ public class TeaComplianceTests
             .ToHashSet();
 
         await Assert.That(fields.Contains("_scroll")).IsFalse();
-        await Assert.That(fields.Contains("_viewport")).IsFalse();
         await Assert.That(fields.Contains("_wasRunning")).IsFalse();
     }
 

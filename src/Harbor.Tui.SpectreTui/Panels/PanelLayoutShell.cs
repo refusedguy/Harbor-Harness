@@ -1,8 +1,8 @@
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
+using System.Text;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels;
-
 /// <summary>
 ///     Dynamic Spectre <see cref="Layout" /> tree built from the current
 ///     <see cref="PanelRegistryView" /> snapshot. Replaces the static
@@ -46,7 +46,6 @@ namespace Harbor.Tui.SpectreTui.Panels;
 internal sealed class PanelLayoutShell
 {
     private readonly PanelRegistry _registry;
-    private Layout _layout = Empty();
     private string _signature = string.Empty;
 
     public PanelLayoutShell(PanelRegistry registry)
@@ -55,7 +54,11 @@ internal sealed class PanelLayoutShell
     }
 
     /// <summary>Current Spectre layout tree. Replace on signature change.</summary>
-    public Layout Layout => _layout;
+    public Layout Layout
+    {
+        get;
+        private set;
+    } = Empty();
 
     /// <summary>
     ///     Rebuild the layout if the visible-set / size / streaming signature has
@@ -70,7 +73,7 @@ internal sealed class PanelLayoutShell
             return;
 
         _signature = sig;
-        _layout = BuildLayout(state, streaming);
+        Layout = BuildLayout(state, streaming);
     }
 
     /// <summary>
@@ -80,7 +83,7 @@ internal sealed class PanelLayoutShell
     private string BuildSignature(UiState state, bool streaming)
     {
         var view = _registry.View(state);
-        var sb = new System.Text.StringBuilder(64);
+        var sb = new StringBuilder(64);
         sb.Append(streaming ? "S1|" : "S0|");
         foreach (var p in view.Providers)
         {
@@ -89,9 +92,9 @@ internal sealed class PanelLayoutShell
                 continue;
             int size = view.GetSize(p.Id);
             sb.Append(p.Id).Append(':')
-              .Append((int)p.DefaultPlacement).Append(':')
-              .Append((int)panelState).Append(':')
-              .Append(size).Append('|');
+                .Append((int)p.DefaultPlacement).Append(':')
+                .Append((int)panelState).Append(':')
+                .Append(size).Append('|');
         }
         return sb.ToString();
     }

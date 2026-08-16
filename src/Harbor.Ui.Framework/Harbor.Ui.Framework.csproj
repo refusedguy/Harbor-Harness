@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Ui.Framework</PackageId>
+    <Description>Harbor UI Framework — meta-package referencing all sub-modules (State, ViewModels, Services, Projection, Sessions, Abstractions).</Description>
+    <PackageTags>harbor;ui;framework;tea;elm;panels;mvu</PackageTags>
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
+  </ItemGroup>
+
+</Project>

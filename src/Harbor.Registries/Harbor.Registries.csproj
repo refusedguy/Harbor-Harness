@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Registries</PackageId>
+    <Description>Harbor registry implementations — AgentRegistry, ToolRegistry, InMemoryMcpRegistry, ProviderRegistry, InMemoryEventBus.</Description>
+    <PackageTags>harbor;ai;agent;registries;infrastructure</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    Registries layer depends on Harbor.Abstractions only — never on
+    Application, Infrastructure sibling, or Presentation projects. See
+    docs/ARCHITECTURE_LAYERS.md §2.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="NonBlocking"/>
+    <PackageReference Include="ZLinq"/>
+    <!--
+      ZLinq.DropInGenerator emits source-generated extension methods that take
+      priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
+      below, every LINQ call site in Harbor.Registries resolves to ZLinq's
+      zero-allocation pipeline without rewriting call sites.
+    -->
+    <PackageReference Include="ZLinq.DropInGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    ZLinq replaces System.Linq throughout Harbor.Registries for zero-allocation
+    LINQ. The implicit "System.Linq" using injected by the SDK is removed here so
+    that all LINQ operators resolve to ZLinq's zero-allocation equivalents
+    without producing ambiguity errors.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+</Project>

@@ -315,6 +315,37 @@ public sealed class SqliteSessionStore : ISessionStore
         }
     }
 
+    public async Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    {
+        try
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                                  UPDATE sessions SET 
+                                      title = @title, 
+                                      updated_at = @updated 
+                                  WHERE id = @id
+                                  """;
+                cmd.Parameters.AddWithValue("@id", session.Id);
+                cmd.Parameters.AddWithValue("@title", session.Title);
+                cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
+                int rows = cmd.ExecuteNonQuery();
+                if (rows == 0)
+                    return Result.Failure($"Session '{session.Id}' not found.");
+            }
+            await Task.CompletedTask.ConfigureAwait(false);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update session");
+            return Result.Failure(ex.Message);
+        }
+    }
+
     private void Initialize()
     {
         if (_initialized) return;

@@ -2,7 +2,18 @@
 
 > This file is read by AI coding agents (Claude Code, Cursor, etc.) when making changes to Harbor. It contains operational guidance, not just conventions. Cross-references [CLAUDE.md](./CLAUDE.md) for conventions.
 >
+> **Quick state (v0.4.0-alpha, R31):**
+> - Build: 0 errors / 0 warnings
+> - Tests: 240+ unit tests passing across 9 projects; 12 E2E tests
+> - 3 known pre-existing test failures: Avalonia 12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" bug in `SetInheritanceParent`)
+> - 8 pre-existing IPC timing-test failures on Linux (named-pipe disposal race)
+> - Plugin compilation: 24/24 tests pass (R30 fix for `Harbor.Abstractions.Models.*` Roslyn resolution)
+>
 > **Связанные документы:**
+> - [.ai-factory/DESCRIPTION.md](./.ai-factory/DESCRIPTION.md) — спецификация проекта и стек
+> - [.ai-factory/rules/base.md](./.ai-factory/rules/base.md) — базовые правила и конвенции
+> - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
+> - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
 > - [docs/PATTERNS.md](./docs/PATTERNS.md) — 18 pattern catalog with real code.
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 38 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
@@ -28,9 +39,10 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 4. Read [specs/14-architecture-revised.md](./specs/14-architecture-revised.md) for current architecture.
 5. Read [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for high-level design + principles summary.
 6. Read [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for development workflow + **principles checklist** for PRs.
-7. If touching `Harbor.Tui.SpectreTui/` — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features.
-8. Run `dotnet build` to make sure the project compiles.
-9. Run `dotnet test` to make sure tests pass — **including `tests/Harbor.Architecture.Tests/`**.
+7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
+8. If touching `Harbor.Tui.SpectreTui/` — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features.
+9. Run `dotnet build` to make sure the project compiles.
+10. Run `dotnet test` to make sure tests pass — **including `tests/Harbor.Architecture.Tests/`**.
 
 ## Project structure quick reference
 
@@ -548,8 +560,9 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 6. **Don't use `AssemblyLoadContext` collectible under AOT** — use out-of-process plugins. **Roslyn CS-source plugins also do NOT work under AOT** — `Microsoft.CodeAnalysis.CSharp` requires JIT. Use the DLL-based or out-of-process plugin path for AOT.
 7. **Don't add `Spectre.Console.Cli`** — not AOT-compatible. Use `ConsoleAppFramework` if needed.
 8. **Don't suppress warnings with `#pragma warning disable`** — fix the code or add to `.editorconfig`.
-9. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
-10. **Don't break tests** — `dotnet test` must pass before commit.
+9. **Don't create C# design-token classes** (`*Tokens.cs`, `*Theme.cs`, `*Palette.cs`) in the UI layer. The source of truth is the XAML `ResourceDictionary`. Dual ownership causes sync drift, memory leaks on theme switch, and AOT breaks.
+10. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
+11. **Don't break tests** — `dotnet test` must pass before commit.
 
 ## Build & test commands
 
@@ -560,8 +573,9 @@ dotnet build
 # Run all tests
 dotnet test
 
-# Run specific project tests
+# Run specific project tests (TUnit uses --treenode-filter, NOT --filter)
 dotnet test tests/Harbor.Core.Tests
+dotnet test tests/Harbor.Tui.Tests --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
 # Run CLI
 dotnet run --project src/Harbor.Cli

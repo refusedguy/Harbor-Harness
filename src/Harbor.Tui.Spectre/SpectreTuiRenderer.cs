@@ -1,8 +1,8 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
-using Harbor.Tui.Abstractions;
-using Harbor.Tui.Abstractions.Renderers;
-using Harbor.Tui.Abstractions.Views;
+using Harbor.Terminal.Abstractions;
+using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.Views;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 namespace Harbor.Tui.Spectre;

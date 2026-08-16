@@ -1,0 +1,30 @@
+@page "/tokens"
+@inject TokenUsageViewModel Vm
+
+<h1>Token Usage</h1>
+<p>Cumulative token counts and estimated cost across the current session.</p>
+
+<div class="token-stat-grid">
+    <div class="token-stat">
+        <div class="label">Input tokens</div>
+        <div class="value">@Vm.TotalIn.ToString("N0")</div>
+    </div>
+    <div class="token-stat">
+        <div class="label">Output tokens</div>
+        <div class="value">@Vm.TotalOut.ToString("N0")</div>
+    </div>
+    <div class="token-stat">
+        <div class="label">Estimated cost</div>
+        <div class="value">$@Vm.EstimatedCostUsd.ToString("F4")</div>
+    </div>
+</div>
+
+<TokenUsageChart Series="@Vm.Series"/>
+
+<div style="margin-top: var(--space-4);">
+    <button class="btn-secondary" @onclick="AddSample">Add sample point</button>
+</div>
+
+@code {
+private void AddSample() => Vm.AddSample();
+}

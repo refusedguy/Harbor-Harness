@@ -1,0 +1,122 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- HdsButton — theme-aware button styles.
+         Classes: hds-primary, hds-secondary, hds-ghost, hds-danger, hds-icon-28, hds-icon-36, 
+         All colors via DynamicResource — no hardcoded hex values.
+         Transitions: MotionFast durations via token, brush + opacity.
+         
+         Icons defined in Themes/Hds/Icons.axaml as StreamGeometry resources. -->
+
+    <!-- ── Primary: accent fill, text-on-accent ── -->
+    <Style Selector="Button.hds-primary">
+        <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButtonPrimary}" />
+        <Setter Property="MinHeight" Value="{StaticResource ButtonHeightDefault}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="Foreground" Duration="{StaticResource EaseNormal}" />
+                <DoubleTransition Property="Opacity" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.hds-primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+        <Setter Property="Opacity" Value="0.95" />
+    </Style>
+
+    <Style Selector="Button.hds-primary:pressed">
+        <Setter Property="Opacity" Value="0.9" />
+    </Style>
+
+    <Style Selector="Button.hds-primary:disabled">
+        <Setter Property="Background" Value="{DynamicResource AccentMutedBrush}" />
+        <Setter Property="Opacity" Value="0.6" />
+    </Style>
+
+    <!-- ── Secondary: transparent + border, hover = subtle surface ── -->
+    <Style Selector="Button.hds-secondary">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButtonSecondary}" />
+        <Setter Property="MinHeight" Value="{StaticResource ButtonHeightDefault}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="BorderBrush" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.hds-secondary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+    </Style>
+
+    <!-- ── Ghost: text-only with accent color ── -->
+    <Style Selector="Button.hds-ghost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButtonGhost}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="Foreground" Duration="{StaticResource EaseNormal}" />
+                <DoubleTransition Property="Opacity" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.hds-ghost:pointerover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+    </Style>
+
+    <!-- ── Danger: red fill, text-on-accent ── -->
+    <Style Selector="Button.hds-danger">
+        <Setter Property="Background" Value="{DynamicResource StateErrorBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingButtonDanger}" />
+        <Setter Property="MinHeight" Value="{StaticResource ButtonHeightDefault}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="Foreground" Duration="{StaticResource EaseNormal}" />
+                <DoubleTransition Property="Opacity" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.hds-danger:pointerover">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+
+    <!-- ── hds-icon-28 / hds-icon-36: compact circular icon buttons ── -->
+    <Style Selector="Button.hds-icon-28">
+        <Setter Property="Width" Value="{StaticResource IconButtonSize28}" />
+        <Setter Property="Height" Value="{StaticResource IconButtonSize28}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusFull}" />
+    </Style>
+
+    <Style Selector="Button.hds-icon-36">
+        <Setter Property="Width" Value="{StaticResource IconButtonSize36}" />
+        <Setter Property="Height" Value="{StaticResource IconButtonSize36}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusFull}" />
+    </Style>
+
+</Styles>

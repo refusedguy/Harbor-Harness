@@ -1,0 +1,94 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        HarborDarkStyles — Orca-inspired control styles using HarborDark tokens.
+
+        These styles are scoped to the experimental Orca shell (views under
+        Views/Shell/). They define the Primary / Danger / Ghost button classes
+        and the OrcaListBoxItem style used by the dense session rail.
+
+        Classic Catppuccin-Mocha AppStyles.axaml is unaffected — these classes
+        don't collide with the classic Subtle/Secondary/WindowButton classes.
+    -->
+
+    <!-- ════════════ Orca Button.Primary — amber fill, dark text ════════════ -->
+    <Style Selector="Button.Primary">
+        <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Primary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+    </Style>
+    <Style Selector="Button.Primary:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.Primary:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentMutedBrush}" />
+        <Setter Property="Opacity" Value="0.5" />
+    </Style>
+
+    <!-- ════════════ Orca Button.Danger — danger-red fill ════════════ -->
+    <Style Selector="Button.Danger">
+        <Setter Property="Background" Value="{DynamicResource StateErrorBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+
+    <!-- ════════════ Orca Button.Ghost — transparent, hover = BgHover ════════════ -->
+    <Style Selector="Button.Ghost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,2" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.12" />
+                <BrushTransition Property="Foreground" Duration="0:0:0.12" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.Ghost:pointerover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- ════════════ Orca ListBoxItem — dense, transparent-by-default rows ════════════
+         Removes the default Fluent chrome (selection highlight, padding,
+         border) so the SessionRowView template can render its own BgActive
+         highlight + accent left-border when active. -->
+    <Style Selector="ListBoxItem.OrcaRow">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="ListBoxItem.OrcaRow:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBoxItem.OrcaRow:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+</Styles>

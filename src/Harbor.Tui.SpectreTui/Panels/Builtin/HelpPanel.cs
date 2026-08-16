@@ -1,10 +1,8 @@
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows the global keymap, registered panel list with their
 ///     hotkeys (Alt+1..Alt+9), and the available slash commands. Toggled with <c>?</c>.
@@ -42,6 +40,7 @@ public sealed class HelpPanel : IPanelProvider
         p.Lines.Add(TextLine.FromMarkup("  [grey]q / Esc[/]    return focus to chat"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]?[/]          toggle this help panel"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]F2[/]         toggle input/chat focus"));
+        p.Lines.Add(TextLine.FromMarkup("  [grey]F12[/]        toggle logs panel (live ILogger output)"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+L[/]     clear transcript"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Ctrl+C[/]     abort running agent"));
         p.Lines.Add(TextLine.FromMarkup("  [grey]Esc[/]        quit"));
@@ -67,7 +66,7 @@ public sealed class HelpPanel : IPanelProvider
                 {
                     // Read state directly from UiState — TEA single source of truth.
                     bool isFocused = panel.Id == ctx.State.FocusedPanelId;
-                    TuiPanelState s = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps)
+                    var s = ctx.State.PanelStates.TryGetValue(panel.Id, out var ps)
                         ? ps
                         : TuiPanelState.Hidden;
                     string state = isFocused
@@ -87,7 +86,7 @@ public sealed class HelpPanel : IPanelProvider
 
         // Slash commands.
         p.Lines.Add(TextLine.FromMarkup("[bold]Slash commands[/]"));
-        foreach (var cmd in ChatCommands.Slash)
+        foreach (string cmd in ChatCommands.Slash)
             p.Lines.Add(TextLine.FromMarkup($"  [grey]{ChatMarkup.Escape(cmd)}[/]"));
         p.Lines.Add(TextLine.FromMarkup(string.Empty));
         p.Lines.Add(TextLine.FromMarkup("[grey]Press ? to close this panel.[/]"));

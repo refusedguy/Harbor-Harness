@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Controls.Sparkline">
+
+    <!--
+        Sparkline — compact inline line chart with no axes.
+        Draws a polyline from `Values` (IEnumerable<double>), auto-scaling
+        to the min/max of the visible window. Used in the status bar to
+        show the last N turns of token usage.
+
+        Killer-feature port from Opencode's `progress-circle-v2.tsx` +
+        Kilocode's kilo-console header sparkline.
+    -->
+
+    <Canvas x:Name="SparkCanvas"
+            Background="Transparent"
+            ClipToBounds="True" />
+</UserControl>

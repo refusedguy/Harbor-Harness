@@ -8,9 +8,9 @@
 
 global using System.Reflection;
 global using TUnit.Core;
+using Assembly = System.Reflection.Assembly;
 
 namespace Harbor.Architecture.Tests;
-
 /// <summary>
 ///     Internal helpers for the architecture tests.
 /// </summary>
@@ -30,9 +30,9 @@ internal static class ArchitectureTestHelpers
     ///     project has direct <c>ProjectReference</c> edges to every Harbor project.)
     /// </remarks>
     /// <returns>A read-only dictionary of Harbor assembly name → loaded assembly.</returns>
-    public static IReadOnlyDictionary<string, System.Reflection.Assembly> LoadHarborAssemblies()
+    public static IReadOnlyDictionary<string, Assembly> LoadHarborAssemblies()
     {
-        var result = new Dictionary<string, System.Reflection.Assembly>(StringComparer.Ordinal);
+        var result = new Dictionary<string, Assembly>(StringComparer.Ordinal);
 
         // Seed with what's already loaded — cheaper than re-loading.
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -47,10 +47,10 @@ internal static class ArchitectureTestHelpers
         // Force-load every Harbor assembly referenced by the entry assembly so the
         // full set is available for inventory. Assembly.Load is a no-op if already
         // loaded.
-        var entry = System.Reflection.Assembly.GetEntryAssembly();
+        var entry = Assembly.GetEntryAssembly();
         if (entry is not null)
         {
-            foreach (AssemblyName refName in entry.GetReferencedAssemblies())
+            foreach (var refName in entry.GetReferencedAssemblies())
             {
                 string? name = refName.Name;
                 if (name is null || !name.StartsWith("Harbor", StringComparison.Ordinal))
@@ -63,7 +63,7 @@ internal static class ArchitectureTestHelpers
                 }
                 try
                 {
-                    var loaded = System.Reflection.Assembly.Load(refName);
+                    var loaded = Assembly.Load(refName);
                     result[name] = loaded;
                 }
                 catch (Exception ex)
@@ -86,7 +86,7 @@ internal static class ArchitectureTestHelpers
     public static HashSet<string> GetReferencedAssemblyNames(Assembly asm)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (AssemblyName refName in asm.GetReferencedAssemblies())
+        foreach (var refName in asm.GetReferencedAssemblies())
         {
             if (refName.Name is { } n)
             {

@@ -1,0 +1,71 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        HDS Typography — TextBlock classes for consistent typography.
+        All sizes/weights reference BaseTokens (FontSize*, FontWeight*).
+        Colors reference semantic brushes defined in the active theme.
+
+        Classes: Caption, Label, Code, Body, Subtitle, Title, Heading, Display.
+    -->
+
+    <Style Selector="TextBlock.Caption">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeCaption}" />
+        <Setter Property="Foreground" Value="{StaticResource TextSubtleBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Label">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Code">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSmall}" />
+        <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.Body">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Subtitle">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSubtitle}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Title">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeTitle}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Heading">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeHeading}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightSemiBold}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <Style Selector="TextBlock.Display">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeDisplay}" />
+        <Setter Property="FontWeight" Value="{StaticResource FontWeightBold}" />
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    </Style>
+
+    <!-- StatusDot — colored indicator dot used in sidebars and lists -->
+    <Style Selector="Ellipse.StatusDot">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Fill" Value="{StaticResource StateRunningBrush}" />
+    </Style>
+
+</Styles>

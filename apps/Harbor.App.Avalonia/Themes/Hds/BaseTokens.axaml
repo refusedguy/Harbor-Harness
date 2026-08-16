@@ -1,0 +1,135 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!--
+        HDS Base Tokens — theme-independent structural tokens.
+        Shadows live in Elevation.axaml (merged below). Colors and brushes
+        (which vary per theme) are NOT defined here — they live in the theme
+        files that merge this base.
+
+        All values are XAML ResourceDictionary-only (no C# token classes) per
+        the MEGASPEC constraint.
+    -->
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/Elevation.axaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ════════════ Spacing scale (4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96 / 128 / 160 / 192) ══ -->
+    <x:Double x:Key="Space1">4</x:Double>
+    <x:Double x:Key="Space2">8</x:Double>
+    <x:Double x:Key="Space3">12</x:Double>
+    <x:Double x:Key="Space4">16</x:Double>
+    <x:Double x:Key="Space5">24</x:Double>
+    <x:Double x:Key="Space6">32</x:Double>
+    <x:Double x:Key="Space7">48</x:Double>
+    <x:Double x:Key="Space8">64</x:Double>
+    <x:Double x:Key="Space9">96</x:Double>
+    <x:Double x:Key="Space10">128</x:Double>
+    <x:Double x:Key="Space11">160</x:Double>
+    <x:Double x:Key="Space12">192</x:Double>
+
+    <!-- ════════════ Padding / Margin / Border thickness scale ════════════ -->
+    <Thickness x:Key="PaddingButtonPrimary">16,6</Thickness>
+    <Thickness x:Key="PaddingButtonSecondary">16,8</Thickness>
+    <Thickness x:Key="PaddingButtonGhost">8,4</Thickness>
+    <Thickness x:Key="PaddingButtonDanger">16,6</Thickness>
+    <Thickness x:Key="PaddingCardDefault">16,16</Thickness>
+    <Thickness x:Key="PaddingCardElevated">24,24</Thickness>
+    <Thickness x:Key="PaddingInputDefault">12,12</Thickness>
+    <Thickness x:Key="PaddingInputFlush">12,12</Thickness>
+    <Thickness x:Key="PaddingInputSearch">48,0,0,12</Thickness>
+    <Thickness x:Key="PaddingChip">8,4</Thickness>
+    <Thickness x:Key="PaddingPill">8,4</Thickness>
+    <Thickness x:Key="PaddingSegmentedItem">8,6</Thickness>
+    <Thickness x:Key="PaddingTooltip">12,4</Thickness>
+    <Thickness x:Key="PaddingSpace2">8</Thickness>
+    <Thickness x:Key="PaddingSpace3">12</Thickness>
+    <Thickness x:Key="PaddingSpace4">16</Thickness>
+    <Thickness x:Key="PaddingSpace5">20</Thickness>
+    <Thickness x:Key="MarginSpace2">8</Thickness>
+    <Thickness x:Key="MarginSpace3">12</Thickness>
+    <Thickness x:Key="MarginSpace4">16</Thickness>
+    <Thickness x:Key="MarginSpace5">20</Thickness>
+    <Thickness x:Key="MarginSpace6">24</Thickness>
+
+    <!-- ════════════ Corner radius ════════════ -->
+    <CornerRadius x:Key="RadiusXs">2</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">4</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">6</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">8</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">12</CornerRadius>
+    <CornerRadius x:Key="Radius2xl">16</CornerRadius>
+    <CornerRadius x:Key="Radius3xl">24</CornerRadius>
+    <CornerRadius x:Key="RadiusFull">9999</CornerRadius>
+    <CornerRadius x:Key="RadiusNone">0</CornerRadius>
+
+    <!-- ════════════ Compound corner radii ════════════ -->
+    <CornerRadius x:Key="RailActiveCornerRadius">0,6,6,0</CornerRadius>
+
+    <!-- ════════════ Border widths ════════════ -->
+    <Thickness x:Key="BorderWidthHairline">0,0,0,1</Thickness>
+    <Thickness x:Key="BorderWidthDefault">1</Thickness>
+    <Thickness x:Key="BorderWidthFocus">2,0,0,0</Thickness>
+    <Thickness x:Key="BorderWidthThin">0,0,0,2</Thickness>
+
+    <!-- ════════════ Motion (TimeSpan ONLY. Duration="{StaticResource MotionFast}") ══ -->
+    <sys:TimeSpan x:Key="MotionInstant">0:0:0.100</sys:TimeSpan>
+    <sys:TimeSpan x:Key="MotionFast">0:0:0.150</sys:TimeSpan>
+    <sys:TimeSpan x:Key="MotionBase">0:0:0.200</sys:TimeSpan>
+    <sys:TimeSpan x:Key="MotionSlow">0:0:0.300</sys:TimeSpan>
+    <!-- backward-compat aliases for existing styles: -->
+    <sys:TimeSpan x:Key="MotionNormal">0:0:0.200</sys:TimeSpan>
+    <sys:TimeSpan x:Key="MotionFaster">0:0:0.060</sys:TimeSpan>
+    <sys:TimeSpan x:Key="EaseStandard">0:0:0.15</sys:TimeSpan>
+    <sys:TimeSpan x:Key="EaseFast">0:0:0.1</sys:TimeSpan>
+    <sys:TimeSpan x:Key="EaseNormal">0:0:0.3</sys:TimeSpan>
+    <sys:TimeSpan x:Key="TransitionBrush">0:0:0.15</sys:TimeSpan>
+
+    <!-- ════════════ Layout constants (shared across themes) ════════════ -->
+    <x:Double x:Key="TitleBarHeight">44</x:Double>
+    <x:Double x:Key="ActivityRailWidth">56</x:Double>
+    <x:Double x:Key="StatusBarHeight">32</x:Double>
+    <x:Double x:Key="RightDrawerWidth">360</x:Double>
+    <x:Double x:Key="RailFlyoutWidth">280</x:Double>
+    <x:Double x:Key="MiniTabStripHeight">36</x:Double>
+
+    <!-- ════════════ Typography (font sizes + weights, theme-independent) ══ -->
+    <x:Double x:Key="FontSizeCaption">11</x:Double>
+    <x:Double x:Key="FontSizeSmall">12</x:Double>
+    <x:Double x:Key="FontSizeBody">13</x:Double>
+    <x:Double x:Key="FontSizeBodyLarge">14</x:Double>
+    <x:Double x:Key="FontSizeSubtitle">16</x:Double>
+    <x:Double x:Key="FontSizeTitle">18</x:Double>
+    <x:Double x:Key="FontSizeTitleLarge">20</x:Double>
+    <x:Double x:Key="FontSizeHeading">24</x:Double>
+    <x:Double x:Key="FontSizeDisplay">32</x:Double>
+
+    <FontWeight x:Key="FontWeightLight">300</FontWeight>
+    <FontWeight x:Key="FontWeightNormal">400</FontWeight>
+    <FontWeight x:Key="FontWeightMedium">500</FontWeight>
+    <FontWeight x:Key="FontWeightSemiBold">600</FontWeight>
+    <FontWeight x:Key="FontWeightBold">700</FontWeight>
+
+    <FontFamily x:Key="FontMono">JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, DejaVu Sans Mono, monospace</FontFamily>
+    <FontFamily x:Key="UiFont">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+
+    <!-- ════════════ Component sizing tokens ════════════ -->
+    <x:Double x:Key="ButtonHeightDefault">36</x:Double>
+    <x:Double x:Key="ButtonHeightSmall">28</x:Double>
+    <x:Double x:Key="ButtonHeightLarge">44</x:Double>
+    <x:Double x:Key="IconButtonSize28">28</x:Double>
+    <x:Double x:Key="IconButtonSize36">36</x:Double>
+    <x:Double x:Key="IconSize16">16</x:Double>
+    <x:Double x:Key="IconSize20">20</x:Double>
+    <x:Double x:Key="IconSize24">24</x:Double>
+
+    <!-- ════════════ Input tokens ════════════ -->
+    <CornerRadius x:Key="InputCornerRadius">6</CornerRadius>
+    <CornerRadius x:Key="ButtonCornerRadius">6</CornerRadius>
+
+    <!-- Legacy corner radius alias (used by AppStyles Border.Card via StaticResource) -->
+    <CornerRadius x:Key="CardCornerRadius">8</CornerRadius>
+
+</ResourceDictionary>

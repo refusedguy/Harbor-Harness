@@ -1,0 +1,43 @@
+<Styles xmlns="https://github.com/avaloniaui"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- MenuFlyoutPresenter — HDS-styled context menu container -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource BgPanelElevatedBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Width" Value="200" />
+    </Style>
+
+    <!-- MenuItem — HDS-styled, 32px min height, rounded hover -->
+    <Style Selector="MenuItem">
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- MenuItem hover — uses BgHoverBrush (surface tint, NOT solid color) -->
+    <Style Selector="MenuItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <!-- MenuItem pressed -->
+    <Style Selector="MenuItem:pressed">
+        <Setter Property="Background" Value="{DynamicResource SelectedBackgroundBrush}" />
+    </Style>
+
+    <!-- Separator -->
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="4" />
+    </Style>
+
+</Styles>

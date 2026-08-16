@@ -1,7 +1,12 @@
-@inject ChatBridge Harbor
+@inject RazorConsoleTeaBridge Harbor
+@inject IHostApplicationLifetime Lifetime
 @using global::RazorConsole.Components
+@using Microsoft.Extensions.Hosting
+@using Harbor.Tui.RazorConsole.Views
+@using Harbor.Ui.Framework.Projection
+@using Harbor.Ui.Framework.State
+@using System.Collections.Immutable
 @using Spectre.Console
-@using Columns = Spectre.Console.Columns
 @using Markup = Spectre.Console.Markup
 @using Panel = Spectre.Console.Panel
 @using Rows = Spectre.Console.Rows
@@ -14,30 +19,33 @@
            Expand="true">
         <ViewHeightScrollable LinesToRender="20">
             <Rows>
-                @if (Harbor.Messages.Count == 0 && !Harbor.IsStreaming)
+                @if (_lines.Count == 0 && !State.IsStreaming)
                 {
                     <Markup Content="No messages yet - type below to start chatting."
                             Foreground="@Color.Grey"
                             Decoration="Decoration.Italic"/>
                 }
 
-                @foreach (var m in Harbor.Messages)
+                @foreach (var line in _lines)
                 {
-                    @Message(m.Role, m.Text)
+                    <Markup Content="@line" Foreground="@Color.Grey85"/>
                 }
 
-                @if (Harbor.IsStreaming)
+                @if (State.IsStreaming)
                 {
-                    @if (!string.IsNullOrWhiteSpace(Harbor.ThinkBuffer))
+                    @if (!string.IsNullOrWhiteSpace(State.Active.ThinkBuffer))
                     {
-                        @Message("thinking", Harbor.ThinkBuffer.Trim())
+                        <Markup Content="@State.Active.ThinkBuffer.Trim()"
+                                Foreground="@Color.Grey54"
+                                Decoration="Decoration.Italic"/>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(Harbor.StreamBuffer))
+                    @if (!string.IsNullOrWhiteSpace(State.Active.TextBuffer))
                     {
-                        @Message("assistant", Harbor.StreamBuffer.Trim())
+                        <Markup Content="@State.Active.TextBuffer.Trim()"
+                                Foreground="@Color.Grey85"/>
                     }
-                    else if (string.IsNullOrWhiteSpace(Harbor.ThinkBuffer))
+                    else if (string.IsNullOrWhiteSpace(State.Active.ThinkBuffer))
                     {
                         <Newline/>
                         <Markup Content="Harbor is thinking..."
@@ -59,18 +67,21 @@
                OnSubmit="Submit"
                Expand="true"/>
 
-    <Markup Content="exit to quit  ·  /help for commands  ·  Enter to send"
-            Foreground="@Color.Grey"
-            Decoration="Decoration.Dim"/>
+    <Markup Content="@_statusBar" Foreground="@Color.Grey"/>
 </Rows>
 
 @code {
 private string _input = string.Empty;
+private string _statusBar = string.Empty;
+private IReadOnlyList<string> _lines = [];
+    private readonly DefaultUiProjector _projector = new();
+
+private UiState State => Harbor.Store.State;
 
 private string PanelTitle =>
-    $"Harbor · {Harbor.AgentName} · {Harbor.Provider}/{Harbor.Model} · {Harbor.Status}";
+    $"Harbor · {State.AgentName} · {State.Provider}/{State.Model} · {State.Status}";
 
-private Color StatusColor => Harbor.Status switch
+private Color StatusColor => State.Status switch
 {
     "running" => Color.Cyan1,
     "compacting" => Color.Yellow,
@@ -78,47 +89,61 @@ private Color StatusColor => Harbor.Status switch
     _ => Color.Grey
 };
 
-private static (string Label, Color LabelColor, Color TextColor) RoleStyle(string role) => role switch
-{
-    "user" => ("You", Color.Green, Color.White),
-    "assistant" => ("Harbor", Color.Cyan1, Color.Grey85),
-    "tool" => ("tool", Color.Blue, Color.Grey74),
-    "tool-result" => ("  ↳", Color.Grey, Color.Grey58),
-    "thinking" => ("think", Color.Grey, Color.Grey54),
-    "system" => ("sys", Color.Grey, Color.Grey62),
-    "error" => ("error", Color.Red, Color.Red1),
-    _ => ("·", Color.Grey, Color.Grey)
-};
-
 protected override void OnInitialized()
 {
-    Harbor.StateChanged += OnStateChanged;
+    Harbor.Store.Changed += OnStateChanged;
+    ProjectState();
 }
 
-private void OnStateChanged(object? sender, EventArgs e) => InvokeAsync(StateHasChanged);
-
-private async Task Submit()
+private void OnStateChanged(object? sender, EventArgs e) => InvokeAsync(() =>
 {
-    var value = _input;
-    _input = string.Empty;
+    ProjectState();
     StateHasChanged();
-    await Harbor.SendAsync(value);
+});
+
+private void ProjectState()
+    {
+        var screen = _projector.Project(Harbor.Store.State);
+        var builder = ImmutableArray.CreateBuilder<string>();
+        foreach (var line in screen.Transcript.RenderedLines)
+        {
+            var text = string.Join(string.Empty, line.Spans.Select(s => s.Text));
+            builder.Add(text);
+        }
+        _lines = builder.ToImmutable();
+        _statusBar = screen.Header.FooterText;
+
+        if (State.ShouldQuit)
+            Lifetime.StopApplication();
+    }
+
+private void Submit()
+{
+    var value = _input.Trim();
+    _input = string.Empty;
+
+    if (string.IsNullOrWhiteSpace(value))
+        return;
+
+    if (value is "exit" or "quit" or "q" or ":q")
+    {
+        Lifetime.StopApplication();
+        return;
+    }
+
+    if (string.Equals(value, "/logs", StringComparison.OrdinalIgnoreCase))
+    {
+        Harbor.DumpDiagnostics();
+        StateHasChanged();
+        return;
+    }
+
+    Harbor.Submit(value);
+    StateHasChanged();
 }
 
 public void Dispose()
 {
-    Harbor.StateChanged -= OnStateChanged;
+    Harbor.Store.Changed -= OnStateChanged;
 }
-}
-
-@{
-RenderFragment Message(string role, string text) =>
-    @<Rows>
-        @{ var style = RoleStyle(role); }
-        <Newline/>
-        <Columns Expand="false">
-            <Markup Content="@style.Label" Foreground="@style.LabelColor" Decoration="Decoration.Bold"/>
-            <Markup Content="@text" Foreground="@style.TextColor"/>
-        </Columns>
-    </Rows>;
 }

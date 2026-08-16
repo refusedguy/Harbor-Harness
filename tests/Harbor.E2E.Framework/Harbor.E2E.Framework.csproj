@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.E2E.Framework: shared infrastructure for all Harbor E2E test projects.
+
+    Provides:
+      * IE2eDriver         - common contract for driving a Harbor app from
+                             outside the process (start, send input, read screen,
+                             wait for text/exit, stop).
+      * CliDriver          - Process.Start-based driver for one-shot CLI commands
+                             (harbor ask ..., harbor version, etc.).
+      * TuiDriver          - PTY-wrapped driver for interactive TUI renderers
+                             (SpectreTui, Termina, Terminal.Gui, RazorConsole).
+                             Uses `script -qfc` on Linux/macOS and ConPTY on
+                             Windows (Windows impl is stubbed, see notes).
+      * HeadlessAvaloniaDriver - Avalonia.Headless driver for the desktop app
+                             (skips on Linux, see notes in HeadlessAvaloniaDriver.cs).
+      * MockLlmServer      - in-process OpenAI-compatible HTTP server. Returns
+                             canned SSE-streamed chat completions. Thread-safe.
+      * E2eTestBase        - TUnit base class. Per-class MockLlmServer + temp HOME.
+
+    Test projects reference this framework + the app project under test, then
+    write 3-5 [Category("E2E")] tests each. All E2E tests are filterable via
+    `dotnet test -filter "Category=E2E"` so they can run separately from the
+    fast unit test suite in CI.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CA1707;S3267;S2365;S2445;S6618;TUnit0055;NU1504</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true).
+         Microsoft.NET.Test.Sdk is the test host adapter. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Plugins.Compilation — concrete IPluginCompiler implementations.
+
+    Implementations:
+      - RoslynPluginCompiler    (compiles CS source in-memory via Roslyn)
+      - CachingCompiler         (disk-cache decorator over any IPluginCompiler)
+      - PluginAssemblyReferences (collects MetadataReference snapshot for Roslyn)
+
+    Depends on Harbor.Plugins.Abstractions (for IPluginCompiler,
+    PluginScript, CompiledPluginAssembly, CompilationResult).
+    Pulls in Microsoft.CodeAnalysis.CSharp for the Roslyn implementation.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugins.Compilation</PackageId>
+    <Description>Harbor plugin compilation — Roslyn-based IPluginCompiler and disk-caching decorator.</Description>
+    <PackageTags>harbor;ai;agent;plugins;roslyn;compilation</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <!--
+      Harbor.Domain is needed explicitly so PluginAssemblyReferences can
+      call typeof(Harbor.Abstractions.Models.Session).Assembly at construction
+      time. Without this ProjectReference, the call would still work at runtime
+      (Harbor.Domain is loaded transitively via Harbor.Abstractions), but the
+      compiler needs a direct reference to allow the static type lookup in
+      RoslynPluginCompiler's host code.
+    -->
+    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

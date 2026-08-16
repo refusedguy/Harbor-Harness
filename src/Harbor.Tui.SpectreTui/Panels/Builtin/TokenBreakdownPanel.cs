@@ -1,12 +1,8 @@
-using System.Collections.Generic;
 using System.Globalization;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
-using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows a horizontal bar chart of token usage per turn —
 ///     input, output, reasoning, cache-read, cache-write. Numbers come straight
@@ -40,9 +36,9 @@ public sealed class TokenBreakdownPanel : IPanelProvider
 
         // Cumulative totals.
         p.Lines.Add(TextLine.FromMarkup(
-            $"  [green]in[/]   {Format(input).PadLeft(12)}  {Bar(input, ctx.Width - 24, scale: MaxOf(input, output))}"));
+            $"  [green]in[/]   {Format(input).PadLeft(12)}  {Bar(input, ctx.Width - 24, MaxOf(input, output))}"));
         p.Lines.Add(TextLine.FromMarkup(
-            $"  [yellow]out[/]  {Format(output).PadLeft(12)}  {Bar(output, ctx.Width - 24, scale: MaxOf(input, output))}"));
+            $"  [yellow]out[/]  {Format(output).PadLeft(12)}  {Bar(output, ctx.Width - 24, MaxOf(input, output))}"));
 
         p.Lines.Add(TextLine.FromMarkup("[grey]─────────────────────────────[/]"));
         p.Lines.Add(TextLine.FromMarkup(

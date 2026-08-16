@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vw="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Components.SessionRow">
+
+    <!--
+        SessionRow — reusable row for the session sidebar list.
+
+        Bindable properties (set on the control itself):
+          - Title          (string)   — session title (e.g. "main chat")
+          - Subtitle       (string)   — agent + model (e.g. "code · gpt-4o")
+          - RelativeTime   (string)   — "5m ago" / "2h ago" (already formatted)
+          - MessageCount   (int)      — number of chat messages
+          - StatusColorKey (string)   — resource key for status dot color
+          - IsDirty        (bool)     — git working tree dirty? shows "•"
+          - IsActive       (bool)     — currently selected row (highlighted)
+
+        The status dot color is resolved from app resources via
+        BrushKeyConverter. The "dirty" indicator is a tiny dot in
+        MochaYellow when IsDirty is true (semantic: StateWarningBrush).
+
+        Usage:
+          <comp:SessionRow Title="{Binding Title}"
+                           Subtitle="{Binding Subtitle}"
+                           RelativeTime="{Binding RelativeTime}"
+                           MessageCount="{Binding MessageCount}"
+                           StatusColorKey="{Binding StatusColorKey}"
+                           IsDirty="{Binding GitIsDirty}"
+                           IsActive="{Binding $self.IsSelected, ElementName=Row}"/>
+    -->
+
+    <UserControl.Resources>
+        <vw:BrushKeyConverter x:Key="BrushKey" />
+    </UserControl.Resources>
+
+    <Grid Margin="2,4" ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Spacing="2">
+            <!-- Title + dirty indicator -->
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="*"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource StateWarningBrush}"
+                           IsVisible="{Binding IsDirty, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           ToolTip.Tip="Working tree has uncommitted changes" />
+            </StackPanel>
+
+            <!-- Subtitle (agent · model) -->
+            <TextBlock Text="{Binding Subtitle, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       FontSize="11"
+                       Foreground="{StaticResource TextSubtleBrush}"
+                       TextTrimming="CharacterEllipsis" />
+
+            <!-- Time + message count -->
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="10"
+                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                <TextBlock
+                    Text="{Binding MessageCount, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat='{}{0} msgs'}"
+                    FontSize="10"
+                    Foreground="{DynamicResource TextTertiaryBrush}" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Status dot -->
+        <TextBlock Grid.Column="1"
+                   Text="*"
+                   FontSize="8"
+                   Foreground="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}"
+                   VerticalAlignment="Center" />
+    </Grid>
+</UserControl>

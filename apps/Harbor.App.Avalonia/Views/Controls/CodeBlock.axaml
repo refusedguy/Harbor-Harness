@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Controls.CodeBlock">
+
+    <!--
+        CodeBlock — ORCA feature steal #3.
+
+        Renders a fenced code block as a dark Mantle-background card with:
+          • Language label (top-left, accent blue)
+          • Copy button (top-right — copies the raw code to clipboard)
+          • Body TextBlock in JetBrains Mono with basic syntax coloring
+            via a simple tokenizer (no AvaloniaEdit dependency — keeps
+            the build light and the headless test renderer happy).
+
+        The whole card uses the existing `Border.CodeBlock` style from
+        AppStyles.axaml (BgPanelBrush background, 1px border, 8px radius).
+    -->
+
+    <Border Background="{DynamicResource BgRailBrush}"
+            CornerRadius="8"
+            Padding="12,10"
+            Margin="0,4"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="1">
+        <StackPanel Orientation="Vertical" Spacing="6">
+            <!-- Header: language label + copy button -->
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           x:Name="LanguageLabel"
+                           Text="{Binding Language, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=UserControl}}"
+                           Foreground="{DynamicResource AccentBrush}"
+                           FontFamily="{DynamicResource FontMono}"
+                           FontSize="11"
+                           FontWeight="SemiBold" />
+                <Button Grid.Column="1"
+                        Classes="CodeCopyButton"
+                        Content="Copy"
+                        Click="CopyButton_Click"
+                        Padding="8,2"
+                        FontSize="11"
+                        VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- Code body — TextBlock hosts the syntax-highlighted Inlines -->
+            <TextBlock x:Name="CodeText"
+                       FontFamily="{DynamicResource FontMono}"
+                       FontSize="13"
+                       TextWrapping="NoWrap"
+                       Foreground="{DynamicResource TextPrimaryBrush}" />
+        </StackPanel>
+    </Border>
+</UserControl>

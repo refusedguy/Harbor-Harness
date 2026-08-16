@@ -1,0 +1,36 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- HDS tokens (theme-independent structural tokens) -->
+                <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
+
+                <!-- HDS palette — ThemeService.ApplyHds swaps this entry by name -->
+                <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/CatppuccinMocha.axaml" />
+
+                <!-- HDS iconography (theme-independent) -->
+                <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/Icons.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/Typography.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/AppStyles.axaml" />
+        <!-- HDS component styles -->
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsButton.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsCard.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsTextBox.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsChip.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsPill.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/Tooltip.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Views/Components/HdsStyles/HdsFlyout.axaml" />
+        <StyleInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/Typography.axaml" />
+    </Application.Styles>
+
+</Application>

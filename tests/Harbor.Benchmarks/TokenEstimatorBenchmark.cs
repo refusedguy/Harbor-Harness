@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Core.Sessions;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="HeuristicTokenEstimator" /> on text payloads of
@@ -13,7 +14,7 @@ namespace Harbor.Benchmarks;
 public class TokenEstimatorBenchmark
 {
     private AssistantMessage _assistantMessage = null!;
-    private ITokenEstimator _estimator = null!;
+    private ITokenTracker _estimator = null!;
     private string _largeText = null!;
     private string _mediumText = null!;
     private string _mixedText = null!;
@@ -22,7 +23,7 @@ public class TokenEstimatorBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _estimator = new HeuristicTokenEstimator();
+        _estimator = new TokenTracker();
         _smallText = new string('a', 100);
         _mediumText = new string('a', 4_096);
         _largeText = new string('a', 65_536);

@@ -1,4 +1,4 @@
-﻿using Harbor.Tui.Abstractions.Renderers;
+﻿using Harbor.Terminal.Abstractions.Renderers;
 namespace Harbor.Tui.SpectreTui;
 /// <summary>Render context shim over the console for non-interactive helpers.</summary>
 internal sealed class SpectreTuiRenderContext : ITuiRenderContext

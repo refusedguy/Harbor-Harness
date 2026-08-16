@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Wpf — standalone production-ready WPF desktop GUI for Harbor.
+    Targets net10.0-windows because WPF requires the Windows Desktop runtime.
+    On non-Windows hosts (Linux sandbox CI), set EnableWindowsTargeting=true
+    so the project still restores + compiles for design-time verification.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>Harbor.App.Wpf</RootNamespace>
+    <AssemblyName>Harbor.App.Wpf</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <IsPackable>false</IsPackable>
+    <IsPackable Condition="'$(PackWpfApp)' == 'true'">true</IsPackable>
+    <PackageId>Harbor.App.Wpf</PackageId>
+    <Description>Harbor standalone WPF desktop app — code editor, chat, provider browser, command palette.</Description>
+    <PackageTags>harbor;wpf;windows;desktop;gui</PackageTags>
+
+    <!-- Single-file publish does not apply to a Windows GUI app at build time. -->
+    <PublishSingleFile>false</PublishSingleFile>
+
+    <!--
+      The repo-wide Directory.Build.props sets TreatWarningsAsErrors=true which
+      is great for library code but fights with WPF's generated code (BAML
+      codegen, generated INotifyPropertyChanged, source-generator glue). Relax
+      to warnings-only for this project; analyzers still flag issues.
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CS1570;CS1571;CS1572;CS1573;CS1574;CS0419;CS0067</NoWarn>
+    <NoWarn>$(NoWarn);WPF0041;WPF0010;WPF0001;WPF0042;WPF0011</NoWarn>
+    <NoWarn>$(NoWarn);CA1416;CA1859;CA1860;CA1310;CA1308;CA1054;CA1056;CA1862;CA1845;CA1822;CA1825;CA1311;CA1305;CA1304;CA1716;CA1720;CA1062;CA2007;CA1830;CA1852;CA1861;CA1816;CA1826;CA1829;CA1849;CA1851</NoWarn>
+    <NoWarn>$(NoWarn);SA1600;SA1101</NoWarn>
+    <NoWarn>$(NoWarn);MA0046;MA0051</NoWarn>
+  </PropertyGroup>
+
+  <!-- Expose internals to the DI test project. App.BuildHost is private; the
+       test uses App.OnStartup-equivalent wiring via a public hook on App. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Wpf.Tests"/>
+  </ItemGroup>
+
+  <!-- App depends on Abstractions + Core (via DI). Infrastructure impls are
+       pulled in transitively through Harbor.Cli.Hosting's HostBuilder is NOT
+       used here (we build our own WPF host) — but we still want the option to
+       register Harbor.Core providers in the WPF composition root. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <!--
+      In-memory session store (Harbor.Storage.Memory) — used by the
+      standalone desktop shell so the app runs without persistent storage.
+      Swap to Harbor.Storage.Jsonl or Harbor.Storage.Sqlite (add a
+      ProjectReference) if you want durable persistence across restarts.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json"/>
+    <PackageReference Include="Microsoft.Extensions.Options"/>
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing"/>
+
+    <!-- WPF-specific libraries -->
+    <PackageReference Include="Markdig"/>
+    <PackageReference Include="AvalonEdit"/>
+    <PackageReference Include="Dirkster.AvalonDock"/>
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="app.manifest">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

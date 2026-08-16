@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — R28-R31: UI component decomposition + business logic extraction
+
+**R28 — Platform-agnostic ToolCallViewModel + reusable components (Avalonia):**
+- Moved `ToolCallViewModel` from `Harbor.App.Avalonia.ViewModels` to `Harbor.Ui.Framework.ViewModels`.
+  Replaced `IBrush StatusBackgroundBrush` with `string StatusBrushKey` so the VM no longer
+  depends on `Avalonia.Media`. Same VM is now reusable by WPF/MAUI/Blazor.
+- Created `Harbor.Ui.Framework.Converters.StatusMappers` — platform-agnostic static helpers
+  for status → brush-key / status → label / duration / time-ago / token-compact / cost formatting.
+- Added 8 new Avalonia `IValueConverter` wrappers in `Views/Converters.cs`:
+  `StatusTextToBrushConverter`, `ToolCallStatusToBrushConverter`, `SessionStatusToTextConverter`,
+  `SessionStatusToBrushConverter`, `TimeAgoConverter`, `TokensToCompactConverter`,
+  `CostToUsdConverter`, `InverseBoolConverter`, `StringNullOrEmptyToBoolConverter`.
+- Created 3 reusable React-style `UserControl`s in `apps/Harbor.App.Avalonia/Views/Components/`:
+  - `StatusBadge` — colored dot + label pill
+  - `ChatBubble` — role pill + message body + optional timestamp
+  - `SessionRow` — sidebar list row (title + subtitle + status dot + dirty indicator)
+- Extracted `StatusBarViewModel` from `MainViewModel` (now independently testable).
+- Added 33 `StatusMappersTests` + 20 `ComponentTests` in `Harbor.App.Avalonia.Tests`.
+
+**R29 — Blazor + WPF ports:**
+- Created Blazor equivalents: `Components/Shared/StatusBadge.razor`, `ChatBubble.razor`, `SessionRow.razor`.
+- Updated `StatusBar.razor` + `Sessions.razor` to use `StatusMappers` helpers (replaced hard-coded "● running"/"● idle" strings).
+- Renamed `MessageBubble.razor` → `ChatBubble.razor` for consistency.
+- Created WPF equivalents: `Controls/ChatBubble.xaml`, `SessionRow.xaml`, `StatusBadge.xaml`.
+- Created `apps/Harbor.App.Wpf/Converters/Converters.cs` mirroring the Avalonia wrappers
+  (`BrushKeyConverter`, `NullToCollapsedConverter`, `StatusTextToBrushConverter`,
+  `TimeAgoConverter`, `TokensToCompactConverter`, `CostToUsdConverter`).
+- Extended `ChatLineViewModel` with `TimestampUtc` + `TimestampText` + `Preview` (80-char truncation).
+- Added `RoleBrushKey` (renamed from `BrushKey`, kept alias for back-compat) and expanded
+  `RoleLabel` switch to all 7 `ChatRole` values.
+- Added 21 `ChatLineViewModelTests`.
+
+**R30 — Plugin system bug fix + business-logic extraction:**
+- **BUG FIX**: Plugin compilation tests were failing (3/24) because `Harbor.Abstractions.Models.*`
+  types physically live in `Harbor.Domain.dll`, not `Harbor.Abstractions.dll`. Roslyn couldn't
+  resolve the namespace without an explicit reference. Fixed by adding
+  `typeof(Harbor.Abstractions.Models.Session).Assembly` to `PluginAssemblyReferences.BuildReferences()`
+  and a direct `ProjectReference` to `Harbor.Domain` in `Harbor.Plugins.Compilation.csproj`.
+  All 24 plugin tests now pass.
+- Moved 6 platform-agnostic files from `apps/Harbor.App.Avalonia/Services/` to `Harbor.Ui.Framework/`:
+  - `ChatMessageRenderer` → `Rendering/`
+  - `ChatStreamingPresenter` → `Rendering/`
+  - `SessionContext` → `Sessions/`
+  - `SessionFactory` → `Sessions/`
+  - `SessionSwitcher` → `Sessions/`
+  - `SessionGitTracker` → `Sessions/`
+- Created `ICommonConfigReader` interface in `Harbor.Ui.Framework/Configuration/` to break the
+  circular dependency: `Ui.Framework → Desktop.Abstractions → Terminal.Abstractions → Ui.Framework`.
+  Each platform app implements it as an adapter over its own `ICommonConfigStore`
+  (e.g. `CommonConfigReaderAdapter` in Avalonia).
+
+**R31 — God-object decomposition:**
+- **MarkdownRenderer**: 487 → 110 lines (control) + 4 specialized classes:
+  - `Markdown/MarkdownBlockRenderer.cs` (202) — block-level rendering
+  - `Markdown/MarkdownInlineRenderer.cs` (173) — inline emission
+  - `Markdown/MarkdownTextExtractor.cs` (96) — pure text extraction
+  - `Markdown/MarkdownResourceResolver.cs` (57) — brush/font lookup
+- **JsonlSessionStore**: 688 → 528 lines + new `JsonlMessageCodec` (215 lines, stateless).
+  Extracted 4 private static methods (`SerializeMessagePayload`, `SerializePart`,
+  `DeserializeMessage`, `DeserializePart`).
+- **SessionManager**: 495 → 492 lines but 2 fewer concerns via new `IChatViewBinder` interface
+  in `Harbor.Ui.Framework/Sessions/`. The interface abstracts `ChatViewModel` (Avalonia-specific
+  VM) + `Dispatcher.UIThread` (Avalonia static) behind a narrow seam
+  (`GetRenderedLineCount()`, `Rebind(UiStore, int)`). Implementation: `AvaloniaChatViewBinder`.
+  Removed `using Avalonia.Threading;` and `using Harbor.App.Avalonia.ViewModels;` from SessionManager.
+
 ### Changed — Code Principles Audit: Sprint 1 + Sprint 2 fixes
 
 Resolved 10 of the 11 critical/high findings from `docs/CODE_PRINCIPLES_AUDIT.md`

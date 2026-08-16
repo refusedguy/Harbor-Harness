@@ -4,11 +4,9 @@
 // are about absence-handling. When `sharpts` IS on PATH, the same tests
 // exercise the real subprocess path (covered by the integration smoke test
 // at the bottom, gated on IsAvailable).
-using Harbor.Scripting.Bridge;
-using Harbor.Scripting.Engines;
+using Harbor.Scripting.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Scripting.Tests.Engines;
-
 public class SharpTsScriptEngineTests
 {
     private static ScriptGlobals NewGlobals(IToolRegistry? tools = null)

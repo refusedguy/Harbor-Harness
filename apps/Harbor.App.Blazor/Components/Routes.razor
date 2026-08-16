@@ -1,0 +1,19 @@
+@* Top-level router. All pages live under Components/Pages and use the
+   _Layout via the @layout directive (or by being inside Routes via the
+   DefaultLayout parameter on RouteView). @*@
+
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(_Layout)"/>
+        <FocusOnNavigate RouteData="routeData" Selector="h1"/>
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(_Layout)">
+            <div class="not-found">
+                <h1>404</h1>
+                <p>The page you requested does not exist.</p>
+                <a href="/" class="btn-primary">Back to home</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

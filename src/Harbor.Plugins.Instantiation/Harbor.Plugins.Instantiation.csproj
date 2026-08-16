@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Plugins.Instantiation — concrete IPluginInstantiator implementations.
+
+    Implementations:
+      - ReflectionPluginInstantiator (reflects over CompiledPluginAssembly,
+        finds IPlugin types with parameterless ctors, activates them)
+      - PluginLifecycle               (Initialize / ShutdownAsync helpers)
+
+    Depends on Harbor.Plugins.Abstractions (for IPluginInstantiator,
+    CompiledPluginAssembly, LoadedPlugin) and Harbor.Abstractions (for IPlugin).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugins.Instantiation</PackageId>
+    <Description>Harbor plugin instantiation — reflection-based IPluginInstantiator and lifecycle helpers.</Description>
+    <PackageTags>harbor;ai;agent;plugins;instantiation;reflection</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+  </ItemGroup>
+
+</Project>

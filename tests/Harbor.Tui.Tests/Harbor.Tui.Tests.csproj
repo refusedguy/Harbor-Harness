@@ -7,7 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Abstractions\Harbor.Tui.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
@@ -16,9 +17,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8"/>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0"/>
-    <PackageReference Include="Moq" Version="4.20.70"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    <PackageReference Include="Moq"/>
   </ItemGroup>
 
 </Project>

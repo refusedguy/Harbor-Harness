@@ -67,10 +67,17 @@ export OPENAI_API_KEY=sk-...
 # Option D — OpenRouter (200+ models)
 export OPENROUTER_API_KEY=sk-or-...
 
-# Run
-dotnet run --project src/Harbor.Cli
+# Run (interactive TUI — default)
+dotnet run --project apps/Harbor.App.Cli
 # Or one-shot:
-dotnet run --project src/Harbor.Cli -- ask "What is 2+2?"
+dotnet run --project apps/Harbor.App.Cli -- ask "What is 2+2?"
+
+# Run the Avalonia desktop GUI
+dotnet run --project apps/Harbor.App.Avalonia
+
+# Run the Blazor Server web app
+dotnet run --project apps/Harbor.App.Blazor
+# → open http://localhost:5000
 ```
 
 > **Env var note**: Kilocode uses `KILO_API_KEY` (not `KILOCODE_API_KEY`). Get a free key at <https://kilo.ai>.
@@ -89,7 +96,7 @@ for a free API key.
 export KILO_API_KEY=klo_xxxxxxxxxxxxxxxxxxxxxx
 export HARBOR_MODEL=kilocode/tencent/hy3:free
 export HARBOR_TUI=plain   # plain is easiest to pipe / inspect
-dotnet run --project src/Harbor.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
+dotnet run --project apps/Harbor.App.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
 ```
 
 ### Real output (captured 2026-07-16, harbor v0.2.0-alpha)
@@ -170,50 +177,93 @@ All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, singl
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                          HARBOR SOLUTION                               │
+│                          HARBOR SOLUTION (v0.4-alpha)                  │
 │                                                                        │
-│  src/  (16 projects)                                                  │
-│  ├── Harbor.Abstractions/         — interfaces, models, events         │
-│  │                                    (XML-documented, zero deps)     │
-│  ├── Harbor.Core/                 — EventBus, AgentLoop, registries    │
-│  │                                    (XML-documented, Result<T>-based)│
-│  ├── Harbor.Tui.Abstractions/     — TUI interfaces, MVVM base          │
-│  │                                    (XML-documented, CT.Mvvm-based)  │
-│  ├── Harbor.Storage.Jsonl/        — JSONL session store                │
-│  ├── Harbor.Storage.Memory/       — in-memory store                    │
-│  ├── Harbor.Storage.Sqlite/       — SQLite store                       │
-│  ├── Harbor.Providers.Anthropic/  — native Anthropic Messages API      │
-│  ├── Harbor.Providers.OpenAI/     — native OpenAI (Chat + Responses)   │
-│  ├── Harbor.Providers.Ollama/     — native Ollama (NDJSON)             │
-│  ├── Harbor.Providers.OpenAiCompatible/ — generic adapter              │
-│  ├── Harbor.Tools.Builtin/        — 8 tools (read/write/edit/.../task) │
-│  ├── Harbor.Tui.Ansi/             — ANSI streaming renderer            │
-│  ├── Harbor.Tui.Plain/            — plain text renderer                │
-│  ├── Harbor.Tui.Spectre/          — Spectre.Console renderer           │
-│  └── Harbor.Cli/                  — entry point, DI wiring             │
+│  src/  (40+ projects, Clean Architecture)                              │
+│  ├── Domain / Abstractions                                             │
+│  │   ├── Harbor.Abstractions/         — interfaces, events, value objs │
+│  │   ├── Harbor.Domain/               — Models (Session, ToolResult,…) │
+│  │   ├── Harbor.Desktop.Abstractions/ — CommonConfig, base VMs         │
+│  │   └── Harbor.Terminal.Abstractions/ — TUI contracts, ITuiPlugin     │
+│  │                                                                      │
+│  ├── UI Framework                                                     │
+│  │   └── Harbor.Ui.Framework/        — TEA + reusable VMs + components │
+│  │       ├── State/      (UiStore, UiReducer, UiMsg)                   │
+│  │       ├── ViewModels/ (ChatLineVM, ToolCallVM, TokenUsageVM, …)     │
+│  │       ├── Converters/ (StatusMappers — platform-agnostic helpers)   │
+│  │       ├── Rendering/  (ChatMessageRenderer, ChatStreamingPresenter) │
+│  │       ├── Sessions/   (SessionFactory, Switcher, IChatViewBinder)   │
+│  │       ├── Panels/     (dockable panel system)                        │
+│  │       └── Services/   (IDispatcherAdapter, GitService, …)            │
+│  │                                                                      │
+│  ├── Application                                                       │
+│  │   ├── Harbor.Core/               — AgentLoop, registries, EventBus   │
+│  │   ├── Harbor.Application/        — Sessions, Permissions, Onboarding │
+│  │   ├── Harbor.Plugins.{Abstractions,Storage,Compilation,             │
+│  │   │                       Instantiation,Registration,Hosting,Runtime}│
+│  │   ├── Harbor.Scripting.{Abstractions,Storage,Compilation,           │
+│  │   │                       Engines,Bridge,Hosting}                    │
+│  │   ├── Harbor.Ipc.{Abstractions,InProcess,Server,Client}             │
+│  │   └── Harbor.Logging/            — Serilog per-run timestamped logs │
+│  │                                                                      │
+│  ├── Infrastructure                                                   │
+│  │   ├── Harbor.Storage.{Jsonl,Memory,Sqlite}                          │
+│  │   ├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}   │
+│  │   ├── Harbor.Tools.{Read,Write,Edit,Bash,Grep,Glob,Ls,Task,         │
+│  │   │                   WebFetch,Patch,Notebook,RipGrep,Tree,Mcp,      │
+│  │   │                   Builtin} (14 tools)                            │
+│  │   └── Harbor.Desktop.DesignSystem/ — ThemeManager, palette tokens   │
+│  │                                                                      │
+│  └── Terminal renderers                                                │
+│      └── Harbor.Tui.{Ansi,Plain,Spectre,Spectre.Fullscreen,SpectreTui, │
+│                      TerminalGui,Termina,RazorConsole,Sixel,           │
+│                      Notifications}                                     │
 │                                                                        │
-│  samples/plugins/  (4 sample plugins)                                 │
-│  ├── Harbor.Plugin.WebSearch/     — DuckDuckGo search (no API key)     │
-│  ├── Harbor.Plugin.TodoWrite/     — per-session todo list              │
-│  ├── Harbor.Plugin.GitTools/      — safe git wrapper                   │
-│  └── Harbor.Plugin.FileTree/      — directory tree visualization       │
+│  apps/  (5 platform apps — composition roots)                          │
+│  ├── Harbor.App.Cli/        — CLI entry point (interactive + ask)      │
+│  ├── Harbor.App.Avalonia/   — cross-platform desktop GUI (Avalonia 12) │
+│  ├── Harbor.App.Wpf/        — Windows desktop GUI (WPF)                │
+│  ├── Harbor.App.Maui/       — WinUI/Android/iOS/Mac Catalyst (.NET MAUI)│
+│  └── Harbor.App.Blazor/     — Blazor Server web app                    │
 │                                                                        │
-│  tests/  (8 test projects, 242 tests)                                 │
+│  samples/  (4 sample plugins + scripts)                                │
+│  ├── plugins/   — Harbor.Plugin.{WebSearch,TodoWrite,GitTools,FileTree}│
+│  ├── plugins-cs/ — HelloWorldPlugin.cs (single-file plugin)            │
+│  └── scripts/   — TypeScript + Jinja scripts                           │
+│                                                                        │
+│  tests/  (9 test projects + benchmarks, 240+ tests)                    │
 │  ├── Harbor.Abstractions.Tests/   — 35 tests                           │
-│  ├── Harbor.Core.Tests/           — 9 passed, 1 skipped                │
-│  ├── Harbor.Tools.Builtin.Tests/  — 16 tests                           │
+│  ├── Harbor.Core.Tests/           — 55 tests                           │
+│  ├── Harbor.Storage.Tests/        — 27 tests                           │
 │  ├── Harbor.Storage.Jsonl.Tests/  — 5 tests                            │
 │  ├── Harbor.Providers.Tests/      — 39 tests                           │
-│  ├── Harbor.Storage.Tests/        — 27 tests                           │
+│  ├── Harbor.Tools.Builtin.Tests/  — 89 tests (1 skipped)               │
 │  ├── Harbor.Config.Tests/         — 36 tests                           │
-│  └── Harbor.Tui.Tests/            — 75 tests                           │
+│  ├── Harbor.Ipc.Tests/            — 27/35 pass (8 pre-existing timing) │
+│  ├── Harbor.App.Avalonia.Tests/   — 138 tests                          │
+│  ├── Harbor.App.Blazor.Tests/     — 20 tests                           │
+│  ├── Harbor.Plugins.Runtime.Tests/ — 24 tests                          │
+│  ├── Harbor.Tui.Tests/            — 75 tests                           │
+│  ├── Harbor.Architecture.Tests/   — layer-dep enforcement              │
+│  └── Harbor.Benchmarks/           — BenchmarkDotNet                    │
 │                                                                        │
-│  providers/  (13 JSON LLM provider configs)                           │
-│  specs/      (16 design documents)                                    │
-│  docs/       (architecture, getting started, build, plugin dev,        │
-│              benchmarks)                                              │
+│  providers/  (13 JSON LLM provider configs)                            │
+│  specs/      (16 design documents — formal architecture spec)          │
+│  docs/       (24 docs — architecture, getting started, build, …)       │
 └────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Reusable UI components (R28-R31)
+
+| Component | Avalonia | Blazor | WPF | Used for |
+|---|---|---|---|---|
+| `StatusBadge` | `Views/Components/StatusBadge.axaml` | `Components/Shared/StatusBadge.razor` | `Controls/StatusBadge.xaml` | Colored dot + label pill (status bar, headers) |
+| `ChatBubble` | `Views/Components/ChatBubble.axaml` | `Components/Shared/ChatBubble.razor` | `Controls/ChatBubble.xaml` | Role pill + message body + optional timestamp |
+| `SessionRow` | `Views/Components/SessionRow.axaml` | `Components/Shared/SessionRow.razor` | `Controls/SessionRow.xaml` | Sidebar list row (title + subtitle + status dot) |
+
+All 9 components share the same prop names (`BrushKey`, `StatusColorKey`, etc.) and call the
+same `Harbor.Ui.Framework.Converters.StatusMappers` helpers — adding a new platform = copy
+the template + substitute the framework's syntax. See [`docs/COMPONENT_CATALOG.md`](./docs/COMPONENT_CATALOG.md).
 
 ### Data flow
 
@@ -224,12 +274,12 @@ User prompt
 IAgent.PromptAsync ────► AgentLoop.RunAsync ────► IEventBus.PublishAsync
                               │                          │
                               ▼                          ▼
-                   ISystemPromptBuilder          TUI / loggers / plugins
-                              │                  (subscribe to AgentEvent)
-                              ▼
-                       ILlmClient.StreamAsync
-                    (IAsyncEnumerable<LlmEvent>)
-                              │
+                   ISystemPromptBuilder          UiStore.Dispatch(event)
+                              │                  (per-session UiStore)
+                              ▼                          │
+                       ILlmClient.StreamAsync             ▼
+                    (IAsyncEnumerable<LlmEvent>)    ChatMessageRenderer
+                              │                    → ObservableCollection<ChatLineVM>
                               ▼
                     MessageConverter + session
                               │
@@ -418,16 +468,23 @@ Total: 242 passed, 1 skipped
 
 ## 🛣️ Roadmap
 
-See [specs/12-roadmap.md](./specs/12-roadmap.md) for the full plan.
+See [`docs/ROADMAP.md`](./docs/ROADMAP.md) for the full plan with priorities, status, and tech-debt backlog.
 
-- ✅ **v0.2 (current)** — Core agent loop, 4 native + 13 JSON providers, 8 tools, 3 storages, 3 TUIs, 4 sample plugins, sub-agent infrastructure, full XML docs
-- 🚧 **v0.3** — Plugin loading from DLLs (AssemblyLoadContext for JIT), improved sub-agent wiring, ZLinq in remaining hot paths
-- 📋 **v0.4** — MCP client, OAuth flows (Anthropic Pro, OpenAI Codex, GitHub Copilot)
-- 📋 **v0.5** — Skills system (markdown), LSP integration (30+ languages)
-- 📋 **v0.6** — Session branching/snapshot/revert
-- 📋 **v0.7** — Client-server mode (HTTP+SSE, two-process architecture)
-- 📋 **v0.8** — NativeAOT release build for core
-- 📋 **v1.0** — Production-ready, multi-platform binaries, plugin marketplace
+- ✅ **v0.4-alpha (current)** — Architecture decomposition (R28-R31): reusable UI components across Avalonia/Blazor/WPF, platform-agnostic VMs in `Harbor.Ui.Framework`, god-object decomposition (MarkdownRenderer / JsonlSessionStore / SessionManager), plugin compilation bug fix (24/24 tests pass), concurrent per-session agents
+- 🚧 **v0.5** — Plugin loading from DLLs (AssemblyLoadContext), sub-agent execution wiring, TUI plugin hooks
+- 📋 **v0.6** — MCP integration (stdio/HTTP/SSE transports, MCP→ITool adapter)
+- 📋 **v0.7** — Skills system (`SKILL.md` format), LSP integration (10+ language servers)
+- 📋 **v0.8** — Session branching/snapshot/revert, session search
+- 📋 **v0.9** — Two-process architecture (NativeAOT core + JIT TUI over Unix Domain Socket)
+- 📋 **v1.0** — Stabilization, NuGet packages, docs site, security + accessibility audit
+
+### 🛠 Tech debt (post-R31)
+
+- AgentLoop (681 lines) — extract `ToolDispatcher` + `RetryPolicy` + `TokenTracker`
+- OpenAILlmClient (656 lines) — extract `OpenAiSseParser` + `OpenAiEventMapper`
+- HarborConfig (492 lines) — split into per-section records
+- Fix 3 pre-existing Avalonia 12 headless test failures (MarkdownRenderer/CodeBlock/TypewriterStreamingText "Stack empty" bug)
+- Fix 8 IPC timing-test failures (named-pipe disposal on Linux)
 
 ## 📄 License
 

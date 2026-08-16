@@ -1,0 +1,40 @@
+@* TopBar — agent/model/provider header. Reads from UiStore so it updates
+   live as the user navigates or the agent switches models. @*@
+@inject UiStore Store
+@inject CommandPaletteService Palette
+@implements IDisposable
+
+<div class="topbar">
+    <span class="agent-name">🤖 @(string.IsNullOrEmpty(Store.State.AgentName) ? "harbor" : Store.State.AgentName)</span>
+    <span class="dot">·</span>
+    <span class="model-name">@(string.IsNullOrEmpty(Store.State.Model) ? "—" : Store.State.Model)</span>
+    <span class="dot">·</span>
+    <span
+        class="provider-name">@(string.IsNullOrEmpty(Store.State.Provider) ? "no provider" : Store.State.Provider)</span>
+    <span class="topbar-spacer"></span>
+    <button class="topbar-btn" @onclick="OpenPaletteAsync" title="Open command palette (Ctrl+P)">
+        ⌘ Commands
+    </button>
+</div>
+
+@code {
+protected override void OnInitialized()
+{
+    Store.Changed += OnChanged;
+}
+
+private async void OnChanged(object? _, UiStateChangedEventArgs __)
+{
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
+
+private async Task OpenPaletteAsync()
+{
+    await Palette.OpenAsync().ConfigureAwait(false);
+}
+
+public void Dispose()
+{
+    Store.Changed -= OnChanged;
+}
+}

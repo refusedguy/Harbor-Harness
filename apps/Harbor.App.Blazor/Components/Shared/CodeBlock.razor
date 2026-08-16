@@ -1,0 +1,46 @@
+@* CodeBlock — renders a fenced code block with a header showing the
+   language + a copy-to-clipboard button. @*@
+
+@inject HarborJsInterop Js
+
+<div class="code-block">
+    <div class="code-header">
+        <span class="code-lang">@Language</span>
+        <button class="code-copy" @onclick="CopyAsync" title="Copy to clipboard">
+            @(Copied ? "✓ Copied" : "Copy")
+        </button>
+    </div>
+    <pre><code>@Code</code></pre>
+</div>
+
+@code {
+/// <summary>Raw code text to render.</summary>
+[Parameter]
+public string Code { get; set; } = string.Empty;
+
+/// <summary>Language label shown in the header.</summary>
+[Parameter]
+public string Language { get; set; } = "text";
+
+private bool Copied { get; set; }
+
+private async Task CopyAsync()
+{
+    try
+    {
+        await Js.CopyToClipboardAsync(Code).ConfigureAwait(false);
+        Copied = true;
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+        _ = Task.Delay(1500).ContinueWith(t =>
+        {
+            _ = t; // discard completed task
+            Copied = false;
+            _ = InvokeAsync(StateHasChanged);
+        });
+    }
+    catch (Exception)
+    {
+        // Best-effort — clipboard may be blocked in non-secure contexts.
+    }
+}
+}

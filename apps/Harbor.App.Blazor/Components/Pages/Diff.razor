@@ -1,0 +1,55 @@
+@page "/diff"
+@using Harbor.Desktop.Abstractions.ViewModels
+@inject HarborJsInterop Js
+
+<h1>Diff Viewer</h1>
+<p>Paste two snippets and see them side-by-side. (Line-level diff — word-level diffing ships when the agent is wired
+    up.)</p>
+
+<div class="diff-shell">
+    <div class="diff-pane">
+        <h3>Before</h3>
+        <textarea @bind="VM.Before" @bind:event="oninput" spellcheck="false"></textarea>
+    </div>
+    <div class="diff-pane">
+        <h3>After</h3>
+        <textarea @bind="VM.After" @bind:event="oninput" spellcheck="false"></textarea>
+    </div>
+</div>
+
+<div class="diff-actions">
+    <button class="btn-primary" @onclick="Compare">Compare</button>
+    <button class="btn-secondary" @onclick="CopyDiff">Copy diff</button>
+</div>
+
+@if (!string.IsNullOrEmpty(VM.DiffText))
+{
+    <pre class="diff-output">@VM.DiffText</pre>
+}
+
+<style>
+    .diff-actions {
+        display: flex;
+        gap: var(--space-2);
+        margin: var(--space-3) 0;
+    }
+
+    .diff-output {
+        background: var(--ctp-crust);
+        padding: var(--space-4);
+        border-radius: var(--radius-md);
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
+        color: var(--text);
+        overflow: auto;
+        max-height: 320px;
+    }
+</style>
+
+@code {
+private readonly DiffViewModel VM = new();
+
+private void Compare() => VM.ComputeDiff();
+
+private Task CopyDiff() => VM.CopyAsync(text => Js.CopyToClipboardAsync(text).AsTask());
+}

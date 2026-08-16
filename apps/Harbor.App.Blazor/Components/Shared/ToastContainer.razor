@@ -1,0 +1,33 @@
+@* ToastContainer — fixed-position stack of toast notifications in the
+   bottom-right corner. Reads from ToastService. @*@
+
+@inject ToastService Toasts
+@implements IDisposable
+
+<div class="toast-container">
+    @foreach (var t in Toasts.Current)
+    {
+        var toast = t;
+        <div class="toast @toast.Level.ToString().ToLowerInvariant()">
+            <div class="toast-title">@toast.Title</div>
+            <div class="toast-message">@toast.Message</div>
+        </div>
+    }
+</div>
+
+@code {
+protected override void OnInitialized()
+{
+    Toasts.Changed += OnChanged;
+}
+
+private async void OnChanged(object? _, EventArgs __)
+{
+    await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+}
+
+public void Dispose()
+{
+    Toasts.Changed -= OnChanged;
+}
+}

@@ -1,12 +1,9 @@
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.State;
 using Harbor.Tui.SpectreTui.View;
-using Spectre.Console;
+using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
-
 /// <summary>
 ///     Builtin panel that shows the live todo list contributed by the (optional)
 ///     <c>TodoWritePlugin</c>. Parses the most recent <c>todo</c> tool result line
@@ -63,7 +60,7 @@ public sealed class TodoListPanel : IPanelProvider
         }
 
         int done = 0, inProgress = 0, pending = 0;
-        foreach (var (marker, content) in todos)
+        foreach ((string marker, string content) in todos)
         {
             string icon;
             string color;
@@ -142,7 +139,7 @@ public sealed class TodoListPanel : IPanelProvider
             var line = lines[i];
             string text = line.Text ?? string.Empty;
 
-            foreach (var sub in text.Split('\n'))
+            foreach (string sub in text.Split('\n'))
             {
                 string s = sub.TrimEnd('\r');
                 var match = TodoLineRegex.Match(s);
@@ -163,7 +160,7 @@ public sealed class TodoListPanel : IPanelProvider
     private static bool ContainsTodoMarker(string text)
     {
         // Quick scan: any of [ ], [~], [x], [X], [?] at the start of a sub-line.
-        foreach (var sub in text.Split('\n'))
+        foreach (string sub in text.Split('\n'))
         {
             string s = sub.TrimStart();
             if (s.Length >= 3 && s[0] == '[' && s[2] == ']'

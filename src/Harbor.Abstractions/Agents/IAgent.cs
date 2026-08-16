@@ -9,7 +9,7 @@ namespace Harbor.Abstractions.Agents;
 /// <remarks>
 ///     <para>
 ///         <b>Why this exists (§ARCH-002):</b> before this interface was extracted,
-///         <c>Harbor.Tui.Abstractions</c> depended on the full <see cref="IAgent" />
+///         <c>Harbor.Terminal.Abstractions</c> depended on the full <see cref="IAgent" />
 ///         contract (which includes <see cref="IAgent.Subscribe" />,
 ///         <see cref="IAgent.Steer" />, <see cref="IAgent.FollowUp" />,
 ///         <see cref="IAgent.Initialize" /> — none of which a TUI effect host calls).
@@ -23,7 +23,7 @@ namespace Harbor.Abstractions.Agents;
 ///     </para>
 ///     <para>
 ///         <b>Layering:</b> declared in <c>Harbor.Abstractions</c> (Domain) so that
-///         <c>Harbor.Tui.Abstractions</c> (also Domain) can reference it without going
+///         <c>Harbor.Terminal.Abstractions</c> (also Domain) can reference it without going
 ///         through <c>Harbor.Core</c> (Application).
 ///     </para>
 /// </remarks>
@@ -34,7 +34,7 @@ public interface IAgentRunner
     ///     <see cref="CancellationTokenSource.Cancel" /> to interrupt the agent at the
     ///     next safe boundary (between turns or during a streaming await).
     /// </summary>
-    CancellationTokenSource AbortSource { get; }
+    public CancellationTokenSource AbortSource { get; }
 
     /// <summary>
     ///     Submit a user prompt as plain text and run the agent loop to completion.
@@ -42,14 +42,36 @@ public interface IAgentRunner
     /// <param name="text">The user's prompt text.</param>
     /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
     /// <returns>Success on completion, or failure with an error message.</returns>
-    Task<Result> PromptAsync(string text, CancellationToken ct = default);
+    public Task<Result> PromptAsync(string text, CancellationToken ct = default);
 
     /// <summary>
     ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> call in flight).
     /// </summary>
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A task that completes when the agent is idle.</returns>
-    Task WaitForIdleAsync(CancellationToken ct = default);
+    public Task WaitForIdleAsync(CancellationToken ct = default);
+
+    /// <summary>
+    ///     Recreate the internal <see cref="AbortSource" /> so the agent is ready
+    ///     for a fresh run after the previous token was cancelled. No-op if the
+    ///     current source has not been cancelled (calling this in the middle of a
+    ///     run would blow away the in-flight cancellation token, so the guard
+    ///     prevents footguns).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why this exists:</b> a single <c>CancellationTokenSource</c> can
+    ///         only transition to the cancelled state once. After an abort (user
+    ///         Stop button, session switch, etc.) the source stays cancelled and
+    ///         every subsequent <see cref="PromptAsync" /> call would immediately
+    ///         observe <c>IsCancellationRequested=true</c> and fail with
+    ///         <c>OperationCanceledException</c> — the user could never send
+    ///         another prompt. The session manager also uses this to reset the
+    ///         abort state before binding a new session so the new session's
+    ///         first prompt isn't dead on arrival.
+    ///     </para>
+    /// </remarks>
+    public void ResetAbortSource();
 }
 
 /// <summary>

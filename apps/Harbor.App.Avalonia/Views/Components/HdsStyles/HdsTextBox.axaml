@@ -1,0 +1,68 @@
+<Styles xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- HdsTextBox — theme-aware text input styles.
+         hds-textbox: surface fill + 1px border, focus → accent border.
+         hds-flush: transparent, bottom 1px border only, focus → accent border.
+         hds-textbox.search: search-input variant with IcSearch icon.
+         Transitions: BrushTransition via EaseNormal. -->
+
+    <!-- Base TextBox style -->
+    <Style Selector="TextBox.hds-textbox">
+        <Setter Property="Background" Value="{DynamicResource BgInputBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="{StaticResource InputCornerRadius}" />
+        <Setter Property="Padding" Value="{StaticResource PaddingInputDefault}" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="BorderBrush" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="TextBox.hds-textbox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+
+    <!-- Flush variant: transparent, bottom border only -->
+    <Style Selector="TextBox.hds-flush">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="{StaticResource BorderWidthHairline}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="{StaticResource PaddingInputDefault}" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{StaticResource EaseNormal}" />
+                <BrushTransition Property="BorderBrush" Duration="{StaticResource EaseNormal}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="TextBox.hds-flush:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+    </Style>
+
+    <!-- Search-input variant: hds-textbox + hds-search classes
+         Adds left padding for IcSearch icon + search-cancel icon on right -->
+    <Style Selector="TextBox.hds-search">
+        <Setter Property="Padding" Value="{StaticResource PaddingInputSearch}" />
+    </Style>
+
+    <Style Selector="TextBox.hds-textbox:disabled">
+        <Setter Property="Background" Value="{DynamicResource BgInputBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}" />
+    </Style>
+
+    <Style Selector="TextBox.hds-flush:disabled">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextTertiaryBrush}" />
+    </Style>
+</Styles>

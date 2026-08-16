@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vma="clr-namespace:Harbor.Desktop.Abstractions.ViewModels;assembly=Harbor.Desktop.Abstractions"
+             x:Class="Harbor.App.Avalonia.Views.ProviderBrowserView">
+
+    <Border Background="#80000000" ZIndex="200"
+            PointerPressed="Backdrop_Click">
+        <Border Background="{DynamicResource BgAppBrush}" CornerRadius="8"
+                Width="900" Height="600" Padding="16">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+                    <TextBlock Grid.Column="0" Text="Provider browser" FontSize="16" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentBrush}" />
+                    <Button Grid.Column="1" Classes="Subtle" Content="Close (Esc)" Click="Close_Click" />
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,2*">
+                    <!-- Provider list -->
+                    <Border Grid.Column="0" Classes="Card" Margin="0,0,8,0">
+                        <Grid RowDefinitions="Auto,*">
+                            <TextBlock Grid.Row="0" Text="Providers" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <!-- BUGFIX: without an ItemTemplate, the ListBox
+                                 showed the raw type name ("ProviderRowViewModel")
+                                 for every row. The ProviderRowViewModel record
+                                 exposes Id/Name/Status — bind them explicitly. -->
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding Providers}"
+                                     SelectedItem="{Binding SelectedProvider, Mode=TwoWay}"
+                                     SelectionChanged="Provider_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="vma:ProviderRowViewModel">
+                                        <StackPanel Margin="2,4" Spacing="2">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Id}" FontSize="10"
+                                                           FontFamily="{DynamicResource FontMono}"
+                                                           Foreground="{DynamicResource TextTertiaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="·" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                <TextBlock Text="{Binding Status}" FontSize="10"
+                                                           Foreground="{DynamicResource StateSuccessBrush}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- Model list -->
+                    <Border Grid.Column="1" Classes="Card" Margin="8,0,0,0">
+                        <Grid RowDefinitions="Auto,Auto,*">
+                            <TextBlock Grid.Row="0" Text="Models" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+                            <!-- Loading spinner + error message -->
+                            <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,8" IsVisible="{Binding IsLoading}">
+                                <TextBlock Text="Loading models…" FontSize="11"
+                                           Foreground="{DynamicResource TextTertiaryBrush}" />
+                                <ProgressBar IsIndeterminate="True" Height="2" />
+                            </StackPanel>
+                            <Border Grid.Row="1" Background="{DynamicResource BgSubtleBrush}"
+                                    CornerRadius="4" Padding="8" Margin="0,0,0,8"
+                                    IsVisible="{Binding ErrorMessage}">
+                                <TextBlock Text="{Binding ErrorMessage}" FontSize="11"
+                                           Foreground="{DynamicResource StateWarningBrush}"
+                                           TextWrapping="Wrap" />
+                            </Border>
+
+                            <ScrollViewer Grid.Row="2">
+                                <ItemsControl ItemsSource="{Binding Models}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vma:ModelRowViewModel">
+                                            <Border Background="{DynamicResource BgRailBrush}" CornerRadius="6"
+                                                    Padding="10" Margin="0,2">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Id}"
+                                                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                                                               Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                    <TextBlock Text="{Binding Features}" FontSize="11"
+                                                               Foreground="{DynamicResource StateSuccessBrush}" />
+                                                    <TextBlock Text="{Binding PricingLabel}" FontSize="11"
+                                                               Foreground="{DynamicResource StateWarningBrush}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

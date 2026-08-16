@@ -20,6 +20,8 @@ artifacts/
 *.userprefs
 *.swp
 *~
+*_wpftmp.csproj
+*_wpftmp.*
 
 ## Build results
 [Dd]ebug/
@@ -87,6 +89,9 @@ config.local.json
 *.harbor-cache
 runtime/
 
+## Serena tooling
+.serena/
+
 ## Build scripts / temp
 *.tmp
 *.bak
@@ -104,3 +109,23 @@ runtime/
 ## Docs build
 _site/
 api/
+
+## E2E screenshots / test artifacts
+docs/screenshots/
+tests/**/docs/
+
+## Build artifacts
+*.binlog
+.avalonia-build-tasks/
+*.wpftmp.csproj
+build/_build/Configuration/
+BenchmarkDotNet.Artifacts/
+.opencode/
+.agent/
+.agents/
+.kilocode/
+.ai-factory.json
+opencode.json
+#.ai-factory/
+/skills-lock.json
+temp/

@@ -10,6 +10,8 @@ namespace Harbor.Tui.SpectreTui.View;
 internal static class ChatMarkdown
 {
 
+    private const int MaxInlineLength = 4096;
+
     // §FP-004 / §PERF-009 (RESOLVED): Cache is now a ConcurrentDictionary, so the
     // per-render `lock(Cache)` is gone. ConcurrentDictionary's GetOrAdd handles
     // the read+populate race atomically without blocking parallel renderers.
@@ -22,7 +24,7 @@ internal static class ChatMarkdown
         @"^\s{0,3}(#{1,3})\s+(.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly ConcurrentDictionary<string, List<TextSpan>> Cache = new(concurrencyLevel: Environment.ProcessorCount, capacity: 512);
+    private static readonly ConcurrentDictionary<string, List<TextSpan>> Cache = new(Environment.ProcessorCount, 512);
     /// <summary>Default ON so agent #/**/` output is readable.</summary>
     public static bool Enabled { get; set; } = true;
 
@@ -52,8 +54,6 @@ internal static class ChatMarkdown
     }
 
     public static void ClearCache() => Cache.Clear();
-
-    private const int MaxInlineLength = 4096;
 
     private static IEnumerable<TextSpan> Render(string text, Color baseColor)
     {
@@ -120,7 +120,7 @@ internal static class ChatMarkdown
                 }
             }
 
-            if ((text[i] == '*' && Peek(text, i, "**")) || (text[i] == '_' && Peek(text, i, "__")))
+            if (text[i] == '*' && Peek(text, i, "**") || text[i] == '_' && Peek(text, i, "__"))
             {
                 string token = text[i] == '*' ? "**" : "__";
                 int end = text.IndexOf(token, i + 2, StringComparison.Ordinal);

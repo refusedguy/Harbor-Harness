@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             xmlns:conv="clr-namespace:Harbor.App.Avalonia.Views"
+             x:Class="Harbor.App.Avalonia.Views.Shell.StatusBarView"
+             Height="32"
+             x:DataType="vm:MainViewModel">
+
+    <Border Background="{DynamicResource BgPanelBrush}"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="12,0">
+
+        <DockPanel LastChildFill="False">
+            <StackPanel Orientation="Horizontal" Spacing="8" DockPanel.Dock="Left">
+                <StackPanel Classes="StatusItem">
+                    <Ellipse x:Name="StatusDot" Width="6" Height="6"
+                             VerticalAlignment="Center" Margin="0,0,6,0"
+                             Fill="{Binding StatusBrushKey, Converter={x:Static conv:BrushKeyConverter.Instance}}"
+                             Classes="StatusDot"/>
+                    <TextBlock Text="{Binding StatusText}"
+                               VerticalAlignment="Center" FontSize="11"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <TextBlock Text="{Binding AgentLabel}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource AccentBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <Button Command="{Binding OpenModelPickerCommand}"
+                            Name="StatusBar_ModelPickerButton"
+                            AutomationProperties.AutomationId="StatusBar_ModelPickerButton"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Margin="0">
+                    <TextBlock Text="{Binding ModelLabel}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource TextMonoBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                    </Button>
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <TextBlock Text="{Binding TokensIn, StringFormat='↓ {0:N0}'}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource StateInfoBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <TextBlock Text="{Binding TokensOut, StringFormat='↑ {0:N0}'}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource StateWarningBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <TextBlock Text="{Binding MessageCount, StringFormat='{}{0} msgs'}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource TextTertiaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" DockPanel.Dock="Right">
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <TextBlock Text="{Binding RunningDurationText}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource StateInfoBrush}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding ShowAnimatedCost}"/>
+                    <TextBlock Text="{Binding AnimatedCostText, StringFormat='running · ${0:F4}'}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource StateWarningBrush}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding ShowAnimatedCost}"/>
+                    <TextBlock Text="{Binding CostText, StringFormat='${0:F4}'}"
+                               FontFamily="{DynamicResource FontMono}" FontSize="11"
+                               Foreground="{DynamicResource StateWarningBrush}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding !ShowAnimatedCost}"/>
+                </StackPanel>
+
+                <Border Classes="StatusBarSeparator"/>
+
+                <StackPanel Classes="StatusItem">
+                    <ctrl:Sparkline Values="{Binding TokenHistory}"
+                                    Width="60" Height="16"
+                                    StrokeBrush="{DynamicResource StateWarningBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</UserControl>

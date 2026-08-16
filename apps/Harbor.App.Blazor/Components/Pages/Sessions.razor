@@ -1,0 +1,65 @@
+@page "/sessions"
+@using Harbor.Ui.Framework.Converters
+@inject SessionListViewModel Vm
+
+<div class="page">
+    <div class="page-header">
+        <h1>Sessions</h1>
+        <button class="btn-primary" @onclick="Vm.ReloadAsync">Reload</button>
+    </div>
+
+    @if (Vm.IsLoading)
+    {
+        <div class="loading">
+            <div class="spinner"></div>
+            Loading...
+        </div>
+    }
+    else if (Vm.Sessions.Count == 0)
+    {
+        <div class="empty">No sessions yet. Start a chat to create one.</div>
+    }
+    else
+    {
+        <div class="session-list">
+            @foreach (var s in Vm.Sessions)
+            {
+                <SessionRow
+                    Title="@s.Title"
+                    Subtitle="@s.Id"
+                    RelativeTime="@StatusMappers.TimeAgo(s.LastModified.UtcDateTime)"
+                    MessageCount="0"
+                    StatusColorKey="MochaOverlay0"
+                    IsDirty="false"
+                    IsActive="false"/>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
+    .page-header h1 {
+        margin: 0;
+        color: var(--accent);
+    }
+
+    .loading, .empty {
+        padding: var(--space-5);
+        text-align: center;
+        color: var(--text-dim);
+    }
+</style>
+
+@code {
+protected override async Task OnInitializedAsync()
+{
+    await Vm.ReloadAsync().ConfigureAwait(false);
+}
+}

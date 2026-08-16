@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Harbor.App.Avalonia.Views.Board"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels.Board"
+             x:Class="Harbor.App.Avalonia.Views.Board.BoardView"
+             x:DataType="vm:BoardViewModel">
+
+    <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Cards}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Margin="16" ItemWidth="260" ItemHeight="120" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:SessionCardViewModel">
+                    <views:SessionCardView DataContext="{Binding}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>

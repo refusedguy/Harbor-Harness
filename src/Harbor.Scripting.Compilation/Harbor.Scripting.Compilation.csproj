@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Scripting.Compilation — concrete IScriptCompiler implementations.
+
+    Implementations:
+      - PassThroughCompiler  (returns source unchanged; for .js)
+      - TscCompiler          (shells out to `tsc` to transpile .ts → .js)
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Scripting.Compilation</PackageId>
+    <Description>Harbor script compilers — pass-through (JS) and tsc-subprocess (TS) IScriptCompiler implementations.</Description>
+    <PackageTags>harbor;scripting;compilation;typescript;tsc</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Scripting.Abstractions\Harbor.Scripting.Abstractions.csproj"/>
+  </ItemGroup>
+
+</Project>

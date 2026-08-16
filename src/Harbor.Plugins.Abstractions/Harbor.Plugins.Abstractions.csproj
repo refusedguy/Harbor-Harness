@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Plugins.Abstractions — contracts shared across the plugin pipeline.
+
+    Contains the leaf-level interfaces and data types referenced by every
+    Harbor.Plugins.* layer:
+      - IPluginSource            (storage contract)
+      - IPluginCompiler          (compilation contract)
+      - IPluginInstantiator      (instantiation contract)
+      - IPluginRegistrar         (registration contract)
+      - IPluginLoadHost          (host-side sink called by the registrar)
+      - PluginScript             (immutable wrapper around a single .cs source file)
+      - CompiledPluginAssembly   (loaded assembly + source hash)
+      - LoadedPlugin             (live IPlugin instance + metadata)
+      - CompilationResult        (result struct returned by IPluginCompiler)
+
+    Dependency policy (Clean Architecture):
+      - References Harbor.Abstractions (Domain) only — never Harbor.Core.
+      - References Harbor.Terminal.Abstractions for the panel/TUI-plugin contracts
+        surfaced on IPluginLoadHost (registration sink).
+      - References Microsoft.CodeAnalysis for Diagnostic (compiler result).
+
+    See docs/PLUGIN_SYSTEM.md and docs/ARCHITECTURE_LAYERS.md for the full
+    layer diagram.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Plugins.Abstractions</PackageId>
+    <Description>Harbor plugin pipeline contracts — interfaces and data types shared across all plugin layers.</Description>
+    <PackageTags>harbor;ai;agent;plugins;abstractions;contracts</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
+  </ItemGroup>
+
+</Project>

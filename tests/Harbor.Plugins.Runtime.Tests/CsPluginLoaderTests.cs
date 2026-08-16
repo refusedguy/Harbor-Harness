@@ -5,17 +5,14 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
-using Harbor.Plugins.Runtime;
-using Harbor.Tui.Abstractions.Panels;
-using Harbor.Tui.Abstractions.Plugins;
+using Harbor.Plugins.Abstractions;
+using Harbor.Terminal.Abstractions.Plugins;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
 namespace Harbor.Plugins.Runtime.Tests;
-
 /// <summary>
 ///     Tests for <see cref="CsPluginLoader" /> — Roslyn-based CS-source plugin loading,
 ///     compilation diagnostics, and on-disk caching.
@@ -36,7 +33,7 @@ public sealed class CsPluginLoaderTests
         var loader = new CsPluginLoader(
             host,
             NullLogger<CsPluginLoader>.Instance,
-            harborDir: fixture.HarborDir);
+            fixture.HarborDir);
 
         var result = await loader.DiscoverAndLoadAsync().ConfigureAwait(false);
 
@@ -57,21 +54,21 @@ public sealed class CsPluginLoaderTests
     {
         using var fixture = await PluginTestFixture.CreateAsync(uniqueSuffix: "B").ConfigureAwait(false);
         var script = new PluginScript(
-            path: Path.Combine(fixture.PluginsDir, "broken.cs"),
-            source: """
-                // This file is intentionally broken.
-                public sealed class Broken {
-                    public void M() {
-                        int x = ; // syntax error — missing expression
-                    }
+            Path.Combine(fixture.PluginsDir, "broken.cs"),
+            """
+            // This file is intentionally broken.
+            public sealed class Broken {
+                public void M() {
+                    int x = ; // syntax error — missing expression
                 }
-                """);
+            }
+            """);
 
         var host = new FakePluginLoadHost();
         var loader = new CsPluginLoader(
             host,
             NullLogger<CsPluginLoader>.Instance,
-            harborDir: fixture.HarborDir);
+            fixture.HarborDir);
 
         var result = await loader.CompileAndLoadAsync(script).ConfigureAwait(false);
 
@@ -95,7 +92,7 @@ public sealed class CsPluginLoaderTests
         var loader1 = new CsPluginLoader(
             host1,
             NullLogger<CsPluginLoader>.Instance,
-            harborDir: fixture.HarborDir);
+            fixture.HarborDir);
 
         var first = await loader1.DiscoverAndLoadAsync().ConfigureAwait(false);
         await Assert.That(first.IsSuccess).IsTrue();
@@ -104,7 +101,7 @@ public sealed class CsPluginLoaderTests
 
         // Verify cache file was written.
         string cacheDir = Path.Combine(fixture.HarborDir, "plugins", "cache");
-        var cacheFiles = Directory.Exists(cacheDir)
+        string[] cacheFiles = Directory.Exists(cacheDir)
             ? Directory.GetFiles(cacheDir, "*.dll")
             : Array.Empty<string>();
         await Assert.That(cacheFiles.Length).IsGreaterThanOrEqualTo(1);
@@ -114,7 +111,7 @@ public sealed class CsPluginLoaderTests
         var loader2 = new CsPluginLoader(
             host2,
             NullLogger<CsPluginLoader>.Instance,
-            harborDir: fixture.HarborDir);
+            fixture.HarborDir);
 
         var second = await loader2.DiscoverAndLoadAsync().ConfigureAwait(false);
         await Assert.That(second.IsSuccess).IsTrue();
@@ -129,51 +126,51 @@ public sealed class CsPluginLoaderTests
     ///     collide in the shared AppDomain type system.
     /// </summary>
     private static string HelloWorldSource(string suffix) => $$"""
-        using System;
-        using System.Collections.Generic;
-        using System.Text.Json;
-        using System.Threading;
-        using System.Threading.Tasks;
-        using CSharpFunctionalExtensions;
-        using Harbor.Abstractions.Models;
-        using Harbor.Abstractions.Models.Identifiers;
-        using Harbor.Abstractions.Plugins;
-        using Harbor.Abstractions.Tools;
-        using Microsoft.Extensions.Logging;
+                                                               using System;
+                                                               using System.Collections.Generic;
+                                                               using System.Text.Json;
+                                                               using System.Threading;
+                                                               using System.Threading.Tasks;
+                                                               using CSharpFunctionalExtensions;
+                                                               using Harbor.Abstractions.Models;
+                                                               using Harbor.Abstractions.Models.Identifiers;
+                                                               using Harbor.Abstractions.Plugins;
+                                                               using Harbor.Abstractions.Tools;
+                                                               using Microsoft.Extensions.Logging;
 
-        public sealed class HelloPlugin{{suffix}} : IToolPlugin
-        {
-            public string Name => "hello-world-{{suffix.ToLowerInvariant()}}";
-            public Version Version => new(1, 0, 0);
-            public Version RequiredHarborVersion => new(0, 4, 0);
-            public string Description => "Test plugin {{suffix}}";
+                                                               public sealed class HelloPlugin{{suffix}} : IToolPlugin
+                                                               {
+                                                                   public string Name => "hello-world-{{suffix.ToLowerInvariant()}}";
+                                                                   public Version Version => new(1, 0, 0);
+                                                                   public Version RequiredHarborVersion => new(0, 4, 0);
+                                                                   public string Description => "Test plugin {{suffix}}";
 
-            public void Initialize(PluginContext context)
-            {
-                context.CreateLogger<HelloPlugin{{suffix}}>().LogInformation("{{suffix}} initialized");
-            }
+                                                                   public void Initialize(PluginContext context)
+                                                                   {
+                                                                       context.CreateLogger<HelloPlugin{{suffix}}>().LogInformation("{{suffix}} initialized");
+                                                                   }
 
-            public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<HelloTool{{suffix}}>();
+                                                                   public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<HelloTool{{suffix}}>();
 
-            public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-        }
+                                                                   public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+                                                               }
 
-        public sealed class HelloTool{{suffix}} : ITool
-        {
-            public ToolName Name => ToolName.Create("hello_{{suffix.ToLowerInvariant()}}");
-            public string DisplayName => "Hello {{suffix}}";
-            public string Description => "Returns a greeting";
-            public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
-            public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-            public string? PromptSnippet => null;
-            public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+                                                               public sealed class HelloTool{{suffix}} : ITool
+                                                               {
+                                                                   public ToolName Name => ToolName.Create("hello_{{suffix.ToLowerInvariant()}}");
+                                                                   public string DisplayName => "Hello {{suffix}}";
+                                                                   public string Description => "Returns a greeting";
+                                                                   public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
+                                                                   public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+                                                                   public string? PromptSnippet => null;
+                                                                   public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
 
-            public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            {
-                return Task.FromResult(ToolResult.Success("Hello from {{suffix}}!"));
-            }
-        }
-        """;
+                                                                   public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
+                                                                   {
+                                                                       return Task.FromResult(ToolResult.Success("Hello from {{suffix}}!"));
+                                                                   }
+                                                               }
+                                                               """;
 
     /// <summary>
     ///     Per-test fixture: creates a unique temp <c>~/.harbor</c>-like directory with a
@@ -193,6 +190,14 @@ public sealed class CsPluginLoaderTests
         public string HarborDir { get; }
         public string PluginsDir { get; }
 
+        public void Dispose()
+        {
+            try { Directory.Delete(_tempRoot, true); }
+            catch (IOException)
+            { /* best-effort cleanup */
+            }
+        }
+
         public static async Task<PluginTestFixture> CreateAsync(string uniqueSuffix)
         {
             string root = Path.Combine(Path.GetTempPath(), "harbor-tests-" + uniqueSuffix + "-" + Guid.NewGuid().ToString("N"));
@@ -206,12 +211,6 @@ public sealed class CsPluginLoaderTests
             string path = Path.Combine(PluginsDir, "plugin.cs");
             await File.WriteAllTextAsync(path, source).ConfigureAwait(false);
         }
-
-        public void Dispose()
-        {
-            try { Directory.Delete(_tempRoot, recursive: true); }
-            catch (IOException) { /* best-effort cleanup */ }
-        }
     }
 
     /// <summary>
@@ -220,29 +219,37 @@ public sealed class CsPluginLoaderTests
     /// </summary>
     private sealed class FakePluginLoadHost : IPluginLoadHost
     {
-        private readonly ConcurrentDictionary<string, ITool> _tools = new();
-        private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
         private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
-        private readonly List<ITuiPlugin> _tuiPlugins = new();
         private readonly List<IPanelProvider> _panelProviders = new();
-        private readonly IEventBus _eventBus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
-
-        public IServiceCollection Services { get; } = new ServiceCollection();
-        public IConfiguration Configuration { get; } = new ConfigurationBuilder().Build();
-        public ILoggerFactory LoggerFactory { get; } = NullLoggerFactory.Instance;
-        public IEventBus EventBus => _eventBus;
+        private readonly ConcurrentDictionary<ProviderId, Func<ILlmClient>> _providers = new();
+        private readonly ConcurrentDictionary<string, ITool> _tools = new();
+        private readonly List<ITuiPlugin> _tuiPlugins = new();
 
         public IReadOnlyList<ITool> RegisteredTools => _tools.Values.ToArray();
         public IReadOnlyList<ProviderId> RegisteredProviderIds => _providers.Keys.ToArray();
         public IReadOnlyList<AgentDefinition> RegisteredAgents => _agents.Values.ToArray();
         public IReadOnlyList<ITuiPlugin> RegisteredTuiPlugins
         {
-            get { lock (_tuiPlugins) { return _tuiPlugins.ToArray(); } }
+            get
+            {
+                lock (_tuiPlugins) { return _tuiPlugins.ToArray(); }
+            }
         }
         public IReadOnlyList<IPanelProvider> RegisteredPanelProviders
         {
-            get { lock (_panelProviders) { return _panelProviders.ToArray(); } }
+            get
+            {
+                lock (_panelProviders) { return _panelProviders.ToArray(); }
+            }
         }
+
+        public IServiceCollection Services { get; } = new ServiceCollection();
+        public IConfiguration Configuration { get; } = new ConfigurationBuilder().Build();
+        public ILoggerFactory LoggerFactory { get; } = NullLoggerFactory.Instance;
+        public IEventBus EventBus
+        {
+            get;
+        } = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance);
 
         public Result RegisterTool(ITool tool)
         {

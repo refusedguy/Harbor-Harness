@@ -1,0 +1,61 @@
+<UserControl x:Class="Harbor.App.Wpf.Controls.SessionRow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Harbor.App.Wpf.Converters">
+    <!--
+        SessionRow — reusable WPF sidebar row for a session.
+
+        Mirrors the Avalonia Harbor.App.Avalonia.Views.Components.SessionRow
+        control. Bindable properties:
+          - Title          (string)
+          - Subtitle       (string)
+          - RelativeTime   (string)
+          - MessageCount   (int)
+          - StatusColorKey (string)
+          - IsDirty        (bool)
+          - IsActive       (bool)
+    -->
+    <UserControl.Resources>
+        <conv:BrushKeyConverter x:Key="BrushKey" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+    <Grid Margin="2,4">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="*"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="Goldenrod"
+                           Visibility="{Binding IsDirty, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+            <TextBlock Text="{Binding Subtitle, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       FontSize="11"
+                       Foreground="{DynamicResource App.TextMuted}"
+                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                           FontSize="10"
+                           Foreground="{DynamicResource App.TextMuted}" />
+                <TextBlock FontSize="10"
+                           Foreground="{DynamicResource App.TextMuted}">
+                    <Run Text="{Binding MessageCount, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                    <Run Text=" msgs" />
+                </TextBlock>
+            </StackPanel>
+        </StackPanel>
+
+        <Ellipse Grid.Column="1"
+                 Width="8"
+                 Height="8"
+                 VerticalAlignment="Center"
+                 Fill="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}" />
+    </Grid>
+</UserControl>

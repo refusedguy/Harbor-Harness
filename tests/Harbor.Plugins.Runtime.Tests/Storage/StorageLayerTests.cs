@@ -1,13 +1,11 @@
-using Harbor.Plugins.Runtime.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
-using TUnit.Assertions;
-using TUnit.Assertions.Extensions;
+using Harbor.Plugins.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Storage;
-
 /// <summary>
 ///     Tests for the Storage layer: <see cref="InMemoryPluginSource" />,
-/// <see cref="FileSystemPluginSource" />, <see cref="CompositePluginSource" />.
+///     <see cref="FileSystemPluginSource" />, <see cref="CompositePluginSource" />.
 /// </summary>
 public sealed class StorageLayerTests
 {
@@ -53,8 +51,12 @@ public sealed class StorageLayerTests
             collected.Add(s);
 
         await Assert.That(collected.Count).IsEqualTo(2);
-        await Assert.That(collected[0].Path.EndsWith("a.cs")).IsTrue();
-        await Assert.That(collected[1].Path.EndsWith("b.cs")).IsTrue();
+        // NOTE: Directory.GetFiles order is filesystem-dependent (not sorted on
+        // Linux). Assert that BOTH expected files were collected, without
+        // assuming a specific order.
+        var paths = collected.Select(c => c.Path).Order(StringComparer.OrdinalIgnoreCase).ToList();
+        await Assert.That(paths[0].EndsWith("a.cs")).IsTrue();
+        await Assert.That(paths[1].EndsWith("b.cs")).IsTrue();
     }
 
     /// <summary>
@@ -109,7 +111,7 @@ public sealed class StorageLayerTests
     public async Task InMemorySource_Empty_YieldsNoScripts()
     {
         var source = new InMemoryPluginSource();
-        var count = 0;
+        int count = 0;
         await foreach (var _ in source.GetScriptsAsync().ConfigureAwait(false))
             count++;
         await Assert.That(count).IsEqualTo(0);

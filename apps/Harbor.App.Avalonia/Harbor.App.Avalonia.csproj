@@ -1,0 +1,132 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Avalonia — standalone ORCA-level desktop GUI for Harbor.
+    Composition root: depends on Harbor.Abstractions + Harbor.Terminal.Abstractions + Harbor.Core +
+    Harbor.Storage.Memory + Harbor.Tools.Builtin + Harbor.Providers.Ollama + Harbor.Providers.OpenAiCompatible.
+    Same DI responsibilities as Harbor.Cli — but instead of a terminal REPL, boots Avalonia 12.1
+    desktop lifetime with Catppuccin-Mocha dark theme, code editor (AvaloniaEdit), streaming chat,
+    session manager, command palette, diff view, token-usage chart, plugin panel host,
+    and a custom-drawn Windows title bar (ExtendClientAreaToDecorationsHint).
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <UseAvalonia>true</UseAvalonia>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.App.Avalonia</PackageId>
+    <Description>Harbor standalone Avalonia desktop app — ORCA-level coding agent GUI.</Description>
+    <PackageTags>harbor;avalonia;gui;desktop;ai-agent;coding-agent</PackageTags>
+
+    <!--
+      Windows runtime identifier — required for Avalonia.Win32 (the W32 backend
+      that powers ClassicDesktopStyleApplicationLifetime.Dispatcher.MainLoop) to
+      load correctly. Without a RID, dotnet run/publish on Windows produces a
+      framework-dependent build that misses the native Win32 dispatcher hooks
+      and throws PlatformNotSupportedException at startup. We default to win-x64
+      on Windows when no RID is explicitly passed; other RIDs (win-arm64,
+      linux-x64, osx-arm64, …) can be passed via -r or <RuntimeIdentifier>.
+      See: https://github.com/AvaloniaUI/Avalonia/issues/13593 (the exact
+      PlatformNotSupportedException stack trace reported there matches the
+      user's Windows crash).
+    -->
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(OS)' == 'Windows_NT' AND '$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+
+    <!-- Avalonia 11.2.7 brings Tmds.DBus.Protocol 0.20.0 transitively (GHSA-xrw6-gwf8-vvr9).
+         We can't pin a higher version of a transitive dep, so suppress NU1903 in this project. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+
+
+    <WarningsAsErrors>$(WarningsAsErrors);AVLN0001;AVLN0002;AVLN0003;AVLN0004;AVLN1000;AVLN1010</WarningsAsErrors>
+
+    <!-- Full XAML→IL compilation: enables compile-time validation of Setter
+         values, binding types, and resource keys. Invalid values (e.g. a
+         string assigned to a BoxShadows property) become build-time AVLN2000
+         errors instead of runtime InvalidCastException. -->
+    <AvaloniaUseCompiledXaml>true</AvaloniaUseCompiledXaml>
+    <AvaloniaXamlReportErrors>true</AvaloniaXamlReportErrors>
+    <AvaloniaVerifyBindings>true</AvaloniaVerifyBindings>
+
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Source-generator MVVM emits some unused-field warnings. -->
+    <NoWarn>$(NoWarn);CS0169;CS0414;CA1823</NoWarn>
+
+    <!-- Meziantou MA0046 insists on EventArgs-derived payload types; we use
+         EventHandler<T> with plain record payloads (UiState, ToastNotification)
+         which is intentional for the simple event contracts in this app. -->
+    <NoWarn>$(NoWarn);MA0046</NoWarn>
+
+    <!-- S3267 (loop → LINQ) fires on intentional foreach loops (OnboardingViewModel
+         API-key builder) where the conditional body would be obscured by LINQ. -->
+    <NoWarn>$(NoWarn);S3267</NoWarn>
+
+    <!-- S125 (commented-out code) flags documentation comments that mention CLI
+         flags like the shell switch as if they were dead code. The Program.cs
+         shell-mode switch has a multi-line explanation that legitimately
+         references the shell flag — false positive. -->
+    <NoWarn>$(NoWarn);S125</NoWarn>
+  </PropertyGroup>
+
+  <!-- Expose internals to the DI test project + the E2E test project so they
+       can call AppHost.BuildAsync() directly. The E2E driver uses this to
+       spin up the real DI container inside an Avalonia.Headless app. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Avalonia.Tests"/>
+    <InternalsVisibleTo Include="Harbor.E2E.App.Avalonia"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Composition-root references: the app wires Harbor services, exactly like Harbor.Cli. -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- Centralized view-model / overlay / dialog locator set. -->
+    <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+
+    <!--
+      Harbor IPC layer. Same pattern as Harbor.App.Cli: the shared contract
+      (Harbor.Ipc.Abstractions) plus the three implementations are all
+      referenced so the app can switch modes via the HARBOR_MODE env var at
+      runtime. Default is 'inprocess' (direct calls). For remote mode, set
+      HARBOR_MODE=ipc-client and the IHarborClient registration switches to
+      IpcHarborClient (the desktop app then talks to a separately-running
+      Harbor.App.Cli ipc-server process).
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Logging/Harbor.Logging.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Avalonia 12.1.x stable (Avalonia.Diagnostics pinned to 11.3.x because
+         the diagnostics inspector package has not been published for 12.x yet). -->
+    <PackageReference Include="Avalonia"/>
+    <PackageReference Include="Avalonia.Desktop"/>
+    <PackageReference Include="Avalonia.Themes.Fluent"/>
+    <PackageReference Include="Avalonia.Fonts.Inter"/>
+    <PackageReference Include="Avalonia.Diagnostics" Condition="'$(Configuration)' == 'Debug'"/>
+    <!-- Avalonia.AvaloniaEdit 12.0.0 is the build matched to Avalonia 12.x -->
+    <PackageReference Include="Avalonia.AvaloniaEdit"/>
+    <!-- Markdown parsing (no rendering — we project to Avalonia controls in ChatMarkdown.cs) -->
+    <PackageReference Include="Markdig"/>
+    <!-- MVVM source generators ([ObservableProperty], [RelayCommand]) -->
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <!-- DI + hosting -->
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Serilog.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+  </ItemGroup>
+
+</Project>

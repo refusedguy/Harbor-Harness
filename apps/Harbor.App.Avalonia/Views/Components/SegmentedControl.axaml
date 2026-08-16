@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Harbor.App.Avalonia.Views.Components.SegmentedControl"
+             AutomationProperties.AutomationId="SegmentedControl">
+
+    <!--
+        SegmentedControl — radio-pill button group.
+        Uses ListBox with ItemsSource + SelectedItem VM binding (no hardcoded Content strings).
+        Selected segment gets Accent fill with TextOnAccentBrush.
+    -->
+    <Border Background="{DynamicResource BgSubtleBrush}"
+            CornerRadius="{DynamicResource RadiusFull}"
+            Padding="4">
+        <ListBox ItemsSource="{Binding Items, RelativeSource={RelativeSource Self}}"
+                 SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"
+                 SelectionMode="Single"
+                 ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                 ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                 BorderThickness="0"
+                 Background="Transparent">
+            <ListBox.Styles>
+                <Style Selector="ListBoxItem">
+                    <Setter Property="Padding" Value="{DynamicResource PaddingSegmentedItem}" />
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                    <Setter Property="CornerRadius" Value="{DynamicResource RadiusFull}" />
+                </Style>
+                <Style Selector="ListBoxItem.selected">
+                    <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+                </Style>
+                <Style Selector="ListBoxItem:hover">
+                    <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+                </Style>
+            </ListBox.Styles>
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Border>
+</UserControl>

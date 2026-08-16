@@ -1,0 +1,78 @@
+@* Sidebar — left navigation pane. Lists the main pages + recent sessions.
+   Width: var(--sidebar-width) (240px). @*@
+@inject NavigationManager Nav
+@inject SessionBrowserService Sessions
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">H</div>
+        <span>Harbor</span>
+    </div>
+
+    <nav class="sidebar-nav">
+        <NavLink class="sidebar-link" href="/" Match="NavLinkMatch.All">
+            <span aria-hidden="true">🏠</span> Home
+        </NavLink>
+        <NavLink class="sidebar-link" href="/chat">
+            <span aria-hidden="true">💬</span> Chat
+        </NavLink>
+        <NavLink class="sidebar-link" href="/sessions">
+            <span aria-hidden="true">📚</span> Sessions
+        </NavLink>
+        <NavLink class="sidebar-link" href="/providers">
+            <span aria-hidden="true">🔌</span> Providers
+        </NavLink>
+        <NavLink class="sidebar-link" href="/code">
+            <span aria-hidden="true">📝</span> Code Editor
+        </NavLink>
+        <NavLink class="sidebar-link" href="/diff">
+            <span aria-hidden="true">🔀</span> Diff
+        </NavLink>
+        <NavLink class="sidebar-link" href="/tokens">
+            <span aria-hidden="true">📊</span> Token Usage
+        </NavLink>
+        <NavLink class="sidebar-link" href="/settings">
+            <span aria-hidden="true">⚙️</span> Settings
+        </NavLink>
+    </nav>
+
+    <div class="sidebar-section">Recent</div>
+    <nav class="sidebar-nav">
+        @if (_recent.Count == 0)
+        {
+            <div class="sidebar-link" style="opacity:0.5;cursor:default;">No recent sessions</div>
+        }
+        else
+        {
+            @foreach (var s in _recent)
+            {
+                <a class="sidebar-link" href="/sessions">
+                    <span aria-hidden="true">•</span>
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@s.Title</span>
+                </a>
+            }
+        }
+    </nav>
+
+    <div class="sidebar-footer">
+        <div>Harbor 0.4.0-alpha</div>
+        <div>Press <kbd>Ctrl+P</kbd> for commands</div>
+    </div>
+</div>
+
+@code {
+private List<SessionSummary> _recent = new();
+
+protected override async Task OnInitializedAsync()
+{
+    try
+    {
+        var list = await Sessions.ListAsync().ConfigureAwait(false);
+        _recent = list.Take(5).ToList();
+    }
+    catch
+    {
+        _recent = new List<SessionSummary>();
+    }
+}
+}

@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

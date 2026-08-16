@@ -1,6 +1,9 @@
 using System.Text.Json;
+using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Tui.RazorConsole;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Tests;
@@ -87,22 +90,26 @@ public class RazorConsoleRendererTests
     }
 }
 
-public class RazorConsoleChatBridgeTests
+public class RazorConsoleTeaBridgeTests
 {
     [Test]
-    public async Task ChatLine_Record_HasCorrectProperties()
+    public async Task Push_AgentEnd_SetsIdleStatus()
     {
-        var line = new ChatLine(ChatRoles.User, "hello");
-        await Assert.That(line.IsUser).IsTrue();
-        await Assert.That(line.Text).IsEqualTo("hello");
+        var agent = TestAgentFactory.Create();
+        using var bridge = new RazorConsoleTeaBridge(agent, null, NullLogger.Instance);
+        bridge.Push(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await Assert.That(bridge.Store.State.Status).IsEqualTo("idle");
     }
 
     [Test]
-    public async Task ChatLine_AssistantLine_HasCorrectProperties()
+    public async Task PushLine_AddsSystemLine()
     {
-        var line = new ChatLine(ChatRoles.Assistant, "response");
-        await Assert.That(line.IsUser).IsFalse();
-        await Assert.That(line.Text).IsEqualTo("response");
+        var agent = TestAgentFactory.Create();
+        using var bridge = new RazorConsoleTeaBridge(agent, null, NullLogger.Instance);
+        bridge.PushLine("test line");
+        var state = bridge.Store.State;
+        await Assert.That(state.Lines.Length).IsGreaterThan(0);
+        await Assert.That(state.Lines[^1].Text).IsEqualTo("test line");
     }
 }
 
@@ -131,5 +138,36 @@ public class RazorConsoleRenderContextTests
     {
         var ctx = new RazorConsoleRenderContext();
         await Assert.That(ctx.SupportsColor).IsTrue();
+    }
+}
+
+internal static class TestAgentFactory
+{
+    public static IAgent Create()
+    {
+        var definition = new AgentDefinition(
+            Name: AgentName.Create("test"),
+            DisplayName: "Test Agent",
+            Description: "Stub",
+            Model: "test-model",
+            ProviderId: "test",
+            Permission: PermissionRuleset.Default);
+        return new StubAgent(definition);
+    }
+
+    private sealed class StubAgent(AgentDefinition definition) : IAgent
+    {
+        public AgentState State { get; } = AgentState.Idle("test-session", definition);
+        public CancellationTokenSource AbortSource { get; } = new();
+        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NoopDisposable();
+        public Task<CSharpFunctionalExtensions.Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
+        public Task<CSharpFunctionalExtensions.Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(CSharpFunctionalExtensions.Result.Success());
+        public void Initialize(Session session, AgentDefinition agent) { }
+        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public void ResetAbortSource() { }
+        public void Steer(AgentMessage message) { }
+        public void FollowUp(AgentMessage message) { }
+        public void Dispose() => AbortSource.Dispose();
+        private sealed class NoopDisposable : IDisposable { public void Dispose() { } }
     }
 }

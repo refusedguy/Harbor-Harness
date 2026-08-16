@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Extensions — infrastructure helper layer.
+
+    Contains: ArrayPool / StringBuilderPool helpers, CollectionExtensions
+    (FrozenSet / FrozenDictionary materializers), MemoryPackExtensions
+    (ToMemoryPackBytes / FromMemoryPackBytes round-trip helpers).
+
+    References:
+      - Harbor.Domain                  (for MemoryPack IMemoryPackable<T> types
+                                        referenced by MemoryPackExtensions)
+      - CommunityToolkit.HighPerformance (FrozenDictionary / FrozenSet helpers
+                                        and incidental performance types)
+
+    System.Buffers (ArrayPool<T>) is in-box for net10.0 — no package ref needed.
+
+    Namespaces preserved as Harbor.Abstractions.Extensions so consumer code
+    (Harbor.Application, Harbor.Tools.*, etc.) requires zero `using` changes —
+    they pick up the types transitively via the Harbor.Abstractions facade.
+
+    See README.md for the architectural rationale.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Extensions</PackageId>
+    <Description>Harbor infrastructure helpers — ArrayPool, StringBuilder pool, FrozenSet materializers, MemoryPack round-trip helpers.</Description>
+    <PackageTags>harbor;ai;agent;extensions;infrastructure;pooling</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <RootNamespace>Harbor.Abstractions</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.HighPerformance"/>
+    <PackageReference Include="MemoryPack"/>
+  </ItemGroup>
+
+</Project>

@@ -8,11 +8,18 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
 </Project>

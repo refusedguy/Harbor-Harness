@@ -1,0 +1,218 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             x:Class="Harbor.App.Avalonia.Views.SettingsView">
+
+    <!--
+        Settings modal — overlay with a centered card.
+
+        Layout:
+          • Backdrop: 50% black scrim that captures clicks (so a click
+            outside the card reads as "dismiss").
+          • Card: 640×560, padded, rounded, surface-tinted background.
+          • Sections, each a labeled StackPanel:
+              - Theme (dark / light / system) — ComboBox, applied immediately
+                on selection AND on Save.
+              - Default provider — TextBox (ollama / openai / anthropic / …).
+              - Default model — TextBox (provider-specific model id).
+              - Font family — TextBox (Inter default).
+              - Storage backend — ComboBox (memory / jsonl / sqlite).
+              - Log level — ComboBox (trace / debug / info / warning / error).
+              - Ollama host — TextBox (URL).
+              - Onboarding re-run — button.
+          • Footer: Cancel (revert + close) + Save (persist + close).
+    -->
+
+    <!--
+        Backdrop: 50% black scrim that captures clicks via Backdrop_Click so a
+        click outside the card reads as "dismiss" (Bug fix: popups not closing
+        on outside click). The inner Border has Background set so its clicks
+        don't bubble to the backdrop (PointerPressed is a tunneling/bubbling
+        routed event — the inner Border eats it before it reaches the outer).
+    -->
+    <Border Background="#80000000" ZIndex="200"
+            PointerPressed="Backdrop_Click">
+        <Border Background="{StaticResource MochaBase}" CornerRadius="12"
+                Width="760" Height="640" Padding="20"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                BoxShadow="0 16 40 0 #80000000">
+            <Grid RowDefinitions="Auto,*,Auto">
+
+                <!-- Header -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+                    <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="Settings" FontSize="18" FontWeight="Bold"
+                                   Foreground="{StaticResource MochaBlue}" />
+                        <TextBlock Text="Persists to ~/.harbor/config.json + ~/.harbor/avalonia.json"
+                                   FontSize="11" Foreground="{StaticResource TextMutedBrush}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="Subtle" Content="✕" Padding="10,4"
+                            Click="Close_Click" ToolTip.Tip="Close (Esc)" />
+                </Grid>
+
+                <!-- Scrollable settings -->
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Spacing="14">
+
+                        <!-- Theme -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Theme" Classes="Label" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ComboBox SelectedItem="{Binding ThemeSettings.Theme, Mode=TwoWay}" MinWidth="180">
+                                    <ComboBoxItem Content="dark" />
+                                    <ComboBoxItem Content="light" />
+                                    <ComboBoxItem Content="system" />
+                                </ComboBox>
+                                <Button Classes="Subtle" Content="Preview"
+                                        Command="{Binding ThemeSettings.ApplyThemeCommand}"
+                                        ToolTip.Tip="Apply the theme immediately without saving." />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Separator Margin="0,2" />
+
+                        <!-- Default provider -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Default provider" Classes="Label" />
+                            <TextBox Text="{Binding DefaultProvider, Mode=TwoWay}"
+                                     PlaceholderText="ollama, openai, anthropic, …" />
+                        </StackPanel>
+
+                        <!-- Default model -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Default model" Classes="Label" />
+                            <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                                     PlaceholderText="qwen2.5-coder:7b, gpt-4o, claude-sonnet-4, …" />
+                        </StackPanel>
+
+                        <!-- Font family -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Font family" Classes="Label" />
+                            <TextBox Text="{Binding FontFamily, Mode=TwoWay}" PlaceholderText="Inter" />
+                        </StackPanel>
+
+                        <!-- Storage backend -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Storage backend" Classes="Label" />
+                            <ComboBox SelectedItem="{Binding StorageBackend, Mode=TwoWay}" MinWidth="180">
+                                <ComboBoxItem Content="memory" />
+                                <ComboBoxItem Content="jsonl" />
+                                <ComboBoxItem Content="sqlite" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Log level -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Log level" Classes="Label" />
+                            <ComboBox SelectedItem="{Binding LogLevel, Mode=TwoWay}" MinWidth="180">
+                                <ComboBoxItem Content="trace" />
+                                <ComboBoxItem Content="debug" />
+                                <ComboBoxItem Content="info" />
+                                <ComboBoxItem Content="warning" />
+                                <ComboBoxItem Content="error" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Ollama host -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Ollama host" Classes="Label" />
+                            <TextBox Text="{Binding OllamaHost, Mode=TwoWay}" PlaceholderText="http://localhost:11434" />
+                        </StackPanel>
+
+                        <Separator Margin="0,2" />
+
+                        <!-- Onboarding -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Onboarding" Classes="Label" />
+                            <Button Classes="Subtle" Content="Re-run setup wizard"
+                                    Command="{Binding RerunOnboardingCommand}"
+                                    ToolTip.Tip="Resets OnboardingCompleted=false. Restart Harbor to launch the wizard." />
+                        </StackPanel>
+
+                        <Separator Margin="0,4" />
+
+                        <!-- ════════════ Provider Configuration (per-provider API keys + model browser) ════════════ -->
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Provider Configuration" Classes="Label" />
+                            <TextBlock Text="Set an API key per provider, then click Test to verify the connection."
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                       TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding ProviderConfigs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="vm:ProviderConfigViewModel">
+                                        <Border Background="{StaticResource MochaMantle}" CornerRadius="6"
+                                                Padding="10" Margin="0,3">
+                                            <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+                                                <!-- Provider name + auth badge -->
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal"
+                                                            Spacing="8">
+                                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Id}" FontSize="10"
+                                                               FontFamily="{StaticResource CodeFont}"
+                                                               Foreground="{StaticResource TextMutedBrush}" />
+                                                </StackPanel>
+                                                <Border Grid.Row="0" Grid.Column="1"
+                                                        Background="{StaticResource MochaSurface0}"
+                                                        CornerRadius="4" Padding="6,2">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="{Binding AuthIcon}" FontSize="12"
+                                                                   Foreground="{StaticResource MochaGreen}" />
+                                                        <TextBlock Text="{Binding AuthText}" FontSize="10"
+                                                                   Foreground="{StaticResource TextMutedBrush}" />
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <!-- API key input (hidden for no-key providers like Ollama) -->
+                                                <TextBox Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                         Margin="0,6,0,0"
+                                                         IsVisible="{Binding RequiresApiKey}"
+                                                         Text="{Binding ApiKey, Mode=TwoWay}"
+                                                         PasswordChar="•"
+                                                         PlaceholderText="Paste API key…" />
+
+                                                <!-- Action row -->
+                                                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+                                                    <Button Classes="Subtle" Content="Save key" Padding="10,4"
+                                                            Command="{Binding SaveKeyCommand}" />
+                                                    <Button Classes="Subtle" Content="Test connection" Padding="10,4"
+                                                            Command="{Binding TestConnectionCommand}"
+                                                            IsEnabled="{Binding !IsTesting}" />
+                                                    <TextBlock Text="{Binding TestResult}" FontSize="11"
+                                                               Foreground="{StaticResource TextMutedBrush}"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <Separator Margin="0,4" />
+
+                        <!-- Model browser (embeds the picker control) -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Browse Models" Classes="Label" />
+                            <TextBlock Text="Pick a model to make it the active session's model."
+                                       FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                       TextWrapping="Wrap" />
+                            <ctrl:ProviderModelPicker DataContext="{Binding Picker}"
+                                                      Height="380" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Footer -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                            Spacing="8" Margin="0,12,0,0">
+                    <Button Classes="Subtle" Content="Cancel" Click="Cancel_Click" />
+                    <Button Classes="Primary" Content="Save" Command="{Binding SaveCommand}" Click="Close_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

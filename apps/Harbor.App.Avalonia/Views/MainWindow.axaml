@@ -1,0 +1,130 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vma="clr-namespace:Harbor.Ui.Framework.ViewModels;assembly=Harbor.Ui.Framework.ViewModels"
+        xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
+        xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+        xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
+        xmlns:chrome="clr-namespace:Harbor.App.Avalonia.Views.Chrome"
+        xmlns:board="clr-namespace:Harbor.App.Avalonia.Views.Board"
+        x:Class="Harbor.App.Avalonia.Views.MainWindow"
+
+        Title="Harbor — AI Coding Agent"
+        Width="1280" Height="800"
+        MinWidth="720" MinHeight="600"
+        Background="{DynamicResource BgAppBrush}"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource FontUi}">
+
+    <Window.Resources>
+        <views:BrushKeyConverter x:Key="BrushKeyConv" />
+        <views:EqualityConverter x:Key="EqualityConv" />
+    </Window.Resources>
+
+    <!--
+        ROOT LAYOUT — Grid with explicit rows/columns:
+          Row 0: TitleBar (Auto, 44px, spans all cols)
+          Row 1: ActivityRail (56) | Content (*) | Drawer (360, hidden)
+          Row 2: StatusBar (Auto, 32px, spans all cols)
+
+        Overlays float above the shell as Grid children with RowSpan=3
+        and ColumnSpan=3, using ZIndex for stacking.
+    -->
+    <Grid RowDefinitions="Auto,*,Auto"
+          ColumnDefinitions="56,*,Auto">
+
+        <!-- ════════════ Title bar ════════════ -->
+        <chrome:TitleBarView Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                             DataContext="{Binding}" />
+
+        <!-- ════════════ Activity rail ════════════ -->
+        <shell:ActivityRailView Grid.Row="1" Grid.Column="0"
+                                VerticalAlignment="Stretch"
+                                DataContext="{Binding}"/>
+
+        <!-- ════════════ Main content area ════════════ -->
+        <Grid Grid.Row="1" Grid.Column="1" RowDefinitions="Auto,*">
+
+            <!-- Tab strip -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal"
+                        Background="{DynamicResource BgRailBrush}"
+                        Spacing="2" Margin="6,4" x:Name="TabStrip">
+                <RadioButton Classes="TabButton" Content="Chat" GroupName="MainView"
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}" />
+                <RadioButton Classes="TabButton" Content="Code" GroupName="MainView"
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}" />
+                <RadioButton Classes="TabButton" Content="Sessions" GroupName="MainView"
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=board}" />
+            </StackPanel>
+
+            <!-- Content -->
+            <Grid Grid.Row="1">
+                <views:ChatView
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat, FallbackValue=True}"
+                    DataContext="{Binding Chat}" />
+                <views:CodeEditorView
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code, FallbackValue=False}"
+                    DataContext="{Binding CodeEditor}" />
+                <board:BoardView
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=board, FallbackValue=False}"
+                    DataContext="{Binding Board}" />
+            </Grid>
+        </Grid>
+
+        <!-- ════════════ Right drawer ════════════ -->
+        <shell:RightDrawerView Grid.Row="1" Grid.Column="2"
+                               IsVisible="{Binding $parent[Window].DataContext.IsRightDrawerOpen, FallbackValue=False}"
+                               VerticalAlignment="Stretch" />
+
+        <!-- ════════════ Status bar ════════════ -->
+        <shell:StatusBarView Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+                             Height="32" />
+
+        <!-- ════════════ Modal overlays — FLOATING SIBLINGS ════════════ -->
+        <views:CommandPaletteView
+            Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+            AutomationProperties.AutomationId="Overlay_CommandPalette"
+            IsVisible="{Binding $parent[Window].DataContext.IsCommandPaletteOpen, FallbackValue=False}"
+            DataContext="{Binding CommandPalette}"
+            ZIndex="800" />
+        <views:SettingsView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                            AutomationProperties.AutomationId="Overlay_SettingsPanel"
+                            IsVisible="{Binding $parent[Window].DataContext.IsSettingsOpen, FallbackValue=False}"
+                            DataContext="{Binding Settings}"
+                            ZIndex="600" />
+        <views:ProviderBrowserView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                   AutomationProperties.AutomationId="Overlay_ProviderBrowser"
+                                   IsVisible="{Binding $parent[Window].DataContext.IsProviderBrowserOpen, FallbackValue=False}"
+                                   DataContext="{Binding ProviderBrowser}"
+                                   ZIndex="600" />
+        <views:DiffView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                        AutomationProperties.AutomationId="Overlay_DiffView"
+                        IsVisible="{Binding $parent[Window].DataContext.IsDiffOpen, FallbackValue=False}"
+                        DataContext="{Binding Diff}"
+                        ZIndex="600" />
+        <views:TokenUsageView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                              AutomationProperties.AutomationId="Overlay_TokenUsage"
+                              IsVisible="{Binding $parent[Window].DataContext.IsTokenUsageOpen, FallbackValue=False}"
+                              DataContext="{Binding TokenUsage}"
+                              ZIndex="600" />
+
+        <views:FocusSessionView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                AutomationProperties.AutomationId="Overlay_FocusSession"
+                                IsVisible="{Binding $parent[Window].DataContext.IsFocusSessionOpen, FallbackValue=False}"
+                                DataContext="{Binding FocusSession}"
+                                ZIndex="700" />
+
+        <shell:SessionsFlyoutView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                 AutomationProperties.AutomationId="Overlay_SessionsFlyout"
+                                 IsVisible="{Binding $parent[Window].DataContext.IsSessionsFlyoutOpen, FallbackValue=False}"
+                                 DataContext="{Binding Sessions}"
+                                 ZIndex="500" />
+
+        <!-- Toast container -->
+        <views:ToastNotificationsView Grid.Row="0" Grid.RowSpan="3" Grid.Column="0" Grid.ColumnSpan="3"
+                                      ZIndex="1000"
+                                      HorizontalAlignment="Right"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,16,80"
+                                      IsHitTestVisible="True" />
+    </Grid>
+</Window>

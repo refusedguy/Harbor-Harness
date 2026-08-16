@@ -1,0 +1,208 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Cli — the canonical CLI app for Harbor.
+
+    This was previously `src/Harbor.Cli/`. Moved to `apps/` to make the
+    solution layout explicit: `src/` holds libraries, `apps/` holds runnable
+    applications. The CLI is just one possible app — sibling apps include
+    Harbor.App.Avalonia, Harbor.App.Wpf, Harbor.App.Blazor, Harbor.App.Maui.
+
+    The .NET namespace stays `Harbor.Cli.*` for backward compat with
+    existing user code and docs.
+
+    ── Feature-flag conditional build ─────────────────────────────────────
+    Pass granular MSBuild properties (or set them as env vars) to selectively
+    exclude categories of ProjectReferences. The NUKE build (`build/_build/`)
+    exposes these as command-line flags: no-plugins, no-scripting,
+    no-spectre-tui, no-all-providers, minimal. Each is spelled with a
+    double-hyphen prefix on the CLI (the literal prefix is omitted here
+    because XML comments disallow consecutive hyphens).
+
+      * `HarborWithPlugins=false`       — removes Harbor.Plugins.* (Roslyn loader)
+      * `HarborWithScripting=false`     — removes Harbor.Scripting.* (Jint engine)
+      * `HarborWithSpectreTui=false`    — removes alternative TUI renderers
+                                          (Spectre/Fullscreen/Termina/RazorConsole/TerminalGui/Ansi)
+      * `HarborWithAllProviders=false`  — keeps only Harbor.Providers.Ollama
+      * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
+
+    The legacy `HARBOR_MINIMAL=true` is a shorthand that forces all of the
+    above to `false`. It also defines the `HARBOR_MINIMAL` C# symbol for
+    backward-compat with the existing `#if HARBOR_MINIMAL` directives in
+    HostBuilder.cs.
+
+    The granular flags additionally define per-feature C# symbols
+    (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SCRIPTING`, `HARBOR_WITH_SPECTRE_TUI`,
+    `HARBOR_WITH_ALL_PROVIDERS`) so HostBuilder.cs can use finer-grained
+    `#if` guards.
+
+    See docs/BUILD_SYSTEM.md for the full variant × flag matrix.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>harbor</ToolCommandName>
+    <PackageId>Harbor.App.Cli</PackageId>
+    <Description>Harbor CLI app — modular AI coding agent.</Description>
+    <PackageTags>harbor;cli;ai;agent;app</PackageTags>
+    <EmbedProviders>true</EmbedProviders>
+    <!-- The .NET namespace stays Harbor.Cli for backward compat. -->
+    <RootNamespace>Harbor.Cli</RootNamespace>
+    <AssemblyName>Harbor.App.Cli</AssemblyName>
+
+    <!--
+      Legacy HARBOR_MINIMAL env-var: when 'true', force ALL granular flags
+      to false. Backward-compat with the existing `#if HARBOR_MINIMAL` code
+      path in HostBuilder.cs.
+    -->
+    <HARBOR_MINIMAL Condition="'$(HARBOR_MINIMAL)' == ''">$(env:HARBOR_MINIMAL)</HARBOR_MINIMAL>
+
+    <!--
+      S6668 (Sonar) false-positives on structured-log calls where the
+      placeholder name case-insensitively matches a local variable name
+      (e.g. template `{ConsoleLevel}` + arg `consoleLevel`). Pre-existing
+      in Program.cs; suppressing here unblocks the build without weakening
+      the analyzer for production code paths.
+    -->
+    <NoWarn>$(NoWarn);S6668</NoWarn>
+
+    <!--
+      Granular feature flags. Default: all true (full build). When
+      HARBOR_MINIMAL=true, all forced to false.
+    -->
+    <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
+    <HarborWithPlugins Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
+
+    <HarborWithScripting Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithScripting>
+    <HarborWithScripting Condition="'$(HarborWithScripting)' == ''">true</HarborWithScripting>
+
+    <HarborWithSpectreTui Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
+    <HarborWithSpectreTui Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
+
+    <HarborWithAllProviders Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllProviders>
+    <HarborWithAllProviders Condition="'$(HarborWithAllProviders)' == ''">true</HarborWithAllProviders>
+
+    <HarborWithAllTools Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithAllTools>
+    <HarborWithAllTools Condition="'$(HarborWithAllTools)' == ''">true</HarborWithAllTools>
+
+    <!--
+      C# symbol definitions for granular #if guards in HostBuilder.cs.
+      Each symbol is defined IFF its corresponding flag is 'true'.
+    -->
+    <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithScripting)' == 'true'">$(DefineConstants);HARBOR_WITH_SCRIPTING</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
+
+    <!--
+      Backward-compat: define HARBOR_MINIMAL when ALL granular flags are off.
+      This preserves the existing `#if HARBOR_MINIMAL` semantics in
+      HostBuilder.cs for the minimal shorthand use case (CLI flag spelled
+      with a double-hyphen prefix, omitted here per XML-comment rules).
+    -->
+    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithScripting)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Expose internals to the DI test project so it can call the internal
+    HostBuilder.Build(params string[] args) entry point directly and assert
+    every [Exposes(typeof(T))] service is resolvable from the built IServiceProvider.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Cli.Tests"/>
+  </ItemGroup>
+
+  <!-- ── Always-referenced core ───────────────────────────────────────────── -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+
+    <!--
+      Harbor IPC layer. The shared contract (Harbor.Ipc.Abstractions) is
+      always referenced; the three implementations (InProcess / Server /
+      Client) are also referenced so the CLI can switch modes via the
+      HARBOR_MODE env var at runtime. Each implementation is small
+      (~10-30 KB) and shares the same IHarborClient interface, so shipping
+      all three in one binary has no real size cost.
+
+      HARBOR_MODE values:
+        inprocess   (default) — UI + agent loop in one process
+        ipc-server            — host the agent loop, accept IPC clients
+        ipc-client            — thin client, connect to a running ipc-server
+
+      See docs/IPC.md for the full architecture and usage guide.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
+  </ItemGroup>
+
+  <!--
+    HarborMode MSBuild property — used by the NUKE PublishIpcServer /
+    PublishIpcClient targets to tag the published binary with the intended
+    mode. The CLI itself reads HARBOR_MODE at runtime, so this property is
+    informational only (it does NOT exclude any of the three IPC projects
+    above). Defaults to 'inprocess'.
+  -->
+  <PropertyGroup>
+    <HarborMode Condition="'$(HarborMode)' == ''">inprocess</HarborMode>
+    <DefineConstants Condition="'$(HarborMode)' == 'ipc-server'">$(DefineConstants);HARBOR_IPC_SERVER</DefineConstants>
+    <DefineConstants Condition="'$(HarborMode)' == 'ipc-client'">$(DefineConstants);HARBOR_IPC_CLIENT</DefineConstants>
+    <DefineConstants Condition="'$(HarborMode)' == 'inprocess'">$(DefineConstants);HARBOR_IPC_INPROCESS</DefineConstants>
+  </PropertyGroup>
+
+  <!-- ── Plugins (conditional on HarborWithPlugins) ───────────────────────── -->
+  <ItemGroup Condition="'$(HarborWithPlugins)' == 'true'">
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+  </ItemGroup>
+
+  <!-- ── Scripting (conditional on HarborWithScripting) ───────────────────── -->
+  <ItemGroup Condition="'$(HarborWithScripting)' == 'true'">
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Storage\Harbor.Scripting.Storage.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Compilation\Harbor.Scripting.Compilation.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Engines\Harbor.Scripting.Engines.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Scripting.Bridge\Harbor.Scripting.Bridge.csproj"/>
+  </ItemGroup>
+
+  <!-- ── All Providers (conditional on HarborWithAllProviders) ─────────────── -->
+  <ItemGroup Condition="'$(HarborWithAllProviders)' == 'true'">
+    <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
+  </ItemGroup>
+
+  <!-- ── Alternative TUI renderers (conditional on HarborWithSpectreTui) ──── -->
+  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
+    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.Extensions.Http"/>
+  </ItemGroup>
+
+</Project>
