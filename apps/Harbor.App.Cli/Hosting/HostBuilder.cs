@@ -8,6 +8,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Cli.Configuration;
 using Harbor.Cli.Logging;
 using Harbor.Core.Agents;
+using Harbor.Core.Resilience;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Permissions;
@@ -104,7 +105,7 @@ internal static class HostBuilder
     [Exposes(typeof(IConfigStore))]
     [Exposes(typeof(AuthStore))]
     [Exposes(typeof(OnboardingWizard))]
-    [Exposes(typeof(ITokenEstimator))]
+    [Exposes(typeof(ITokenTracker))]
     [Exposes(typeof(IEventBus))]
     [Exposes(typeof(ISystemPromptBuilder))]
     [Exposes(typeof(MessageConverter))]
@@ -263,7 +264,7 @@ internal static class HostBuilder
             logger: sp.GetRequiredService<ILogger<JsonConfigStore>>()));
         builder.Services.AddSingleton<AuthStore>();
         builder.Services.AddSingleton<OnboardingWizard>();
-        builder.Services.AddSingleton<ITokenEstimator, HeuristicTokenEstimator>();
+        builder.Services.AddSingleton<ITokenTracker, TokenTracker>();
         // SamplingMiddleware (rate=0.1) drops ~90% of MessageUpdateEvents which
         // breaks streaming text delivery to TUI renderers — not registered.
         builder.Services.AddSingleton<IEventBusMiddleware>(sp =>
@@ -276,6 +277,7 @@ internal static class HostBuilder
         });
         builder.Services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         builder.Services.AddSingleton<MessageConverter>();
+        builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
         builder.Services.AddSingleton<IAgentLoop, AgentLoop>();
         builder.Services.AddSingleton<IAgent, DefaultAgent>();
 
@@ -449,7 +451,7 @@ internal static class HostBuilder
         builder.Services.AddSingleton(panelRegistry);
         builder.Services.AddSingleton<IPanelRegistry>(panelRegistry);
         builder.Services.AddSingleton<ICompactionService>(sp => new CompactionService(
-            sp.GetRequiredService<ITokenEstimator>(),
+            sp.GetRequiredService<ITokenTracker>(),
             sp.GetRequiredService<IProviderRegistry>(),
             sp.GetRequiredService<ILogger<CompactionService>>()));
         builder.Services.AddSingleton<IPermissionService>(sp => new PermissionService(
