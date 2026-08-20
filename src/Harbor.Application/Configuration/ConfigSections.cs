@@ -73,9 +73,9 @@ public sealed record CostConfig(decimal Limit)
 ///     Compaction tuning.
 /// </summary>
 public sealed record CompactionConfig(
-    int ReserveTokens,
-    int KeepRecentTokens,
-    int TailTurns)
+    [property: JsonPropertyName("reserveTokens")] int ReserveTokens,
+    [property: JsonPropertyName("keepRecentTokens")] int KeepRecentTokens,
+    [property: JsonPropertyName("tailTurns")] int TailTurns)
 {
     public static readonly CompactionConfig Default = new(16384, 20000, 2);
 
@@ -132,9 +132,9 @@ public sealed record RunLimitsConfig(
 ///     User-supplied provider config entry (overrides the bundled JSON presets).
 /// </summary>
 public sealed record ProviderConfigEntry(
-    string BaseUrl,
-    string ApiType,
-    string? ModelsUrl)
+    [property: JsonPropertyName("baseUrl")] string BaseUrl,
+    [property: JsonPropertyName("apiType")] string ApiType,
+    [property: JsonPropertyName("modelsUrl")] string? ModelsUrl)
 {
     public static readonly ProviderConfigEntry Default = new(string.Empty, "openai-compatible", null);
 

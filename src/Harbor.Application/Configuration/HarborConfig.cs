@@ -228,12 +228,12 @@ public sealed class HarborConfig
 /// </summary>
 public sealed class RawConfigDto
 {
-    public string? Provider { get; set; }
-    public string? Model { get; set; }
-    public string? Agent { get; set; }
-    public string? Tui { get; set; }
-    public string? Storage { get; set; }
-    public bool? Onboarded { get; set; }
+    [JsonPropertyName("provider")] public string? Provider { get; set; }
+    [JsonPropertyName("model")] public string? Model { get; set; }
+    [JsonPropertyName("agent")] public string? Agent { get; set; }
+    [JsonPropertyName("tui")] public string? Tui { get; set; }
+    [JsonPropertyName("storage")] public string? Storage { get; set; }
+    [JsonPropertyName("onboarded")] public bool? Onboarded { get; set; }
 
     [JsonPropertyName("defaultProvider")] public string? DefaultProvider { get; set; }
     [JsonPropertyName("defaultModel")] public string? DefaultModel { get; set; }
@@ -241,13 +241,13 @@ public sealed class RawConfigDto
     [JsonPropertyName("storageBackend")] public string? StorageBackend { get; set; }
     [JsonPropertyName("logLevel")] public string? LogLevelConfig { get; set; }
 
-    public Dictionary<string, string>? ApiKeys { get; set; }
-    public Dictionary<string, ProviderConfigEntry>? Providers { get; set; }
-    public List<string>? EnabledPlugins { get; set; }
-    public List<string>? DisabledTools { get; set; }
-    public int? MaxSteps { get; set; }
-    public decimal? CostLimit { get; set; }
-    public CompactionConfig? Compaction { get; set; }
+    [JsonPropertyName("apiKeys")] public Dictionary<string, string>? ApiKeys { get; set; }
+    [JsonPropertyName("providers")] public Dictionary<string, ProviderConfigEntry>? Providers { get; set; }
+    [JsonPropertyName("enabledPlugins")] public List<string>? EnabledPlugins { get; set; }
+    [JsonPropertyName("disabledTools")] public List<string>? DisabledTools { get; set; }
+    [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
+    [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
+    [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
 }
 
 /// <summary>
