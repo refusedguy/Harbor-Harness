@@ -19,15 +19,15 @@ public sealed class BrushKeyConverter : IValueConverter
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string key) return null;
-        if (Application.Current is null) return null;
+        if (global::Avalonia.Application.Current is null) return null;
 
         // Avalonia 12: TryGetResource searches merged dictionaries too.
         // Direct indexer (Resources[key]) only checks the top-level dictionary.
-        if (Application.Current.TryGetResource(key, null, out object? resource) && resource is IBrush)
+        if (global::Avalonia.Application.Current.TryGetResource(key, null, out object? resource) && resource is IBrush)
             return (IBrush)resource;
 
         // Fallback: direct indexer
-        return Application.Current.Resources[key] as IBrush;
+        return global::Avalonia.Application.Current.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />
@@ -129,7 +129,7 @@ public sealed class StepToStepperBrushConverter : IValueConverter
             _ when currentStep == dotStep => "StepperActiveBrush",
             _ => "StepperPendingBrush"
         };
-        return Application.Current?.Resources[key] as IBrush;
+        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />

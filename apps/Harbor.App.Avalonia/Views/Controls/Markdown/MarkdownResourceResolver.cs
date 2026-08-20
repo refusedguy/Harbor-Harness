@@ -10,7 +10,7 @@ namespace Harbor.App.Avalonia.Views.Controls.Markdown;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         All lookups go through <c>Application.Current.Resources.TryGetResource</c>
+///         All lookups go through <c>global::Avalonia.Application.Current.Resources.TryGetResource</c>
 ///         so they pick up theme-variant changes (Mocha dark / Latte light)
 ///         automatically. When a key is missing or the resource isn't the
 ///         expected type, the fallback is returned so the renderer never
@@ -26,7 +26,7 @@ internal static class MarkdownResourceResolver
     /// </summary>
     public static IBrush TryFindBrush(string key, IBrush fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
+        if (global::Avalonia.Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
         {
             return b;
         }
@@ -46,7 +46,7 @@ internal static class MarkdownResourceResolver
     /// </summary>
     public static FontFamily TryFindFont(string key, FontFamily fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is FontFamily f)
+        if (global::Avalonia.Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is FontFamily f)
         {
             return f;
         }

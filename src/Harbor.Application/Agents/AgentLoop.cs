@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.Core.Resilience;
+using Harbor.Core.Resources;
 using Harbor.Core.Sessions;
 using Harbor.Core.Telemetry;
 using Microsoft.Extensions.Logging;
@@ -79,7 +80,7 @@ public sealed class AgentLoop : IAgentLoop
         activity?.SetTag(GenAiTags.RequestModel, agent.Model);
         try
         {
-            _logger.LogInformation("Agent loop starting: agent={Agent}", agent.Name.Value);
+            _logger.LogInformation(CoreResources.GetLog("AgentLoopStarting"), agent.Name.Value);
 
             // Resolve the model once up front so the context window can be carried
             // on AgentStartEvent (renderers need it to show context usage).
@@ -344,7 +345,7 @@ public sealed class AgentLoop : IAgentLoop
         catch (Exception ex)
         {
             activity?.AddException(ex);
-            _logger.LogError(ex, "Agent loop failed");
+            _logger.LogError(ex, CoreResources.GetError("AgentFailed"), ex.Message);
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }

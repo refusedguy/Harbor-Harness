@@ -40,31 +40,16 @@ namespace Harbor.Core.Agents;
 ///         successful "tool returned an error" rather than throwing.
 ///     </para>
 /// </remarks>
-internal sealed class ToolDispatcher
+internal sealed class ToolDispatcher(
+    IToolRegistry tools,
+    IPermissionService permissions,
+    IEventBus eventBus,
+#pragma warning disable S6672
+    ILogger<AgentLoop> logger)
+#pragma warning restore S6672
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
-
-    private readonly IEventBus _eventBus;
-#pragma warning disable S6672 // Logger category should match enclosing type — ToolDispatcher is internal, sharing AgentLoop's logger is fine
-    private readonly ILogger<AgentLoop> _logger;
-#pragma warning restore S6672
-    private readonly IPermissionService _permissions;
-    private readonly IToolRegistry _tools;
-
-    public ToolDispatcher(
-        IToolRegistry tools,
-        IPermissionService permissions,
-        IEventBus eventBus,
-#pragma warning disable S6672
-        ILogger<AgentLoop> logger)
-#pragma warning restore S6672
-    {
-        _tools = tools;
-        _permissions = permissions;
-        _eventBus = eventBus;
-        _logger = logger;
-    }
 
     /// <summary>
     ///     Execute a batch of tool calls either sequentially (if any tool
@@ -140,7 +125,7 @@ internal sealed class ToolDispatcher
             var toolNameResult = ToolName.TryCreate(tc.ToolName);
             if (toolNameResult.IsSuccess)
             {
-                var toolResult = _tools.GetTool(toolNameResult.Value);
+                var toolResult = tools.GetTool(toolNameResult.Value);
                 if (toolResult.IsSuccess && toolResult.Value.ExecutionMode == ExecutionMode.Sequential)
                 {
                     return true;
@@ -175,7 +160,7 @@ internal sealed class ToolDispatcher
                 true);
         }
 
-        var toolResult = _tools.GetTool(toolNameResult.Value);
+        var toolResult = tools.GetTool(toolNameResult.Value);
         if (toolResult.IsFailure)
         {
             // Build the "available tools" list with a pooled StringBuilder instead of
@@ -183,7 +168,7 @@ internal sealed class ToolDispatcher
             string available;
             using (var avail = StringBuilderPool.Rent(128))
             {
-                var allTools = _tools.GetAllTools();
+                var allTools = tools.GetAllTools();
                 for (int i = 0; i < allTools.Count; i++)
                 {
                     if (avail.Builder.Length > 0) avail.Builder.Append(", ");
@@ -198,9 +183,9 @@ internal sealed class ToolDispatcher
                 true);
         }
 
-        await _eventBus.PublishAsync(new ToolExecutionStartEvent(
+        await eventBus.PublishAsync(new ToolExecutionStartEvent(
             toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
-        _logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
+        logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
 
         try
         {
@@ -213,20 +198,20 @@ internal sealed class ToolDispatcher
             {
                 activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
                 var invalid = ToolResult.Error(validation.Error);
-                await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+                await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, invalid, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
             }
 
             // Permission check
-            var permResponse = await _permissions.CheckAsync(
+            var permResponse = await permissions.CheckAsync(
                 agent.Name.Value, toolCall.ToolName, toolCall.Args, ct).ConfigureAwait(false);
 
             if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
                 var denied = ToolResult.Error("Permission denied");
-                await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+                await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, denied, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
             }
@@ -237,9 +222,9 @@ internal sealed class ToolDispatcher
             // eagerly before checking whether Debug is enabled. The guard eliminates
             // the per-tool-call string allocation when debug logging is off (the
             // common production case).
-            if (_logger.IsEnabled(LogLevel.Debug))
+            if (logger.IsEnabled(LogLevel.Debug))
             {
-                _logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+                logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
             }
             var ctx = new ToolContext(
                 session.Session.Id,
@@ -250,7 +235,7 @@ internal sealed class ToolDispatcher
                 session.Messages,
                 async (update, c) =>
                 {
-                    // §FP-003 (RESOLVED): previously `_ = _eventBus.PublishAsync(...)`
+                    // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
                     // was fire-and-forget — exceptions died as unobserved task exceptions
                     // and tool progress updates were silently dropped on bus back-pressure.
                     // The lambda is now async and awaits the publish with a try/catch so
@@ -258,25 +243,25 @@ internal sealed class ToolDispatcher
                     // still `Task` per the ToolContext.ReportProgress contract.
                     try
                     {
-                        await _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
+                        await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
                             .ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
+                        logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
                     }
                 },
                 // async/await instead of ContinueWith + .Result: the latter allocates a
                 // continuation Task and accesses .Result which (though safe here because
                 // the antecedent is already complete) is a foot-gun. The async state
                 // machine is slightly cheaper and clearer about intent.
-                async (req, c) => (await _permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
+                async (req, c) => (await permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
                 null!);
 
             var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);
 
-            _logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+            logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, result, result.IsError), ct).ConfigureAwait(false);
 
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
@@ -284,7 +269,7 @@ internal sealed class ToolDispatcher
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             var cancelled = ToolResult.Error("Tool execution was cancelled.");
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, cancelled, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
         }
@@ -292,9 +277,9 @@ internal sealed class ToolDispatcher
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            _logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
+            logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             var errored = ToolResult.Error($"Tool execution failed: {ex.Message}");
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, errored, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
         }

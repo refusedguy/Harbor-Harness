@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Storage.Jsonl;
@@ -28,22 +29,11 @@ namespace Harbor.Storage.Jsonl;
 /// </remarks>
 public sealed class JsonlSessionStore : ISessionStore
 {
-    // TODO(principles)[PERF, байтоебля]: JsonOptions uses reflection-based
-    // JsonSerializer.Deserialize<SessionHeaderEntry>(line, JsonOptions) — это
-    // генерит IL2026 warnings под NativeAOT и боксит record'ы. Для AOT нужен
-    // JsonTypeInfo<> через JsonSerializerContext. См. аудит §PERF-003, §AOT-001.
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
+    // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
+    // See JsonlCodecContext.cs for the registered types.
+    private static readonly JsonSerializerOptions JsonOptions = JsonlCodecContext.JsonOptions;
 
-    // TODO(principles)[CONCURRENCY]: простой `lock(_lock)` сериализует ВСЕ записи
-    // во ВСЕ сессии. Если одновременно идут 10 сессий, каждая ждет другую. Это OK
-    // для File.AppendAllText (atomic per-call), но плохо для batch-загрузки.
-    // Альтернатива: per-session SemaphoreSlim (Dictionary<sessionId, SemaphoreSlim>),
-    // либо System.Threading.Channels для write queue. См. аудит §PERF-004.
-    private readonly object _lock = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
     private readonly ILogger<JsonlSessionStore> _logger;
 
     /// <summary>
@@ -79,6 +69,12 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    private async ValueTask<SemaphoreSlim> GetSessionLockAsync(string sessionId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+    }
+
     /// <summary>
     ///     Create a new session and write its header to the JSONL file.
     /// </summary>
@@ -89,7 +85,7 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     <c>Directory.CreateDirectory</c> and <c>File.AppendAllText</c> are
     ///     synchronous I/O that do not accept a CT.
     /// </remarks>
-    public Task<Result<Session>> CreateAsync(
+    public async Task<Result<Session>> CreateAsync(
         string directory,
         string agentName,
         string providerId,
@@ -102,7 +98,9 @@ public sealed class JsonlSessionStore : ISessionStore
             var session = Session.Create(directory, agentName, providerId, modelId);
             string sessionFile = GetSessionFilePath(session.Id);
 
-            lock (_lock)
+            var semaphore = await GetSessionLockAsync(session.Id, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
                 ct.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
@@ -119,21 +117,24 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.ProviderId,
                     session.CreatedAt);
 
-                File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonOptions) + "\n");
+                File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry) + "\n");
+            }
+            finally
+            {
+                semaphore.Release();
             }
 
-            // New session — no cache entry to invalidate, but be defensive.
             _messageCache.TryRemove(session.Id, out _);
-            return Task.FromResult(Result.Success(session));
+            return Result.Success(session);
         }
         catch (OperationCanceledException)
         {
-            return Task.FromResult(Result.Failure<Session>("Operation was cancelled."));
+            return Result.Failure<Session>("Operation was cancelled.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to create session");
-            return Task.FromResult(Result.Failure<Session>(ex.Message));
+            return Result.Failure<Session>(ex.Message);
         }
     }
 
@@ -209,7 +210,7 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     mid-write. The guard at least prevents a write that has already been
     ///     cancelled by the time the call enters the critical section.
     /// </remarks>
-    public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    public async Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         try
         {
@@ -217,15 +218,14 @@ public sealed class JsonlSessionStore : ISessionStore
             string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile))
             {
-                // Invalidate any stale cache entry for the missing session.
                 _messageCache.TryRemove(sessionId, out _);
-                return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+                return Result.Failure($"Session '{sessionId}' not found.");
             }
 
-            lock (_lock)
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
-                // Re-check cancellation after acquiring the lock — the wait may
-                // have been long under contention.
                 ct.ThrowIfCancellationRequested();
 
                 var entry = new MessageEntry(
@@ -236,23 +236,24 @@ public sealed class JsonlSessionStore : ISessionStore
                     message.CreatedAt,
                     JsonlMessageCodec.SerializeMessagePayload(message));
 
-                File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonOptions) + "\n");
+                File.AppendAllText(sessionFile, JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry) + "\n");
+            }
+            finally
+            {
+                semaphore.Release();
             }
 
-            // Invalidate the parsed-message cache for this session. The next
-            // GetMessagesAsync call will re-parse from disk (the file has
-            // changed). Other sessions' cache entries are untouched.
             _messageCache.TryRemove(sessionId, out _);
-            return Task.FromResult(Result.Success());
+            return Result.Success();
         }
         catch (OperationCanceledException)
         {
-            return Task.FromResult(Result.Failure("Operation was cancelled."));
+            return Result.Failure("Operation was cancelled.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to append message to session {SessionId}", sessionId);
-            return Task.FromResult(Result.Failure(ex.Message));
+            return Result.Failure(ex.Message);
         }
     }
 
@@ -277,13 +278,6 @@ public sealed class JsonlSessionStore : ISessionStore
     ///         the cache for free on the second and subsequent calls.
     ///     </para>
     ///     <para>
-    ///         <b>TODO(principles)[PERF]:</b> на каждый чанк строки вызывается
-    ///         <c>JsonDocument.Parse(line)</c> — тысячи аллокаций. Для длинных
-    ///         сессий (10k+ строк) это существенный overhead даже с кэшем (первый
-    ///         reads всё ещё pays full parse). Альтернативы: (1) Utf8JsonReader
-    ///         на ReadOnlySpan&lt;byte&gt;, (2) MemoryPack-encoded binary формат
-    ///         вместо JSONL (есть же [MemoryPackable] на всех сообщениях!),
-    ///         (3) streaming deserialize. См. аудит §PERF-005.
     ///     </para>
     /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
@@ -340,32 +334,41 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     before the file delete. <c>File.Delete</c> itself is synchronous I/O
     ///     that does not accept a CT.
     /// </remarks>
-    public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
+    public async Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
         try
         {
             ct.ThrowIfCancellationRequested();
-            // Always invalidate the cache — even if the file is missing, a
-            // stale cache entry should not survive a DeleteAsync call.
             _messageCache.TryRemove(sessionId, out _);
 
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (File.Exists(sessionFile))
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
-                File.Delete(sessionFile);
+                string sessionFile = GetSessionFilePath(sessionId);
+                if (File.Exists(sessionFile))
+                {
+                    File.Delete(sessionFile);
+                }
+                _sessionLocks.TryRemove(sessionId, out _);
+                return Result.Success();
             }
-            return Task.FromResult(Result.Success());
+            finally
+            {
+                semaphore.Release();
+            }
         }
         catch (OperationCanceledException)
         {
-            return Task.FromResult(Result.Failure("Operation was cancelled."));
+            return Result.Failure("Operation was cancelled.");
         }
         catch (Exception ex)
         {
-            return Task.FromResult(Result.Failure(ex.Message));
+            _logger.LogError(ex, "Failed to delete session {SessionId}", sessionId);
+            return Result.Failure(ex.Message);
         }
     }
-
+    
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
         try
@@ -419,21 +422,23 @@ public sealed class JsonlSessionStore : ISessionStore
         return Result.Success();
     }
 
-    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    public async Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
     {
         try
         {
             ct.ThrowIfCancellationRequested();
             string sessionFile = GetSessionFilePath(session.Id);
             if (!File.Exists(sessionFile))
-                return Task.FromResult(Result.Failure($"Session '{session.Id}' not found."));
+                return Result.Failure($"Session '{session.Id}' not found.");
 
-            lock (_lock)
+            var semaphore = await GetSessionLockAsync(session.Id, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
             {
                 ct.ThrowIfCancellationRequested();
                 var lines = File.ReadAllLines(sessionFile).ToList();
                 if (lines.Count == 0)
-                    return Task.FromResult(Result.Failure($"Session '{session.Id}' is empty."));
+                    return Result.Failure($"Session '{session.Id}' is empty.");
 
                 var header = new SessionHeaderEntry(
                     "session",
@@ -447,21 +452,25 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.ProviderId,
                     session.CreatedAt);
 
-                lines[0] = JsonSerializer.Serialize(header, JsonOptions);
+                lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
                 File.WriteAllLines(sessionFile, lines);
+            }
+            finally
+            {
+                semaphore.Release();
             }
 
             _messageCache.TryRemove(session.Id, out _);
-            return Task.FromResult(Result.Success());
+            return Result.Success();
         }
         catch (OperationCanceledException)
         {
-            return Task.FromResult(Result.Failure("Operation was cancelled."));
+            return Result.Failure("Operation was cancelled.");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
-            return Task.FromResult(Result.Failure(ex.Message));
+            return Result.Failure(ex.Message);
         }
     }
 
@@ -482,35 +491,18 @@ public sealed class JsonlSessionStore : ISessionStore
         CancellationToken ct)
     {
         var messages = new Dictionary<string, AgentMessage>();
-        var errors = new List<string>(capacity: 0); // capacity 0 → lazily allocated on first error
+        var errors = new List<string>(capacity: 0);
 
         using var reader = new StreamReader(sessionFile);
         while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
 
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                string? type = doc.RootElement.GetProperty("type").GetString();
-
-                if (type == "message")
-                {
-                    var msgResult = JsonlMessageCodec.DeserializeMessage(sessionId, doc.RootElement);
-                    if (msgResult.IsSuccess)
-                        messages[msgResult.Value.Id] = msgResult.Value; // latest entry wins
-                    else
-                        errors.Add(msgResult.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                // §ROP-001 (RESOLVED): per-line JSON parse errors are aggregated
-                // and logged at Warning level. Previously the caller silently
-                // swallowed these, leaving the user with a truncated session
-                // transcript and no diagnostic.
-                errors.Add($"Line parse failed: {ex.Message}");
-            }
+            var msgResult = ParseMessageLine(line, sessionId);
+            if (msgResult.IsSuccess)
+                messages[msgResult.Value.Id] = msgResult.Value;
+            else
+                errors.Add($"Line parse failed: {msgResult.Error}");
         }
 
         if (errors.Count > 0)
@@ -521,6 +513,345 @@ public sealed class JsonlSessionStore : ISessionStore
 
         var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
         return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
+    }
+
+    private static Result<AgentMessage> ParseMessageLine(string line, string sessionId)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(line));
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return Result.Failure<AgentMessage>("JSON does not start with an object");
+
+            string? type = null;
+            string? id = null;
+            DateTimeOffset createdAt = default;
+            string? parentId = null;
+            string? role = null;
+            JsonElement? payload = default;
+
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    break;
+
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                string propName = reader.GetString()!;
+                reader.Read();
+
+                switch (propName)
+                {
+                    case "type":
+                        type = reader.GetString()!;
+                        break;
+                    case "id":
+                        id = reader.GetString()!;
+                        break;
+                    case "createdAt":
+                        createdAt = reader.GetDateTimeOffset();
+                        break;
+                    case "parentId":
+                        if (reader.TokenType == JsonTokenType.String)
+                            parentId = reader.GetString()!;
+                        break;
+                    case "role":
+                        role = reader.GetString()!;
+                        break;
+                     case "payload":
+                        payload = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
+                        break;
+                }
+            }
+
+            if (type != "message")
+                return Result.Failure<AgentMessage>("Not a message line");
+
+            if (id is null)
+                return Result.Failure<AgentMessage>("missing 'id'");
+
+            if (role is null)
+                return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
+
+            if (payload is null)
+                return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
+
+            return role switch
+            {
+                "user" => ParseUserPayload(id, sessionId, createdAt, parentId, payload.Value),
+                "assistant" => ParseAssistantPayload(id, sessionId, createdAt, parentId, payload.Value),
+                "tool_result" => ParseToolResultPayload(id, sessionId, createdAt, parentId, payload.Value),
+                _ => Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'")
+            };
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"Line parse failed: {ex.Message}");
+        }
+    }
+
+    private static Result<AgentMessage> ParseUserPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return Result.Failure<AgentMessage>($"user message {id}: payload is not an object");
+
+            string? content = null;
+            string? agent = null;
+            string? model = null;
+
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    break;
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                string propName = reader.GetString()!;
+                reader.Read();
+
+                switch (propName)
+                {
+                    case "content":
+                        content = reader.GetString()!;
+                        break;
+                    case "agent":
+                        agent = reader.GetString()!;
+                        break;
+                    case "model":
+                        model = reader.GetString()!;
+                        break;
+                }
+            }
+
+            if (content is null || agent is null || model is null)
+                return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
+
+            return Result.Success<AgentMessage>(new UserMessage(id, sessionId, createdAt, content, agent, model, parentId));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"user message {id}: {ex.Message}");
+        }
+    }
+
+    private static Result<AgentMessage> ParseAssistantPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return Result.Failure<AgentMessage>($"assistant message {id}: payload is not an object");
+
+            List<ContentPart>? parts = null;
+            StopReason? stopReason = null;
+            Usage? usage = null;
+            string? model = null;
+            bool isSummary = false;
+            string? summaryFirstKeptId = null;
+
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    break;
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                string propName = reader.GetString()!;
+                reader.Read();
+
+                switch (propName)
+                {
+                    case "parts":
+                        parts = ParseParts(ref reader);
+                        break;
+                    case "stopReason":
+                        var srStr = reader.GetString()!;
+                        stopReason = StopReasonJsonConverter.Parse(srStr);
+                        break;
+                    case "usage":
+                        usage = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.Usage) as Usage ?? new Usage(0, 0);
+                        break;
+                    case "model":
+                        model = reader.GetString()!;
+                        break;
+                    case "isSummary":
+                        isSummary = reader.GetBoolean();
+                        break;
+                    case "summaryFirstKeptId":
+                        summaryFirstKeptId = reader.GetString()!;
+                        break;
+                }
+            }
+
+            if (parts is null)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'parts'");
+            if (stopReason is null)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'stopReason'");
+            if (usage is null)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'usage'");
+            if (model is null)
+                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'model'");
+
+            return Result.Success<AgentMessage>(new AssistantMessage(id, sessionId, createdAt, parts, stopReason.Value, usage, model, parentId, isSummary, summaryFirstKeptId));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"assistant message {id}: {ex.Message}");
+        }
+    }
+
+    private static Result<AgentMessage> ParseToolResultPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
+
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                return Result.Failure<AgentMessage>($"tool_result message {id}: payload is not an object");
+
+            List<ToolResultEntry>? results = null;
+
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject)
+                    break;
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+
+                string propName = reader.GetString()!;
+                reader.Read();
+
+                if (propName == "results" && reader.TokenType == JsonTokenType.StartArray)
+                {
+                    results = new List<ToolResultEntry>();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.StartObject)
+                            continue;
+
+                        string? tcId = null;
+                        string? tn = null;
+                        string? output = null;
+                        bool isError = false;
+
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                        {
+                            if (reader.TokenType != JsonTokenType.PropertyName)
+                                continue;
+                            string rProp = reader.GetString()!;
+                            reader.Read();
+
+                            switch (rProp)
+                            {
+                                case "toolCallId":
+                                    tcId = reader.GetString()!;
+                                    break;
+                                case "toolName":
+                                    tn = reader.GetString()!;
+                                    break;
+                                case "output":
+                                    output = reader.GetString()!;
+                                    break;
+                                case "isError":
+                                    isError = reader.GetBoolean();
+                                    break;
+                            }
+                        }
+
+                        if (tcId is null || tn is null || output is null)
+                            return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
+
+                        results.Add(new ToolResultEntry(tcId, tn, output, isError));
+                    }
+                }
+            }
+
+            if (results is null)
+                return Result.Failure<AgentMessage>($"tool_result message {id}: missing 'results'");
+
+            return Result.Success<AgentMessage>(new ToolResultMessage(id, sessionId, createdAt, results, parentId));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<AgentMessage>($"tool_result message {id}: {ex.Message}");
+        }
+    }
+
+    private static List<ContentPart> ParseParts(ref Utf8JsonReader reader)
+    {
+        var parts = new List<ContentPart>();
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject)
+                continue;
+
+            string? partType = null;
+            string? text = null;
+            string? partId = null;
+            string? toolName = null;
+            JsonElement? args = null;
+            string? path = null;
+            string? mimeType = null;
+            long sizeBytes = 0;
+
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName)
+                    continue;
+                string pProp = reader.GetString()!;
+                reader.Read();
+
+                switch (pProp)
+                {
+                    case "type":
+                        partType = reader.GetString()!;
+                        break;
+                    case "text":
+                        text = reader.GetString()!;
+                        break;
+                    case "id":
+                        partId = reader.GetString()!;
+                        break;
+                    case "toolName":
+                        toolName = reader.GetString()!;
+                        break;
+                    case "args":
+                        args = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
+                        break;
+                    case "path":
+                        path = reader.GetString()!;
+                        break;
+                    case "mimeType":
+                        mimeType = reader.GetString()!;
+                        break;
+                    case "sizeBytes":
+                        sizeBytes = reader.GetInt64();
+                        break;
+                }
+            }
+
+            ContentPart? part = partType switch
+            {
+                "text" => new TextPart(text!),
+                "thinking" => new ThinkingPart(text!),
+                "tool_call" => new ToolCallPart(partId!, toolName!, args!.Value),
+                "file" => new FilePart(path!, mimeType!, sizeBytes),
+                _ => null
+            };
+
+            if (part is not null)
+                parts.Add(part);
+        }
+
+        return parts;
     }
 
     private string GetSessionFilePath(string sessionId) =>
@@ -534,7 +865,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
         try
         {
-            return JsonSerializer.Deserialize<SessionHeaderEntry>(firstLine, JsonOptions);
+            return JsonSerializer.Deserialize<SessionHeaderEntry>(firstLine, JsonlCodecContext.Default.SessionHeaderEntry);
         }
         catch
         {

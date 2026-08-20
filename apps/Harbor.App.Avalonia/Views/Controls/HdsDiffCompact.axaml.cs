@@ -79,7 +79,7 @@ public sealed partial class HdsDiffCompact : UserControl
 
     private IBrush? TryGetBrush(string key)
     {
-        return Application.Current?.Resources[key] as IBrush;
+        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
     }
 
     private void RootBorder_PointerPressed(object? sender, PointerPressedEventArgs e)

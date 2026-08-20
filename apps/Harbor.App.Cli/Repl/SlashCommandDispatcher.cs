@@ -112,4 +112,15 @@ internal sealed class SlashCommandDispatcher
 
     private static void PrintTuiOptions() => Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen");
     private static void PrintStorageOptions() => Console.WriteLine("Storage: jsonl (default), memory, sqlite");
+
+    public static async Task<int?> TryHandleAsync(string commandName, string[] args, ICommand[] commands, CancellationToken ct = default)
+    {
+        var command = commands.FirstOrDefault(c => c.Name.Equals(commandName, StringComparison.OrdinalIgnoreCase));
+        if (command is not null)
+        {
+            await command.ExecuteAsync(args, ct).ConfigureAwait(false);
+            return 0;
+        }
+        return null;
+    }
 }

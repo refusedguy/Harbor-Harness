@@ -135,7 +135,7 @@ public sealed class CsPluginLoader
                 _host.LoggerFactory.CreateLogger<CachingCompiler>()))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>()),
+                new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>(), _host.LoggerFactory),
                 _logger))
             .WithOptions(o =>
             {
@@ -183,7 +183,7 @@ public sealed class CsPluginLoader
                 _host.LoggerFactory.CreateLogger<CachingCompiler>()))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>()),
+                new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>(), _host.LoggerFactory),
                 _logger))
             .WithOptions(o => o.PluginRoot = _globalPluginsDir)
             .Build(_host.LoggerFactory.CreateLogger<PluginHost>());
@@ -217,7 +217,7 @@ public sealed class CsPluginLoader
             _host.LoggerFactory.CreateLogger<CachingCompiler>());
         var instantiator = new ReflectionPluginInstantiator();
         var registrar = new SafePluginRegistrar(
-            new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>()),
+            new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>(), _host.LoggerFactory),
             _logger);
 
         return new PluginHostBuilder()

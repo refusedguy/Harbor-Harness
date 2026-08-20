@@ -12,7 +12,7 @@ public partial class ModalHostView : UserControl
 {
     public ModalHostView()
     {
-        if (Application.Current is not null)
+        if (global::Avalonia.Application.Current is not null)
             InitializeComponent();
     }
 

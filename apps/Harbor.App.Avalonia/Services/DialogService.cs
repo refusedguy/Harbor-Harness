@@ -27,7 +27,7 @@ public sealed class AvaloniaFilePicker : IFilePicker
 
     /// <summary>Get the main window (used as the parent for dialogs).</summary>
     private static Window? MainWindow =>
-        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        (global::Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<string>> PickFilesAsync(string title, bool allowMultiple = false, CancellationToken cancellationToken = default)
@@ -80,7 +80,7 @@ public sealed class DialogService : IDialogService
 
     /// <summary>Get the main window (used as the parent for dialogs).</summary>
     private static Window? MainWindow =>
-        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        (global::Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
 
     /// <summary>Show a confirmation dialog with OK / Cancel buttons.</summary>
     public async Task<bool> ConfirmAsync(string title, string message, string okLabel = "OK", string cancelLabel = "Cancel", CancellationToken cancellationToken = default)

@@ -29,45 +29,46 @@ namespace Harbor.Storage.Jsonl;
 internal static class JsonlMessageCodec
 {
     /// <summary>
-    ///     Web-default JSON serializer options shared with
-    ///     <c>JsonlSessionStore</c> for <c>Usage</c> deserialization.
+    ///     JSON serializer options — delegates to <see cref="JsonlCodecContext.JsonOptions" />
+    ///     which includes the AOT-registered <see cref="JsonlCodecContext" /> as
+    ///     <see cref="JsonSerializerOptions.TypeInfoResolver" />.
     /// </summary>
-    public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    public static JsonSerializerOptions JsonOptions => JsonlCodecContext.JsonOptions;
 
     /// <summary>
     ///     Project an <see cref="AgentMessage" /> into the role-specific
     ///     payload shape that gets serialized as the <c>payload</c> field
-    ///     of the JSONL line.
+    ///     of the JSONL line. Uses named DTO types (AOT-registered in
+    ///     <see cref="JsonlCodecContext" />) instead of anonymous types.
     /// </summary>
     public static object SerializeMessagePayload(AgentMessage message)
     {
         return message switch
         {
-            UserMessage u => new { content = u.Content, agent = u.Agent, model = u.Model },
-            AssistantMessage a => new
-            {
-                parts = a.Parts.Select(SerializePart).ToArray(),
-                stopReason = a.StopReason.ToString().ToLowerInvariant(),
-                usage = a.Usage,
-                model = a.Model,
-                isSummary = a.IsSummary,
-                summaryFirstKeptId = a.SummaryFirstKeptId
-            },
-            ToolResultMessage tr => new { results = tr.Results },
-            _ => new { }
+            UserMessage u => new UserPayload(u.Content, u.Agent, u.Model),
+            AssistantMessage a => new AssistantPayload(
+                Parts: a.Parts.Select(SerializePart).ToArray(),
+                StopReason: a.StopReason.ToString().ToLowerInvariant(),
+                Usage: a.Usage,
+                Model: a.Model,
+                IsSummary: a.IsSummary,
+                SummaryFirstKeptId: a.SummaryFirstKeptId),
+            ToolResultMessage tr => new ToolResultPayload(tr.Results.ToArray()),
+            _ => new UnknownPartPayload("unknown")
         };
     }
 
     /// <summary>
-    ///     Project a single <see cref="ContentPart" /> into its JSON shape.
+    ///     Project a single <see cref="ContentPart" /> into its JSON shape
+    ///     using a named DTO type (AOT-registered).
     /// </summary>
     public static object SerializePart(ContentPart part) => part switch
     {
-        TextPart t => new { type = "text", text = t.Text },
-        ThinkingPart th => new { type = "thinking", text = th.Text },
-        ToolCallPart tc => new { type = "tool_call", id = tc.Id, toolName = tc.ToolName, args = tc.Args },
-        FilePart f => new { type = "file", path = f.Path, mimeType = f.MimeType, sizeBytes = f.SizeBytes },
-        _ => new { type = "unknown" }
+        TextPart t => new TextPartPayload("text", t.Text),
+        ThinkingPart th => new ThinkingPartPayload("thinking", th.Text),
+        ToolCallPart tc => new ToolCallPartPayload("tool_call", tc.Id, tc.ToolName, tc.Args),
+        FilePart f => new FilePartPayload("file", f.Path, f.MimeType, f.SizeBytes),
+        _ => new UnknownPartPayload("unknown")
     };
 
     /// <summary>
@@ -146,7 +147,7 @@ internal static class JsonlMessageCodec
             }
 
             var usage = payload.TryGetProperty("usage", out var u)
-                ? u.Deserialize<Usage>(JsonOptions) ?? new Usage(0, 0)
+                ? JsonSerializer.Deserialize<Usage>(u.GetRawText(), JsonlCodecContext.Default.Usage) ?? new Usage(0, 0)
                 : new Usage(0, 0);
             string? model = payload.TryGetProperty("model", out var m) ? m.GetString() : null;
             if (model is null)

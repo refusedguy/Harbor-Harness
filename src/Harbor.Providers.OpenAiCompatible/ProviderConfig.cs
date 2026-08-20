@@ -11,7 +11,8 @@ public sealed class ProviderConfig
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
+        AllowTrailingCommas = true,
+        TypeInfoResolver = OpenAiCompatibleJsonContext.Default
     };
     public string Id { get; set; } = "";
     public string DisplayName { get; set; } = "";
@@ -47,7 +48,8 @@ public sealed class ProviderConfig
         try
         {
             string json = File.ReadAllText(path);
-            var config = JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions) ?? throw new InvalidOperationException("Deserialization returned null");
+            var config = JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions) 
+                ?? throw new InvalidOperationException("Deserialization returned null");
             if (string.IsNullOrEmpty(config.Id))
                 return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'id'.");
             if (string.IsNullOrEmpty(config.BaseUrl))

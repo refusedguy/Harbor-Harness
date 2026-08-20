@@ -274,14 +274,17 @@ public sealed class ProviderRegistry : IProviderRegistry
 public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
 {
     private readonly IProviderRegistry _registry;
+    private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>
     ///     Construct a builder backed by the supplied registry.
     /// </summary>
     /// <param name="registry">The registry to wrap.</param>
-    public ProviderRegistryBuilder(IProviderRegistry registry)
+    /// <param name="loggerFactory">Logger factory for provider construction.</param>
+    public ProviderRegistryBuilder(IProviderRegistry registry, ILoggerFactory loggerFactory)
     {
         _registry = registry;
+        _loggerFactory = loggerFactory;
     }
 
     /// <inheritdoc />
@@ -332,5 +335,15 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
         }
 
         _registry.Register(result.Value, factory);
+    }
+
+    /// <summary>
+    ///     Register a provider via a factory interface.
+    /// </summary>
+    /// <param name="factory">The factory producing the client instance.</param>
+    public void AddProvider(IProviderFactory factory)
+    {
+        var pid = factory.ProviderId;
+        _registry.Register(pid, () => factory.CreateClient(_loggerFactory));
     }
 }

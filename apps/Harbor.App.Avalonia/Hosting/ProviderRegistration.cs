@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAiCompatible;
@@ -34,19 +35,12 @@ internal static class ProviderRegistration
         IModelCatalog modelCatalog)
     {
         var providerRegistry = new ProviderRegistry(loggerFactory.CreateLogger<ProviderRegistry>());
-        var pb = new ProviderRegistryBuilder(providerRegistry);
-        pb.AddProvider("ollama", () => new OllamaLlmClient(
-            new HttpClient
-            {
-                BaseAddress = new Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434"),
-                // 10s timeout — the default 100s makes the UI feel frozen when
-                // Ollama isn't running. The ProviderBrowserViewModel adds its
-                // own 5s cancellation token on top, so a missing Ollama is
-                // surfaced as a quick "no models" rather than a 100s hang.
-                Timeout = TimeSpan.FromSeconds(10)
-            },
-            new OllamaConfig(),
-            loggerFactory.CreateLogger<OllamaLlmClient>()));
+        var pb = new ProviderRegistryBuilder(providerRegistry, loggerFactory);
+        pb.AddProvider(new OllamaProviderFactory(new HttpClient
+        {
+            BaseAddress = new Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434"),
+            Timeout = TimeSpan.FromSeconds(10)
+        }));
         RegisterJsonProviders(pb, authResolver, modelCatalog, loggerFactory);
         providerRegistry.Freeze();
         return providerRegistry;
@@ -149,4 +143,21 @@ internal static class ProviderRegistration
             current = Path.GetDirectoryName(current);
         }
     }
+}
+
+internal sealed class OllamaProviderFactory : IProviderFactory
+{
+    private readonly HttpClient _httpClient;
+
+    public OllamaProviderFactory(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
+
+    public ProviderId ProviderId => ProviderId.Create("ollama");
+
+    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new OllamaLlmClient(
+        _httpClient,
+        new OllamaConfig(),
+        loggerFactory.CreateLogger<OllamaLlmClient>());
 }

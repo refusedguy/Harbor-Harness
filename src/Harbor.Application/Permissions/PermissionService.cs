@@ -1,3 +1,4 @@
+using Harbor.Core.Resources;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Core.Permissions;
 /// <summary>
@@ -87,7 +88,7 @@ public sealed class PermissionService : IPermissionService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "User ask failed");
+            _logger.LogError(ex, CoreResources.GetError("PermissionDenied"), request.Permission, request.Pattern);
             return Result.Success(new PermissionResponse(PermissionAction.Deny, false));
         }
     }

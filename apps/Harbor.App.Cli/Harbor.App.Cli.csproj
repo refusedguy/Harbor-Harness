@@ -105,7 +105,35 @@
       with a double-hyphen prefix, omitted here per XML-comment rules).
     -->
     <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithScripting)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+
+    <!--
+      NativeAOT configuration. Enabled automatically when HARBOR_MINIMAL=true
+      (which disables Roslyn scripting, non-AOT-friendly providers, etc.).
+      Can also be enabled explicitly: dotnet publish -p:HarborWithAot=true.
+      When AOT is on, force all incompatible features off so the trimmed
+      binary stays functional.
+    -->
+    <HarborWithAot Condition="'$(HARBOR_MINIMAL)' == 'true'">true</HarborWithAot>
+    <HarborWithAot Condition="'$(HarborWithAot)' == ''">false</HarborWithAot>
+    <HarborWithAot Condition="'$(HarborWithAot)' == 'true'">true</HarborWithAot>
+
+    <DefineConstants Condition="'$(HarborWithAot)' == 'true'">$(DefineConstants);HARBOR_WITH_AOT</DefineConstants>
   </PropertyGroup>
+
+  <!-- NativeAOT: strip, optimize for speed. JSON serialization hot paths
+       are migrated to JsonSerializerContext source generation (§PERF-002/§PERF-005)
+       so AOT analysis passes cleanly. Only third-party assemblies that emit
+       their own trimming warnings (MemoryPack, MessagePack) are suppressed. -->
+  <PropertyGroup Condition="'$(HarborWithAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+    <NativeAOTErrorOnWarningsAsErrors>false</NativeAOTErrorOnWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050;IL2104;IL3053</WarningsNotAsErrors>
+  </PropertyGroup>
+
 
   <!--
     Expose internals to the DI test project so it can call the internal

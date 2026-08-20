@@ -1,8 +1,8 @@
 using System.Diagnostics;
-
+using System.Threading.Tasks;
 namespace Harbor.Cli.Commands;
 
-public sealed class DaemonCommand
+public sealed class DaemonCommand : ICommand
 {
     private static readonly string HarborDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor");
@@ -17,8 +17,11 @@ public sealed class DaemonCommand
         _error = error;
     }
 
-    public int Execute(string[] args)
+    public string Name => "daemon";
+
+    public async Task<int> ExecuteAsync(string[] args, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         if (args.Length == 0)
         {
             PrintUsage();
@@ -26,16 +29,17 @@ public sealed class DaemonCommand
         }
 
         string subcommand = args[0].ToLowerInvariant();
-        if (subcommand == "start") return Start();
-        if (subcommand == "stop") return Stop();
-        if (subcommand == "status") return Status();
+        if (subcommand == "start") return await StartAsync(ct).ConfigureAwait(false);
+        if (subcommand == "stop") return await StopAsync(ct).ConfigureAwait(false);
+        if (subcommand == "status") return await StatusAsync(ct).ConfigureAwait(false);
         _error.WriteLine($"Unknown subcommand: {subcommand}");
         PrintUsage();
         return 1;
     }
 
-    private int Start()
+    private async Task<int> StartAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (IsRunning())
         {
             _output.WriteLine("Daemon is already running.");
@@ -74,8 +78,9 @@ public sealed class DaemonCommand
         }
     }
 
-    private int Stop()
+    private async Task<int> StopAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!File.Exists(PidFile))
         {
             _output.WriteLine("No daemon PID file found.");
@@ -96,7 +101,9 @@ public sealed class DaemonCommand
             if (!process.HasExited)
             {
                 process.Kill(entireProcessTree: true);
-                process.WaitForExit(5000);
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+                await process.WaitForExitAsync(linkedCts.Token).ConfigureAwait(false);
             }
         }
         catch (ArgumentException)
@@ -117,8 +124,9 @@ public sealed class DaemonCommand
         return 0;
     }
 
-    private int Status()
+    private async Task<int> StatusAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!File.Exists(PidFile))
         {
             _output.WriteLine("Daemon is not running (no PID file).");

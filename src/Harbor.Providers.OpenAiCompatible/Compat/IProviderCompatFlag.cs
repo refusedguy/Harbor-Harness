@@ -16,7 +16,7 @@ namespace Harbor.Providers.OpenAiCompatible.Compat;
 ///     <para>
 ///         <see cref="ProviderId" /> is informational — the registration code is
 ///         expected to populate <see cref="ProviderConfig.Quirks" /> with only the
-///         flags whose <see cref="ProviderId" /> matches the config's id. <see cref="Apply" />
+///         flags whose <see cref="ProviderId" /> matches the config's id. <see cref="Write" />
 ///         is therefore free to assume it only runs on its target provider and does
 ///         not need to re-check the id internally.
 ///     </para>
@@ -27,13 +27,19 @@ public interface IProviderCompatFlag
     public ProviderId ProviderId { get; }
 
     /// <summary>
-    ///     Mutate the request payload in place to satisfy the provider's quirks.
-    ///     Implementations MUST be idempotent and thread-safe (they may be called
-    ///     concurrently across StreamAsync invocations on the same client).
+    ///     Return true if the named standard property should be omitted from the JSON payload.
     /// </summary>
-    /// <param name="payload">The mutable JSON payload being built for the chat-completions request.</param>
+    /// <param name="propertyName">The JSON property name being considered.</param>
     /// <param name="request">The originating <see cref="LlmRequest" /> (read-only context).</param>
-    public void Apply(Dictionary<string, object?> payload, LlmRequest request);
+    /// <returns>True to skip writing this property.</returns>
+    public bool IsPropertyOmitted(string propertyName, LlmRequest request);
+
+    /// <summary>
+    ///     Write any additional/compat-specific properties into the writer after standard ones.
+    /// </summary>
+    /// <param name="writer">The <see cref="Utf8JsonWriter" /> targeting the request body.</param>
+    /// <param name="request">The originating <see cref="LlmRequest" /> (read-only context).</param>
+    public void Write(Utf8JsonWriter writer, LlmRequest request);
 }
 
 /// <summary>
@@ -46,13 +52,15 @@ public sealed class DeepSeekReasonerCompatFlag : IProviderCompatFlag
     public ProviderId ProviderId { get; } = ProviderId.Create("deepseek");
 
     /// <inheritdoc />
-    public void Apply(Dictionary<string, object?> payload, LlmRequest request)
+    public bool IsPropertyOmitted(string propertyName, LlmRequest request)
     {
-        if (request.Model.Contains("reasoner", StringComparison.OrdinalIgnoreCase))
-        {
-            payload.Remove("temperature");
-        }
+        if (propertyName == "temperature" && request.Model.Contains("reasoner", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
     }
+
+    /// <inheritdoc />
+    public void Write(Utf8JsonWriter writer, LlmRequest request) { }
 }
 
 /// <summary>
@@ -66,11 +74,14 @@ public sealed class GroqMaxTokensCompatFlag : IProviderCompatFlag
     public ProviderId ProviderId { get; } = ProviderId.Create("groq");
 
     /// <inheritdoc />
-    public void Apply(Dictionary<string, object?> payload, LlmRequest request)
+    public bool IsPropertyOmitted(string propertyName, LlmRequest request) => false;
+
+    /// <inheritdoc />
+    public void Write(Utf8JsonWriter writer, LlmRequest request)
     {
-        if (!payload.ContainsKey("max_tokens") && !payload.ContainsKey("max_completion_tokens"))
+        if (!request.MaxOutputTokens.HasValue)
         {
-            payload["max_tokens"] = 4096;
+            writer.WriteNumber("max_tokens", 4096);
         }
     }
 }

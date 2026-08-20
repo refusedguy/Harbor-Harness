@@ -22,7 +22,7 @@ namespace Harbor.App.Avalonia;
 ///     constructs the <see cref="MainViewModel" />, and shows the
 ///     <see cref="MainWindow" />.
 /// </summary>
-public partial class App : Application
+public partial class App : global::Avalonia.Application
 {
     /// <summary>
     ///     The DI container. Set by <c>Program.cs</c> in the Avalonia

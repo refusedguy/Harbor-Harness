@@ -11,79 +11,61 @@ namespace Harbor.Core.Sessions;
 ///     Performance: pooled StringBuilder, index-based cut-point (no List allocations),
 ///     pooled buffers for serializing intermediate message text.
 /// </summary>
-public sealed class CompactionService : ICompactionService
+public sealed class CompactionService(
+    ITokenTracker tokenTracker,
+    IProviderRegistry providers,
+    ILogger<CompactionService> logger) : ICompactionService
 {
-    private const string SummarizationPrompt = """
-                                               You are creating a summary of the conversation so far to provide context to a teammate who is taking over the task.
-
-                                               The summary should preserve ALL important information needed to continue the work, including:
-                                               - The original goal and current state
-                                               - Decisions made and their rationale
-                                               - Files read and modified (with paths)
-                                               - Commands run and their outcomes
-                                               - Errors encountered and how they were resolved
-                                               - Outstanding questions or blockers
-
-                                               Output the summary in this exact Markdown structure:
-
-                                               ## Goal
-                                               [What the user is trying to accomplish]
-
-                                               ## Constraints & Preferences
-                                               [Any constraints, preferences, or rules discovered]
-
-                                               ## Progress
-                                               ### Done
-                                               - [Completed tasks]
-
-                                               ### In Progress
-                                               - [Currently being worked on]
-
-                                               ### Blocked
-                                               - [Items blocked, with reason]
-
-                                               ## Key Decisions
-                                               - [Decision: rationale]
-
-                                               ## Next Steps
-                                               - [Immediate next actions]
-
-                                               ## Critical Context
-                                               [Any other information needed to continue]
-
-                                               ## Files
-                                               ### Read
-                                               - `path/to/file`
-
-                                               ### Modified
-                                               - `path/to/file` — what was changed
-
-                                               Rules:
-                                               - Keep every section, even when empty (use "None" if no content).
-                                               - Preserve exact file paths, commands, error strings, identifiers.
-                                               - Do not mention the summary process or that context was compacted.
-                                               - Be concise but complete — every detail matters.
-                                               """;
-    private readonly ILogger<CompactionService> _logger;
-    private readonly IProviderRegistry _providers;
-
-    private readonly ITokenTracker _tokenTracker;
-
-    /// <summary>
-    ///     Construct a <see cref="CompactionService" /> wired to the supplied services.
-    /// </summary>
-    /// <param name="tokenTracker">The token tracker used to estimate tokens and decide when to compact.</param>
-    /// <param name="providers">The provider registry for invoking the summarization LLM call.</param>
-    /// <param name="logger">The logger.</param>
-    public CompactionService(
-        ITokenTracker tokenTracker,
-        IProviderRegistry providers,
-        ILogger<CompactionService> logger)
-    {
-        _tokenTracker = tokenTracker;
-        _providers = providers;
-        _logger = logger;
-    }
+    private const string SummarizationPrompt = 
+        "You are creating a summary of the conversation so far to provide context to a teammate who is taking over the task.\n" +
+        "\n" +
+        "The summary should preserve ALL important information needed to continue the work, including:\n" +
+        "- The original goal and current state\n" +
+        "- Decisions made and their rationale\n" +
+        "- Files read and modified (with paths)\n" +
+        "- Commands run and their outcomes\n" +
+        "- Errors encountered and how they were resolved\n" +
+        "- Outstanding questions or blockers\n" +
+        "\n" +
+        "Output the summary in this exact Markdown structure:\n" +
+        "\n" +
+        "## Goal\n" +
+        "[What the user is trying to accomplish]\n" +
+        "\n" +
+        "## Constraints & Preferences\n" +
+        "[Any constraints, preferences, or rules discovered]\n" +
+        "\n" +
+        "## Progress\n" +
+        "### Done\n" +
+        "- [Completed tasks]\n" +
+        "\n" +
+        "### In Progress\n" +
+        "- [Currently being worked on]\n" +
+        "\n" +
+        "### Blocked\n" +
+        "- [Items blocked, with reason]\n" +
+        "\n" +
+        "## Key Decisions\n" +
+        "- [Decision: rationale]\n" +
+        "\n" +
+        "## Next Steps\n" +
+        "- [Immediate next actions]\n" +
+        "\n" +
+        "## Critical Context\n" +
+        "[Any other information needed to continue]\n" +
+        "\n" +
+        "## Files\n" +
+        "### Read\n" +
+        "- `path/to/file`\n" +
+        "\n" +
+        "### Modified\n" +
+        "- `path/to/file` — what was changed\n" +
+        "\n" +
+        "Rules:\n" +
+        "- Keep every section, even when empty (use \"None\" if no content).\n" +
+        "- Preserve exact file paths, commands, error strings, identifiers.\n" +
+        "- Do not mention the summary process or that context was compacted.\n" +
+        "- Be concise but complete — every detail matters.";
 
     /// <summary>
     ///     Token reserve below the model's context window that triggers compaction.
@@ -103,7 +85,7 @@ public sealed class CompactionService : ICompactionService
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
-        int estimated = _tokenTracker.EstimateTokens(messages);
+        int estimated = tokenTracker.EstimateTokens(messages);
         return estimated > model.ContextWindow - ReserveTokens;
     }
 
@@ -132,7 +114,7 @@ public sealed class CompactionService : ICompactionService
                 return Result.Failure<CompactionResult>(providerIdResult.Error);
             }
 
-            var clientResult = _providers.GetClient(providerIdResult.Value);
+            var clientResult = providers.GetClient(providerIdResult.Value);
             if (clientResult.IsFailure)
             {
                 return Result.Failure<CompactionResult>(clientResult.Error);
@@ -169,9 +151,9 @@ public sealed class CompactionService : ICompactionService
             int headTokens = 0;
             for (int i = 0; i < tailStart; i++)
             {
-                headTokens += _tokenTracker.EstimateMessage(messages[i]);
+                headTokens += tokenTracker.EstimateMessage(messages[i]);
             }
-            int summaryTokens = _tokenTracker.Estimate(summary);
+            int summaryTokens = tokenTracker.Estimate(summary);
             int tokensSaved = headTokens - summaryTokens;
 
             // 5. Capture first kept (tail) message id (if any) without allocating a Skip().FirstOrDefault().
@@ -202,7 +184,7 @@ public sealed class CompactionService : ICompactionService
         catch (Exception ex)
         {
             stopwatch.Stop();
-            _logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
+            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
             return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
         }
     }
@@ -221,7 +203,7 @@ public sealed class CompactionService : ICompactionService
 
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            int msgTokens = _tokenTracker.EstimateMessage(messages[i]);
+            int msgTokens = tokenTracker.EstimateMessage(messages[i]);
             if (tailTokens + msgTokens > keepRecentTokens)
             {
                 break;

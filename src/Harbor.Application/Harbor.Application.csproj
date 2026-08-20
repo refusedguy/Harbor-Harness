@@ -45,4 +45,17 @@
     <Using Remove="System.Linq"/>
   </ItemGroup>
 
+  <PropertyGroup>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\LogMessages.resx">
+      <LogicalName>Harbor.Core.LogMessages.resources</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\ErrorMessages.resx">
+      <LogicalName>Harbor.Core.ErrorMessages.resources</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

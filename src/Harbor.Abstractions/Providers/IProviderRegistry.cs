@@ -86,4 +86,10 @@ public interface IProviderRegistryBuilder
     /// <param name="providerId">The provider id string.</param>
     /// <param name="factory">Factory producing the client (invoked lazily).</param>
     public void AddProvider(string providerId, Func<ILlmClient> factory);
+
+    /// <summary>
+    ///     Register a provider via a factory interface.
+    /// </summary>
+    /// <param name="factory">Factory producing the client instance.</param>
+    public void AddProvider(IProviderFactory factory);
 }

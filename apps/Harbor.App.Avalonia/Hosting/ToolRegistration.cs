@@ -19,18 +19,68 @@ internal static class ToolRegistration
     public static ToolRegistry Build(ILoggerFactory loggerFactory)
     {
         var toolRegistry = new ToolRegistry();
-        var tb = new ToolRegistryBuilder(toolRegistry);
-        tb.AddTool(() => new ReadTool(loggerFactory.CreateLogger<ReadTool>()));
-        tb.AddTool(() => new WriteTool(loggerFactory.CreateLogger<WriteTool>()));
-        tb.AddTool(() => new EditTool(loggerFactory.CreateLogger<EditTool>()));
-        tb.AddTool(() => new BashTool(loggerFactory.CreateLogger<BashTool>()));
-        tb.AddTool(() => new GlobTool(loggerFactory.CreateLogger<GlobTool>()));
-        tb.AddTool(() => new GrepTool(loggerFactory.CreateLogger<GrepTool>()));
-        tb.AddTool(() => new LsTool(loggerFactory.CreateLogger<LsTool>()));
-        tb.AddTool(() => new PatchTool(loggerFactory.CreateLogger<PatchTool>()));
-        tb.AddTool(() => new NotebookTool(loggerFactory.CreateLogger<NotebookTool>()));
-        tb.AddTool(() => new TreeTool(loggerFactory.CreateLogger<TreeTool>()));
+        var tb = new ToolRegistryBuilder(toolRegistry, loggerFactory);
+        tb.AddTool(new ReadToolFactory());
+        tb.AddTool(new WriteToolFactory());
+        tb.AddTool(new EditToolFactory());
+        tb.AddTool(new BashToolFactory());
+        tb.AddTool(new GlobToolFactory());
+        tb.AddTool(new GrepToolFactory());
+        tb.AddTool(new LsToolFactory());
+        tb.AddTool(new PatchToolFactory());
+        tb.AddTool(new NotebookToolFactory());
+        tb.AddTool(new TreeToolFactory());
         toolRegistry.Freeze();
         return toolRegistry;
     }
+}
+
+file sealed class ReadToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new ReadTool(loggerFactory.CreateLogger<ReadTool>());
+}
+
+file sealed class WriteToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new WriteTool(loggerFactory.CreateLogger<WriteTool>());
+}
+
+file sealed class EditToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new EditTool(loggerFactory.CreateLogger<EditTool>());
+}
+
+file sealed class BashToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new BashTool(loggerFactory.CreateLogger<BashTool>());
+}
+
+file sealed class GlobToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new GlobTool(loggerFactory.CreateLogger<GlobTool>());
+}
+
+file sealed class GrepToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new GrepTool(loggerFactory.CreateLogger<GrepTool>());
+}
+
+file sealed class LsToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new LsTool(loggerFactory.CreateLogger<LsTool>());
+}
+
+file sealed class PatchToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new PatchTool(loggerFactory.CreateLogger<PatchTool>());
+}
+
+file sealed class NotebookToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new NotebookTool(loggerFactory.CreateLogger<NotebookTool>());
+}
+
+file sealed class TreeToolFactory : IToolFactory
+{
+    public ITool CreateTool(ILoggerFactory loggerFactory) => new TreeTool(loggerFactory.CreateLogger<TreeTool>());
 }

@@ -81,6 +81,12 @@ public interface IToolRegistryBuilder
     /// </summary>
     /// <param name="factory">Factory producing the tool instance.</param>
     public void AddTool(Func<ITool> factory);
+
+    /// <summary>
+    ///     Register a tool via a factory interface.
+    /// </summary>
+    /// <param name="factory">Factory producing the tool instance.</param>
+    public void AddTool(IToolFactory factory);
 }
 
 /// <summary>

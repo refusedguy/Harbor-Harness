@@ -262,7 +262,7 @@ public sealed partial class CodeBlock : UserControl
 
     private static IBrush TryFindBrush(string key, IBrush fallback)
     {
-        if (Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
+        if (global::Avalonia.Application.Current?.Resources.TryGetResource(key, null, out object? r) == true && r is IBrush b)
         {
             return b;
         }
@@ -271,7 +271,7 @@ public sealed partial class CodeBlock : UserControl
 
     private static FontFamily TryFindFont()
     {
-        if (Application.Current?.Resources.TryGetResource("FontMono", null, out object? r) == true && r is FontFamily f)
+        if (global::Avalonia.Application.Current?.Resources.TryGetResource("FontMono", null, out object? r) == true && r is FontFamily f)
         {
             return f;
         }

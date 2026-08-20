@@ -143,6 +143,7 @@
     <PackageVersion Include="NonBlocking" Version="2.1.2" />
     <PackageVersion Include="KZDev.PerfUtils" Version="3.0.1" />
     <PackageVersion Include="MemoryPack" Version="1.21.4" />
+    <PackageVersion Include="MemoryPack.Core" Version="1.21.4" />
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
     <!-- ── MessagePack (cross-platform binary serialization for IPC) ───────── -->
     <!--

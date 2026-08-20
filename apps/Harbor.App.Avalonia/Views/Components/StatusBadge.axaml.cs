@@ -38,7 +38,7 @@ public sealed partial class StatusBadge : UserControl
         // Skip InitializeComponent in headless test mode (no Application
         // means ReflectionBinding throws). Real apps still call it via
         // the auto-generated partial class from the AXAML compile task.
-        if (Application.Current is not null)
+        if (global::Avalonia.Application.Current is not null)
         {
             InitializeComponent();
         }

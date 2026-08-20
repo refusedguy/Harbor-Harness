@@ -56,7 +56,7 @@ public sealed class ToastBrushConverter : IValueConverter
             ToastKind.Error => "StateErrorBrush",
             _ => "AccentPrimaryBrush"
         };
-        return Application.Current?.Resources[key] as IBrush;
+        return global::Avalonia.Application.Current?.Resources[key] as IBrush;
     }
 
     /// <inheritdoc />

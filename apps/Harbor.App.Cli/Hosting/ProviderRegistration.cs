@@ -92,7 +92,7 @@ internal static class ProviderRegistration
         {
             try
             {
-                var config = JsonSerializer.Deserialize<ProviderConfig>(content);
+                var config = JsonSerializer.Deserialize<ProviderConfig>(content, OpenAiCompatibleJsonContext.Default.Options);
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;
                 if (config.Id is "anthropic" or "openai" or "ollama") continue;
                 if (!seenIds.Add(config.Id)) continue;

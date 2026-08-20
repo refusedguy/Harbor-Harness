@@ -118,24 +118,32 @@ public static class Program
                 return await RunInteractiveAsync(args, scriptPath);
             }
 
-            string command = args[0].ToLowerInvariant();
-            _logger.LogInformation("Command: {Command}", command);
-            return command switch
-            {
-                "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
-                "providers" => await RunListProvidersAsync(),
-                "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
-                "sessions" => await RunListSessionsAsync(),
-                "tui" => PrintTuiOptions(),
-                "storage" => PrintStorageOptions(),
-                "setup" => await RunSetupAsync(),
-                "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
-                "config" => await RunConfigAsync(args.Skip(1).ToArray()),
-                "logs" => RunLogsCommand(args.Skip(1).ToArray()),
-                "help" or "--help" or "-h" => PrintHelp(),
-                "version" or "--version" or "-v" => PrintVersion(),
-                _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
-            };
+        string command = args[0].ToLowerInvariant();
+        _logger.LogInformation("Command: {Command}", command);
+
+        var cliCommands = new ICommand[]
+        {
+            new LogsCommand(Console.Out, Console.Error),
+            new DaemonCommand(Console.Out, Console.Error),
+        };
+        if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
+            return exitCode;
+
+        return command switch
+        {
+            "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
+            "providers" => await RunListProvidersAsync(),
+            "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
+            "sessions" => await RunListSessionsAsync(),
+            "tui" => PrintTuiOptions(),
+            "storage" => PrintStorageOptions(),
+            "setup" => await RunSetupAsync(),
+            "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
+            "config" => await RunConfigAsync(args.Skip(1).ToArray()),
+            "help" or "--help" or "-h" => PrintHelp(),
+            "version" or "--version" or "-v" => PrintVersion(),
+            _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
+        };
         }
         catch (Exception ex)
         {
@@ -523,10 +531,10 @@ public static class Program
     ///     <c>--last</c> (print the latest file), <c>--follow</c> (tail -f),
     ///     <c>--clean</c> (delete all log files).
     /// </summary>
-    private static int RunLogsCommand(string[] args)
+    private static async Task<int> RunLogsCommand(string[] args)
     {
         var cmd = new LogsCommand(Console.Out, Console.Error);
-        return cmd.Execute(args);
+        return await cmd.ExecuteAsync(args).ConfigureAwait(false);
     }
 
     // ── Helpers ──

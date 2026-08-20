@@ -56,12 +56,6 @@ public interface IConfigStore
 /// </summary>
 public sealed class JsonConfigStore : IConfigStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private readonly string _configPath;
     private readonly object _lock = new();
     private readonly ILogger<JsonConfigStore>? _logger;
@@ -89,7 +83,7 @@ public sealed class JsonConfigStore : IConfigStore
                 }
 
                 string json = File.ReadAllText(_configPath);
-                var raw = JsonSerializer.Deserialize<RawConfigDto>(json, JsonOptions);
+                var raw = JsonSerializer.Deserialize(json, ConfigJsonContext.OptionsContext.RawConfigDto);
                 if (raw is null)
                     return Task.FromResult(Result.Failure<HarborConfig>("config.json is empty"));
 
@@ -128,7 +122,8 @@ public sealed class JsonConfigStore : IConfigStore
 
                 // Serialize the canonical flat shape (not the composed sections)
                 // so a reload reads the same fields back via RawConfigDto.
-                string json = JsonSerializer.Serialize(config.ToRaw(), JsonOptions);
+                
+                string json = JsonSerializer.Serialize(config.ToRaw()!, ConfigJsonContext.OptionsContext.RawConfigDto);
                 File.WriteAllText(_configPath, json);
                 _logger?.LogDebug("Config saved to {Path}", _configPath);
                 return Task.FromResult(Result.Success());

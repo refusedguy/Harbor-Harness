@@ -57,7 +57,7 @@ public sealed partial class EmptyState : UserControl
 
     public EmptyState()
     {
-        if (Application.Current is not null)
+        if (global::Avalonia.Application.Current is not null)
             InitializeComponent();
     }
 

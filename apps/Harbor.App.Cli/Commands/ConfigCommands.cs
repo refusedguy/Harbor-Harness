@@ -9,19 +9,8 @@ namespace Harbor.Cli.Commands;
 /// <summary>
 ///     /setup — run onboarding wizard.
 /// </summary>
-public sealed class SetupCommand : ISlashCommand
+public sealed class SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer) : ISlashCommand
 {
-    private readonly Func<string, Task<string>> _reader;
-
-    private readonly OnboardingWizard _wizard;
-    private readonly Action<string> _writer;
-
-    public SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer)
-    {
-        _wizard = wizard;
-        _reader = reader;
-        _writer = writer;
-    }
     public string Name => "setup";
     public string Description => "Run setup wizard (provider, API key, model)";
     public string Usage => "/setup";
@@ -29,7 +18,7 @@ public sealed class SetupCommand : ISlashCommand
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
-        var result = await _wizard.RunAsync(_reader, _writer, ct).ConfigureAwait(false);
+        var result = await wizard.RunAsync(reader, writer, ct).ConfigureAwait(false);
         return result;
     }
 }

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/apps/">
+    <Project Path="apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj" />
     <Project Path="apps/Harbor.App.Blazor/Harbor.App.Blazor.csproj" />
     <Project Path="apps/Harbor.App.Maui/Harbor.App.Maui.csproj" />
     <Project Path="apps/Harbor.App.Wpf/Harbor.App.Wpf.csproj" />
