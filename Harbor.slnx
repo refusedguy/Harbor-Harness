@@ -99,6 +99,8 @@
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Blazor.Tests/Harbor.App.Blazor.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
+        <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>
+        <Project Path="tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj"/>
         <!-- Maui.Tests excluded on Linux (needs maui-tizen workload). -->
         <!-- Wpf.Tests excluded on Linux (needs Windows Desktop runtime). Restore on Windows. -->
         <Project Path="tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj"/>
@@ -111,6 +113,7 @@
         <Project Path="tests/Harbor.Storage.Tests/Harbor.Storage.Tests.csproj"/>
         <Project Path="tests/Harbor.Tools.Builtin.Tests/Harbor.Tools.Builtin.Tests.csproj"/>
         <Project Path="tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj"/>
+        <Project Path="tests/Harbor.Ui.Framework.Tests/Harbor.Ui.Framework.Tests.csproj"/>
     </Folder>
 
     <Folder Name="/tests/Benchmarks/">
