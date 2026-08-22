@@ -102,6 +102,10 @@ public sealed class EditTool : ITool
     {
         string rawPath = args.GetProperty("path").GetString()!;
 
+        if (SymlinkGuard.ContainsTraversalSegments(rawPath))
+            return ToolResult.Error(
+                "Path traversal ('..') is not allowed; provide a direct path without '..' segments.");
+
         string path;
         try
         {
@@ -118,6 +122,10 @@ public sealed class EditTool : ITool
             return ToolResult.Error($"Path is a directory: {path}");
         if (!File.Exists(path))
             return ToolResult.Error($"File not found: {path}");
+
+        var symlinkCheck = SymlinkGuard.Check(path);
+        if (symlinkCheck.IsFailure)
+            return ToolResult.Error(symlinkCheck.Error);
 
         string original;
         try

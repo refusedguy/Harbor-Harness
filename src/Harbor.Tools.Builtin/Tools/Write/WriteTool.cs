@@ -65,6 +65,11 @@ public sealed class WriteTool : ITool
         CancellationToken cancellationToken = default)
     {
         string rawPath = args.GetProperty("path").GetString()!;
+
+        if (SymlinkGuard.ContainsTraversalSegments(rawPath))
+            return ToolResult.Error(
+                "Path traversal ('..') is not allowed; provide a direct path without '..' segments.");
+
         string content = args.GetProperty("content").GetString() ?? string.Empty;
         bool createDirs = GetBoolDefaultTrue(args, "createDirs");
 
@@ -85,6 +90,10 @@ public sealed class WriteTool : ITool
         }
 
         _logger.LogInformation("Writing: {Path} ({Chars} chars)", path, content.Length);
+
+        var symlinkCheck = SymlinkGuard.Check(path);
+        if (symlinkCheck.IsFailure)
+            return ToolResult.Error(symlinkCheck.Error);
 
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory, not a file: {path}");
