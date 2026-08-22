@@ -1,6 +1,7 @@
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Immutable;
 using TUnit.Assertions;
@@ -14,6 +15,8 @@ namespace Harbor.Ui.Framework.Tests;
 internal sealed class TestDispatcherAdapter : IDispatcherAdapter
 {
     public event EventHandler<UiState>? StateChanged;
+
+    public void Raise(UiState state) => StateChanged?.Invoke(this, state);
 
     public void Post(Action action) => action();
 
@@ -39,6 +42,8 @@ public class TestChatViewModel : ChatViewModelBase
     }
 
     public int OnStoreChangedCallCount { get; private set; }
+
+    public new void ApplySelectors(UiState state) => base.ApplySelectors(state);
 
     protected override void OnStoreChanged(UiState state)
     {
@@ -165,7 +170,7 @@ public class ChatViewModelBaseTests
         var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
 
         var state = new UiState { IsStreaming = true, IsAgentRunning = false };
-        dispatcher.StateChanged?.Invoke(dispatcher, state);
+        dispatcher.Raise(state);
 
         await Assert.That(vm.IsStreaming).IsTrue();
         await Assert.That(vm.OnStoreChangedCallCount).IsEqualTo(1);

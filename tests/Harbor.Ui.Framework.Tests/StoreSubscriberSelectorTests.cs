@@ -1,30 +1,11 @@
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
 namespace Harbor.Ui.Framework.Tests;
-
-/// <summary>
-///     Test double for <see cref="IDispatcherAdapter" /> — no-ops so tests stay synchronous.
-/// </summary>
-internal sealed class TestDispatcherAdapter : IDispatcherAdapter
-{
-    public event EventHandler<UiState>? StateChanged;
-
-    public void Post(Action action) => action();
-
-    public T Invoke<T>(Func<T> func) => func();
-
-    public void Bind(UiStore store)
-    {
-    }
-
-    public void Unbind(UiStore store)
-    {
-    }
-}
 
 /// <summary>
 ///     Concrete <see cref="StoreSubscriberViewModel" /> exposing protected members for testing.
@@ -60,8 +41,8 @@ public class StoreSubscriberSelectorTests
         int countA = 0;
         int countB = 0;
 
-        vm.RegisterSelector<UiState>(s => s.ScrollOffset, v => countA++);
-        vm.RegisterSelector<UiState>(s => s.Status, v => countB++);
+        vm.RegisterSelector(s => s.ScrollOffset, v => countA++);
+        vm.RegisterSelector(s => s.Status, v => countB++);
 
         vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "running" });
 
@@ -75,7 +56,7 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         int count = 0;
 
-        vm.RegisterSelector<UiState>(s => s.ScrollOffset, v => count++);
+        vm.RegisterSelector(s => s.ScrollOffset, v => count++);
 
         vm.ApplySelectors(new UiState { ScrollOffset = 5 });
         vm.ApplySelectors(new UiState { ScrollOffset = 5 });
@@ -90,7 +71,7 @@ public class StoreSubscriberSelectorTests
         int count = 0;
         int lastValue = -1;
 
-        vm.RegisterSelector<UiState>(s => s.ScrollOffset, v =>
+        vm.RegisterSelector(s => s.ScrollOffset, v =>
         {
             count++;
             lastValue = v;
@@ -110,7 +91,7 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         int count = 0;
 
-        vm.RegisterSelector<UiState>(s => s.ScrollOffset, v => count++);
+        vm.RegisterSelector(s => s.ScrollOffset, v => count++);
 
         vm.ApplySelectors(new UiState { ScrollOffset = 5 });
         vm.ResetSelectors();
@@ -125,7 +106,7 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         string? lastStatus = null;
 
-        vm.RegisterSelector<UiState>(s => s.Status, v => lastStatus = v);
+        vm.RegisterSelector(s => s.Status, v => lastStatus = v);
 
         vm.ApplySelectors(new UiState { Status = "idle" });
 
@@ -138,7 +119,7 @@ public class StoreSubscriberSelectorTests
         var vm = new TestableStoreSubscriberViewModel();
         int count = 0;
 
-        vm.RegisterSelector<UiState>(
+        vm.RegisterSelector(
             s => s.Status,
             v => count++,
             StringComparer.OrdinalIgnoreCase);
@@ -156,8 +137,8 @@ public class StoreSubscriberSelectorTests
         int scrollCount = 0;
         int statusCount = 0;
 
-        vm.RegisterSelector<UiState>(s => s.ScrollOffset, v => scrollCount++);
-        vm.RegisterSelector<UiState>(s => s.Status, v => statusCount++);
+        vm.RegisterSelector(s => s.ScrollOffset, v => scrollCount++);
+        vm.RegisterSelector(s => s.Status, v => statusCount++);
 
         vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "running" });
         vm.ApplySelectors(new UiState { ScrollOffset = 5, Status = "idle" });

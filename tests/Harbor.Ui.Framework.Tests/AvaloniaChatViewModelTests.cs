@@ -40,7 +40,7 @@ public sealed class TestableHookTrackingViewModel : StoreSubscriberViewModel
 
     public void SimulateStateChange(UiState state)
     {
-        Dispatcher.StateChanged?.Invoke(this, state);
+        ((TestDispatcherAdapter)Dispatcher).Raise(state);
     }
 }
 
@@ -70,7 +70,7 @@ public sealed class TrackingOrderViewModel : StoreSubscriberViewModel
 
     public void SimulateStateChange(UiState state)
     {
-        Dispatcher.StateChanged?.Invoke(this, state);
+        ((TestDispatcherAdapter)Dispatcher).Raise(state);
     }
 }
 
@@ -105,7 +105,7 @@ public sealed class SelectorTrackingViewModel : StoreSubscriberViewModel
 
     public void SimulateStateChange(UiState state)
     {
-        Dispatcher.StateChanged?.Invoke(this, state);
+        ((TestDispatcherAdapter)Dispatcher).Raise(state);
     }
 }
 
