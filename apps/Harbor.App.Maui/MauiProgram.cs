@@ -77,7 +77,10 @@ public static class MauiProgram
         builder.Services.AddSingleton<IProviderRegistry, ProviderRegistry>();
         builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
         builder.Services.AddSingleton<IAgentRegistry, AgentRegistry>();
-        builder.Services.AddSingleton<IPermissionService, PermissionService>();
+        builder.Services.AddSingleton<IPermissionService>(sp => new PermissionService(
+            sp.GetRequiredService<IAgentRegistry>(),
+            sp.GetRequiredService<ILogger<PermissionService>>(),
+            workspaceRoot: Directory.GetCurrentDirectory()));
         builder.Services.AddSingleton<ISessionStore, MemorySessionStore>();
         builder.Services.AddSingleton<ISystemPromptBuilder, SystemPromptBuilder>();
         builder.Services.AddSingleton<ITokenTracker, TokenTracker>();

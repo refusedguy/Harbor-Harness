@@ -233,7 +233,8 @@ internal static partial class HostBuilder
             sp.GetRequiredService<ILogger<CompactionService>>()));
         builder.Services.AddSingleton<IPermissionService>(sp => new PermissionService(
             sp.GetRequiredService<IAgentRegistry>(),
-            sp.GetRequiredService<ILogger<PermissionService>>()));
+            sp.GetRequiredService<ILogger<PermissionService>>(),
+            workspaceRoot: Directory.GetCurrentDirectory()));
     }
 
     private static void ApplyEnvOverrides(HarborConfig config)

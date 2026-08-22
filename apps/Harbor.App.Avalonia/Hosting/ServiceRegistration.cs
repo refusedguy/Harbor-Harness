@@ -105,7 +105,8 @@ internal static class ServiceRegistration
             sp.GetRequiredService<ILogger<CompactionService>>()));
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
             agentRegistry,
-            sp.GetRequiredService<ILogger<PermissionService>>()));
+            sp.GetRequiredService<ILogger<PermissionService>>(),
+            workspaceRoot: Directory.GetCurrentDirectory()));
     }
 
     /// <summary>

@@ -174,7 +174,10 @@ public partial class App : Application
 
         // Event bus + permission service + message converter (required by AgentLoop)
         services.AddSingleton<IEventBus, InMemoryEventBus>();
-        services.AddSingleton<IPermissionService, PermissionService>();
+        services.AddSingleton<IPermissionService>(sp => new PermissionService(
+            sp.GetRequiredService<IAgentRegistry>(),
+            sp.GetRequiredService<ILogger<PermissionService>>(),
+            workspaceRoot: Directory.GetCurrentDirectory()));
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<ITokenTracker, TokenTracker>();
 

@@ -44,12 +44,30 @@ public class PermissionServiceTests
             new PermissionRule("read", "*", PermissionAction.Allow));
 
         var (svc, _) = CreateService(agent);
-        var args = Args(("path", "/some/file.txt"));
+        var args = Args(("path", "some/file.txt"));
 
         var result = await svc.CheckAsync("code", "read", args);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
+    }
+
+    [Test]
+    public async Task CheckAsync_AbsolutePath_EscapesToDeny_WithoutAsker()
+    {
+        // A1 security hardening: rooted paths carry no workspace-relative meaning,
+        // so glob Allow rules are skipped; with no user asker configured the
+        // resulting Ask escalates to Deny.
+        var agent = AgentWithRuleset(
+            new PermissionRule("read", "*", PermissionAction.Allow));
+
+        var (svc, _) = CreateService(agent);
+        var args = Args(("path", "/some/file.txt"));
+
+        var result = await svc.CheckAsync("code", "read", args);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
 
     [Test]
@@ -143,16 +161,16 @@ public class PermissionServiceTests
     public async Task CheckAsync_ExtractsPathForFileTools()
     {
         var agent = AgentWithRuleset(
-            new PermissionRule("edit", "/safe/*", PermissionAction.Allow),
+            new PermissionRule("edit", "safe/*", PermissionAction.Allow),
             new PermissionRule("edit", "*", PermissionAction.Deny));
 
         var (svc, _) = CreateService(agent);
 
-        var allowedResult = await svc.CheckAsync("code", "edit", Args(("path", "/safe/file.txt")));
+        var allowedResult = await svc.CheckAsync("code", "edit", Args(("path", "safe/file.txt")));
         await Assert.That(allowedResult.IsSuccess).IsTrue();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
-        var deniedResult = await svc.CheckAsync("code", "edit", Args(("path", "/unsafe/file.txt")));
+        var deniedResult = await svc.CheckAsync("code", "edit", Args(("path", "unsafe/file.txt")));
         await Assert.That(deniedResult.IsSuccess).IsTrue();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }

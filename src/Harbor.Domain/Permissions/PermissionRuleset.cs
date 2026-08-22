@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
@@ -156,18 +157,126 @@ public sealed record PermissionRuleset
     /// <param name="permission">The permission name (typically the tool name, e.g. <c>read</c>, <c>bash</c>).</param>
     /// <param name="argPath">The argument path (e.g. file path for <c>read</c>, command string for <c>bash</c>).</param>
     /// <returns>The action to take; <see cref="PermissionAction.Ask" /> if no rule matches.</returns>
+    /// <remarks>
+    ///     <para>
+    ///         For the <c>bash</c> tool (A2): commands identified as destructive by
+    ///         <see cref="BashArgMatcher.IsDestructiveCommand" /> are denied before any rule walk
+    ///         — glob deny patterns cannot express flag-swapped or compound spellings such as
+    ///         <c>rm -fr /</c> or <c>cd / &amp;&amp; rm -rf .</c>. Deny rules are then tested against
+    ///         BOTH the raw command AND the argv-derived targets from
+    ///         <see cref="BashArgMatcher.GetDenyMatchTargets" /> for every bash command, so an
+    ///         absolute invocation like <c>/usr/bin/sudo ls</c> hits a <c>sudo *</c> deny even
+    ///         without shell metacharacters. Commands containing shell metacharacters
+    ///         (<c>; | &amp; ` $(&lt; &gt;</c>, newlines) outside quotes are never matched by Allow
+    ///         rules — the decision escalates to Ask so glob patterns like <c>cat *</c> cannot
+    ///         silently authorize <c>cat f; rm -rf ~</c>.
+    ///     </para>
+    ///     <para>
+    ///         For path-like tools (<see cref="PathGuardTools" />) whose argument contains a
+    ///         <c>..</c> segment or is rooted (A1/A2): glob Allow patterns must not silently
+    ///         authorize traversal escapes (<c>src/*</c> matching <c>src/../../../etc/passwd</c>)
+    ///         and absolute paths carry no workspace-relative meaning inside a ruleset, so Allow
+    ///         rules are skipped and the decision falls through to Ask (or an earlier matching
+    ///         Deny). Only an exact literal rule pattern (no glob metacharacters) may still
+    ///         allow such an argument — it can only match that one string, so it cannot
+    ///         over-match.
+    ///     </para>
+    /// </remarks>
     public PermissionAction Evaluate(string permission, string argPath)
     {
         var rules = _sortedRules;
+        bool isBash = permission.Equals("bash", StringComparison.OrdinalIgnoreCase);
+
+        // A2: recursive-force deletions of dangerous targets are always denied, regardless
+        // of how the flags are spelled or whether the rm sits in a compound command tail.
+        if (isBash && BashArgMatcher.IsDestructiveCommand(argPath))
+            return PermissionAction.Deny;
+
+        bool bashMetachars = isBash && BashArgMatcher.HasShellMetacharacters(argPath);
+        // A2: computed for EVERY bash command, not just metacharacter-bearing ones, so
+        // Deny rules see argv[0] / basename / normalized-command targets of all segments.
+        IReadOnlyList<string>? denyTargets = isBash ? BashArgMatcher.GetDenyMatchTargets(argPath) : null;
+        bool pathGuard = PathGuardTools.Contains(permission) && HasUnsafePathShape(argPath);
+
         for (int i = 0; i < rules.Length; i++)
         {
             ref readonly var rule = ref rules[i];
             if (!rule.MatchesPermission(permission)) continue;
+
+            if (denyTargets is not null)
+            {
+                if (rule.Action == PermissionAction.Deny
+                    && (rule.MatchesPattern(argPath) || MatchesAnyTarget(denyTargets, rule)))
+                {
+                    return PermissionAction.Deny;
+                }
+            }
+
+            if (rule.Action == PermissionAction.Allow)
+            {
+                if (bashMetachars) continue; // Allow must not match; anything else falls through to Ask.
+                if (pathGuard && !IsLiteralPattern(rule.Pattern)) continue;
+            }
+
             if (!rule.MatchesPattern(argPath)) continue;
             return rule.Action;
         }
 
         return PermissionAction.Ask; // default: ask user
+    }
+
+    /// <summary>
+    ///     Tools whose primary argument is a workspace-relative file path and therefore get the
+    ///     unsafe-path guard applied in <see cref="Evaluate" /> (A2).
+    /// </summary>
+    private static readonly FrozenSet<string> PathGuardTools = new[]
+    {
+        "read", "write", "edit", "ls", "glob", "grep", "tree", "ripgrep", "notebook", "patch", "mcp"
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     Returns <see langword="true" /> when <paramref name="argPath" /> either contains a
+    ///     <c>..</c> segment (traversal escape, on <c>/</c> or <c>\</c> separators) or is rooted
+    ///     (absolute), i.e. has no safe workspace-relative meaning for glob rule matching.
+    /// </summary>
+    private static bool HasUnsafePathShape(string argPath)
+    {
+        if (argPath.Length == 0) return false;
+        if (argPath[0] == '/' || argPath[0] == '\\' || Path.IsPathRooted(argPath)) return true;
+
+        int segmentStart = 0;
+        for (int i = 0; i <= argPath.Length; i++)
+        {
+            if (i < argPath.Length && argPath[i] != '/' && argPath[i] != '\\') continue;
+            int len = i - segmentStart;
+            if (len == 2 && argPath[segmentStart] == '.' && argPath[segmentStart + 1] == '.') return true;
+            segmentStart = i + 1;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     Returns <see langword="true" /> when the glob pattern contains no <c>*</c>/<c>?</c>
+    ///     metacharacters, meaning it can only ever match its literal subject and therefore
+    ///     cannot over-match an unsafe path shape.
+    /// </summary>
+    private static bool IsLiteralPattern(string pattern)
+    {
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            if (pattern[i] == '*' || pattern[i] == '?') return false;
+        }
+        return true;
+    }
+
+    private static bool MatchesAnyTarget(IReadOnlyList<string> targets, PermissionRule rule)
+    {
+        for (int i = 0; i < targets.Count; i++)
+        {
+            if (rule.MatchesPattern(targets[i])) return true;
+        }
+        return false;
     }
 
     private static string KeyFor(PermissionRule rule) => rule.Permission + ":" + rule.Pattern;

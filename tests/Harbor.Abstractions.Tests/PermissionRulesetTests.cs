@@ -60,8 +60,14 @@ public class PermissionRulesetTests
         });
 
         var merged = PermissionRuleset.Default.Merge(userRules);
-        var action = merged.Evaluate("write", "/etc/passwd");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
+        // Relative workspace path: user Allow override applies.
+        var relative = merged.Evaluate("write", "src/Program.cs");
+        await Assert.That(relative).IsEqualTo(PermissionAction.Allow);
+
+        // A1 (security hardening): rooted paths have no workspace-relative meaning,
+        // so glob Allow rules are skipped and the decision falls through to Ask.
+        var absolute = merged.Evaluate("write", "/etc/passwd");
+        await Assert.That(absolute).IsEqualTo(PermissionAction.Ask);
     }
 
     [Test]
