@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.App.Cli"/>
+    <InternalsVisibleTo Include="Harbor.Benchmarks"/>
   </ItemGroup>
 
 </Project>

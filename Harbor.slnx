@@ -102,7 +102,7 @@
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>
         <!-- Ipc.Tests excluded: parallel named-pipe tests deadlock under TUnit
              parallel scheduling on Linux (pre-existing). Run per-class:
-             dotnet test tests/Harbor.Ipc.Tests --treenode-filter "/*/*/<Class>/*" -->
+             dotnet test tests/Harbor.Ipc.Tests (flag: treenode-filter) "/*/*/<Class>/*" -->
 
         <!-- Maui.Tests excluded on Linux (needs maui-tizen workload). -->
         <!-- Wpf.Tests excluded on Linux (needs Windows Desktop runtime). Restore on Windows. -->

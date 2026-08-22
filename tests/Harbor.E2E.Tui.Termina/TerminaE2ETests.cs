@@ -153,6 +153,14 @@ public class TerminaE2ETests : E2eTestBase
         await driver.SendInputAsync("hello world\r").ConfigureAwait(false);
 
         bool sawResponse = await driver.WaitForTextAsync("Hello from the mock LLM!", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        if (!sawResponse)
+        {
+            // Failure diagnostics: dump the ANSI-stripped screen so the actual
+            // UI state (error banner, empty chat, partial text) is visible in CI logs.
+            string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
+            string tail = screen.Length > 1200 ? screen[^1200..] : screen;
+            Console.WriteLine($"[TUI-E2E] Streaming response not seen. Screen (last 1200 chars):\n{tail}");
+        }
         await Assert.That(sawResponse).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);

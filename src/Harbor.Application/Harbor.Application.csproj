@@ -50,6 +50,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="Resources\LogMessages.resx">
       <LogicalName>Harbor.Core.LogMessages.resources</LogicalName>
     </EmbeddedResource>
