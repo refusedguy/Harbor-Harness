@@ -30,7 +30,7 @@ public class ToolRegistryBenchmark
     {
         _frozenRegistry = new ToolRegistry();
         _unfrozenRegistry = new ToolRegistry();
-        _toolName = ToolName.Create("tool-0");
+        _toolName = ToolName.Create("tool_0");
         _permission = PermissionRuleset.Default;
 
         for (int i = 0; i < ToolCount; i++)
