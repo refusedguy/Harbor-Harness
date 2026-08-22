@@ -19,20 +19,57 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         _logger = logger;
     }
 
+    /// <summary>
+    ///     Register an MCP server by name with a single shell command (legacy form). The command
+    ///     is split on the first space into a program + arguments and launched as-is.
+    /// </summary>
     public Result Register(string name, string stdioCommand)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure("Server name cannot be empty.");
-        if (string.IsNullOrWhiteSpace(stdioCommand))
+
+        var (command, args) = SplitCommand(stdioCommand);
+        if (string.IsNullOrWhiteSpace(command))
             return Result.Failure("stdioCommand cannot be empty.");
+
+        return RegisterInternal(name, new McpServerStartInfo { Command = command, Args = args });
+    }
+
+    /// <summary>
+    ///     Register an MCP server by name with an explicit spawn description. This is the
+    ///     preferred form — it supports arguments, working directory, and environment overrides
+    ///     without shell-quoting the command line.
+    /// </summary>
+    public Result Register(string name, McpServerStartInfo startInfo)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure("Server name cannot be empty.");
+        if (startInfo is null)
+            return Result.Failure("startInfo cannot be null.");
+        if (string.IsNullOrWhiteSpace(startInfo.Command))
+            return Result.Failure("startInfo.Command cannot be empty.");
+
+        return RegisterInternal(name, startInfo);
+    }
+
+    private Result RegisterInternal(string name, McpServerStartInfo startInfo)
+    {
         if (_servers.ContainsKey(name))
             return Result.Failure($"MCP server '{name}' is already registered.");
 
-        _servers[name] = new ServerEntry(stdioCommand);
-        _logger?.LogInformation("Registered MCP server: {Name} -> {Command}", name, stdioCommand);
+        _servers[name] = new ServerEntry(startInfo);
+        _logger?.LogInformation("Registered MCP server: {Name} -> {Command}", name, startInfo.Command);
         return Result.Success();
     }
 
+    /// <summary>
+    ///     Load servers from a standard mcp.json file. Supports both the legacy flat map
+    ///     (<c>"name": "command"</c> / <c>"name": {"command": ...}</c>) and the industry
+    ///     <c>mcpServers</c> map (with <c>args</c>, <c>cwd</c>, <c>env</c>, <c>disabled</c>).
+    ///     Missing file → treated as empty config. <c>${projectRoot}</c>, <c>${home}</c>,
+    ///     <c>${harborHome}</c> macros in command/args/cwd/env are expanded. Unknown fields
+    ///     are ignored.
+    /// </summary>
     public Result RegisterFromConfig(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -49,57 +86,79 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             var json = File.ReadAllText(path);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-
             if (root.ValueKind != JsonValueKind.Object)
             {
                 _logger?.LogWarning("MCP config root is not an object: {Path}", path);
                 return Result.Failure("MCP config root must be an object.");
             }
 
+            JsonElement servers = root;
+            if (root.TryGetProperty("mcpServers", out var mcpServers) && mcpServers.ValueKind == JsonValueKind.Object)
+                servers = mcpServers;
+
             int loaded = 0;
-            foreach (var property in root.EnumerateObject())
+            foreach (var property in servers.EnumerateObject())
             {
                 string name = property.Name;
                 JsonElement value = property.Value;
 
-                string stdioCommand;
+                // Legacy flat form: "name": "command line" — kept for backward compatibility.
                 if (value.ValueKind == JsonValueKind.String)
                 {
-                    stdioCommand = value.GetString() ?? string.Empty;
-                }
-                else if (value.ValueKind == JsonValueKind.Object)
-                {
-                    if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
-                    {
-                        _logger?.LogWarning("MCP server '{Name}' missing 'command' string in config", name);
-                        continue;
-                    }
-
-                    var command = commandEl.GetString() ?? string.Empty;
-                    if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
-                    {
-                        var parts = new List<string> { command };
-                        foreach (var arg in argsEl.EnumerateArray())
-                        {
-                            if (arg.ValueKind == JsonValueKind.String)
-                                parts.Add(arg.GetString()!);
-                            else
-                                parts.Add(arg.GetRawText());
-                        }
-                        stdioCommand = string.Join(" ", parts);
-                    }
+                    var legacyResult = Register(name, value.GetString() ?? string.Empty);
+                    if (legacyResult.IsSuccess)
+                        loaded++;
                     else
-                    {
-                        stdioCommand = command;
-                    }
-                }
-                else
-                {
-                    _logger?.LogWarning("MCP server '{Name}' has unsupported config type", name);
+                        _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, legacyResult.Error);
                     continue;
                 }
 
-                var result = Register(name, stdioCommand);
+                if (value.ValueKind != JsonValueKind.Object)
+                {
+                    _logger?.LogWarning("MCP server '{Name}' config is not an object", name);
+                    continue;
+                }
+
+                if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
+                {
+                    _logger?.LogWarning("MCP server '{Name}' missing 'command' string in config", name);
+                    continue;
+                }
+
+                if (value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
+                {
+                    _logger?.LogInformation("MCP server '{Name}' is disabled; skipping", name);
+                    continue;
+                }
+
+                var command = commandEl.GetString() ?? string.Empty;
+                var args = new List<string>();
+                if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
+                    foreach (var a in argsEl.EnumerateArray())
+                        if (a.ValueKind == JsonValueKind.String) args.Add(a.GetString()!);
+
+                string? cwd = value.TryGetProperty("cwd", out var cwdEl) && cwdEl.ValueKind == JsonValueKind.String
+                    ? cwdEl.GetString()
+                    : null;
+
+                Dictionary<string, string>? env = null;
+                if (value.TryGetProperty("env", out var envEl) && envEl.ValueKind == JsonValueKind.Object)
+                {
+                    env = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (var e in envEl.EnumerateObject())
+                        if (e.Value.ValueKind == JsonValueKind.String)
+                            env[e.Name] = e.Value.GetString()!;
+                }
+
+                var startInfo = new McpServerStartInfo
+                {
+                    Command = command,
+                    Args = args,
+                    WorkingDirectory = cwd,
+                    Environment = env
+                };
+
+                var result = RegisterInternal(name, startInfo);
                 if (result.IsSuccess)
                     loaded++;
                 else
@@ -140,7 +199,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         try
         {
-            await using var transport = new McpJsonRpcTransport(process.Stdin, process.Stdout);
+            await using var transport = new McpJsonRpcTransport(process.Stdout, process.Stdin);
             int id = ++_nextId;
 
             using var requestDoc = JsonDocument.Parse($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{args.GetRawText()}}}");
@@ -176,37 +235,33 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         }
     }
 
+    private static (string Command, IReadOnlyList<string> Args) SplitCommand(string stdioCommand)
+    {
+        var span = stdioCommand.AsSpan().Trim();
+        var idx = span.IndexOf(' ');
+        if (idx < 0)
+            return (span.ToString(), Array.Empty<string>());
+
+        var command = span[..idx].ToString();
+        var rest = span[(idx + 1)..].ToString();
+        return (command, new[] { rest });
+    }
+
     private sealed class ServerEntry : IAsyncDisposable
     {
-        private readonly string _command;
+        private readonly McpServerStartInfo _startInfo;
         private McpProcessClient? _process;
 
-        public ServerEntry(string command) => _command = command;
+        public ServerEntry(McpServerStartInfo startInfo) => _startInfo = startInfo;
 
         public McpProcessClient? GetProcess()
         {
             if (_process is { HasExited: false }) return _process;
             _process?.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
-            var parts = _command.AsSpan().Trim();
-            var spaceIdx = parts.IndexOf(' ');
-            string fileName, arguments;
-
-            if (spaceIdx >= 0)
+            var psi = new ProcessStartInfo
             {
-                fileName = parts[..spaceIdx].ToString();
-                arguments = parts[(spaceIdx + 1)..].ToString();
-            }
-            else
-            {
-                fileName = parts.ToString();
-                arguments = string.Empty;
-            }
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                Arguments = arguments,
+                FileName = _startInfo.Command,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -214,9 +269,20 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 CreateNoWindow = true
             };
 
+            if (_startInfo.Args is { Count: > 0 })
+                foreach (var a in _startInfo.Args)
+                    psi.ArgumentList.Add(a);
+
+            if (!string.IsNullOrWhiteSpace(_startInfo.WorkingDirectory))
+                psi.WorkingDirectory = _startInfo.WorkingDirectory;
+
+            if (_startInfo.Environment is { Count: > 0 })
+                foreach (var (k, v) in _startInfo.Environment)
+                    psi.Environment[k] = v;
+
             try
             {
-                _process = new McpProcessClient(startInfo);
+                _process = new McpProcessClient(psi);
                 return _process;
             }
             catch

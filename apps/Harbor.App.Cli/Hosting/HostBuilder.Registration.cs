@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -141,14 +142,25 @@ internal static partial class HostBuilder
         var mcpRegistry = new McpRegistry(
             loggerFactory.CreateLogger<McpRegistry>());
 
-        string? mcpConfigPath = Environment.GetEnvironmentVariable("HARBOR_MCP_CONFIG");
-        if (string.IsNullOrEmpty(mcpConfigPath))
-        {
-            string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            mcpConfigPath = Path.Combine(homeDir, ".harbor", "harbor.mcp.json");
-        }
+        // Load MCP servers from the standard mcp.json files in overlay order
+        // (later wins): an explicit HARBOR_MCP_CONFIG, then ~/.harbor/mcp.json,
+        // then <project>/.harbor/mcp.json. ${projectRoot}/${home}/${harborHome}
+        // macros are expanded; disabled servers are skipped. No new protocol is
+        // introduced — each entry is just spawned as a stdio JSON-RPC process.
+        string projectRoot = Directory.GetCurrentDirectory();
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string harborHome = Path.Combine(homeDir, ".harbor");
+        var mcpLoader = new McpServersConfigLoader(projectRoot, homeDir, harborHome);
 
-        mcpRegistry.RegisterFromConfig(mcpConfigPath);
+        var mcpConfigPaths = new List<string>();
+        string? explicitMcp = Environment.GetEnvironmentVariable("HARBOR_MCP_CONFIG");
+        if (!string.IsNullOrEmpty(explicitMcp))
+            mcpConfigPaths.Add(explicitMcp);
+        mcpConfigPaths.Add(Path.Combine(harborHome, "mcp.json"));
+        mcpConfigPaths.Add(Path.Combine(projectRoot, ".harbor", "mcp.json"));
+
+        foreach (var entry in mcpLoader.Load(mcpConfigPaths.ToArray()))
+            mcpRegistry.Register(entry.Name, entry.StartInfo);
         var toolRegistry = CreateToolRegistry(tempSp, mcpRegistry, agentRegistry);
         var providerRegistry = CreateProviderRegistry(tempSp, harborDir, config);
         var eventBus = tempSp.GetRequiredService<IEventBus>();

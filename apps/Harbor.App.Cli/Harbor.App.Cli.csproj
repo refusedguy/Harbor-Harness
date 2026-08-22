@@ -128,7 +128,10 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>false</InvariantGlobalization>
     <StripSymbols>true</StripSymbols>
-    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+    <TrimMode>full</TrimMode>
+    <UseAppHost>false</UseAppHost>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
     <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
     <NativeAOTErrorOnWarningsAsErrors>false</NativeAOTErrorOnWarningsAsErrors>
     <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050;IL2104;IL3053</WarningsNotAsErrors>

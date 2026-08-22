@@ -13,8 +13,8 @@ internal sealed class McpJsonRpcTransport : IAsyncDisposable
 
     public McpJsonRpcTransport(Stream input, Stream output, JsonSerializerOptions? options = null)
     {
-        _reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 8192, leaveOpen: true);
-        _writer = new StreamWriter(output, Encoding.UTF8, bufferSize: 8192, leaveOpen: true) { AutoFlush = true };
+        _reader = new StreamReader(input, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 8192, leaveOpen: true);
+        _writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 8192, leaveOpen: true) { AutoFlush = true };
         _options = options ?? new JsonSerializerOptions
         {
             TypeInfoResolver = McpJsonSerializerContext.Default,
