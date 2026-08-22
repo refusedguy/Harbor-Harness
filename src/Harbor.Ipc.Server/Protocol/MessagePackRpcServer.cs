@@ -15,12 +15,19 @@ namespace Harbor.Ipc.Protocol;
 ///         so concurrent request-dispatcher completions and event-broadcaster
 ///         pushes never interleave half-frames.
 ///     </para>
-///     <para>
-///         <b>Clean shutdown:</b> the accept loop is cancelled via the
-///         <see cref="StopAsync" />-provided cancellation token. In-flight
-///         request tasks observe their per-request cancellation tokens and
-///         drain. The server never throws on shutdown — it logs and returns.
-///     </para>
+    ///     <para>
+    ///         <b>Clean shutdown:</b> the accept loop is cancelled via the
+    ///         <see cref="StopAsync" />-provided cancellation token. In-flight
+    ///         request tasks observe their per-request cancellation tokens and
+    ///         drain. The server never throws on shutdown — it logs and returns.
+    ///     </para>
+    ///     <para>
+    ///         <b>Frame resilience:</b> reads go through <see cref="ResilientFrameReader" />.
+    ///         Zero-length frames and undecodable payloads are logged and skipped — the
+    ///         connection stays alive. Only terminal stream conditions (EOF, I/O error,
+    ///         cancellation) close a connection, and a bad connection never takes down
+    ///         the accept loop or the server.
+    ///     </para>
 /// </remarks>
 public sealed class MessagePackRpcServer : IAsyncDisposable
 {
@@ -107,42 +114,80 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
             _logger.LogInformation("Client connected");
             while (!ct.IsCancellationRequested)
             {
-                HarborRequest? request;
+                FrameReadResult read;
                 try
                 {
-                    request = await WireCodec.ReadRequestAsync(stream, ct).ConfigureAwait(false);
+                    read = await ResilientFrameReader.ReadRequestAsync(stream, ct).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) { break; }
-                catch (EndOfStreamException) { break; }
+                catch (OperationCanceledException) { return; }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Read failed; closing client");
-                    break;
+                    _logger.LogWarning(ex, "Stream read failed; closing client connection");
+                    return;
                 }
 
-                if (request is null) break;
+                switch (read.Outcome)
+                {
+                    case FrameReadOutcome.Request:
+                        break;
+                    case FrameReadOutcome.StreamEnded:
+                        _logger.LogDebug("Client stream ended");
+                        return;
+                    case FrameReadOutcome.EmptyFrame:
+                        _logger.LogDebug("Skipping zero-length frame; keeping connection alive");
+                        continue;
+                    case FrameReadOutcome.UndecodableFrame:
+                        _logger.LogWarning(read.Error, "Skipping undecodable frame; keeping connection alive");
+                        continue;
+                    case FrameReadOutcome.OversizedFrame:
+                        _logger.LogWarning(
+                            read.Error, "Incoming frame exceeds size cap; closing client connection");
+                        return;
+                    default:
+                        _logger.LogWarning("Unknown frame outcome {Outcome}; closing client connection", read.Outcome);
+                        return;
+                }
 
-                // SubscribeToEventsRequest needs the reply stream AND the
-                // per-client write lock so the broadcaster can push
-                // out-of-band frames to this client without interleaving
-                // with our direct response frames.
-                var replyStream = request is SubscribeToEventsRequest ? stream : null;
-                var replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
+                var request = read.Request!;
 
-                var response = await _dispatcher
-                    .DispatchAsync(request, replyStream, replyWriteLock, ct)
-                    .ConfigureAwait(false);
-
-                await writeLock.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
-                    await WireCodec.WriteResponseAsync(stream, response, ct).ConfigureAwait(false);
+                    // SubscribeToEventsRequest needs the reply stream AND the
+                    // per-client write lock so the broadcaster can push
+                    // out-of-band frames to this client without interleaving
+                    // with our direct response frames.
+                    var replyStream = request is SubscribeToEventsRequest ? stream : null;
+                    var replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
+
+                    var response = await _dispatcher
+                        .DispatchAsync(request, replyStream, replyWriteLock, ct)
+                        .ConfigureAwait(false);
+
+                    await writeLock.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        await WireCodec.WriteResponseAsync(stream, response, ct).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        writeLock.Release();
+                    }
                 }
-                finally
+                catch (OperationCanceledException) { return; }
+                catch (Exception ex)
                 {
-                    writeLock.Release();
+                    _logger.LogError(ex, "Request processing failed; closing client connection");
+                    return;
                 }
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Server shutting down — expected.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected client-handler failure; connection closed gracefully");
         }
         finally
         {
