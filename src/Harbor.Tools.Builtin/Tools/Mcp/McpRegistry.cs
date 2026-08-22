@@ -20,19 +20,21 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     /// <summary>
-    ///     Register an MCP server by name with a single shell command (legacy form). The command
-    ///     is split on the first space into a program + arguments and launched as-is.
+    ///     Register an MCP server by name with a single shell command (legacy form). The
+    ///     command line is tokenized with shell-like quoting rules (<see cref="McpArgvParser" />)
+    ///     into a program + arguments and launched as-is.
     /// </summary>
     public Result Register(string name, string stdioCommand)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure("Server name cannot be empty.");
 
-        var (command, args) = SplitCommand(stdioCommand);
-        if (string.IsNullOrWhiteSpace(command))
-            return Result.Failure("stdioCommand cannot be empty.");
+        var parsed = McpArgvParser.ParseCommand(stdioCommand);
+        if (parsed.IsFailure)
+            return Result.Failure(parsed.Error);
 
-        return RegisterInternal(name, new McpServerStartInfo { Command = command, Args = args });
+        var tokens = parsed.Value;
+        return RegisterInternal(name, new McpServerStartInfo { Command = tokens[0], Args = tokens[1..] });
     }
 
     /// <summary>
@@ -233,18 +235,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             await kv.Value.DisposeAsync().ConfigureAwait(false);
             _servers.TryRemove(kv.Key, out _);
         }
-    }
-
-    private static (string Command, IReadOnlyList<string> Args) SplitCommand(string stdioCommand)
-    {
-        var span = stdioCommand.AsSpan().Trim();
-        var idx = span.IndexOf(' ');
-        if (idx < 0)
-            return (span.ToString(), Array.Empty<string>());
-
-        var command = span[..idx].ToString();
-        var rest = span[(idx + 1)..].ToString();
-        return (command, new[] { rest });
     }
 
     private sealed class ServerEntry : IAsyncDisposable
