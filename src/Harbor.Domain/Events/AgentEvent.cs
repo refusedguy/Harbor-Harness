@@ -19,6 +19,7 @@ namespace Harbor.Abstractions.Events;
 [JsonDerivedType(typeof(AgentErrorEvent), "agent_error")]
 [JsonDerivedType(typeof(CompactionStartedEvent), "compaction_started")]
 [JsonDerivedType(typeof(CompactionCompletedEvent), "compaction_completed")]
+[JsonDerivedType(typeof(CompactionFailedEvent), "compaction_failed")]
 [JsonDerivedType(typeof(SessionStatsEvent), "session_stats")]
 public abstract record AgentEvent
 {
@@ -83,7 +84,9 @@ public sealed record TurnEndEvent(
 /// <summary>
 ///     Emitted when the entire agent run completes.
 /// </summary>
-public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages) : AgentEvent;
+/// <param name="NewMessages">Messages produced by the run.</param>
+/// <param name="Cancelled">True when the run ended because it was cancelled, not because the agent finished.</param>
+public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages, bool Cancelled = false) : AgentEvent;
 
 /// <summary>
 ///     Emitted on an unrecoverable agent error.
@@ -111,6 +114,13 @@ public sealed record CompactionCompletedEvent(
     int PrunedMessageCount,
     int TokensSaved,
     TimeSpan Duration) : AgentEvent;
+
+/// <summary>
+///     Emitted when compaction fails and the loop falls back to truncation.
+/// </summary>
+/// <param name="SessionId">The session whose compaction failed.</param>
+/// <param name="Error">The compaction failure description.</param>
+public sealed record CompactionFailedEvent(string SessionId, string Error) : AgentEvent;
 
 /// <summary>
 ///     Periodic stats snapshot for a session (cost, tokens, message count).

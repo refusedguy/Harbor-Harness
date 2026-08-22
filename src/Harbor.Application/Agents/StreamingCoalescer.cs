@@ -1,6 +1,17 @@
 using Harbor.Abstractions.Extensions;
 namespace Harbor.Core.Agents;
 /// <summary>
+///     A tool call whose accumulated args JSON failed to parse. The call is
+///     never materialized as an executable <see cref="ToolCallPart" />; the
+///     agent loop converts it into an error tool_result so the model can
+///     retry with well-formed arguments next turn.
+/// </summary>
+/// <param name="Id">The provider-side tool call id.</param>
+/// <param name="ToolName">The requested tool name.</param>
+/// <param name="RawArgsTail">Tail of the raw accumulated args JSON, for diagnostics.</param>
+internal sealed record MalformedToolCall(string Id, string ToolName, string RawArgsTail);
+
+/// <summary>
 ///     Coalesces streaming LLM events (text deltas, thinking deltas,
 ///     tool-call start/delta fragments) into buffer state that the
 ///     <see cref="AgentLoop" /> can flush into a single
@@ -112,26 +123,46 @@ internal sealed class StreamingCoalescer : IDisposable
     }
 
     /// <summary>
+    ///     Maximum number of trailing characters of the raw args JSON preserved
+    ///     in <see cref="MalformedToolCall.RawArgsTail" />.
+    /// </summary>
+    internal const int RawArgsTailLength = 200;
+
+    /// <summary>
     ///     Materialize all accumulated tool calls into <see cref="ToolCallPart" />
     ///     list. Parses each tool's args JSON, returning pooled StringBuilders
     ///     to the pool. Interns tool names via <see cref="StringPool.Shared" />.
+    ///     <para>
+    ///         Tool calls whose args JSON fails to parse are NOT materialized
+    ///         (they would otherwise execute with silently-replaced
+    ///         <c>{}</c> arguments); they are reported via
+    ///         <paramref name="malformedSink" /> instead so the caller can
+    ///         surface an error tool_result to the model.
+    ///     </para>
     /// </summary>
-    public List<ToolCallPart> MaterializeToolCalls()
+    /// <param name="malformedSink">
+    ///     Optional list receiving one <see cref="MalformedToolCall" /> per
+    ///     un-parseable tool call. Calls added here are excluded from the
+    ///     returned executable list.
+    /// </param>
+    public List<ToolCallPart> MaterializeToolCalls(List<MalformedToolCall>? malformedSink = null)
     {
         var result = new List<ToolCallPart>(_pendingToolCalls.Count);
         foreach ((string id, (string name, var args)) in _pendingToolCalls)
         {
+            string jsonText = args.Builder.Length == 0 ? "{}" : args.ToString();
             JsonElement parsedArgs;
             try
             {
-                string jsonText = args.Builder.Length == 0 ? "{}" : args.ToString();
                 using var doc = JsonDocument.Parse(jsonText);
                 parsedArgs = doc.RootElement.Clone();
             }
             catch (JsonException)
             {
-                using var fallback = JsonDocument.Parse("{}");
-                parsedArgs = fallback.RootElement.Clone();
+                // Do not execute the tool with fabricated empty args — report the
+                // call as malformed so the loop can return an error tool_result.
+                malformedSink?.Add(new MalformedToolCall(id, name, RawTail(jsonText)));
+                continue;
             }
             finally
             {
@@ -143,6 +174,16 @@ internal sealed class StreamingCoalescer : IDisposable
         }
         _pendingToolCalls.Clear();
         return result;
+    }
+
+    private static string RawTail(string jsonText)
+    {
+        if (jsonText.Length <= RawArgsTailLength)
+        {
+            return jsonText;
+        }
+
+        return jsonText.Substring(jsonText.Length - RawArgsTailLength);
     }
 
     /// <summary>

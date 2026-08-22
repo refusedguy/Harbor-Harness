@@ -82,6 +82,190 @@ public sealed class CompactionService(
     /// </summary>
     public int TailTurns { get; set; } = 2;
 
+    /// <summary>
+    ///     Default token reserve used by <see cref="TruncateToFit" /> when the
+    ///     caller does not supply one (mirrors <see cref="ReserveTokens" />).
+    /// </summary>
+    public const int DefaultReserveTokens = 16384;
+
+    /// <summary>
+    ///     Floor for the truncation budget so very small context windows still
+    ///     keep a usable slice of history instead of an effectively empty one.
+    /// </summary>
+    private const int MinimumTruncationBudget = 4096;
+
+    /// <summary>
+    ///     Aggressive fallback for when LLM-based compaction fails: keep only
+    ///     the most recent messages that fit the model's context budget
+    ///     (<c>ContextWindow − reserve − MaxOutputTokens</c>) and drop the older
+    ///     middle/head. The result is a plain tail slice — no summary is
+    ///     produced, but the next request is no longer known-overfull.
+    ///     <para>
+    ///         The cut point never lands on a <see cref="ToolResultMessage" />:
+    ///         orphan tool results whose assistant tool_call was dropped would
+    ///         be rejected by providers. Orphaned results at the boundary are
+    ///         dropped together with the head instead. At least one message is
+    ///         always kept.
+    ///     </para>
+    /// </summary>
+    /// <param name="messages">The current message history.</param>
+    /// <param name="model">The target model (context window + output budget).</param>
+    /// <param name="tokenTracker">Token estimator used to size the kept tail.</param>
+    /// <param name="reserveTokens">Safety reserve below the context window.</param>
+    /// <returns>A new list with the kept tail messages, or <paramref name="messages" /> when it is empty.</returns>
+    public static IReadOnlyList<AgentMessage> TruncateToFit(
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        ITokenTracker tokenTracker,
+        int reserveTokens = DefaultReserveTokens)
+    {
+        if (messages.Count == 0)
+        {
+            return messages;
+        }
+
+        int budget = ComputeTruncationBudget(model, reserveTokens);
+
+        // Walk backwards accumulating the newest messages until the budget is hit.
+        int tailTokens = 0;
+        int tailStart = messages.Count;
+        for (int i = messages.Count - 1; i >= 0; i--)
+        {
+            int msgTokens = tokenTracker.EstimateMessage(messages[i]);
+            if (tailTokens + msgTokens > budget)
+            {
+                break;
+            }
+
+            tailTokens += msgTokens;
+            tailStart = i;
+        }
+
+        // Never open the kept slice with an orphan tool_result — its assistant
+        // tool_call is in the dropped head and providers reject the pair.
+        while (tailStart < messages.Count && messages[tailStart] is ToolResultMessage)
+        {
+            tailStart++;
+        }
+
+        // Degenerate budget (every single message overflows): keep at least the
+        // most recent message rather than returning an empty history.
+        if (tailStart >= messages.Count)
+        {
+            tailStart = messages.Count - 1;
+        }
+
+        var kept = new List<AgentMessage>(messages.Count - tailStart);
+        for (int i = tailStart; i < messages.Count; i++)
+        {
+            kept.Add(messages[i]);
+        }
+
+        return kept;
+    }
+
+    /// <summary>
+    ///     Shared token budget for <see cref="TruncateToFit" /> and
+    ///     <see cref="TruncateToFitStrict" />: context window minus reserve and
+    ///     max output tokens, floored so tiny windows still keep a usable slice.
+    /// </summary>
+    private static int ComputeTruncationBudget(ModelInfo model, int reserveTokens)
+    {
+        int budget = model.ContextWindow - reserveTokens - model.MaxOutputTokens;
+        if (budget < MinimumTruncationBudget)
+        {
+            budget = Math.Max(MinimumTruncationBudget, model.ContextWindow / 2);
+        }
+
+        return budget;
+    }
+
+    /// <summary>
+    ///     Strict-reduction variant of <see cref="TruncateToFit" />, used as the
+    ///     compaction-failure fallback. Unlike the budget-fit walk — which keeps
+    ///     everything when the history already fits — this ALWAYS drops part of
+    ///     the head once the history exceeds a small floor, because after a
+    ///     failed LLM compaction the next request must actually shrink, not
+    ///     merely be "not provably overfull".
+    ///     <para>
+    ///         Policy (deterministic): keep system-role messages (none exist in
+    ///         session history — the system prompt travels separately on
+    ///         <c>LlmRequest</c>) plus the newest K messages, where
+    ///         K = min(max(total / 2, 4), budgetFit) — the newest half clamped
+    ///         to [4 .. budget-fit]. Whenever total &gt; 4 the target is strictly
+    ///         below total, so reduction is guaranteed even when the whole
+    ///         history would trivially fit. The cut point never opens on an
+    ///         orphan <see cref="ToolResultMessage" /> (see <see cref="TruncateToFit" />),
+    ///         and at least one message is always kept.
+    ///     </para>
+    /// </summary>
+    /// <param name="messages">The current message history.</param>
+    /// <param name="model">The target model (context window + output budget).</param>
+    /// <param name="tokenTracker">Token estimator used to size the budget-fit ceiling.</param>
+    /// <param name="reserveTokens">Safety reserve below the context window.</param>
+    /// <returns>A new list holding strictly fewer messages than the input whenever the input exceeds the keep floor.</returns>
+    public static IReadOnlyList<AgentMessage> TruncateToFitStrict(
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        ITokenTracker tokenTracker,
+        int reserveTokens = DefaultReserveTokens)
+    {
+        if (messages.Count == 0)
+        {
+            return messages;
+        }
+
+        const int MinimumKeptMessages = 4;
+        int total = messages.Count;
+
+        // Budget-fit ceiling: size of the newest run that fits the token
+        // budget; at least one message is always kept.
+        int budget = ComputeTruncationBudget(model, reserveTokens);
+        int budgetFit = 0;
+        int tailTokens = 0;
+        for (int i = total - 1; i >= 0; i--)
+        {
+            int msgTokens = tokenTracker.EstimateMessage(messages[i]);
+            if (tailTokens + msgTokens > budget)
+            {
+                break;
+            }
+
+            tailTokens += msgTokens;
+            budgetFit++;
+        }
+
+        budgetFit = Math.Max(budgetFit, 1);
+
+        // Newest half, clamped to [MinimumKeptMessages .. budgetFit].
+        // For total > MinimumKeptMessages this is strictly less than total.
+        int keep = Math.Min(Math.Max(MinimumKeptMessages, total / 2), budgetFit);
+
+        int tailStart = total - keep;
+
+        // Never open the kept slice with an orphan tool_result — its assistant
+        // tool_call is in the dropped head and providers reject the pair.
+        while (tailStart < total && messages[tailStart] is ToolResultMessage)
+        {
+            tailStart++;
+        }
+
+        // Degenerate boundary (orphan skip consumed the whole tail): keep at
+        // least the most recent message rather than returning an empty history.
+        if (tailStart >= total)
+        {
+            tailStart = total - 1;
+        }
+
+        var kept = new List<AgentMessage>(total - tailStart);
+        for (int i = tailStart; i < total; i++)
+        {
+            kept.Add(messages[i]);
+        }
+
+        return kept;
+    }
+
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {

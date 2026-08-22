@@ -14,6 +14,15 @@ public sealed class DefaultAgent : IAgent
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
     private readonly ILogger<DefaultAgent> _logger;
+    /// <summary>
+    ///     Mutual exclusion for <see cref="PromptAsync" /> entry. The previous
+    ///     check-then-act <c>State?.IsRunning == true</c> guard was not
+    ///     synchronized, so two concurrent calls could both pass it and start
+    ///     overlapping runs on the same session. <see cref="SemaphoreSlim.WaitAsync(TimeSpan, CancellationToken)" />
+    ///     with a zero timeout performs a single atomic acquire attempt: the
+    ///     losing caller fails fast with a "busy" failure instead of racing.
+    /// </summary>
+    private readonly SemaphoreSlim _runGate = new(1, 1);
     private readonly ISessionStore _sessionStore;
     private readonly Channel<AgentMessage> _steeringQueue;
 
@@ -205,61 +214,85 @@ public sealed class DefaultAgent : IAgent
     /// <summary>
     ///     Submit a pre-built <see cref="UserMessage" /> and run the agent loop to completion.
     /// </summary>
+    /// <remarks>
+    ///     Entry is mutually exclusive via <see cref="_runGate" />: concurrent
+    ///     callers are serialized atomically and the loser receives
+    ///     <c>Result.Failure("Agent is busy...")</c> instead of both calls
+    ///     passing an unsynchronized <c>IsRunning</c> check (the previous race).
+    /// </remarks>
     /// <param name="message">The user message to submit.</param>
     /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
     /// <returns>Success on completion, or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
-        if (State?.IsRunning == true)
-            return Result.Failure("Agent is already running.");
-
         if (State is null)
             return Result.Failure("Agent is not initialized.");
 
-        await _sessionStore.AppendMessageAsync(State.SessionId, message, ct).ConfigureAwait(false);
+        bool acquired;
+        try
+        {
+            // Zero-timeout acquire: a single atomic attempt — never blocks.
+            acquired = await _runGate.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result.Failure("Agent was cancelled.");
+        }
 
-        // Swap in a fresh per-run completion source so WaitForIdleAsync callers
-        // awaiting the PREVIOUS source see THIS run's terminal result. The old
-        // source is completed with a cancelled sentinel to unblock any caller
-        // that raced between State.IsRunning flipping true and the swap.
-        var completion = StartRunCompletion();
-
-        State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
-
-        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortSource.Token, ct);
+        if (!acquired)
+            return Result.Failure("Agent is busy. Wait for the current run to complete or use Steer() to interrupt it.");
 
         try
         {
-            var session = await LoadSessionContextAsync(State.SessionId, ct).ConfigureAwait(false);
-            var result = await _agentLoop.RunAsync(session, State.Agent, linkedCts.Token).ConfigureAwait(false);
+            await _sessionStore.AppendMessageAsync(State.SessionId, message, ct).ConfigureAwait(false);
 
-            State = State with
+            // Swap in a fresh per-run completion source so WaitForIdleAsync callers
+            // awaiting the PREVIOUS source see THIS run's terminal result. The old
+            // source is completed with a cancelled sentinel to unblock any caller
+            // that raced between State.IsRunning flipping true and the swap.
+            var completion = StartRunCompletion();
+
+            State = State with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
+
+            var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortSource.Token, ct);
+
+            try
             {
-                IsRunning = false,
-                LastActivityAt = DateTimeOffset.UtcNow
-            };
+                var session = await LoadSessionContextAsync(State.SessionId, ct).ConfigureAwait(false);
+                var result = await _agentLoop.RunAsync(session, State.Agent, linkedCts.Token).ConfigureAwait(false);
 
-            completion.TrySetResult(result);
-            return result;
-        }
-        catch (OperationCanceledException) when (linkedCts.Token.IsCancellationRequested)
-        {
-            State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-            var cancelled = Result.Failure("Agent was cancelled.");
-            completion.TrySetResult(cancelled);
-            return cancelled;
-        }
-        catch (Exception ex)
-        {
-            State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-            _logger.LogError(ex, "Agent run failed");
-            var failed = Result.Failure(ex.Message);
-            completion.TrySetException(ex);
-            return failed;
+                State = State with
+                {
+                    IsRunning = false,
+                    LastActivityAt = DateTimeOffset.UtcNow
+                };
+
+                completion.TrySetResult(result);
+                return result;
+            }
+            catch (OperationCanceledException) when (linkedCts.Token.IsCancellationRequested)
+            {
+                State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                var cancelled = Result.Failure("Agent was cancelled.");
+                completion.TrySetResult(cancelled);
+                return cancelled;
+            }
+            catch (Exception ex)
+            {
+                State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                _logger.LogError(ex, "Agent run failed");
+                var failed = Result.Failure(ex.Message);
+                completion.TrySetException(ex);
+                return failed;
+            }
+            finally
+            {
+                linkedCts.Dispose();
+            }
         }
         finally
         {
-            linkedCts.Dispose();
+            _runGate.Release();
         }
     }
 
@@ -315,12 +348,13 @@ public sealed class DefaultAgent : IAgent
 
     /// <summary>
     ///     Release all resources held by this agent: event-bus subscription, abort source,
-    ///     steering/follow-up channels.
+    ///     run gate, steering/follow-up channels.
     /// </summary>
     public void Dispose()
     {
         _eventBusSubscription?.Dispose();
         AbortSource?.Dispose();
+        _runGate.Dispose();
         _steeringQueue.Writer.TryComplete();
         _followUpQueue.Writer.TryComplete();
     }
