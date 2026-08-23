@@ -69,7 +69,11 @@ internal sealed class DummySessionContext : ISessionContext
     public DummySessionContext(Session session) { Session = session; }
     public Session Session { get; }
     public IReadOnlyList<AgentMessage> Messages => Array.Empty<AgentMessage>();
-    public Channel<AgentMessage> SteeringQueue => Channel.CreateUnbounded<AgentMessage>();
+
+    // A4: the channel MUST be created once per context. A per-access factory
+    // (=> Channel.CreateUnbounded<...>()) silently dropped every steering
+    // message — writers and the AgentLoop reader held different channels.
+    public Channel<AgentMessage> SteeringQueue { get; } = Channel.CreateUnbounded<AgentMessage>();
     public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) => Task.CompletedTask;
     public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
 }
