@@ -55,10 +55,17 @@ public sealed class BashTool : ITool
         string? cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
         int timeout = args.TryGetProperty("timeout", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : 30;
         var env = args.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Object
-            ? e.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString() ?? "")
+            ? e.EnumerateObject().ToDictionary(
+                p => p.Name,
+                // GetString() would throw for non-string JSON kinds; fall back
+                // to the raw token ("123", "true") instead of crashing.
+                p => p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() ?? "" : p.Value.GetRawText())
             : null;
 
         if (timeout is < 1 or > 600) timeout = 30;
+
+        if (cwd is not null && !Directory.Exists(cwd))
+            return ToolResult.Error($"Working directory does not exist: '{cwd}'.");
 
         var psi = new ProcessStartInfo
         {
@@ -102,6 +109,12 @@ public sealed class BashTool : ITool
         using var stderr = StringBuilderPool.Rent(1024);
         long stdoutDropped = 0;
         long stderrDropped = 0;
+        // End-of-stream sentinels: the async output callbacks can still fire
+        // AFTER WaitForExitAsync returns (and after a kill). Every code path
+        // below awaits both sentinels before touching (or disposing) the
+        // pooled builders, so no late callback can write into a returned slot.
+        var stdoutEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stderrEof = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(timeout));
 
@@ -109,7 +122,11 @@ public sealed class BashTool : ITool
 
         process.OutputDataReceived += (_, e) =>
         {
-            if (e.Data is null) return;
+            if (e.Data is null)
+            {
+                stdoutEof.TrySetResult();
+                return;
+            }
             if (stdout.Builder.Length >= MaxOutputChars)
             {
                 stdoutDropped += e.Data.Length + 1;
@@ -119,7 +136,11 @@ public sealed class BashTool : ITool
         };
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data is null) return;
+            if (e.Data is null)
+            {
+                stderrEof.TrySetResult();
+                return;
+            }
             if (stderr.Builder.Length >= MaxOutputChars)
             {
                 stderrDropped += e.Data.Length + 1;
@@ -128,15 +149,28 @@ public sealed class BashTool : ITool
             stderr.Builder.Append(e.Data).Append('\n');
         };
 
-        if (!process.Start())
-            return ToolResult.Error("Failed to start process.");
+        try
+        {
+            if (!process.Start())
+                return ToolResult.Error("Failed to start process.");
+        }
+        catch (Exception ex)
+        {
+            return ToolResult.Error($"Failed to start process: {ex.Message}");
+        }
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        // Bounded drain: wait for the reader callbacks to signal end-of-stream
+        // so the builders are quiescent before they are read or returned.
+        Task DrainAsync() => Task.WhenAll(stdoutEof.Task, stderrEof.Task)
+            .WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None);
+
         try
         {
             await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
+            await DrainAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException ex)
         {
@@ -146,9 +180,18 @@ public sealed class BashTool : ITool
                 catch
                 { /* ignore */
                 }
-                _logger.LogWarning(ex, "Command timed out after {Timeout}s", timeout);
+                bool timedOut = !cancellationToken.IsCancellationRequested;
+                await DrainAsync().ConfigureAwait(false);
+                if (timedOut)
+                {
+                    _logger.LogWarning(ex, "Command timed out after {Timeout}s", timeout);
+                    return ToolResult.Error(
+                        $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
+                }
+
+                _logger.LogInformation(ex, "Command cancelled before completion");
                 return ToolResult.Error(
-                    $"Command timed out after {timeout}s and was killed.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
+                    $"Command was cancelled.\nStdout so far:\n{stdout}\nStderr:\n{stderr}");
             }
         }
 
@@ -156,9 +199,12 @@ public sealed class BashTool : ITool
         if (stdout.Builder.Length > 0) output.Append(stdout.Builder).Append('\n');
         if (stderr.Builder.Length > 0) output.Append("[stderr]\n").Append(stderr.Builder).Append('\n');
         output.Append("[exit code: ").Append(process.ExitCode).Append(']').Append('\n');
-
         if (stdoutDropped > 0 || stderrDropped > 0)
         {
+            // Surface truncation to the model, not just to the logs — the
+            // agent must be able to tell that output was incomplete.
+            output.Append("[output truncated: ").Append(stdoutDropped + stderrDropped)
+                .Append(" chars dropped (cap=").Append(MaxOutputChars).Append(")]\n");
             _logger.LogWarning("Bash output truncated: stdout dropped {StdoutDropped} chars, stderr dropped {StderrDropped} chars (cap={Cap})",
                 stdoutDropped, stderrDropped, MaxOutputChars);
         }
@@ -166,7 +212,11 @@ public sealed class BashTool : ITool
         _logger.LogInformation("Command completed: exit={ExitCode}", process.ExitCode);
 
         if (output.Length > 50_000)
-            output.Length = 50_000;
+        {
+            const string HardCutNote = "\n[output truncated to 50000 chars]\n";
+            output.Length = 50_000 - HardCutNote.Length;
+            output.Append(HardCutNote);
+        }
 
         bool isError = process.ExitCode != 0;
         var result = isError
