@@ -1,0 +1,59 @@
+<Solution>
+    <!--
+      contrib/Contrib.slnx — alternative TUI renderers, desktop apps and
+      scripting extensions. Built SEPARATELY from the main Harbor.slnx:
+
+          dotnet build contrib/Contrib.slnx
+
+      Main-solution projects under src/ are pulled in transitively via
+      ProjectReference. Platform notes: Harbor.App.Wpf needs the Windows
+      Desktop workload, Harbor.App.Maui needs maui-tizen — both are
+      commented out below so the solution builds on Linux/macOS.
+    -->
+
+    <Folder Name="/tui/">
+        <Project Path="tui/Harbor.Tui.Spectre/Harbor.Tui.Spectre.csproj"/>
+        <Project Path="tui/Harbor.Tui.Spectre.Fullscreen/Harbor.Tui.Spectre.Fullscreen.csproj"/>
+        <Project Path="tui/Harbor.Tui.SpectreTui/Harbor.Tui.SpectreTui.csproj"/>
+        <Project Path="tui/Harbor.Tui.TerminalGui/Harbor.Tui.TerminalGui.csproj"/>
+        <Project Path="tui/Harbor.Tui.Termina/Harbor.Tui.Termina.csproj"/>
+        <Project Path="tui/Harbor.Tui.RazorConsole/Harbor.Tui.RazorConsole.csproj"/>
+        <Project Path="tui/Harbor.Tui.Sixel/Harbor.Tui.Sixel.csproj"/>
+    </Folder>
+
+    <Folder Name="/scripting/">
+        <Project Path="scripting/Harbor.Scripting.Abstractions/Harbor.Scripting.Abstractions.csproj"/>
+        <Project Path="scripting/Harbor.Scripting.Storage/Harbor.Scripting.Storage.csproj"/>
+        <Project Path="scripting/Harbor.Scripting.Compilation/Harbor.Scripting.Compilation.csproj"/>
+        <Project Path="scripting/Harbor.Scripting.Engines/Harbor.Scripting.Engines.csproj"/>
+        <Project Path="scripting/Harbor.Scripting.Bridge/Harbor.Scripting.Bridge.csproj"/>
+        <Project Path="scripting/Harbor.Scripting.Hosting/Harbor.Scripting.Hosting.csproj"/>
+    </Folder>
+
+    <Folder Name="/apps/">
+        <!-- Requires the Windows Desktop workload — uncomment on Windows:
+        <Project Path="apps/Harbor.App.Wpf/Harbor.App.Wpf.csproj"/>
+        -->
+        <!-- Requires the maui-tizen workload — uncomment where available:
+        <Project Path="apps/Harbor.App.Maui/Harbor.App.Maui.csproj"/>
+        -->
+        <Project Path="apps/Harbor.App.Blazor/Harbor.App.Blazor.csproj"/>
+    </Folder>
+
+    <Folder Name="/tests/">
+        <!-- Requires Windows Desktop workload — uncomment on Windows:
+        <Project Path="tests/Harbor.App.Wpf.Tests/Harbor.App.Wpf.Tests.csproj"/>
+        -->
+        <!-- Requires maui-tizen workload — uncomment where available:
+        <Project Path="tests/Harbor.App.Maui.Tests/Harbor.App.Maui.Tests.csproj"/>
+        -->
+        <Project Path="tests/Harbor.App.Blazor.Tests/Harbor.App.Blazor.Tests.csproj"/>
+        <Project Path="tests/Harbor.E2E.App.Blazor/Harbor.E2E.App.Blazor.csproj"/>
+        <Project Path="tests/Harbor.Tui.Contrib.Tests/Harbor.Tui.Contrib.Tests.csproj"/>
+        <Project Path="tests/Harbor.E2E.Tui.SpectreTui/Harbor.E2E.Tui.SpectreTui.csproj"/>
+        <Project Path="tests/Harbor.E2E.Tui.Termina/Harbor.E2E.Tui.Termina.csproj"/>
+        <Project Path="tests/Harbor.E2E.Tui.TerminalGui/Harbor.E2E.Tui.TerminalGui.csproj"/>
+        <Project Path="tests/Harbor.E2E.Tui.RazorConsole/Harbor.E2E.Tui.RazorConsole.csproj"/>
+        <Project Path="tests/Harbor.Scripting.Tests/Harbor.Scripting.Tests.csproj"/>
+    </Folder>
+</Solution>

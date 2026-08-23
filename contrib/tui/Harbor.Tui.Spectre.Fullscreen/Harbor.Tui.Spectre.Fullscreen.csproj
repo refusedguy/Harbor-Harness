@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Contrib.Tests"/>
   </ItemGroup>
 
   <ItemGroup>

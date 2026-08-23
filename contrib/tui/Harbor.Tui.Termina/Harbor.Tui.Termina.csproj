@@ -20,7 +20,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Harbor.Tui.Tests"/>
+    <InternalsVisibleTo Include="Harbor.Tui.Contrib.Tests"/>
   </ItemGroup>
   <Target Name="RemoveTerminaGenerators" BeforeTargets="CoreCompile">
     <ItemGroup>

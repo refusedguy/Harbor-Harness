@@ -11,15 +11,38 @@
 ## Build from source
 
 ```bash
-git clone https://github.com/harbor-sh/harbor
-cd harbor
+git clone https://github.com/refusedguy/Harbor-Harness
+cd Harbor-Harness
 
-# Restore + build all projects
-dotnet build
+# Restore + build the main solution (production core)
+dotnet build Harbor.slnx
 
 # Build Release configuration
 dotnet build -c Release
 ```
+
+### contrib/ — optional extensions (separate build)
+
+Alternative TUI renderers (Spectre, Spectre.Fullscreen, SpectreTui,
+TerminalGui, Termina, RazorConsole, Sixel), desktop apps (Wpf / Maui /
+Blazor) and the scripting stack (SharpTS/Jint) live under `contrib/` and
+are **not** part of `Harbor.slnx`. Build them explicitly:
+
+```bash
+# All contrib projects that build on the current OS
+dotnet build contrib/Contrib.slnx
+
+# Contrib tests (TUnit)
+dotnet run --project contrib/tests/Harbor.Tui.Contrib.Tests
+dotnet run --project contrib/tests/Harbor.Scripting.Tests
+```
+
+Platform notes: `Harbor.App.Wpf` needs the Windows Desktop workload,
+`Harbor.App.Maui` needs `maui-tizen`; both are commented out in
+`contrib/Contrib.slnx` so the solution builds on Linux/macOS. The CLI still
+compiles the alternative renderers in when `HarborWithSpectreTui=true`
+(default) — pass `-p:HarborWithSpectreTui=false` (or `HARBOR_MINIMAL=true`)
+for a core-only CLI binary.
 
 ## Run tests
 
