@@ -13,18 +13,12 @@ using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
-using Harbor.Tui.RazorConsole;
-using Harbor.Tui.Spectre;
-using Harbor.Tui.Spectre.Fullscreen;
-using Harbor.Tui.Termina;
-using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.State;
 using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
-// Use a using-alias to disambiguate the two SpectreTuiRenderer types
-// (Harbor.Tui.Spectre.SpectreTuiRenderer vs Harbor.Tui.SpectreTui.SpectreTuiRenderer).
-using SpectreTuiProjectRenderer = Harbor.Tui.SpectreTui.SpectreTuiRenderer;
+// Alternative TUI renderers (Spectre/Fullscreen/SpectreTui/TerminalGui/Termina/RazorConsole)
+// moved to contrib/tui in sprint 2 — outside the main solution's layer scope.
 
 namespace Harbor.Architecture.Tests;
 /// <summary>
@@ -444,13 +438,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
             "Harbor.Tui.Ansi",
-            "Harbor.Tui.Plain",
-            "Harbor.Tui.Spectre",
-            "Harbor.Tui.Spectre.Fullscreen",
-            "Harbor.Tui.SpectreTui",
-            "Harbor.Tui.TerminalGui",
-            "Harbor.Tui.Termina",
-            "Harbor.Tui.RazorConsole"
+            "Harbor.Tui.Plain"
         ];
         var missing = expected.Where(n => !loaded.ContainsKey(n)).ToList();
         await Assert.That(missing).IsEmpty();
@@ -473,16 +461,13 @@ public class LayerDependencyTests
         yield return typeof(SqliteSessionStore).Assembly;
     }
 
-    /// <summary>TUI renderer assemblies to test, sourced as method data for TUnit.</summary>
+    /// <summary>TUI renderer assemblies to test, sourced as method data for TUnit.
+    /// Only main-solution renderers are probed; contrib renderers (Spectre,
+    /// Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole) moved out of
+    /// scope in sprint 2.</summary>
     public static IEnumerable<Assembly> TuiRendererAssemblies()
     {
         yield return typeof(AnsiTuiRenderer).Assembly;
         yield return typeof(PlainTuiRenderer).Assembly;
-        yield return typeof(SpectreTuiRenderer).Assembly;
-        yield return typeof(FullscreenTuiRenderer).Assembly;
-        yield return typeof(SpectreTuiProjectRenderer).Assembly;
-        yield return typeof(TerminalGuiRenderer).Assembly;
-        yield return typeof(TerminaRenderer).Assembly;
-        yield return typeof(RazorConsoleRenderer).Assembly;
     }
 }

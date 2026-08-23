@@ -10,11 +10,6 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

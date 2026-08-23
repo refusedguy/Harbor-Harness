@@ -75,9 +75,6 @@
         <Project Path="src/Harbor.Tui.Plain/Harbor.Tui.Plain.csproj"/>
         <Project Path="src/Harbor.Tui.Ansi/Harbor.Tui.Ansi.csproj"/>
         <Project Path="src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj"/>
-        <Project Path="src/Harbor.Tui.Spectre/Harbor.Tui.Spectre.csproj"/>
-        <Project Path="src/Harbor.Tui.Spectre.Fullscreen/Harbor.Tui.Spectre.Fullscreen.csproj"/>
-        <Project Path="src/Harbor.Tui.SpectreTui/Harbor.Tui.SpectreTui.csproj"/>
     </Folder>
 
     <Folder Name="/src/Desktop/">
@@ -117,10 +114,6 @@
         <Project Path="tests/Harbor.Tui.E2E.Tests/Harbor.Tui.E2E.Tests.csproj"/>
         <Project Path="tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj"/>
         <Project Path="tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj"/>
-        <Project Path="tests/Harbor.E2E.Tui.SpectreTui/Harbor.E2E.Tui.SpectreTui.csproj"/>
-        <Project Path="tests/Harbor.E2E.Tui.Termina/Harbor.E2E.Tui.Termina.csproj"/>
-        <Project Path="tests/Harbor.E2E.Tui.TerminalGui/Harbor.E2E.Tui.TerminalGui.csproj"/>
-        <Project Path="tests/Harbor.E2E.Tui.RazorConsole/Harbor.E2E.Tui.RazorConsole.csproj"/>
         <Project Path="tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj"/>
         <Project Path="tests/Harbor.E2E.App.Blazor/Harbor.E2E.App.Blazor.csproj"/>
     </Folder>

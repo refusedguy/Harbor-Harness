@@ -151,6 +151,7 @@
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
 
@@ -208,14 +209,17 @@
   </ItemGroup>
 
   <!-- ── Alternative TUI renderers (conditional on HarborWithSpectreTui) ──── -->
+  <!-- Physically live in contrib/tui since the sprint-2 contrib migration.
+       The main solution does not list them, but the CLI still compiles them
+       in when HarborWithSpectreTui=true (default); minimal/no-spectre-tui
+       builds exclude them entirely. -->
   <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
-    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -8,11 +8,11 @@
     <NoWarn>$(NoWarn);CS0618;NU1603</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Terminal.Gui"/>

@@ -13,8 +13,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
-    <ProjectReference Include="..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
+    <ProjectReference Include="..\..\..\tests\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <ProjectReference Include="..\..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

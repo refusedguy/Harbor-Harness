@@ -26,18 +26,11 @@ using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
-using Harbor.Tui.RazorConsole;
-using Harbor.Tui.Spectre;
-using Harbor.Tui.Spectre.Fullscreen;
-using Harbor.Tui.Termina;
-using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.State;
 using NetArchTest.Rules;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
-// Use a using-alias to disambiguate the two SpectreTuiRenderer types
-// (Harbor.Tui.Spectre.SpectreTuiRenderer vs Harbor.Tui.SpectreTui.SpectreTuiRenderer).
-using SpectreTuiProjectRenderer = Harbor.Tui.SpectreTui.SpectreTuiRenderer;
+// Alternative TUI renderers moved to contrib/tui in sprint 2 — outside main layer scope.
 using TestResult = NetArchTest.Rules.TestResult;
 
 namespace Harbor.Architecture.Tests;
@@ -494,78 +487,6 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Tui.Spectre (Presentation) must NOT depend on Application
-    ///     or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectre_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(SpectreTuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.Spectre.Fullscreen (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectreFullscreen_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(FullscreenTuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.SpectreTui (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectreTui_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(SpectreTuiProjectRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.TerminalGui (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiTerminalGui_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(TerminalGuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.Termina (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiTermina_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(TerminaRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.RazorConsole (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiRazorConsole_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(RazorConsoleRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
     ///     Sanity check: NetArchTest sees at least one type in each Harbor
     ///     assembly under test. If a ProjectReference is accidentally removed
     ///     from this test project, the corresponding InAssembly(...) call
@@ -594,11 +515,6 @@ public sealed class NetArchLayerRules
             typeof(ReadTool).Assembly,
             typeof(AnsiTuiRenderer).Assembly,
             typeof(PlainTuiRenderer).Assembly,
-            typeof(SpectreTuiProjectRenderer).Assembly,
-            typeof(FullscreenTuiRenderer).Assembly,
-            typeof(TerminalGuiRenderer).Assembly,
-            typeof(TerminaRenderer).Assembly,
-            typeof(RazorConsoleRenderer).Assembly
         };
         foreach (var asm in assemblies)
         {
