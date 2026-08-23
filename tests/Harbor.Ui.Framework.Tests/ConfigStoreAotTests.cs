@@ -195,4 +195,73 @@ public class ConfigStoreAotTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Test]
+    public async Task Load_AbsentKeys_KeepDefaultsInsteadOfNull()
+    {
+        // .NET 10 STJ source-gen regression: metadata-based deserialization
+        // assigns default(T) — null for strings — to every init-only property
+        // ABSENT from the JSON, instead of leaving the constructor-initialized
+        // value. A legacy config.json missing newer keys therefore loaded as
+        // ConfigDirectory = null and crashed Path.Combine(null, …).
+        string dir = NewTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "config.json");
+            await File.WriteAllTextAsync(
+                path,
+                """{ "configVersion": "1", "storageBackend": "memory", "defaultProvider": "ollama" }""");
+
+            var defaults = new CommonConfig { ConfigDirectory = dir };
+            var store = new JsonCommonConfigStore(defaults, NullLogger<JsonCommonConfigStore>.Instance);
+
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            // Present keys win…
+            await Assert.That(result.Value.StorageBackend).IsEqualTo("memory");
+            await Assert.That(result.Value.DefaultProvider).IsEqualTo("ollama");
+            // …absent keys fall back to their declared defaults, NOT null.
+            await Assert.That(result.Value.ConfigDirectory).IsEqualTo(dir);
+            await Assert.That(string.IsNullOrEmpty(result.Value.UserAgent)).IsFalse();
+            await Assert.That(string.IsNullOrEmpty(result.Value.Theme)).IsFalse();
+            await Assert.That(string.IsNullOrEmpty(result.Value.LogLevel)).IsFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Test]
+    public async Task Load_EmptyObject_YieldsFullDefaults()
+    {
+        string dir = NewTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, "config.json");
+            await File.WriteAllTextAsync(path, "{}");
+
+            var defaults = new CommonConfig
+            {
+                ConfigDirectory = dir,
+                Theme = "dark",
+                UserAgent = "ProbeAgent/2.0"
+            };
+            var store = new JsonCommonConfigStore(defaults, NullLogger<JsonCommonConfigStore>.Instance);
+
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.ConfigDirectory).IsEqualTo(dir);
+            await Assert.That(result.Value.Theme).IsEqualTo("dark");
+            await Assert.That(result.Value.UserAgent).IsEqualTo("ProbeAgent/2.0");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

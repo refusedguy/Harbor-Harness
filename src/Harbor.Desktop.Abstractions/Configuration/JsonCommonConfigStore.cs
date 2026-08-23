@@ -18,6 +18,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using System.Text.Json.Serialization.Metadata;
+using System.Text.Json.Nodes;
 namespace Harbor.Desktop.Abstractions.Configuration;
 /// <summary>
 ///     JSON-backed <see cref="ICommonConfigStore" />. Reads and writes the
@@ -86,7 +87,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            var config = JsonSerializer.Deserialize(json, CommonConfigInfo);
+            var config = DeserializeMergedWithDefaults(json);
             if (config is null)
             {
                 _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
@@ -110,9 +111,57 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
         }
     }
 
-    /// <inheritdoc />
-    public async Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default)
+    /// <summary>
+    ///     Deserialize <paramref name="json" /> with ABSENT keys filled from
+    ///     the default instance instead of being reset to null.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Why this exists (.NET 10 STJ source-gen):</b> metadata-based
+    ///         deserialization assigns <c>default(T)</c> (i.e. NULL for string)
+    ///         to every init-only property that is ABSENT from the JSON — it
+    ///         does NOT leave the parameterless-constructor field-initializer
+    ///         value in place (the reflection-based serializer does). A config
+    ///         file written before a property existed therefore loaded as
+    ///         <c>ConfigDirectory = null</c> and crashed
+    ///         <c>Path.Combine(null, …)</c> on next use.
+    ///     </para>
+    ///     <para>
+    ///         Fix: deep-merge the parsed file over the serialized defaults
+    ///         node-first, then deserialize the merged node. Explicit nulls in
+    ///         the file still win; only ABSENT keys fall back to defaults.
+    ///     </para>
+    /// </remarks>
+    private CommonConfig? DeserializeMergedWithDefaults(string json)
     {
+        var fileNode = JsonNode.Parse(json);
+        if (fileNode is not JsonObject fileObject)
+        {
+            return JsonSerializer.Deserialize(json, CommonConfigInfo);
+        }
+
+        byte[] defaultsBytes = JsonSerializer.SerializeToUtf8Bytes(_default, CommonConfigInfo);
+        using var defaultsDoc = JsonDocument.Parse(defaultsBytes);
+        var defaultsNode = JsonNode.Parse(defaultsDoc.RootElement.GetRawText());
+        if (defaultsNode is not JsonObject defaultsObject)
+        {
+            return JsonSerializer.Deserialize(json, CommonConfigInfo);
+        }
+
+        // The serialized defaults object carries EVERY property key, so no
+        // key is "absent" after the merge and the null-reset cannot trigger.
+        // File values win verbatim (including explicit nulls — explicit user
+        // choice); keys missing from the file keep their default values.
+        foreach (var (key, value) in fileObject)
+        {
+            defaultsObject[key] = value is null ? null : JsonNode.Parse(value.ToJsonString());
+        }
+
+        return defaultsNode.Deserialize(CommonConfigInfo);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default)    {
         if (config is null) throw new ArgumentNullException(nameof(config));
 
         await _lock.WaitAsync(ct).ConfigureAwait(false);
