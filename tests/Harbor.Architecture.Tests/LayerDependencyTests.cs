@@ -7,7 +7,6 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
-using Harbor.Scripting.Abstractions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
@@ -284,36 +283,6 @@ public class LayerDependencyTests
     }
 
     /// <summary>
-    ///     Harbor.Scripting (Application) may reference Harbor.Abstractions only —
-    ///     NOT Harbor.Core / Harbor.Application / Harbor.Registries, NOT
-    ///     Harbor.Terminal.Abstractions, NOT sibling Application, NOT Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task Scripting_ReferencesOnlyAbstractions()
-    {
-        var asm = typeof(ScriptGlobals).Assembly;
-        string[] forbidden =
-        [
-            "Harbor.Core",
-            "Harbor.Application",
-            "Harbor.Registries",
-            "Harbor.Terminal.Abstractions",
-            "Harbor.Plugins.Runtime",
-            "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Providers.Anthropic",
-            "Harbor.Providers.OpenAI",
-            "Harbor.Providers.Ollama",
-            "Harbor.Storage.Jsonl",
-            "Harbor.Storage.Memory",
-            "Harbor.Storage.Sqlite",
-            "Harbor.Tools.Builtin",
-            "Harbor.Cli"
-        ];
-        var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
-        await Assert.That(violations).IsEmpty();
-    }
-
-    /// <summary>
     ///     Every Harbor.Providers.* (Infrastructure) project may reference
     ///     Harbor.Abstractions only — NOT Harbor.Core, NOT other Providers.
     /// </summary>
@@ -433,13 +402,11 @@ public class LayerDependencyTests
     [Test]
     public async Task AllExpectedHarborAssembliesAreLoaded()
     {
-        // Sanity probe: touch a type from Harbor.Scripting.Abstractions AND
-        // Harbor.Plugins.Runtime so their assemblies are force-loaded into the
-        // AppDomain before the inventory runs. (Both are leaf-level projects
+        // Sanity probe: touch a type from Harbor.Plugins.Runtime so its assembly
+        // is force-loaded into the AppDomain. (It is a leaf-level project
         // referenced transitively by the test csproj but not touched by any
         // typeof() probe in the per-assembly tests above; without this nudge
-        // they may not yet be loaded when this sanity check runs.)
-        _ = typeof(ScriptGlobals).Assembly.GetName().Name;
+        // it may not yet be loaded when this sanity check runs.)
         _ = typeof(CompiledPlugin).Assembly.GetName().Name;
         // Harbor.Core is now an empty facade (no types of its own — it forwards
         // to Harbor.Application + Harbor.Registries). Touch its FacadeMarker
@@ -466,10 +433,8 @@ public class LayerDependencyTests
             "Harbor.Registries",
             "Harbor.Core",
             "Harbor.Plugins.Runtime",
-            // Harbor.Scripting was split into Abstractions/Bridge/Engines/Hosting/
-            // Storage/Compilation — the leaf-level Abstractions is the smallest
-            // sanity-check probe (loaded transitively via Harbor.Scripting.Hosting).
-            "Harbor.Scripting.Abstractions",
+            // Harbor.Scripting moved to contrib/scripting (sprint 2) — outside
+            // the main solution's layer enforcement scope.
             "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic",
             "Harbor.Providers.OpenAI",

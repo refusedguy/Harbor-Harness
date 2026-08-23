@@ -20,7 +20,6 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
-using Harbor.Scripting.Abstractions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
@@ -362,34 +361,6 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Scripting (Application) must NOT depend on Harbor.Core,
-    ///     Harbor.Application, Harbor.Registries, Harbor.Terminal.Abstractions, or
-    ///     Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_Scripting_DoesNotDependOn_Core_Application_Registries_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(ScriptGlobals).Assembly);
-        var result = types
-            .Should()
-            .NotHaveDependencyOn("Harbor.Core")
-            .And().NotHaveDependencyOn("Harbor.Application")
-            .And().NotHaveDependencyOn("Harbor.Registries")
-            .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
-            .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
-            .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
-            .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
-            .And().NotHaveDependencyOn("Harbor.Providers.Ollama")
-            .And().NotHaveDependencyOn("Harbor.Storage.Jsonl")
-            .And().NotHaveDependencyOn("Harbor.Storage.Memory")
-            .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
-            .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .GetResult();
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
     ///     Harbor.Providers.OpenAiCompatible (Infrastructure) must NOT depend
     ///     on Harbor.Core, sibling Infrastructure, or Presentation.
     /// </summary>
@@ -613,7 +584,6 @@ public sealed class NetArchLayerRules
             ArchitectureTestHelpers.LoadHarborAssemblies()["Harbor.Core"]
             ?? throw new InvalidOperationException("Harbor.Core assembly not loaded"),
             typeof(PluginHost).Assembly,
-            typeof(ScriptGlobals).Assembly,
             typeof(OpenAiCompatibleLlmClient).Assembly,
             typeof(AnthropicLlmClient).Assembly,
             typeof(OpenAILlmClient).Assembly,

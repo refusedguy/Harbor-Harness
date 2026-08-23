@@ -16,16 +16,7 @@ using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-#if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Abstractions;
-#endif
 #if HARBOR_WITH_PLUGINS
-#endif
-#if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Compilation;
-using Harbor.Scripting.Engines;
-using Harbor.Scripting.Hosting;
-using Harbor.Scripting.Storage;
 #endif
 namespace Harbor.Cli;
 /// <summary>
@@ -252,9 +243,8 @@ public static class Program
     }
 
     /// <summary>
-    ///     Run a script file at startup via <see cref="ScriptHost" />. The script's
-    ///     <c>Harbor.registerTool</c> calls register tools in the live
-    ///     <see cref="IToolRegistry" />, making them available to the agent.
+    ///     Run a script file at startup. Scripting moved to contrib/scripting
+    ///     (sprint 2) — the main CLI reports --script as unsupported.
     /// </summary>
     /// <returns>Success, or failure with an error message. Never throws for expected script failures.</returns>
     private static async Task<Result> RunStartupScriptAsync(IServiceProvider services, string? scriptPath)
@@ -263,61 +253,14 @@ public static class Program
         {
             return Result.Success();
         }
-#if !HARBOR_WITH_SCRIPTING
-        // No-scripting build excludes the entire Harbor.Scripting.* stack —
-        // --script is reported as unsupported rather than silently ignored.
+
+        // Scripting moved to contrib/scripting (sprint 2) — the main CLI no
+        // longer ships Harbor.Scripting.*. --script is reported as unsupported
+        // rather than silently ignored.
         _ = services;
-        _logger.LogWarning("--script flag ignored: HARBOR_WITH_SCRIPTING build flag is off");
+        _logger.LogWarning("--script flag ignored: scripting lives in contrib/scripting and is not part of the main CLI build");
         return CSharpFunctionalExtensions.Result.Failure(
-            "Scripting is disabled in this build. Use the full build (./build.sh Publish) with --with-scripting to enable --script.");
-#else
-        var tools = services.GetRequiredService<IToolRegistry>();
-        var providers = services.GetRequiredService<IProviderRegistry>();
-        var agents = services.GetRequiredService<IAgentRegistry>();
-        var loggerFactory = services.GetRequiredService<ILoggerFactory>();
-
-        // Compose the script host: SharpTS engine (default) + tsc compiler
-        // fallback + in-memory store seeded with the one-shot script path.
-        // SharpTS handles TypeScript natively (no tsc needed); if `sharpts`
-        // is not on PATH, the host falls back to the Jint engine.
-        var sharpTsLogger = loggerFactory.CreateLogger<SharpTsScriptEngine>();
-        var jintLogger = loggerFactory.CreateLogger("Harbor.Scripting.Jint");
-        var tscLogger = loggerFactory.CreateLogger<TscCompiler>();
-        var hostLogger = loggerFactory.CreateLogger<ScriptHost>();
-
-        var sharpTs = new SharpTsScriptEngine(sharpTsLogger);
-        IScriptEngine engine = sharpTs.IsAvailable
-            ? sharpTs
-            : new JintScriptEngine(jintLogger);
-        IScriptCompiler compiler = engine is SharpTsScriptEngine
-            ? new PassThroughCompiler()
-            : new TscCompiler(tscLogger);
-
-        var globals = new ScriptGlobals
-        {
-            Tools = tools,
-            Providers = providers,
-            Agents = agents,
-            Logger = loggerFactory.CreateLogger("Harbor.Script")
-        };
-
-        var host = new ScriptHost(engine, new InMemoryScriptStore(), compiler, hostLogger);
-        string fullPath = Path.GetFullPath(scriptPath);
-        string source;
-        try
-        {
-            source = File.ReadAllText(fullPath);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"Failed to read script '{fullPath}': {ex.Message}");
-        }
-
-        var result = await host.EvaluateAsync(fullPath, source, globals).ConfigureAwait(false);
-        return result.IsSuccess
-            ? Result.Success()
-            : Result.Failure(result.Error ?? "Script evaluation failed.");
-#endif
+            "Scripting is not available in this build. Build contrib/Contrib.slnx for the scripting-enabled projects.");
     }
 
     /// <summary>

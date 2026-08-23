@@ -20,9 +20,9 @@
     because XML comments disallow consecutive hyphens).
 
       * `HarborWithPlugins=false`       — removes Harbor.Plugins.* (Roslyn loader)
-      * `HarborWithScripting=false`     — removes Harbor.Scripting.* (Jint engine)
-      * `HarborWithSpectreTui=false`    — removes alternative TUI renderers
-                                          (Spectre/Fullscreen/Termina/RazorConsole/TerminalGui/Ansi)
+      * `HarborWithSpectreTui=false`    — (historical; alternative TUI renderers
+                                          now live in contrib/tui and are no
+                                          longer referenced from the main CLI)
       * `HarborWithAllProviders=false`  — keeps only Harbor.Providers.Ollama
       * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
 
@@ -32,7 +32,7 @@
     HostBuilder.cs.
 
     The granular flags additionally define per-feature C# symbols
-    (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SCRIPTING`, `HARBOR_WITH_SPECTRE_TUI`,
+    (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SPECTRE_TUI`,
     `HARBOR_WITH_ALL_PROVIDERS`) so HostBuilder.cs can use finer-grained
     `#if` guards.
 
@@ -76,9 +76,6 @@
     <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
     <HarborWithPlugins Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
 
-    <HarborWithScripting Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithScripting>
-    <HarborWithScripting Condition="'$(HarborWithScripting)' == ''">true</HarborWithScripting>
-
     <HarborWithSpectreTui Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
     <HarborWithSpectreTui Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
 
@@ -93,7 +90,6 @@
       Each symbol is defined IFF its corresponding flag is 'true'.
     -->
     <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
-    <DefineConstants Condition="'$(HarborWithScripting)' == 'true'">$(DefineConstants);HARBOR_WITH_SCRIPTING</DefineConstants>
     <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
@@ -104,7 +100,7 @@
       HostBuilder.cs for the minimal shorthand use case (CLI flag spelled
       with a double-hyphen prefix, omitted here per XML-comment rules).
     -->
-    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithScripting)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
 
     <!--
       NativeAOT configuration. Enabled automatically when HARBOR_MINIMAL=true
@@ -201,15 +197,6 @@
     <ProjectReference Include="..\..\src\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
-  </ItemGroup>
-
-  <!-- ── Scripting (conditional on HarborWithScripting) ───────────────────── -->
-  <ItemGroup Condition="'$(HarborWithScripting)' == 'true'">
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Storage\Harbor.Scripting.Storage.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Compilation\Harbor.Scripting.Compilation.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Engines\Harbor.Scripting.Engines.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Bridge\Harbor.Scripting.Bridge.csproj"/>
   </ItemGroup>
 
   <!-- ── All Providers (conditional on HarborWithAllProviders) ─────────────── -->

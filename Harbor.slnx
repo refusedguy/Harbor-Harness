@@ -64,15 +64,6 @@
         <Project Path="src/Harbor.Plugins.Runtime/Harbor.Plugins.Runtime.csproj"/>
     </Folder>
 
-    <Folder Name="/src/Scripting/">
-        <Project Path="src/Harbor.Scripting.Abstractions/Harbor.Scripting.Abstractions.csproj"/>
-        <Project Path="src/Harbor.Scripting.Storage/Harbor.Scripting.Storage.csproj"/>
-        <Project Path="src/Harbor.Scripting.Compilation/Harbor.Scripting.Compilation.csproj"/>
-        <Project Path="src/Harbor.Scripting.Engines/Harbor.Scripting.Engines.csproj"/>
-        <Project Path="src/Harbor.Scripting.Bridge/Harbor.Scripting.Bridge.csproj"/>
-        <Project Path="src/Harbor.Scripting.Hosting/Harbor.Scripting.Hosting.csproj"/>
-    </Folder>
-
     <Folder Name="/src/IPC/">
         <Project Path="src/Harbor.Ipc.Abstractions/Harbor.Ipc.Abstractions.csproj"/>
         <Project Path="src/Harbor.Ipc.Client/Harbor.Ipc.Client.csproj"/>
@@ -111,7 +102,6 @@
         <Project Path="tests/Harbor.Core.Tests/Harbor.Core.Tests.csproj"/>
         <Project Path="tests/Harbor.Plugins.Runtime.Tests/Harbor.Plugins.Runtime.Tests.csproj"/>
         <Project Path="tests/Harbor.Providers.Tests/Harbor.Providers.Tests.csproj"/>
-        <Project Path="tests/Harbor.Scripting.Tests/Harbor.Scripting.Tests.csproj"/>
         <Project Path="tests/Harbor.Storage.Jsonl.Tests/Harbor.Storage.Jsonl.Tests.csproj"/>
         <Project Path="tests/Harbor.Storage.Tests/Harbor.Storage.Tests.csproj"/>
         <Project Path="tests/Harbor.Tools.Builtin.Tests/Harbor.Tools.Builtin.Tests.csproj"/>

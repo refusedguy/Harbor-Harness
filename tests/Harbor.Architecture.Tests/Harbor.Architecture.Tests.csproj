@@ -40,7 +40,6 @@
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
