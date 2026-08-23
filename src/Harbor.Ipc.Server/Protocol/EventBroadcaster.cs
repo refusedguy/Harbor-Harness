@@ -11,12 +11,20 @@ namespace Harbor.Ipc.Protocol;
 ///         is then serialized into an <see cref="EventEnvelope" /> and
 ///         pushed to every registered client stream concurrently.
 ///     </para>
-///     <para>
-///         <b>Failure isolation:</b> if writing to one client throws
-///         (broken pipe, client gone), the broadcaster removes that client
-///         from its registration list and continues broadcasting to the
-///         remaining clients. One dead client never blocks the others.
-///     </para>
+    ///     <para>
+    ///         <b>Failure isolation:</b> if writing to one client throws
+    ///         (broken pipe, client gone), the broadcaster removes that client
+    ///         from its registration list and continues broadcasting to the
+    ///         remaining clients. One dead client never blocks the others.
+    ///     </para>
+    ///     <para>
+    ///         <b>Fan-out budget (B4):</b> the envelope is serialized once and
+    ///         delivered to all clients concurrently via fully-observed tasks,
+    ///         each bounded by a ~250 ms per-client write budget (lock acquire +
+    ///         frame write). A slow or stuck client is unregistered when its
+    ///         budget lapses instead of delaying every other client or the
+    ///         publishing agent loop.
+    ///     </para>
 ///     <para>
 ///         <b>Frame integrity:</b> each registered client carries its own
 ///         <see cref="SemaphoreSlim" /> write lock — the same lock the
@@ -37,6 +45,19 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private int _disposed;
     private IDisposable? _eventBusSubscription;
     private TaskCompletionSource<bool>? _subscriptionReady;
+
+    // B4: per-client write budget — one slow/stuck client must never delay
+    // delivery to the others (nor block the publishing agent loop) longer
+    // than this.
+    private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
+
+    // B4: cheap snapshot cache. Membership mutations bump
+    // <see cref="_membershipVersion" />; broadcasts rebuild the array only
+    // when the version changed, so the steady state costs one integer
+    // compare per event.
+    private int _membershipVersion;
+    private ClientRegistration[] _cachedSnapshot = Array.Empty<ClientRegistration>();
+    private int _snapshotVersion = -1;
 
     /// <summary>
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
@@ -59,6 +80,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
         lock (_clientsLock)
         {
             _clients.Clear();
+            _membershipVersion++;
         }
     }
 
@@ -96,10 +118,12 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 if (ReferenceEquals(_clients[i].Stream, clientStream))
                 {
                     _clients[i] = new ClientRegistration(clientStream, writeLock);
+                    _membershipVersion++;
                     return;
                 }
             }
             _clients.Add(new ClientRegistration(clientStream, writeLock));
+            _membershipVersion++;
             _subscriptionReady?.TrySetResult(true);
         }
     }
@@ -118,6 +142,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 if (ReferenceEquals(_clients[i].Stream, clientStream))
                 {
                     _clients.RemoveAt(i);
+                    _membershipVersion++;
                     return;
                 }
             }
@@ -129,59 +154,118 @@ public sealed class EventBroadcaster : IAsyncDisposable
         var projected = ProjectEvent(evt);
         if (projected is null) return;
 
+        // Serialize the envelope exactly once, before the fan-out loop.
         var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
         var envelope = new EventEnvelope { EventBytes = eventBytes };
 
-        List<ClientRegistration> snapshot;
-        lock (_clientsLock)
+        ClientRegistration[] snapshot = SnapshotClients();
+        if (snapshot.Length == 0) return;
+
+        // B4: deliver concurrently with a per-client write budget. Every send is
+        // a bounded, fully-observed task — no unobserved fire-and-forget. A
+        // client that times out or throws is marked dead and unregistered after
+        // the fan-out completes; it can never stall the others or the agent loop.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(ClientWriteTimeout);
+
+        var sends = new Task[snapshot.Length];
+        var alive = new bool[snapshot.Length];
+        for (int i = 0; i < snapshot.Length; i++)
         {
-            snapshot = new List<ClientRegistration>(_clients);
+            sends[i] = SendToClientAsync(snapshot[i], envelope, timeoutCts.Token, alive, i);
         }
 
-        if (snapshot.Count == 0) return;
+        await Task.WhenAll(sends).ConfigureAwait(false);
 
-        var deadClients = new List<ClientRegistration>(0);
-        foreach (var client in snapshot)
+        RemoveDeadClients(snapshot, alive);
+    }
+
+    /// <summary>
+    ///     One bounded send to one client: take the per-client write lock within
+    ///     the budget, push the pre-serialized envelope, release the lock. Any
+    ///     failure — timeout, broken pipe, shutdown cancellation — marks the
+    ///     client dead instead of throwing to the fan-out loop.
+    /// </summary>
+    private async Task SendToClientAsync(
+        ClientRegistration client,
+        EventEnvelope envelope,
+        CancellationToken writeCt,
+        bool[] alive,
+        int index)
+    {
+        try
         {
+            // Take the per-client write lock so broadcaster-pushed frames never
+            // interleave with dispatcher response frames on the same stream.
+            if (!await client.WriteLock.WaitAsync(ClientWriteTimeout, writeCt).ConfigureAwait(false))
+            {
+                return; // could not acquire the lock within budget → treat as dead
+            }
             try
             {
-                // Take the per-client write lock so broadcaster-pushed frames
-                // never interleave with dispatcher response frames on the same stream.
-                await client.WriteLock.WaitAsync(ct).ConfigureAwait(false);
-                try
-                {
-                    await WireCodec.WriteResponseAsync(client.Stream, envelope, ct).ConfigureAwait(false);
-                }
-                finally
-                {
-                    client.WriteLock.Release();
-                }
+                await WireCodec.WriteResponseAsync(client.Stream, envelope, writeCt).ConfigureAwait(false);
+                alive[index] = true;
             }
-            catch (Exception ex)
+            finally
             {
-                _logger.LogDebug(ex, "Client stream write failed; unregistering");
-                deadClients.Add(client);
+                client.WriteLock.Release();
             }
         }
-
-        if (deadClients.Count > 0)
+        catch (Exception ex)
         {
-            lock (_clientsLock)
+            _logger.LogDebug(ex, "Client stream write failed or timed out; unregistering");
+        }
+    }
+
+    private void RemoveDeadClients(ClientRegistration[] snapshot, bool[] alive)
+    {
+        lock (_clientsLock)
+        {
+            bool removedAny = false;
+            for (int i = 0; i < snapshot.Length; i++)
             {
-                foreach (var dead in deadClients)
+                if (alive[i]) continue;
+
+                for (int j = 0; j < _clients.Count; j++)
                 {
-                    for (int i = 0; i < _clients.Count; i++)
+                    if (ReferenceEquals(_clients[j].Stream, snapshot[i].Stream))
                     {
-                        if (ReferenceEquals(_clients[i].Stream, dead.Stream))
-                        {
-                            _clients.RemoveAt(i);
-                            break;
-                        }
+                        _clients.RemoveAt(j);
+                        removedAny = true;
+                        break;
                     }
                 }
             }
-            // Don't dispose the streams here — the per-client RPC loop owns them.
+
+            if (removedAny)
+            {
+                _membershipVersion++;
+            }
+        }
+        // Don't dispose the streams here — the per-client RPC loop owns them.
+    }
+
+    /// <summary>
+    ///     Snapshot of the registered clients, cached across broadcasts and
+    ///     rebuilt only when membership actually changed (B4).
+    /// </summary>
+    private ClientRegistration[] SnapshotClients()
+    {
+        lock (_clientsLock)
+        {
+            if (_snapshotVersion != _membershipVersion)
+            {
+                var clients = new ClientRegistration[_clients.Count];
+                for (int i = 0; i < _clients.Count; i++)
+                {
+                    clients[i] = _clients[i];
+                }
+                _cachedSnapshot = clients;
+                _snapshotVersion = _membershipVersion;
+            }
+
+            return _cachedSnapshot;
         }
     }
 

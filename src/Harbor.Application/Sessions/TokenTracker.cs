@@ -12,6 +12,15 @@ public sealed class TokenTracker : ITokenTracker
     private int _totalCacheReadTokens;
     private int _totalCacheWriteTokens;
 
+    // Running-estimate cache (B3): _runningEstimate covers exactly the leading
+    // _trackedCount messages of the history. Appends reported through
+    // <see cref="RecordAppendedMessage" /> extend the cache incrementally; any
+    // other change to the history (external append, compaction prune,
+    // truncation) desynchronizes the count and forces exactly one full rescan
+    // on the next ShouldCompact call before O(1) checks resume.
+    private int _runningEstimate;
+    private int _trackedCount;
+
     public int ReserveTokens { get; set; } = 16384;
 
     public TokenTracker() : this(new HeuristicTokenEstimator()) { }
@@ -36,9 +45,33 @@ public sealed class TokenTracker : ITokenTracker
 
     public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => _estimator.EstimateMessages(messages);
 
+    /// <inheritdoc />
+    public void RecordAppendedMessage(AgentMessage message)
+    {
+        _runningEstimate += _estimator.EstimateMessage(message);
+        _trackedCount++;
+    }
+
+    /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {
-        int estimated = _estimator.EstimateMessages(messages);
+        int estimated;
+        if (messages.Count == _trackedCount)
+        {
+            // Fast path: the history length matches what the running cache
+            // covers, so no message can have been appended or pruned since.
+            estimated = _runningEstimate;
+        }
+        else
+        {
+            // Staleness fallback: the cache cannot know about externally
+            // appended messages (or a compaction prune) — recompute once and
+            // re-sync so subsequent turns are O(1) again.
+            estimated = _estimator.EstimateMessages(messages);
+            _runningEstimate = estimated;
+            _trackedCount = messages.Count;
+        }
+
         return estimated > model.ContextWindow - ReserveTokens;
     }
 

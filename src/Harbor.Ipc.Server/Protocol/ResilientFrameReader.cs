@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Buffers.Binary;
+using System.Threading;
 
 namespace Harbor.Ipc.Protocol;
 
@@ -22,8 +24,9 @@ internal enum FrameReadOutcome
     /// <see cref="HarborRequest" />. The stream stays in sync — safe to skip and continue.</summary>
     UndecodableFrame,
 
-    /// <summary>Declared frame length exceeds <see cref="WireCodec.MaxFrameBytes" />.
-    /// The payload was not consumed — framing is unrecoverable; close the connection.</summary>
+    /// <summary>Declared frame length exceeds the per-frame cap, or the connection's
+    /// outstanding-buffered-bytes budget would be violated. Framing is treated as a
+    /// protocol error; close this connection (the server keeps serving others).</summary>
     OversizedFrame
 }
 
@@ -37,23 +40,62 @@ internal readonly record struct FrameReadResult(FrameReadOutcome Outcome, Harbor
 ///     per-failure classification instead of exception-based control flow.
 /// </summary>
 /// <remarks>
-///     <b>Framing contract:</b> this reader must stay byte-compatible with
-///     <c>WireCodec</c>, which is the source of truth for the frame layout; the frame
-///     size cap is shared via <see cref="WireCodec.MaxFrameBytes" />. A malformed or
-///     empty frame must never kill a connection — only terminal stream conditions
-///     (<see cref="OperationCanceledException" />, <see cref="System.IO.IOException" />)
-///     propagate as exceptions.
+///     <para>
+///         <b>Framing contract:</b> this reader must stay byte-compatible with
+///         <c>WireCodec</c>, which is the source of truth for the frame layout. A
+///         malformed or empty frame must never kill a connection — only terminal
+///         stream conditions (<see cref="OperationCanceledException" />,
+///         <see cref="System.IO.IOException" />) propagate as exceptions.
+///     </para>
+///     <para>
+///         <b>Frame budget (D2):</b> instances are created once per connection and
+///         enforce two caps before any large allocation happens: a maximum declared
+///         frame length (default 16 MB, tighter than the 64 MB client-side
+///         <c>WireCodec.MaxFrameBytes</c>) and a total outstanding buffered-bytes
+///         budget per connection (default 128 MB). Payloads are read incrementally
+///         into pooled buffers rented from <see cref="ArrayPool{T}.Shared" /> instead
+///         of allocating <c>new byte[length]</c> up front, so a malicious or buggy
+///         length header cannot trigger an OOM. A budget violation is classified as
+///         <see cref="FrameReadOutcome.OversizedFrame" /> — a protocol error whose
+///         recovery is closing that one connection while the server keeps serving
+///         all others.
+///     </para>
 /// </remarks>
-internal static class ResilientFrameReader
+internal sealed class ResilientFrameReader
 {
+    /// <summary>Sane default single-frame cap: requests are tiny; 16 MB is generous.</summary>
+    internal const long DefaultMaxFrameBytes = 16 * 1024 * 1024;
+
+    /// <summary>Sane default per-connection outstanding-buffered-bytes budget.</summary>
+    internal const long DefaultMaxOutstandingBytes = 128 * 1024 * 1024;
+
+    private readonly long _maxFrameBytes;
+    private readonly long _maxOutstandingBytes;
+    private long _outstandingBytes;
+
+    /// <summary>
+    ///     Create a reader with explicit caps. One instance per connection — the
+    ///     outstanding-bytes budget is per-connection state.
+    /// </summary>
+    public ResilientFrameReader(
+        long maxFrameBytes = DefaultMaxFrameBytes,
+        long maxOutstandingBytes = DefaultMaxOutstandingBytes)
+    {
+        if (maxFrameBytes < 1) throw new ArgumentOutOfRangeException(nameof(maxFrameBytes));
+        if (maxOutstandingBytes < maxFrameBytes) throw new ArgumentOutOfRangeException(nameof(maxOutstandingBytes));
+
+        _maxFrameBytes = maxFrameBytes;
+        _maxOutstandingBytes = maxOutstandingBytes;
+    }
+
     /// <summary>
     ///     Read one framed <see cref="HarborRequest" />, classifying every failure mode:
     ///     clean EOF or truncated frame → <see cref="FrameReadOutcome.StreamEnded" />,
     ///     zero-length frame → <see cref="FrameReadOutcome.EmptyFrame" />,
     ///     undecodable payload → <see cref="FrameReadOutcome.UndecodableFrame" />,
-    ///     over-cap length → <see cref="FrameReadOutcome.OversizedFrame" />.
+    ///     over-cap length or exhausted buffer budget → <see cref="FrameReadOutcome.OversizedFrame" />.
     /// </summary>
-    public static async Task<FrameReadResult> ReadRequestAsync(Stream stream, CancellationToken ct = default)
+    public async ValueTask<FrameReadResult> ReadRequestAsync(Stream stream, CancellationToken ct = default)
     {
         byte[] header = new byte[4];
         int headerBytes = await ReadExactAsync(stream, header, ct).ConfigureAwait(false);
@@ -64,31 +106,52 @@ internal static class ResilientFrameReader
         if (length == 0)
             return new(FrameReadOutcome.EmptyFrame, null, null);
 
-        if (length > WireCodec.MaxFrameBytes)
+        if (length > _maxFrameBytes)
         {
             return new(
                 FrameReadOutcome.OversizedFrame,
                 null,
-                new InvalidOperationException($"Incoming frame length {length} exceeds cap {WireCodec.MaxFrameBytes}"));
+                new InvalidOperationException($"Incoming frame length {length} exceeds frame cap {_maxFrameBytes}"));
         }
 
-        byte[] payload = new byte[length];
-        int payloadBytes = await ReadExactAsync(stream, payload, ct).ConfigureAwait(false);
-        if (payloadBytes < payload.Length)
-            return new(FrameReadOutcome.StreamEnded, null, null);
+        // D2: enforce the connection-wide outstanding-buffer budget BEFORE renting,
+        // so a flood of concurrent large frames on one connection cannot exhaust memory.
+        if (Interlocked.Read(ref _outstandingBytes) + length > _maxOutstandingBytes)
+        {
+            return new(
+                FrameReadOutcome.OversizedFrame,
+                null,
+                new InvalidOperationException(
+                    $"Connection outstanding-buffer budget {_maxOutstandingBytes} exceeded (frame {length})"));
+        }
 
+        int payloadLength = (int)length;
+        byte[] payload = ArrayPool<byte>.Shared.Rent(payloadLength);
+        Interlocked.Add(ref _outstandingBytes, payloadLength);
         try
         {
-            var request = MessagePackSerializer.Deserialize<HarborRequest>(payload, cancellationToken: ct);
-            return new(FrameReadOutcome.Request, request, null);
+            int payloadBytes = await ReadExactAsync(stream, payload.AsMemory(0, payloadLength), ct).ConfigureAwait(false);
+            if (payloadBytes < payloadLength)
+                return new(FrameReadOutcome.StreamEnded, null, null);
+
+            try
+            {
+                var request = MessagePackSerializer.Deserialize<HarborRequest>(payload.AsMemory(0, payloadLength), cancellationToken: ct);
+                return new(FrameReadOutcome.Request, request, null);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return new(FrameReadOutcome.UndecodableFrame, null, ex);
+            }
         }
-        catch (OperationCanceledException)
+        finally
         {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return new(FrameReadOutcome.UndecodableFrame, null, ex);
+            Interlocked.Add(ref _outstandingBytes, -payloadLength);
+            ArrayPool<byte>.Shared.Return(payload);
         }
     }
 
@@ -96,13 +159,12 @@ internal static class ResilientFrameReader
     ///     Read exactly <c>buffer.Length</c> bytes. Returns the number of bytes actually
     ///     read; a value less than <c>buffer.Length</c> means the peer closed mid-read.
     /// </summary>
-    private static async Task<int> ReadExactAsync(Stream stream, byte[] buffer, CancellationToken ct)
+    private static async Task<int> ReadExactAsync(Stream stream, Memory<byte> buffer, CancellationToken ct)
     {
         int total = 0;
         while (total < buffer.Length)
         {
-            int n = await stream.ReadAsync(buffer.AsMemory(total, buffer.Length - total), ct)
-                .ConfigureAwait(false);
+            int n = await stream.ReadAsync(buffer[total..], ct).ConfigureAwait(false);
             if (n == 0) break;
             total += n;
         }
