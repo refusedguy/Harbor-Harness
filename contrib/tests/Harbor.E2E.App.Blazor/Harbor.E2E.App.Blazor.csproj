@@ -14,8 +14,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
-    <ProjectReference Include="..\..\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
+    <ProjectReference Include="..\..\..\tests\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

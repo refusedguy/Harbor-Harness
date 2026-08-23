@@ -49,17 +49,17 @@
        used here (we build our own WPF host) — but we still want the option to
        register Harbor.Core providers in the WPF composition root. -->
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <!--
       In-memory session store (Harbor.Storage.Memory) — used by the
       standalone desktop shell so the app runs without persistent storage.
       Swap to Harbor.Storage.Jsonl or Harbor.Storage.Sqlite (add a
       ProjectReference) if you want durable persistence across restarts.
     -->
-    <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

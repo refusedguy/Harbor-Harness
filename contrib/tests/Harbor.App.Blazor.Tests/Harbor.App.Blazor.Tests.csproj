@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
+    <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

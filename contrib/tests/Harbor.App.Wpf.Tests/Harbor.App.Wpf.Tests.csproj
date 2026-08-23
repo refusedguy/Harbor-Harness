@@ -25,7 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\apps\Harbor.App.Wpf\Harbor.App.Wpf.csproj"/>
+    <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Wpf\Harbor.App.Wpf.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

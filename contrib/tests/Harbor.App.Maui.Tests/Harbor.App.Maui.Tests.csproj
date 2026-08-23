@@ -27,7 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\apps\Harbor.App.Maui\Harbor.App.Maui.csproj"/>
+    <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Maui\Harbor.App.Maui.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
