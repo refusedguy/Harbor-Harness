@@ -1,5 +1,10 @@
 # Harbor Desktop App Plan — Master Plan for 4 ORCA-level Desktop GUIs
 
+> **Historical plan (pre-sprint-2).** Since sprint-2, `Harbor.App.{Wpf,Maui,Blazor}` live in
+> [`contrib/apps/`](../contrib/apps/) (build via `contrib/Contrib.slnx`); only
+> `Harbor.App.{Cli,Avalonia}` remain in the main solution. Paths below reflect the layout
+> at the time of writing and are not updated to the contrib layout.
+
 > **Task ID:** G (researcher-r4)
 > **Purpose:** Define the complete plan to build 4 standalone desktop GUI apps (Avalonia, WPF, MAUI, Blazor) at ORCA-level quality — meaning: embedded code editor, session manager, animations, design system, plugin support, provider browser, MCP browser, settings UI, diff viewer, token usage charts, slash command palette, toast notifications, dark/light theme.
 > **Output scope:** single document, ~2 000 lines, lives at `/home/z/my-project/extracted/docs/DESKTOP_APP_PLAN.md`.
@@ -2166,7 +2171,7 @@ public static class ServiceCollectionExtensions
 ```
 harbor/
 ├── apps/                                       # ← application entry points (one per platform)
-│   ├── Harbor.App.Cli/                         # ← existing CLI (src/Harbor.Cli renamed)
+│   ├── Harbor.App.Cli/                         # ← existing CLI (apps/Harbor.App.Cli renamed)
 │   │   ├── Harbor.App.Cli.csproj
 │   │   ├── Program.cs
 │   │   ├── Repl/
@@ -2404,9 +2409,9 @@ The new `apps/Harbor.App.*` projects are full-featured (per this doc).
 
 This is a pure rename — no code changes. The CLI is the fifth "app" (per the user's brief which lists `apps/Harbor.App.Cli/`). The move:
 
-1. `git mv src/Harbor.Cli apps/Harbor.App.Cli`
+1. `git mv apps/Harbor.App.Cli apps/Harbor.App.Cli`
 2. Update `Harbor.slnx` to point at the new path.
-3. Update any docs that reference `src/Harbor.Cli` (CLAUDE.md, AGENTS.md, ARCHITECTURE.md, DEVELOPMENT.md, GETTING_STARTED.md).
+3. Update any docs that reference `apps/Harbor.App.Cli` (CLAUDE.md, AGENTS.md, ARCHITECTURE.md, DEVELOPMENT.md, GETTING_STARTED.md).
 
 ---
 

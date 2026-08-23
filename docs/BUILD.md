@@ -68,13 +68,13 @@ Current test status: **65 passed, 1 skipped** across 4 test projects.
 
 ```bash
 # Interactive REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # One-shot prompt
-dotnet run --project src/Harbor.Cli -- ask "Hello"
+dotnet run --project apps/Harbor.App.Cli -- ask "Hello"
 
 # Show help
-dotnet run --project src/Harbor.Cli -- help
+dotnet run --project apps/Harbor.App.Cli -- help
 ```
 
 ## Publish as a single binary
@@ -82,7 +82,7 @@ dotnet run --project src/Harbor.Cli -- help
 ### Framework-dependent (small, requires .NET 10 runtime)
 
 ```bash
-dotnet publish src/Harbor.Cli -c Release -o ./publish
+dotnet publish apps/Harbor.App.Cli -c Release -o ./publish
 
 # Run
 ./publish/harbor
@@ -93,11 +93,11 @@ Size: ~5 MB.
 ### Self-contained (no .NET runtime needed)
 
 ```bash
-dotnet publish src/Harbor.Cli -c Release -r linux-x64 --self-contained -o ./publish-linux
+dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64 --self-contained -o ./publish-linux
 
 # Cross-platform variants:
-dotnet publish src/Harbor.Cli -c Release -r osx-arm64 --self-contained -o ./publish-osx
-dotnet publish src/Harbor.Cli -c Release -r win-x64 --self-contained -o ./publish-win
+dotnet publish apps/Harbor.App.Cli -c Release -r osx-arm64 --self-contained -o ./publish-osx
+dotnet publish apps/Harbor.App.Cli -c Release -r win-x64 --self-contained -o ./publish-win
 ```
 
 Size: ~80 MB (includes .NET runtime).
@@ -105,7 +105,7 @@ Size: ~80 MB (includes .NET runtime).
 ### Single-file self-contained
 
 ```bash
-dotnet publish src/Harbor.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ./publish
+dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ./publish
 ```
 
 Size: ~80 MB, but a single executable.
@@ -113,7 +113,7 @@ Size: ~80 MB, but a single executable.
 ### NativeAOT (smallest, fastest startup — experimental)
 
 ```bash
-dotnet publish src/Harbor.Cli -c Release -r linux-x64 -p:PublishAot=true -o ./publish-aot
+dotnet publish apps/Harbor.App.Cli -c Release -r linux-x64 -p:PublishAot=true -o ./publish-aot
 ```
 
 Size: ~5-10 MB. Startup: <50ms. RSS: <30MB.
@@ -130,10 +130,10 @@ See [specs/08-native-aot.md](../specs/08-native-aot.md) for details.
 
 ```bash
 # Pack
-dotnet pack src/Harbor.Cli -c Release
+dotnet pack apps/Harbor.App.Cli -c Release
 
 # Install globally
-dotnet tool install --global --add-src ./src/Harbor.Cli/nupkg Harbor.Cli
+dotnet tool install --global --add-src ./apps/Harbor.App.Cli/nupkg Harbor.Cli
 
 # Use
 harbor
@@ -193,7 +193,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - run: dotnet publish src/Harbor.Cli -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -o ./publish
+      - run: dotnet publish apps/Harbor.App.Cli -c Release -r ${{ matrix.rid }} --self-contained -p:PublishSingleFile=true -o ./publish
       - uses: actions/upload-artifact@v4
         with:
           name: harbor-${{ matrix.rid }}

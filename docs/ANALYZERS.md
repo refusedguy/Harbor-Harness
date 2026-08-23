@@ -6,7 +6,8 @@ Harbor runs three layers of static analysis + DI validation:
    `Directory.Build.props` (solution-wide) and `apps/Directory.Build.props`
    (apps-only). Severities configured in `.editorconfig`.
 2. **DI registration tests** — per-composition-root test projects under
-   `tests/Harbor.App.*.Tests/` that build the host and assert every
+   `tests/Harbor.App.*.Tests/` (Wpf/Maui/Blazor variants live in
+   `contrib/tests/` since sprint-2) that build the host and assert every
    expected service is resolvable.
 3. **`dotnet-arch-analyzer`** — optional namespace-level layer validation
    via `dotnetarch.json` (circular deps + layer violations).
@@ -100,6 +101,9 @@ Each composition root has a dedicated test project under
 `tests/Harbor.App.*.Tests/` that builds the host and asserts every
 `[Exposes(typeof(T))]`-declared service is resolvable.
 
+> Since sprint-2, `Harbor.App.{Wpf,Maui,Blazor}.Tests` live in `contrib/tests/`
+> (build via `contrib/Contrib.slnx`); Cli/Avalonia test projects remain in `tests/`.
+
 | Test project | Composition root | TFM |
 |--------------|------------------|-----|
 | `Harbor.App.Cli.Tests` | `Harbor.Cli.Hosting.HostBuilder.Build` | `net10.0` |
@@ -126,7 +130,8 @@ When adding a new service registration to any composition root:
 2. Add `[Exposes(typeof(IFoo))]` to the composition root's `Build` method
    (keep the attribute list in sync with the actual registrations).
 3. Add a `[Test] public async Task Build_Registers_IFoo()` to the matching
-   `tests/Harbor.App.*.Tests/*DiTests.cs` file.
+   `tests/Harbor.App.*.Tests/*DiTests.cs` file (Wpf/Maui/Blazor: under
+   `contrib/tests/`).
 4. Add `typeof(IFoo)` to the `required` array in the aggregate test
    (`Build_AllDeclaredServices_Resolvable`).
 
@@ -160,6 +165,10 @@ dotnet-arch analyze --config dotnetarch.json --solution Harbor.slnx
 | **Infrastructure** | `Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`, `Harbor.Plugins.Runtime`, `Harbor.Plugins.Hosting`, `Harbor.Plugins.Compilation`, `Harbor.Plugins.Instantiation`, `Harbor.Plugins.Registration`, `Harbor.Plugins.Storage`, `Harbor.Scripting.*` | Domain, Application |
 | **Presentation** | `Harbor.Tui.*`, `Harbor.Desktop.*`, `Harbor.Ui.Framework` | Domain, Application |
 | **CompositionRoot** | `Harbor.App.*` | Domain, Application, Infrastructure, Presentation |
+
+> Since sprint-2, `Harbor.Scripting.{Abstractions,Bridge,Compilation,Engines,Hosting,Storage}`
+> live in `contrib/scripting/` (outside `Harbor.slnx`) — layer rules apply to them only
+> via the contrib build.
 
 ### Rules
 

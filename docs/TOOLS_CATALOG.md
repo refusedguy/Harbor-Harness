@@ -1030,7 +1030,7 @@ public sealed class WebFetchTool : ITool
 
 ### Step 4 — Register in DI
 
-In `src/Harbor.Cli/Hosting/HostBuilder.cs`'s `CreateToolRegistry`:
+In `apps/Harbor.App.Cli/Hosting/HostBuilder.cs`'s `CreateToolRegistry`:
 
 ```csharp
 tb.AddTool(() => new WebFetchTool(loggerFactory.CreateLogger<WebFetchTool>()));

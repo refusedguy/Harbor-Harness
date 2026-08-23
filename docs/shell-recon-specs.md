@@ -4,6 +4,8 @@ Reconnaissance report for Harbor UI shell architecture. Analyzes `specs/07-tui.m
 `docs/DESKTOP_APP_PLAN.md`, `docs/ALTERNATIVE_UIS.md`, `docs/SPECTRE_TUI_DEEP_DIVE.md`,
 `docs/ARCHITECTURE.md`, and `docs/ARCHITECTURE_LAYERS.md` against the actual codebase.
 
+> **Note:** snapshot generated 2026-08-12, before sprint-2. `Harbor.Tui.{Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel}` now live in `contrib/tui/`, `Harbor.App.{Wpf,Maui,Blazor}` in `contrib/apps/`, their tests in `contrib/tests/`. Paths below are not updated.
+
 ## Specs inventory
 
 | Document | Path | Relevance |

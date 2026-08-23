@@ -1,6 +1,50 @@
 # Benchmarks — Harbor
 
-> **Real measurements** taken on the actual codebase with .NET 10.0.302 SDK.
+> **Latest rerun: 2026-08-22** (i5-8250U, 4C/8T, .NET 10.0.10, Release). Full data: `/tmp/benchmark-report.md`.
+> Suite: `tests/Harbor.Benchmarks` — 23 classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
+> Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
+
+## Bottlenecks (P0→P3, measured)
+
+| # | Target | Evidence | Fix direction |
+|---|---|---|---|
+| P0 | `AppReducer` streaming concat | 1.72 ms / **19.4 MB** per 1000 TextDelta (O(N²) string +) | pooled StringBuilder / chunk list, materialize on MessageEnd |
+| P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
+| P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
+| P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов | serialize once, reuse buffers |
+| P1 | `EventBus.PublishAsync` | фикс. 8.1 KB alloc даже при 0 подписчиков | ring-buffer scrollback |
+| P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
+| P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
+| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр | инкрементальная проекция по revision |
+| P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
+| P3 | `OpenAiSseParser` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
+
+## Key numbers (2026-08-22, Release JIT)
+
+| Operation | Mean | Allocated |
+|---|--:|--:|
+| AgentLoop turn (no tool) | 10.2–11.8 µs | 5.5 KB |
+| AgentLoop turn (+tool) | 16.6–26.6 µs | 7.5 KB |
+| EventBus.PublishAsync (0 sub) | 8.1 µs | 8.1 KB |
+| WireCodec roundtrip 64B / raw frame 64B | 6.2 µs / 0.25 µs | 1.8 KB / 0 |
+| OpenAiSse.ParseChunk 32B→4KB | 10.2–10.6 µs | 3.9–6.8 KB |
+| JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
+| Sqlite WAL Append ×10 | 2.2–2.6 ms | 155 KB |
+| AppStore.Dispatch TextDelta ×1000 | 1.72 ms | 19.4 MB |
+| DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
+| Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
+| PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
+| PermissionRuleset.Evaluate | 0.11–0.29 µs | 0 |
+| ToolRegistry.ResolveTools frozen @4 | 0.094 µs | 344 B |
+| ToolRegistry.GetTool | 0.8–1.6 µs | 80 B |
+| ProviderRegistry.GetClient frozen | 0.77 µs | 80 B |
+| Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
+| SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
+| StateDiff Record.Equals identical | 0.59 ns | 0 |
+
+---
+
+> **Historical measurements (2026-07-18)** taken on the actual codebase with .NET 10.0.302 SDK.
 > Previous versions of this doc contained inflated numbers (5 MB binary, 28 MB RSS) — those were Debug JIT DLL sizes and debug-process RSS. This version measures what users actually see.
 
 ## 1. Environment

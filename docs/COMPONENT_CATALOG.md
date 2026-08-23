@@ -3,6 +3,9 @@
 > Reusable UI components in Harbor. Each component exists in 3 platform flavors
 > (Avalonia / Blazor / WPF) with identical prop names and shared logic via
 > `Harbor.Ui.Framework.Converters.StatusMappers`.
+>
+> **Note (sprint-2):** the Blazor/WPF/MAUI apps moved to [`contrib/apps/`](../contrib/apps/) —
+> paths below reflect that; Avalonia stays in `apps/Harbor.App.Avalonia`.
 
 ## Table of contents
 
@@ -32,8 +35,8 @@
 
 **Platform implementations:**
 - Avalonia: `apps/Harbor.App.Avalonia/Views/Components/StatusBadge.axaml(.cs)`
-- Blazor: `apps/Harbor.App.Blazor/Components/Shared/StatusBadge.razor`
-- WPF: `apps/Harbor.App.Wpf/Controls/StatusBadge.xaml(.cs)`
+- Blazor: `contrib/apps/Harbor.App.Blazor/Components/Shared/StatusBadge.razor`
+- WPF: `contrib/apps/Harbor.App.Wpf/Controls/StatusBadge.xaml(.cs)`
 
 **Usage (Avalonia):**
 ```xml
@@ -65,8 +68,8 @@
 
 **Platform implementations:**
 - Avalonia: `apps/Harbor.App.Avalonia/Views/Components/ChatBubble.axaml(.cs)`
-- Blazor: `apps/Harbor.App.Blazor/Components/Shared/ChatBubble.razor`
-- WPF: `apps/Harbor.App.Wpf/Controls/ChatBubble.xaml(.cs)`
+- Blazor: `contrib/apps/Harbor.App.Blazor/Components/Shared/ChatBubble.razor`
+- WPF: `contrib/apps/Harbor.App.Wpf/Controls/ChatBubble.xaml(.cs)`
 
 **Role label values** (driven by `ChatLineViewModel.RoleLabel`):
 - `user` — user prompt
@@ -105,8 +108,8 @@
 
 **Platform implementations:**
 - Avalonia: `apps/Harbor.App.Avalonia/Views/Components/SessionRow.axaml(.cs)`
-- Blazor: `apps/Harbor.App.Blazor/Components/Shared/SessionRow.razor`
-- WPF: `apps/Harbor.App.Wpf/Controls/SessionRow.xaml(.cs)`
+- Blazor: `contrib/apps/Harbor.App.Blazor/Components/Shared/SessionRow.razor`
+- WPF: `contrib/apps/Harbor.App.Wpf/Controls/SessionRow.xaml(.cs)`
 
 ---
 
@@ -230,7 +233,7 @@ Static class with pure functions (no UI framework dependency):
 
 ### WPF converter wrappers
 
-`apps/Harbor.App.Wpf/Converters/Converters.cs` mirrors the Avalonia wrappers (same names,
+`contrib/apps/Harbor.App.Wpf/Converters/Converters.cs` mirrors the Avalonia wrappers (same names,
 same logic, `System.Windows.Data.IValueConverter` instead of Avalonia's). Includes
 `NullToCollapsedConverter` for the `Visibility` enum.
 
@@ -245,7 +248,7 @@ needed because Razor evaluates C# expressions inline.
 
 To add a new platform (e.g. MAUI WinUI):
 
-1. Create `apps/Harbor.App.Maui/Controls/` folder.
+1. Create `contrib/apps/Harbor.App.Maui/Controls/` folder.
 2. Port each of `StatusBadge`, `ChatBubble`, `SessionRow` to MAUI XAML.
 3. Use the SAME property names (`StatusText`, `BrushKey`, `Title`, etc.).
 4. Resolve `BrushKey` via a MAUI `IValueConverter` that wraps `StatusMappers.*` lookups.

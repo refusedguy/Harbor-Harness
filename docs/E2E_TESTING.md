@@ -114,7 +114,9 @@ points at the mock server. Also writes `~/.harbor/config.json` with
 | `ProvidersCommand_ListsAllRegisteredProviders` | `harbor providers` lists `ollama` (always-registered) |
 | `AskCommand_WithMockServer_ReturnsResponse` | `harbor ask "..."` with mock server returns the canned text; `Server.ReceivedRequests.Count > 0` |
 
-### 3.2 `tests/Harbor.E2E.App.Blazor/` (3 tests, all passing)
+### 3.2 `contrib/tests/Harbor.E2E.App.Blazor/` (3 tests, all passing)
+
+> Lives in **contrib/** since sprint-2 — build via `dotnet build contrib/Contrib.slnx`, not the main solution.
 
 | Test | Asserts |
 |---|---|
@@ -138,10 +140,11 @@ E2E tests spawn real `dotnet exec <dll>` subprocesses. The DLLs must exist:
 
 ```bash
 dotnet build tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj
-dotnet build tests/Harbor.E2E.App.Blazor/Harbor.E2E.App.Blazor.csproj
+dotnet build contrib/tests/Harbor.E2E.App.Blazor/Harbor.E2E.App.Blazor.csproj   # or: dotnet build contrib/Contrib.slnx
 ```
 
-Both build commands pull in the framework + app under test as project refs.
+Both build commands pull in the framework + app under test as project refs
+(the Blazor suite resolves its references inside contrib/).
 
 ### 4.2 Run the CLI E2E suite
 
@@ -154,7 +157,7 @@ Expected: `Passed! - Failed: 0, Passed: 6, Skipped: 0, Total: 6`.
 ### 4.3 Run the Blazor E2E suite
 
 ```bash
-dotnet test tests/Harbor.E2E.App.Blazor --no-build
+dotnet test contrib/tests/Harbor.E2E.App.Blazor --no-build
 ```
 
 Expected: `Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3`.
@@ -211,7 +214,8 @@ constraints (PTY allocation in CI sandboxes, headless Avalonia on Linux).
 
 ### 6.1 TUI E2E (SpectreTui / Termina / Terminal.Gui / RazorConsole)
 
-**Status:** Test projects exist at `tests/Harbor.E2E.Tui.{SpectreTui,Termina,TerminalGui,RazorConsole}/`
+**Status:** Test projects exist at `contrib/tests/Harbor.E2E.Tui.{SpectreTui,Termina,TerminalGui,RazorConsole}/`
+(moved to contrib in sprint-2; build via `contrib/Contrib.slnx`)
 with placeholder tests. They will not pass in the current sandbox because:
 
 - TUI renderers call `Console.ReadKey(true)` in raw mode, which requires a

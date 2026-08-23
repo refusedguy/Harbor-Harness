@@ -28,16 +28,16 @@ export HARBOR_MODEL=kilocode/tencent/hy3:free
 export HARBOR_TUI=plain    # простой вывод, удобно для первого запуска
 
 # 4. Запусти one-shot промпт
-dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 # 5. Или запусти интерактивный REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### Что ты увидишь (реальный stdout, E2E-verified 2026-07-16)
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 [agent_start] session=8f3c2a01e9d74f5f9b8c1a2b3c4d5e6f
 [turn_start] turn=1
@@ -73,7 +73,7 @@ status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
 ### Task 1: Ask a coding question
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask \
+$ dotnet run --project apps/Harbor.App.Cli -- ask \
     "What's the difference between IEnumerable<T> and IQueryable<T> in C#?"
 ```
 
@@ -84,7 +84,7 @@ LLM ответит текстом без tool calls. Event sequence:
 
 ```bash
 $ export HARBOR_TUI=ansi   # ANSI для интерактивности
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> Add a TODO comment to the top of src/Harbor.Core/Agents/AgentLoop.cs
 ```
 
@@ -181,20 +181,20 @@ ollama serve  # in another terminal
 
 ```bash
 # Interactive REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # One-shot prompt
 # (E2E-verified free example using the Kilocode free model)
 export KILO_API_KEY=klo_...
 export HARBOR_MODEL=kilocode/tencent/hy3:free
-dotnet run --project src/Harbor.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
+dotnet run --project apps/Harbor.App.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
 
 # List available providers
-dotnet run --project src/Harbor.Cli -- providers
+dotnet run --project apps/Harbor.App.Cli -- providers
 
 # List available models
-dotnet run --project src/Harbor.Cli -- models
-dotnet run --project src/Harbor.Cli -- models kilocode
+dotnet run --project apps/Harbor.App.Cli -- models
+dotnet run --project apps/Harbor.App.Cli -- models kilocode
 ```
 
 ### 5. Real output (E2E verified, 2026-07-16)
@@ -206,7 +206,7 @@ Running the one-shot prompt above produces output like this (captured with
 $ export KILO_API_KEY=klo_…
 $ export HARBOR_MODEL=kilocode/tencent/hy3:free
 $ export HARBOR_TUI=plain
-$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 [agent_start] session=8f3c…
 [turn_start] turn=1
@@ -261,6 +261,11 @@ export HARBOR_TUI=plain
 # Rich panels/tables via Spectre.Console
 export HARBOR_TUI=spectre
 ```
+
+> `spectre` and the other rich renderers (spectre-tui, fullscreen, termina,
+> terminal-gui, razor) are built from [`contrib/tui/`](../contrib/tui/) and compiled
+> into the CLI by the default-on `HarborWithSpectreTui` MSBuild flag (turn off with
+> `HARBOR_MINIMAL=true`).
 
 See all options: `harbor tui`
 
@@ -431,7 +436,7 @@ export KILO_API_KEY=klo_...    # get one at https://kilo.ai (free)
 **Как это выглядит в терминале** (реальный stderr):
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "hello"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "hello"
 fail: Harbor.Providers.OpenAiCompatible.ConfigAuthResolver[0]
       Auth failed for provider 'kilocode': Set $KILO_API_KEY
       Expected env var: KILO_API_KEY
@@ -462,7 +467,7 @@ Fix:
 
 ```bash
 # 1. Список всех доступных моделей
-dotnet run --project src/Harbor.Cli -- models anthropic
+dotnet run --project apps/Harbor.App.Cli -- models anthropic
 
 # 2. Используй точное имя модели
 export HARBOR_MODEL=anthropic/claude-sonnet-4-20250514   # exact id
@@ -479,7 +484,7 @@ curl http://localhost:11434/api/tags  # should return JSON
 **Типичная ошибка**:
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "hi"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "hi"
 fail: Harbor.Providers.Ollama.OllamaLlmClient[0]
       Failed to connect to Ollama at http://localhost:11434
       System.Net.Http.HttpRequestException: Connection refused (localhost:11434)
@@ -496,7 +501,7 @@ Fix: запусти `ollama serve` в отдельном терминале.
 **Пример невалидного JSON** (trailing comma):
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- providers
+$ dotnet run --project apps/Harbor.App.Cli -- providers
 warn: Harbor.Core.Configuration.JsonConfigStore[0]
       Failed to parse providers/myllm.json: Unexpected token ',' at position 142
 ```
@@ -537,14 +542,14 @@ var events = await bus.GetScrollbackAsync(cts.Token);
 ```bash
 # 1. Попробуй plain renderer (no colors, no escape codes)
 export HARBOR_TUI=plain
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # 2. Если работает — проблема в твоём terminal emulator
 #    Проверь TERM variable
 echo $TERM    # должно быть xterm-256color или screen-256color
 
 # 3. Для CI / pipes — всегда используй plain
-HARBOR_TUI=plain dotnet run --project src/Harbor.Cli -- ask "..." | grep foo
+HARBOR_TUI=plain dotnet run --project apps/Harbor.App.Cli -- ask "..." | grep foo
 ```
 
 ### "Tool 'X' is not registered" в логах
@@ -600,7 +605,7 @@ Compaction должен срабатывать автоматически ког
 Если не срабатывает — проверь `HeuristicTokenEstimator` и `CompactionService`:
 
 ```bash
-$ HARBOR_LOG_LEVEL=debug dotnet run --project src/Harbor.Cli
+$ HARBOR_LOG_LEVEL=debug dotnet run --project apps/Harbor.App.Cli
 # В логах должно быть:
 # debug: CompactionService.ShouldCompact: estimated=12345 / context=8192 → true
 # info:  Compaction triggered for session abc123

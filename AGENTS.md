@@ -62,7 +62,7 @@ src/Harbor.Providers.OpenAI/          — native OpenAI (Chat + Responses API)
 src/Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
 src/Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter
 src/Harbor.Tools.Builtin/             — 14 builtin tools (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
-src/Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands, FileLogger
+apps/Harbor.App.Cli/                       — entry point, DI wiring, onboarding, slash-commands, FileLogger
 
 samples/plugins/                      — 4 legacy DLL-based sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
 samples/plugins-cs/                   — CS-source sample plugins (Roslyn-compiled at runtime)
@@ -258,7 +258,7 @@ public sealed class MyTool : ITool
 }
 ```
 
-Register in `src/Harbor.Cli/Hosting/HostBuilder.cs` (in `CreateToolRegistry`):
+Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (in `CreateToolRegistry`):
 ```csharp
 tb.AddTool(() => new MyTool(loggerFactory.CreateLogger<MyTool>()));
 ```
@@ -410,7 +410,7 @@ export KILO_API_KEY=klo_xxxxxxxxxxxxxxxxxxxxxx
 export HARBOR_MODEL=kilocode/tencent/hy3:free
 export HARBOR_TUI=plain   # easy to capture stdout
 
-dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 ```
 
 ### Expected output (capture for regression diffs)
@@ -446,7 +446,7 @@ Read `AgentLoop.RunAsync` to find where the event should be emitted.
 ### E2E with tool calls (more realistic)
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "Read the first 10 lines of README.md"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Read the first 10 lines of README.md"
 
 [agent_start] session=abc123
 [turn_start] turn=1
@@ -578,13 +578,13 @@ dotnet test tests/Harbor.Core.Tests
 dotnet test tests/Harbor.Tui.Tests --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
 # Run CLI
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # List providers
-dotnet run --project src/Harbor.Cli -- providers
+dotnet run --project apps/Harbor.App.Cli -- providers
 
 # List models
-dotnet run --project src/Harbor.Cli -- models
+dotnet run --project apps/Harbor.App.Cli -- models
 ```
 
 ## Testing a change
@@ -594,7 +594,7 @@ dotnet run --project src/Harbor.Cli -- models
 3. `dotnet test` — all tests must pass (currently 242 passed, 1 skipped).
 4. If you added a new tool — add tests for it.
 5. If you changed an interface — update all implementations.
-6. Run the CLI manually to verify: `dotnet run --project src/Harbor.Cli -- help`.
+6. Run the CLI manually to verify: `dotnet run --project apps/Harbor.App.Cli -- help`.
 7. For changes to `AgentLoop` or any `ILlmClient` — run the E2E smoke test against
    Kilocode free model (see E2E testing section above).
 8. For hot-path changes — add a benchmark to `docs/BENCHMARKS.md` (see benchmarks section).
@@ -653,7 +653,7 @@ If the timeout fires, the stack trace shows where it's stuck. Common culprits:
 $ ls ~/.harbor/plugins/
 myplugin.cs
 
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
 (no plugins listed)
 ```

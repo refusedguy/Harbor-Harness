@@ -91,7 +91,7 @@ public Result ValidateArguments(JsonElement args)
 ### 3. Read a file with offset/limit (existing `read` tool)
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask \
+$ dotnet run --project apps/Harbor.App.Cli -- ask \
     "Read the first 20 lines of src/Harbor.Core/Agents/AgentLoop.cs and summarize it"
 ```
 
@@ -204,7 +204,7 @@ public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
 ```bash
 export MYLLM_API_KEY=...
 export HARBOR_MODEL=myllm/llama-4-70b
-dotnet run --project src/Harbor.Cli -- providers   # verify it's loaded
+dotnet run --project apps/Harbor.App.Cli -- providers   # verify it's loaded
 ```
 
 ### 10. Add a native LLM provider (Anthropic-style)
@@ -254,7 +254,7 @@ export HARBOR_MODEL=anthropic/claude-sonnet-4-20250514
 ollama pull llama3.2
 ollama serve &
 export HARBOR_MODEL=ollama/llama3.2
-dotnet run --project src/Harbor.Cli -- ask "Write a haiku about .NET"
+dotnet run --project apps/Harbor.App.Cli -- ask "Write a haiku about .NET"
 ```
 
 ### 13. Switch provider mid-REPL
@@ -288,7 +288,7 @@ Append-only, git-friendly, zero native deps.
 
 ```bash
 export HARBOR_STORAGE=sqlite
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 # Sessions in ~/.harbor/sessions.db
 sqlite3 ~/.harbor/sessions.db "SELECT COUNT(*) FROM messages;"
 ```
@@ -466,7 +466,7 @@ public sealed class HelloTool : ITool
 }
 EOF
 
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   hello  v1.0.0  Says hello
 harbor> ask "Say hello to Alice"
@@ -519,7 +519,7 @@ See [PLUGIN_DEVELOPMENT.md §LspDiagnosticsPanel](./PLUGIN_DEVELOPMENT.md) for t
 ### 26. List saved sessions
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- sessions
+$ dotnet run --project apps/Harbor.App.Cli -- sessions
 abc123  2026-07-16 14:23  Code review of AgentLoop.cs     17 msgs
 def456  2026-07-15 09:11  Refactor PermissionService      8 msgs
 ```

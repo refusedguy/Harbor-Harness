@@ -5,7 +5,7 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
-[![Tests](https://img.shields.io/badge/tests-242%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1333%20passing-brightgreen)]()
 [![Providers](https://img.shields.io/badge/providers-13-blue)]()
 [![Plugins](https://img.shields.io/badge/plugins-4%20samples-orange)]()
 [![E2E](https://img.shields.io/badge/e2e-verified-brightgreen)]()
@@ -35,7 +35,7 @@ Harbor is a from-scratch reimagining of AI coding agents (kilocode, opencode, pi
 - **Performance-obsessed**: `FrozenDictionary` registries, `ArrayPool`, `IReadOnlyCollection` APIs, zero boxing
 - **CSharpFunctionalExtensions**: `Result<T>` for errors, `ValueObject` for IDs
 - **CommunityToolkit.Mvvm**: source-generated `ObservableObject` + `[ObservableProperty]` + `[RelayCommand]` in TUI view models
-- **TUnit tests**: 242 tests, source-generated, fastest .NET framework
+- **TUnit tests**: 1349 executed (1333 passed, 15 known-fail IPC/E2E-Tui, 1 skipped), source-generated, fastest .NET framework
 - **Zero unsafe code**: 100% safe, no `unsafe` blocks
 - **Comprehensive analyzers**: Roslynator, Sonar, Microsoft.NetAnalyzers, Meziantou, AsyncFixer, ReflectionAnalyzers, BannedApiAnalyzers
 - **NativeAOT-ready**: core can be AOT-compiled (TUI runs JIT separately)
@@ -104,7 +104,7 @@ dotnet run --project apps/Harbor.App.Cli -- ask "Write a Python one-liner that p
 ```
 $ export KILO_API_KEY=klo_…
 $ export HARBOR_MODEL=kilocode/tencent/hy3:free
-$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages" --no-build
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages" --no-build
 
 [agent_start] session=8f3c…
 [turn_start] turn=1
@@ -148,28 +148,35 @@ See [docs/BENCHMARKS.md](./docs/BENCHMARKS.md) for the full methodology and raw 
 
 ### Hot-path latency (per-call, excluding network)
 
+Measured 2026-08-22 (i5-8250U, Release JIT; AOT not re-measured):
+
 | Operation | Harbor (JIT) | Harbor (AOT) |
 |---|---|---|
-| `ProviderRegistry.GetClient` (frozen) | 0.18 µs | 0.12 µs |
-| `ToolRegistry.ResolveTools` (4 tools) | 0.42 µs | 0.31 µs |
-| `PermissionRuleset.Evaluate` | 0.27 µs | 0.21 µs |
-| `AgentEvent` publish (1 subscriber) | 0.34 µs | 0.26 µs |
-| `HeuristicTokenEstimator.Estimate` (1 KB) | 1.2 µs | 0.9 µs |
-| `MessageConverter.ToLlmMessages` (10 msgs) | 2.8 µs | 2.1 µs |
+| `ProviderRegistry.GetClient` (frozen) | 0.77 µs | n/m |
+| `ToolRegistry.ResolveTools` (frozen, 4 tools) | 0.094 µs | n/m |
+| `PermissionRuleset.Evaluate` (default Allow) | 0.11 µs | n/m |
+| `EventBus.PublishAsync` (0 subscribers) | 8.1 µs ⚠ | n/m |
+| `TokenEstimator.Estimate` (100 chars / 4K) | 0.10 / 0.28 µs | n/m |
+| `MessageConverter.Serialize` single small msg | 57 µs | n/m |
+
+⚠ known bottleneck — see docs/BENCHMARKS.md §Bottlenecks.
 
 ### Test execution
 
-| Test project | Tests | Duration |
+Full matrix: `/tmp/test-report.md` (2026-08-22). Key projects:
+
+| Test project | Tests | Status |
 |---|---|---|
-| `Harbor.Abstractions.Tests` | 35 | ~1.4 s |
-| `Harbor.Core.Tests` | 10 (1 skipped) | ~1.0 s |
-| `Harbor.Tools.Builtin.Tests` | 16 | ~1.6 s |
-| `Harbor.Storage.Jsonl.Tests` | 5 | ~1.2 s |
-| `Harbor.Providers.Tests` | 39 | ~1.6 s |
-| `Harbor.Storage.Tests` | 27 | ~2.2 s |
-| `Harbor.Config.Tests` | 36 | ~1.6 s |
-| `Harbor.Tui.Tests` | 75 | ~1.5 s |
-| **Total** | **242** | **~12 s** |
+| `Harbor.Tui.Tests` | 285 | pass |
+| `Harbor.App.Avalonia.Tests` | 211 | pass |
+| `Harbor.Core.Tests` | 72 | pass |
+| `Harbor.Architecture.Tests` | 54 | pass |
+| `Harbor.Scripting.Tests` | 51 | pass |
+| `Harbor.Providers.Tests` | 39 | pass |
+| `Harbor.Config.Tests` | 36 | pass |
+| `Harbor.E2E.*` (Cli/Blazor/Framework/SpectreTui) | 132 | pass |
+| `Harbor.Ipc.Tests` | 27 | 8 known-fail (pipe race) |
+| **Executed total** | **1349** | **1333 passed** |
 
 All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, single-threaded runs.
 
@@ -231,21 +238,21 @@ All measurements taken on Debian 13 (trixie), linux-x64, .NET 10.0.0-rc.2, singl
 │  ├── plugins-cs/ — HelloWorldPlugin.cs (single-file plugin)            │
 │  └── scripts/   — TypeScript + Jinja scripts                           │
 │                                                                        │
-│  tests/  (9 test projects + benchmarks, 240+ tests)                    │
+│  tests/  (20+ test projects + benchmarks, 1100+ tests)                    │
 │  ├── Harbor.Abstractions.Tests/   — 35 tests                           │
-│  ├── Harbor.Core.Tests/           — 55 tests                           │
+│  ├── Harbor.Core.Tests/           — 72 tests                           │
 │  ├── Harbor.Storage.Tests/        — 27 tests                           │
-│  ├── Harbor.Storage.Jsonl.Tests/  — 5 tests                            │
+│  ├── Harbor.Storage.Jsonl.Tests/  — 8 tests                            │
 │  ├── Harbor.Providers.Tests/      — 39 tests                           │
-│  ├── Harbor.Tools.Builtin.Tests/  — 89 tests (1 skipped)               │
+│  ├── Harbor.Tools.Builtin.Tests/  — 104 tests (1 skipped)              │
 │  ├── Harbor.Config.Tests/         — 36 tests                           │
-│  ├── Harbor.Ipc.Tests/            — 27/35 pass (8 pre-existing timing) │
-│  ├── Harbor.App.Avalonia.Tests/   — 138 tests                          │
+│  ├── Harbor.Ipc.Tests/            — 19/27 pass (8 pre-existing timing) │
+│  ├── Harbor.App.Avalonia.Tests/   — 211 tests                          │
 │  ├── Harbor.App.Blazor.Tests/     — 20 tests                           │
 │  ├── Harbor.Plugins.Runtime.Tests/ — 24 tests                          │
-│  ├── Harbor.Tui.Tests/            — 75 tests                           │
+│  ├── Harbor.Tui.Tests/            — 285 tests                          │
 │  ├── Harbor.Architecture.Tests/   — layer-dep enforcement              │
-│  └── Harbor.Benchmarks/           — BenchmarkDotNet                    │
+│  └── Harbor.Benchmarks/           — BenchmarkDotNet (23 classes)       │
 │                                                                        │
 │  providers/  (13 JSON LLM provider configs)                            │
 │  specs/      (16 design documents — formal architecture spec)          │
@@ -402,7 +409,7 @@ code. Add `ZLinq` to a project's `<PackageReference>` only when a benchmark just
 | Cold start | <50 ms | **38 ms** | Core only, JIT Debug |
 | RSS idle | <30 MB | **28 MB** | Core (TUI adds ~50 MB) |
 | Binary size | ~5 MB | **5 MB** | Single-file, framework-dependent |
-| Test execution | <15 s | **~12 s** | 242 tests |
+| Test execution | <15 s | see test-report | 1187 executed |
 | Tool call latency | <5 ms | **<2 ms** | Excluding external I/O |
 | LLM token-to-screen | <35 ms | **~20 ms** | LLM network dominates |
 
@@ -455,15 +462,15 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) — fastest .NET test fram
 
 ```
 Harbor.Abstractions.Tests   — 35 passed
-Harbor.Core.Tests           — 9 passed, 1 skipped
-Harbor.Tools.Builtin.Tests  — 16 passed
-Harbor.Storage.Jsonl.Tests  — 5 passed
+Harbor.Core.Tests           — 72 passed
+Harbor.Tools.Builtin.Tests  — 103 passed, 1 skipped
+Harbor.Storage.Jsonl.Tests  — 8 passed
 Harbor.Providers.Tests      — 39 passed
 Harbor.Storage.Tests        — 27 passed
 Harbor.Config.Tests         — 36 passed
-Harbor.Tui.Tests            — 75 passed
+Harbor.Tui.Tests            — 285 passed
 ──────────────────────────────────────────────────────
-Total: 242 passed, 1 skipped
+Executed total: 1333 passed (1349 run, 15 known-fail IPC/E2E-Tui)
 ```
 
 ## 🛣️ Roadmap

@@ -2,6 +2,10 @@
 
 > Harbor development roadmap. Last updated: v0.4.0-alpha, R31 (post-decomposition).
 > See [CHANGELOG.md](../CHANGELOG.md) for the per-release change history.
+>
+> **Sprint-2 note:** optional UI/scripting components moved to [`contrib/`](../contrib/)
+> (`contrib/tui/`, `contrib/apps/`, `contrib/scripting/`, `contrib/tests/`; build via
+> `contrib/Contrib.slnx`). They still exist and work — just outside `Harbor.slnx`.
 
 ## Current State: v0.4.0-alpha (R31)
 

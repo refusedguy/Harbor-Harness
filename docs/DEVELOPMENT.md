@@ -71,20 +71,20 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Tes
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Run interactive REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # One-shot prompt
-dotnet run --project src/Harbor.Cli -- ask "What is 2+2?"
+dotnet run --project apps/Harbor.App.Cli -- ask "What is 2+2?"
 
 # List providers
-dotnet run --project src/Harbor.Cli -- providers
+dotnet run --project apps/Harbor.App.Cli -- providers
 
 # List models
-dotnet run --project src/Harbor.Cli -- models
-dotnet run --project src/Harbor.Cli -- models anthropic
+dotnet run --project apps/Harbor.App.Cli -- models
+dotnet run --project apps/Harbor.App.Cli -- models anthropic
 
 # Show help
-dotnet run --project src/Harbor.Cli -- help
+dotnet run --project apps/Harbor.App.Cli -- help
 ```
 
 ## Configuration
@@ -134,7 +134,7 @@ export HARBOR_MODEL=openrouter/anthropic/claude-3.5-sonnet
 
 1. Create `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs`.
 2. Implement `ITool` interface.
-3. Register in `src/Harbor.Cli/Program.cs` — `builder.AddTool<YourTool>()`.
+3. Register in `apps/Harbor.App.Cli/Program.cs` — `builder.AddTool<YourTool>()`.
 4. Add tests in `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs`.
 5. `dotnet build && dotnet test`.
 
@@ -222,7 +222,7 @@ EOF
 
 #### Step 2: Register in DI
 
-Edit `src/Harbor.Cli/Hosting/HostBuilder.cs`:
+Edit `apps/Harbor.App.Cli/Hosting/HostBuilder.cs`:
 
 ```csharp
 private static ToolRegistry CreateToolRegistry(IServiceProvider sp)
@@ -307,7 +307,7 @@ Duration: ~1.2s
 ```bash
 $ export KILO_API_KEY=klo_...
 $ export HARBOR_MODEL=kilocode/tencent/hy3:free
-$ dotnet run --project src/Harbor.Cli -- ask "What time is it?"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "What time is it?"
 [tool_execution_start] id=tc_1 tool=time args={}
 [tool_execution_end]   id=tc_1 ok=true
 The current UTC time is 2026-07-16T14:23:45.1234567Z.
@@ -334,7 +334,7 @@ Commit:
 
 ```bash
 git add src/Harbor.Tools.Builtin/Time/ tests/Harbor.Tools.Builtin.Tests/TimeToolTests.cs \
-        src/Harbor.Cli/Hosting/HostBuilder.cs
+        apps/Harbor.App.Cli/Hosting/HostBuilder.cs
 git commit -m "feat: add 'time' builtin tool returning current UTC time"
 ```
 
@@ -649,7 +649,7 @@ public sealed class HelloTool : ITool
 EOF
 
 # 2. Restart Harbor — CsPluginLoader picks it up
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   hello  v1.0.0  Says hello
 ```
@@ -673,7 +673,7 @@ If RSS grows over time on a long-running session:
 
 ```bash
 # 1. Run Harbor with the problematic session
-HARBOR_TUI=plain dotnet run --project src/Harbor.Cli -- ask "Long task..."
+HARBOR_TUI=plain dotnet run --project apps/Harbor.App.Cli -- ask "Long task..."
 
 # 2. In another terminal, find the Harbor process
 ps aux | grep Harbor.Cli
@@ -723,7 +723,7 @@ See [CLAUDE.md](../CLAUDE.md) for full conventions.
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/src/Harbor.Cli/bin/Debug/net10.0/Harbor.Cli.dll",
+      "program": "${workspaceFolder}/apps/Harbor.App.Cli/bin/Debug/net10.0/Harbor.Cli.dll",
       "args": ["ask", "Hello"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
@@ -845,8 +845,9 @@ dotnet-gcdump collect -n harbor
 
 ## SpectreTUI development
 
-Если меняете `src/Harbor.Tui.SpectreTui/` — обязательно прочитайте [docs/SPECTRE_TUI_DEEP_DIVE.md](./SPECTRE_TUI_DEEP_DIVE.md):
+Если меняете `contrib/tui/Harbor.Tui.SpectreTui/` — обязательно прочитайте [docs/SPECTRE_TUI_DEEP_DIVE.md](./SPECTRE_TUI_DEEP_DIVE.md):
 архитектура render-loop, layout tree, scroll conventions, и квесты из opencode/kilocode/pi-agent (diff-view, slash-completion, file-tree).
+Проект живёт в contrib с sprint-2: собирайте через `contrib/Contrib.slnx` или флаг `HarborWithSpectreTui` в основном решении.
 
 ## Troubleshooting
 
@@ -863,7 +864,7 @@ Check if `GetScrollback_ReturnsRecentEvents` is hanging — it's skipped by defa
 
 - Check `providers/<name>.json` exists.
 - Check `id` field is lowercase alphanumeric.
-- Run `dotnet run --project src/Harbor.Cli -- providers` to see what's loaded.
+- Run `dotnet run --project apps/Harbor.App.Cli -- providers` to see what's loaded.
 
 ### API key not found
 

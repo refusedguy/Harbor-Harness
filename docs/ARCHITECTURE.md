@@ -301,7 +301,7 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 
 ### Step 1: `Program.cs` → `RunAskAsync`
 
-`src/Harbor.Cli/Program.cs:85`:
+`apps/Harbor.App.Cli/Program.cs:85`:
 
 ```csharp
 private static async Task<int> RunAskAsync(string[] args)
@@ -316,7 +316,7 @@ private static async Task<int> RunAskAsync(string[] args)
 
 ### Step 2: `HostBuilder.Build` wires DI
 
-`src/Harbor.Cli/Hosting/HostBuilder.cs:40`:
+`apps/Harbor.App.Cli/Hosting/HostBuilder.cs:40`:
 
 ```csharp
 public static IHost Build(params string[] args)

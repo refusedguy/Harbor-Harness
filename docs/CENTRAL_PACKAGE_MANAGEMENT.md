@@ -49,7 +49,7 @@ Every `.csproj` declared its own package versions:
 ```
 
 ```xml
-<!-- src/Harbor.Cli/Harbor.Cli.csproj -->
+<!-- apps/Harbor.App.Cli/Harbor.Cli.csproj -->
 <ItemGroup>
   <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0"/>
   <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
@@ -256,6 +256,9 @@ The current `Directory.Packages.props` pins `Markdig` to `1.3.2`. The previous p
 ### 4.5 Packages that will be added in the desktop-app sprint
 
 The new `apps/Harbor.App.*` + `desktop/Harbor.Desktop.*` projects (per `docs/DESKTOP_APP_PLAN.md`) will require these additional packages, to be added to `Directory.Packages.props`:
+
+> **Note (sprint-2):** `Harbor.App.{Wpf,Maui,Blazor}` now live in [`contrib/apps/`](../contrib/apps/)
+> and build via `contrib/Contrib.slnx`; only `Harbor.App.{Cli,Avalonia}` remain in the main solution.
 
 ```xml
 <!-- ── Desktop app stacks ───────────────────────────────────────────── -->
@@ -621,7 +624,7 @@ warning NU1605: PackageReference Version 'X' was ignored because the package
 
 ### 11.3 Different versions across multi-targeted projects
 
-If `apps/Harbor.App.Maui` targets both `net10.0-desktop` and `net10.0-maccatalyst`, and you need different package versions per target, use a conditional `<PackageVersion>`:
+If `contrib/apps/Harbor.App.Maui` targets both `net10.0-desktop` and `net10.0-maccatalyst`, and you need different package versions per target, use a conditional `<PackageVersion>`:
 
 ```xml
 <!-- Directory.Packages.props -->

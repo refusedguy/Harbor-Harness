@@ -1,6 +1,6 @@
 # SpectreTUI Deep Dive — Harbor
 
-> Детальный разбор `Harbor.Tui.SpectreTui` для разработчиков, которые хотят **дорабатывать фичи**, перенося их из opencode / kilocode / pi-agent / crush.
+> Детальный разбор `Harbor.Tui.SpectreTui` (с sprint-2 живёт в [`contrib/tui/`](../contrib/tui/Harbor.Tui.SpectreTui/); собирается через `contrib/Contrib.slnx` или флаг `HarborWithSpectreTui` в основном решении) для разработчиков, которые хотят **дорабатывать фичи**, перенося их из opencode / kilocode / pi-agent / crush.
 
 **Цель документа:** дать полное понимание того, как устроен SpectreTUI-рендерер, чтобы вы могли:
 1. Добавлять новые виджеты (например, diff-view, todo-list, file-tree, lsp-diagnostics).
@@ -415,7 +415,7 @@ private void OnKeyMessage(KeyMessage key) {
 
 ### Фича: diff-view при Edit tool (как в kilocode)
 
-**Где:** `src/Harbor.Tui.SpectreTui/View/DiffPreviewView.cs` (новый) + регистрация в `BuildWidgets`.
+**Где:** `contrib/tui/Harbor.Tui.SpectreTui/View/DiffPreviewView.cs` (новый) + регистрация в `BuildWidgets`.
 
 1. Создать `DiffPreviewView`:
    ```csharp
@@ -636,10 +636,10 @@ if (key.Key == Key.Enter && key.Character is '\n') return;
 
 ### 13.5.2. Три способа зарегистрировать панель
 
-#### (a) Builtin — пишете в `Harbor.Tui.SpectreTui/Panels/Builtin/`
+#### (a) Builtin — пишете в `contrib/tui/Harbor.Tui.SpectreTui/Panels/Builtin/`
 
 ```csharp
-// src/Harbor.Tui.SpectreTui/Panels/Builtin/MyPanel.cs
+// contrib/tui/Harbor.Tui.SpectreTui/Panels/Builtin/MyPanel.cs
 public sealed class MyPanel : IPanelProvider
 {
     public string Id => "my-panel";

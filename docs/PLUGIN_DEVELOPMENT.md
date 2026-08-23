@@ -8,7 +8,7 @@
 - [EXAMPLES.md §Plugins](./EXAMPLES.md#plugins) — короткие рецепты.
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
 - [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
-- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (planned by subagent #5).
+- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
 
 ---
 
@@ -58,7 +58,7 @@ public sealed class HelloTool : ITool
 Запусти Harbor:
 
 ```bash
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   hello  v1.0.0  Says hello
 
@@ -241,7 +241,7 @@ up changes.
 
 ```bash
 # After editing a plugin
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### NativeAOT limitations
@@ -838,7 +838,7 @@ $ cp samples/plugins/Harbor.Plugin.MyPlugin/bin/Release/net10.0/Harbor.Plugin.My
 $ cp samples/plugins/Harbor.Plugin.MyPlugin/bin/Release/net10.0/*.dll ~/.harbor/plugins/  # deps
 
 # 5. Run Harbor
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### After (Roslyn .cs plugin)
@@ -851,7 +851,7 @@ public sealed class MyTool : ITool { /* ... */ }
 EOF
 
 # 2. Run Harbor — CsPluginLoader compiles it on startup
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### What you lose going to .cs
@@ -890,6 +890,9 @@ scripts:
   subprocess via the `sharpts` dotnet tool, with native TS interpretation);
   Jint is the in-process fallback when `sharpts` is not installed.
 - **F# scripts** (`.fsx`) — via the `FsharpTool` plugin above.
+
+Note: the scripting projects live in `contrib/scripting/` (sprint-2 move) and the
+main-solution CLI does not support `--script`.
 
 See [SCRIPTING.md](./SCRIPTING.md) for the layered architecture (Engines /
 Storage / Compilation / Hosting / Bridge), the four interfaces
@@ -973,7 +976,7 @@ public async Task Plugin_Tool_IsCallable_By_LLM()
 ### Manual smoke test
 
 ```bash
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   todowrite  v1.0.0  Todo list management for agents
 
@@ -998,7 +1001,7 @@ $ gh gist create myplugin.cs --public
 
 # User installs
 $ curl -fsSL https://gist.githubusercontent.com/user/myplugin.cs/raw > ~/.harbor/plugins/myplugin.cs
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   myplugin  v1.0.0
 ```
@@ -1108,5 +1111,5 @@ using Harbor.Abstractions.Events;   // AgentEvent comes from here
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
 - [ARCHITECTURE.md §Plugin contract](./ARCHITECTURE.md#8-plugin-contract).
 - [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
-- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (planned).
+- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
 - [specs/06-mcp.md](../specs/06-mcp.md) — MCP server integration.

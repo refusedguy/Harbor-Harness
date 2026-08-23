@@ -681,7 +681,7 @@ Notes:
      MAUI: `MainThread.BeginInvokeOnMainThread`; Blazor: `InvokeAsync(StateHasChanged)`).
    - Bind the chat history to an `ObservableCollection<ChatLineViewModel>`
      (or your framework's equivalent).
-5. Register in `src/Harbor.Cli/Hosting/HostBuilder.cs` `RegisterTui` switch
+5. Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` `RegisterTui` switch
    on `HARBOR_TUI`.
 6. Add `case` to `Program.PrintTuiOptions()`.
 7. Add to solution: `dotnet sln Harbor.slnx add src/Harbor.Tui.<Framework>/...`.

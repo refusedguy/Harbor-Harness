@@ -147,7 +147,7 @@ fields.
 | `ShowSessionSidebar` | `bool` | `true` | Left session-sidebar visible. |
 | `OpenTabs` | `ImmutableList<string>` | `Empty` | Session IDs open in tabs (L-to-R). |
 
-### WpfConfig (`apps/Harbor.App.Wpf/Configuration/WpfConfig.cs`)
+### WpfConfig (`contrib/apps/Harbor.App.Wpf/Configuration/WpfConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -157,14 +157,14 @@ fields.
 | `WindowMaximized` | `bool` | `false` | Open maximized on next launch. |
 | `UseAvalonDock` | `bool` | `true` | Use AvalonDock (Dirkster.AvalonDock) as panel system. |
 
-### MauiConfig (`apps/Harbor.App.Maui/Configuration/MauiConfig.cs`)
+### MauiConfig (`contrib/apps/Harbor.App.Maui/Configuration/MauiConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `UseDarkMode` | `bool` | `true` | Force dark mode. `false` forces light. |
 | `LastPlatform` | `string` | `"windows"` | `windows` \| `maccatalyst` \| `ios` \| `android`. |
 
-### BlazorConfig (`apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs`)
+### BlazorConfig (`contrib/apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -535,9 +535,9 @@ Harbor.Desktop.Abstractions/Configuration/
 
 apps/Harbor.App.Cli/Configuration/CliConfig.cs         ← sealed record : AppConfigBase
 apps/Harbor.App.Avalonia/Configuration/AvaloniaConfig.cs
-apps/Harbor.App.Wpf/Configuration/WpfConfig.cs
-apps/Harbor.App.Maui/Configuration/MauiConfig.cs
-apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs
+contrib/apps/Harbor.App.Wpf/Configuration/WpfConfig.cs
+contrib/apps/Harbor.App.Maui/Configuration/MauiConfig.cs
+contrib/apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs
 ```
 
 Each app's composition root wires BOTH layers:
@@ -604,7 +604,8 @@ synchronously.
 
 Each app's test project asserts that BOTH `ICommonConfigStore` + `CommonConfig`
 (shared) AND `IAppConfigStore<TAppConfig>` + `TAppConfig` (app-specific) AND
-`CompositeConfig<TAppConfig>` (composite) are registered:
+`CompositeConfig<TAppConfig>` (composite) are registered
+(Wpf/Maui/Blazor test projects live in `contrib/tests/` since sprint-2):
 
 | Test project | Test file | Assertions |
 | --- | --- | --- |

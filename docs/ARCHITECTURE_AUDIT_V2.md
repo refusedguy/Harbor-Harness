@@ -1725,7 +1725,7 @@ renderer is the bottleneck — the LLM generates tokens faster than the
 terminal can repaint.
 
 The current mitigation is the `ChatTranscriptCache`
-(`src/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`) which caches
+(`contrib/tui/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`) which caches
 the rendered `IRenderable` for already-seen lines so only the new line
 needs rendering. But the *write* to the terminal is still full-screen —
 `AnsiConsole.Write(renderable)` redraws every row.
@@ -1926,8 +1926,8 @@ documented with implementation sketches in §3.
   in-memory Roslyn compile; not AOT-friendly.
 - `src/Harbor.Plugins.Instantiation/ReflectionPluginInstantiator.cs` —
   `Assembly.Load(byte[])` into default ALC (no unload, §3.8).
-- `src/Harbor.Scripting.Hosting/ScriptHost.cs` — script-host facade.
-- `src/Harbor.Scripting.Engines/JintScriptEngine.cs` —
+- `contrib/scripting/Harbor.Scripting.Hosting/ScriptHost.cs` — script-host facade.
+- `contrib/scripting/Harbor.Scripting.Engines/JintScriptEngine.cs` —
   per-call `Engine` instance (thread safety); JSON serialization fallback
   for return values.
 - `src/Harbor.Storage.Jsonl/JsonlSessionStore.cs` —

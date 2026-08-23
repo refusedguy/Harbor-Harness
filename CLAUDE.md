@@ -726,7 +726,7 @@ dotnet test
 dotnet test tests/Harbor.Core.Tests
 
 # Run the CLI
-dotnet run --project src/Harbor.Cli -- help
+dotnet run --project apps/Harbor.App.Cli -- help
 ```
 
 ## Common tasks
@@ -740,7 +740,7 @@ dotnet run --project src/Harbor.Cli -- help
 1. Create `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs`.
 2. Implement `ITool` interface (sealed class, XML docs on every public member,
    `ConfigureAwait(false)` everywhere, `ArrayPool`/`StringBuilderPool` for buffers).
-3. Register in `src/Harbor.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
+3. Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
    `tb.AddTool(() => new YourTool(loggerFactory.CreateLogger<YourTool>()))`.
    If the tool needs a DI dependency, construct it eagerly and pass the instance —
    `ToolContext.Services` is not populated by the default `AgentLoop` (see
@@ -781,7 +781,7 @@ public sealed class TimeTool : ITool
 }
 ```
 
-Register in `src/Harbor.Cli/Hosting/HostBuilder.cs`:
+Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs`:
 
 ```csharp
 tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));
@@ -818,7 +818,7 @@ export HARBOR_MODEL=myllm/my-model-id
 1. Create `src/Harbor.Providers.<Name>/` project.
 2. Reference `Harbor.Abstractions` and `Harbor.Core`.
 3. Implement `ILlmClient`.
-4. Register in `src/Harbor.Cli/Program.cs` `BuildHost()`.
+4. Register in `apps/Harbor.App.Cli/Program.cs` `BuildHost()`.
 5. Add to solution: `dotnet sln add src/Harbor.Providers.<Name>/...`.
 
 ```csharp
@@ -847,7 +847,7 @@ public sealed class MyLlmClient : ILlmClient
 
 1. Create `src/Harbor.Storage.<Name>/` project.
 2. Implement `ISessionStore`.
-3. Register in `src/Harbor.Cli/Program.cs` — add to the `switch` on `HARBOR_STORAGE` env var.
+3. Register in `apps/Harbor.App.Cli/Program.cs` — add to the `switch` on `HARBOR_STORAGE` env var.
 4. Add tests.
 
 ```csharp
@@ -870,7 +870,7 @@ public sealed class RedisSessionStore : ISessionStore
    `BaseTuiRenderer` / `IInteractiveTuiRenderer` if you need full-screen or
    own the input loop).
 3. Register in DI: add to the `switch` on `HARBOR_TUI` in
-   `src/Harbor.Cli/Hosting/HostBuilder.cs` `RegisterTui`. Also add a
+   `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` `RegisterTui`. Also add a
    `ProjectReference` to `Harbor.Cli.csproj`.
 4. Update `Program.PrintTuiOptions()` to list the new option.
 5. Done — no other changes needed (event-bus decoupling).

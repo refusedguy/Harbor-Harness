@@ -3,27 +3,37 @@
 > Quick-reference card: what's done, what's broken, what's next.
 > For the full plan see [ROADMAP.md](./ROADMAP.md). For change history see [CHANGELOG.md](../CHANGELOG.md).
 >
-> **Last updated:** R31 (v0.4.0-alpha)
+> **Last updated:** 2026-08-22 — full bench+test sweep (см. /tmp/test-report.md, /tmp/benchmark-report.md)
 
-## Build & test status
+## Build & test status (полный прогон 2026-08-22)
+
+Итог: **1349 выполнено → 1333 passed / 15 known-fail / 1 skipped**; 6 проектов пропущены (причины ниже). Полный clean-ребилд решения: 0 ошибок (WIP-барьер снят).
 
 | Check | Status |
 |---|---|
-| `dotnet build` (full solution) | ✅ 0 errors / 0 warnings |
-| `Harbor.Abstractions.Tests` | ✅ 35/35 pass |
-| `Harbor.Core.Tests` | ✅ 55/55 pass |
-| `Harbor.Storage.Tests` | ✅ 27/27 pass |
-| `Harbor.Storage.Jsonl.Tests` | ✅ 5/5 pass |
-| `Harbor.Config.Tests` | ✅ 36/36 pass |
-| `Harbor.Tools.Builtin.Tests` | ✅ 88/89 pass (1 skipped) |
-| `Harbor.Providers.Tests` | ✅ 39/39 pass |
-| `Harbor.Ipc.Tests` | ⚠️ 27/35 pass (8 pre-existing timing bugs) |
-| `Harbor.App.Avalonia.Tests` | ⚠️ 137/138 pass (1 pre-existing Avalonia 12 headless bug) |
-| `Harbor.App.Blazor.Tests` | ✅ 20/20 pass |
-| `Harbor.Plugins.Runtime.Tests` | ✅ 24/24 pass (fixed in R30) |
-| `Harbor.Tui.Tests` | ✅ 75/75 pass |
-| `Harbor.Architecture.Tests` | ✅ All layer-dep rules enforced |
-| E2E (Avalonia headless) | ✅ 12/12 pass |
+| `dotnet build tests/Harbor.Benchmarks -c Release` | ✅ 0 errors / 0 warnings |
+| Harbor.Tui.Tests | ✅ 285/285 |
+| Harbor.App.Avalonia.Tests | ✅ 211/211 |
+| Harbor.Core.Tests | ✅ 73/73 |
+| Harbor.Architecture.Tests | ✅ 54/54 |
+| Harbor.Scripting.Tests | ✅ 51/51 |
+| Harbor.Providers.Tests | ✅ 39/39 |
+| Harbor.Config.Tests | ✅ 36/36 |
+| Harbor.E2E.Tui.SpectreTui + Tui.E2E + E2E.Cli/Blazor/Framework | ✅ 132/132 |
+| Harbor.Tools.Builtin.Tests | ✅ 138/139 (1 skip) |
+| Harbor.Ipc.Tests | ⚠️ 19/27 — 8 pre-existing Linux pipe-disposal race; хост не завершается |
+| Harbor.E2E.Tui.Termina | ⚠️ 34/41 — scenario-тесты рендера требуют triage |
+| Harbor.Application.Tests | ✅ 34/34 |
+| Harbor.App.Maui.Tests | ⛔ SKIP: global.json форсирует MTP, проект на VSTest |
+| Harbor.App.Wpf.Tests | ⛔ SKIP: net10.0-windows apphost не строится на Linux |
+| Harbor.E2E.App.Avalonia, E2E.Tui.TerminalGui | ⛔ SKIP: зависание headless-хоста ×2 |
+| Harbor.Ui.Framework.Tests | ✅ 47/47 (файлы проекта исправлены; полный clean-ребилд блокирует только чужой WIP в AgentLoop.cs) |
+
+## Benchmarks (23 класса, Release, 2026-08-22)
+
+Топ bottlenecks: AppReducer streaming O(N²) (19.4 MB/1000 дельт), MessageConverter large-msg
+(1.2 MB/msg), Compaction full-scan per turn (598 µs @1000), EventBroadcaster (8 MB/1000 событий),
+EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P0–P3 — docs/BENCHMARKS.md.
 
 ## Recent milestones
 

@@ -552,7 +552,8 @@ public interface IToolPlugin : IPlugin
 - Future: NuGet-distributed plugins (`harbor plugin install foo`).
 
 **Alternative considered.** Scripting (Lua, F#). Rejected for core — but see
-[SCRIPTING.md](./SCRIPTING.md) (planned by subagent #5) for a scripting alternative.
+[SCRIPTING.md](./SCRIPTING.md) for the scripting alternative (shipped under
+`contrib/scripting/`).
 
 **Common mistakes.**
 - Plugin doing heavy work in `Initialize` — should be lazy.
