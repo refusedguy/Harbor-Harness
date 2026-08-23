@@ -670,8 +670,42 @@ public sealed class TuiDriver : IE2eDriver
                     return true;
             }
             await Task.Delay(100, ct).ConfigureAwait(false);
+
+            // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
+            // or repaint mid-line split the pattern across grid rows / leave
+            // interleaved repaint artifacts in the flat log. Collapsing ALL
+            // whitespace on both sides matches when every character is present
+            // in order, regardless of layout. Only consulted after exact matching
+            // fails, so strict tests are unaffected.
+            string needle = CollapseWhitespace(pattern);
+            if (needle.Length == 0)
+                continue;
+
+            lock (_terminalBuffer)
+            {
+                string visible = _terminalBuffer.GetVisibleText();
+                if (CollapseWhitespace(visible).Contains(needle, StringComparison.Ordinal))
+                    return true;
+            }
+
+            if (CollapseWhitespace(screen).Contains(needle, StringComparison.Ordinal))
+                return true;
         }
         return false;
+    }
+
+    /// <summary>Removes every whitespace character, used by the tear-tolerant matcher.</summary>
+    private static string CollapseWhitespace(string input)
+    {
+        if (input.IndexOf(' ') < 0 && input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && input.IndexOf('\t') < 0)
+            return input;
+        var sb = new System.Text.StringBuilder(input.Length);
+        foreach (char ch in input)
+        {
+            if (!char.IsWhiteSpace(ch))
+                sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     /// <inheritdoc />
