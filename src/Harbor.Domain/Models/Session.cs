@@ -328,10 +328,7 @@ public enum CacheStrategy
     None,
 
     /// <summary>Short-lived (5-minute) cache entry.</summary>
-    Ephemeral,
-
-    /// <summary>Long-lived (1-hour) cache entry.</summary>
-    LongLived
+    Ephemeral
 }
 
 /// <summary>

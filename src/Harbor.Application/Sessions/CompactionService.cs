@@ -381,13 +381,16 @@ public sealed class CompactionService(
             }
 
             string prompt = BuildSummarizationPrompt(messages, tailStart);
+            // Ф8/A1: the summarization system prompt is a compile-time constant, so the
+            // request is a perfect prefix-cache candidate — flag it Ephemeral.
             var request = new LlmRequest(
                 model.Id,
                 new[] { LlmUserMessage.Text(prompt) },
                 SummarizationPrompt,
                 Array.Empty<ToolDefinition>(),
                 Temperature: 0.3m,
-                MaxOutputTokens: 4096);
+                MaxOutputTokens: 4096,
+                CacheStrategy: CacheStrategy.Ephemeral);
 
             // 3. Stream LLM (collect full text into pooled StringBuilder)
             using var summaryBuilder = StringBuilderPool.Rent(4096);

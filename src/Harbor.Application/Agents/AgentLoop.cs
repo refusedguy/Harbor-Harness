@@ -218,6 +218,9 @@ public sealed class AgentLoop : IAgentLoop
 
                 // 5. Build request — size the ToolDefinition array directly instead of LINQ Select().ToList().
                 var toolDefs = BuildToolDefinitions(tools);
+                // Ф6/A1: the system prompt is stable across turns (tools/agent rarely change
+                // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
+                // candidate — flag it Ephemeral for providers that support cache_control.
                 var request = new LlmRequest(
                     agent.Model,
                     llmMessages,
@@ -225,7 +228,8 @@ public sealed class AgentLoop : IAgentLoop
                     toolDefs,
                     MaxOutputTokens: model.MaxOutputTokens,
                     Temperature: agent.Temperature,
-                    ReasoningEffort: agent.ReasoningEffort);
+                    ReasoningEffort: agent.ReasoningEffort,
+                    CacheStrategy: systemPrompt.Length > 0 ? CacheStrategy.Ephemeral : CacheStrategy.None);
 
                 // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
                 //    failures (HTTP 429/5xx, network errors, timeouts) restart the
