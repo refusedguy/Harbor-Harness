@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -8,15 +9,45 @@ using Result = CSharpFunctionalExtensions.Result;
 namespace Harbor.Tools.Builtin;
 /// <summary>
 ///     Fetches a URL and returns its content as markdown (HTML stripped, code kept, links
-///     inlined). Uses a shared <see cref="HttpClient" />; respects redirects and sets a
-///     realistic User-Agent.
+///     inlined). Uses a shared <see cref="HttpClient" />, follows redirects manually with
+///     per-hop safety re-validation, and sets a realistic User-Agent.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>SSRF protection:</b> every request target — the original URL
+///         and every redirect hop — is resolved via DNS and <b>all</b>
+///         returned IPs are checked against a non-public-address deny list:
+///         loopback (127.0.0.0/8, ::1), link-local (169.254.0.0/16 incl. the
+///         cloud-metadata endpoint 169.254.169.254, fe80::/10), RFC1918
+///         private ranges (10/8, 172.16/12, 192.168/16), IPv6 unique-local
+///         (fc00::/7), 0.0.0.0/8 + ::, and IPv6-mapped IPv4 equivalents
+///         (::ffff:a.b.c.d). Blocking is the default; hosts can be opted in
+///         deliberately via <see cref="AllowedHosts" /> (e.g. local
+///         development against an Ollama-style endpoint).
+///     </para>
+///     <para>
+///         Redirects are followed manually
+///         (<c>HttpClientHandler.AllowAutoRedirect = false</c>) so that each
+///         hop goes through the same validation with fresh DNS resolution,
+///         capped at <see cref="MaxRedirectHops" /> hops.
+///     </para>
+///     <para>
+///         Known limitation: the DNS check happens just before the request,
+///         while <see cref="HttpClient" /> performs its own resolution at
+///         connect time — a rebinding attacker with very short TTLs can
+///         still slip past the pre-check. This raises the bar substantially
+///         but is not a hermetic containment boundary.
+///     </para>
+/// </remarks>
 public sealed class WebFetchTool : ITool
 {
     private const int DefaultMaxChars = 50_000;
     private const int HardMaxChars = 500_000;
     private const int MaxDownloadBytes = 5 * 1024 * 1024; // 5 MiB hard cap
     private const int HttpTimeoutSeconds = 30;
+
+    /// <summary>Maximum number of redirects followed per fetch.</summary>
+    public const int MaxRedirectHops = 5;
 
     private static readonly HttpClient SharedClient = BuildClient();
     private readonly Func<HttpClient> _clientFactory;
@@ -28,21 +59,56 @@ public sealed class WebFetchTool : ITool
     ///     <see cref="HttpClient" />. This is the constructor used by DI.
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
-    public WebFetchTool(ILogger<WebFetchTool> logger) : this(logger, () => SharedClient)
+    public WebFetchTool(ILogger<WebFetchTool> logger) : this(logger, () => SharedClient, allowedHosts: null)
     {
     }
 
     /// <summary>
     ///     Construct a <see cref="WebFetchTool" /> with a custom <see cref="HttpClient" />
-    ///     factory. Used in tests to inject a mock HTTP handler.
+    ///     factory and an optional SSRF allowlist. Used in tests to inject a mock HTTP handler.
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
     /// <param name="clientFactory">Factory returning the <see cref="HttpClient" /> to use.</param>
-    public WebFetchTool(ILogger<WebFetchTool> logger, Func<HttpClient> clientFactory)
+    /// <param name="allowedHosts">
+    ///     Optional seed for <see cref="AllowedHosts" />. Host names listed here are exempt
+    ///     from the non-public-address check (deliberate opt-out for local development).
+    /// </param>
+    public WebFetchTool(
+        ILogger<WebFetchTool> logger,
+        Func<HttpClient> clientFactory,
+        IEnumerable<string>? allowedHosts = null)
     {
         _logger = logger;
         _clientFactory = clientFactory;
+        if (allowedHosts is not null)
+        {
+            foreach (string host in allowedHosts)
+            {
+                AllowedHosts.Add(host);
+            }
+        }
     }
+
+    /// <summary>
+    ///     Deliberate SSRF opt-out: host names exempt from the non-public
+    ///     address check. Default is EMPTY — every private/loopback/link-local
+    ///     target is blocked until a host is added here.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Matching is case-insensitive against the URL's IDN-normalized
+    ///         host (e.g. <c>"localhost"</c>, <c>"127.0.0.1"</c>,
+    ///         <c>"host.docker.internal"</c>). The special entry
+    ///         <c>"*"</c> disables the address check entirely — use only in
+    ///         trusted test environments.
+    ///     </para>
+    ///     <para>
+    ///         Mutate before the first <c>ExecuteAsync</c> call (or pass
+    ///         entries via the constructor overload) — instances are not
+    ///         thread-safe during mutation.
+    ///     </para>
+    /// </remarks>
+    public ICollection<string> AllowedHosts { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc />
     public ToolName Name => ToolName.Create("webfetch");
@@ -124,37 +190,19 @@ public sealed class WebFetchTool : ITool
             url, selector ?? "(none)", maxChars);
 
         var client = _clientFactory();
-        HttpResponseMessage response;
-        try
-        {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.UserAgent.ParseAdd("Harbor/0.4 (+https://github.com/harbor)");
-            req.Headers.Accept.ParseAdd("text/html, application/json, text/plain, */*;q=0.5");
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(TimeSpan.FromSeconds(HttpTimeoutSeconds));
+        // Manual redirect following with per-hop re-validation (SSRF guard):
+        // the original URL and every redirect hop are resolved via DNS and
+        // all resulting IPs are checked before connecting.
+        FetchOutcome fetched = await FetchWithRedirectsAsync(
+            client, url, cancellationToken).ConfigureAwait(false);
+        if (fetched.Error is not null)
+        {
+            return ToolResult.Error(fetched.Error);
+        }
 
-            response = await client.SendAsync(
-                req,
-                HttpCompletionOption.ResponseHeadersRead,
-                cts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return ToolResult.Error("webfetch cancelled");
-        }
-        catch (OperationCanceledException)
-        {
-            return ToolResult.Error($"Request timed out after {HttpTimeoutSeconds}s.");
-        }
-        catch (HttpRequestException ex)
-        {
-            return ToolResult.Error($"HTTP request failed: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"webfetch failed: {ex.Message}");
-        }
+        HttpResponseMessage response = fetched.Response!;
+        Uri finalUri = fetched.FinalUri!;
 
         using (response)
         {
@@ -165,7 +213,7 @@ public sealed class WebFetchTool : ITool
             if (IsBinaryContentType(contentType))
             {
                 return ToolResult.Error(
-                    $"Refusing to fetch binary content-type '{contentType}' from {url}. " +
+                    $"Refusing to fetch binary content-type '{contentType}' from {finalUri}. " +
                     "Use a dedicated HTTP client if you need raw bytes.");
             }
 
@@ -193,7 +241,7 @@ public sealed class WebFetchTool : ITool
             }
 
             if (HasNulByte(bytes))
-                return ToolResult.Error($"Response body from {url} looks binary ({bytes.Length} bytes).");
+                return ToolResult.Error($"Response body from {finalUri} looks binary ({bytes.Length} bytes).");
 
             string body = Encoding.UTF8.GetString(bytes);
 
@@ -213,7 +261,7 @@ public sealed class WebFetchTool : ITool
                 markdown = markdown[..maxChars] + "\n\n… truncated at " + maxChars + " chars";
 
             var summary = new StringBuilder(128);
-            summary.Append("Fetched ").Append(url).Append(" — ").Append((int)response.StatusCode)
+            summary.Append("Fetched ").Append(finalUri).Append(" — ").Append((int)response.StatusCode)
                 .Append(' ').Append(response.ReasonPhrase ?? HttpStatusCode.OK.ToString())
                 .Append(" (").Append(bytes.Length).Append(" bytes, ").Append(contentType).Append(')');
 
@@ -221,10 +269,11 @@ public sealed class WebFetchTool : ITool
                 summary + "\n\n" + markdown,
                 new
                 {
-                    url,
+                    url = finalUri.ToString(),
                     status = (int)response.StatusCode,
                     contentType,
                     sizeBytes = bytes.Length,
+                    hops = fetched.Hops,
                     selector,
                     truncated = markdown.Length >= maxChars,
                     chars = markdown.Length
@@ -236,8 +285,10 @@ public sealed class WebFetchTool : ITool
     {
         var handler = new SocketsHttpHandler
         {
-            AllowAutoRedirect = true,
-            MaxAutomaticRedirections = 5,
+            // Redirects are followed MANUALLY in FetchWithRedirectsAsync so
+            // every hop can be re-validated against the SSRF deny list with
+            // fresh DNS resolution before we connect.
+            AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.All,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
         };
@@ -246,6 +297,220 @@ public sealed class WebFetchTool : ITool
             DefaultRequestVersion = HttpVersion.Version20,
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
         };
+    }
+
+    /// <summary>Terminal result of a redirect-aware fetch.</summary>
+    /// <param name="FinalUri">The URI the response ultimately came from.</param>
+    /// <param name="Response">The final (non-redirect) response. Null on error.</param>
+    /// <param name="Hops">Number of HTTP requests issued (1 = no redirects).</param>
+    /// <param name="Error">Human-readable failure reason, null on success.</param>
+    private sealed record FetchOutcome(Uri? FinalUri, HttpResponseMessage? Response, int Hops, string? Error);
+
+    /// <summary>
+    ///     GET a URL following up to <see cref="MaxRedirectHops" /> redirects
+    ///     manually. Every hop — original URL included — is validated via
+    ///     <see cref="GetBlockedReasonAsync" /> (DNS resolve + IP deny list)
+    ///     before connecting; DNS is therefore re-resolved whenever the host
+    ///     changes (and even when it does not).
+    /// </summary>
+    private async Task<FetchOutcome> FetchWithRedirectsAsync(
+        HttpClient client,
+        string url,
+        CancellationToken ct)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? current)
+            || current.Scheme != "http" && current.Scheme != "https")
+        {
+            return new FetchOutcome(null, null, 0, $"'url' must be an absolute http(s) URL: {url}");
+        }
+
+        for (int hop = 0; hop <= MaxRedirectHops + 1; hop++)
+        {
+            // Cap total requests at 1 + MaxRedirectHops.
+            if (hop > MaxRedirectHops)
+            {
+                return new FetchOutcome(
+                    null, null, hop,
+                    $"Blocked URL '{url}': exceeded {MaxRedirectHops} redirects.");
+            }
+
+            string? blocked = await GetBlockedReasonAsync(current, ct).ConfigureAwait(false);
+            if (blocked is not null)
+            {
+                return new FetchOutcome(null, null, hop, blocked);
+            }
+
+            HttpResponseMessage resp;
+            using (var req = new HttpRequestMessage(HttpMethod.Get, current))
+            {
+                req.Headers.UserAgent.ParseAdd("Harbor/0.4 (+https://github.com/harbor)");
+                req.Headers.Accept.ParseAdd("text/html, application/json, text/plain, */*;q=0.5");
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(HttpTimeoutSeconds));
+                try
+                {
+                    resp = await client.SendAsync(
+                        req,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return new FetchOutcome(null, null, hop, "webfetch cancelled");
+                }
+                catch (OperationCanceledException)
+                {
+                    return new FetchOutcome(null, null, hop, $"Request timed out after {HttpTimeoutSeconds}s.");
+                }
+                catch (HttpRequestException ex)
+                {
+                    return new FetchOutcome(null, null, hop, $"HTTP request failed: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    return new FetchOutcome(null, null, hop, $"webfetch failed: {ex.Message}");
+                }
+            }
+
+            bool isRedirect = resp.StatusCode
+                is HttpStatusCode.MovedPermanently   // 301
+                or HttpStatusCode.Found              // 302
+                or HttpStatusCode.SeeOther           // 303
+                or HttpStatusCode.TemporaryRedirect  // 307
+                or HttpStatusCode.PermanentRedirect; // 308
+
+            if (!isRedirect)
+            {
+                return new FetchOutcome(current, resp, hop + 1, null);
+            }
+
+            Uri? location = resp.Headers.Location;
+            if (location is null)
+            {
+                // 3xx without Location — no hop to follow; hand the response
+                // back like HttpClient's auto-redirect would.
+                return new FetchOutcome(current, resp, hop + 1, null);
+            }
+
+            Uri next = location.IsAbsoluteUri ? location : new Uri(current, location);
+            resp.Dispose();
+
+            if (next.Scheme != "http" && next.Scheme != "https")
+            {
+                return new FetchOutcome(
+                    null, null, hop + 1,
+                    $"Blocked redirect from '{current}' to '{next}': only http/https schemes are supported.");
+            }
+
+            current = next;
+        }
+
+        // Not reachable: the final loop iteration returns the redirect-cap
+        // outcome above. Kept so the compiler sees every path returns.
+        return new FetchOutcome(
+            null, null, MaxRedirectHops + 1,
+            $"Blocked URL '{url}': exceeded {MaxRedirectHops} redirects.");
+    }
+
+    /// <summary>
+    ///     SSRF gate for one request target. Returns <see langword="null" />
+    ///     when fetching <paramref name="uri" /> is allowed, otherwise a
+    ///     human-readable reason.
+    /// </summary>
+    /// <remarks>
+    ///     Hosts listed in <see cref="AllowedHosts" /> (or the wildcard
+    ///     <c>"*"</c>) bypass the check. Otherwise ALL addresses the host
+    ///     resolves to must be public — a single private/loopback/link-local
+    ///     address fails closed. DNS is resolved fresh on every call so each
+    ///     redirect hop re-checks its (possibly changed) host.
+    /// </remarks>
+    private async Task<string?> GetBlockedReasonAsync(Uri uri, CancellationToken ct)
+    {
+        string host = uri.IdnHost;
+
+        if (AllowedHosts.Contains("*") || AllowedHosts.Contains(host))
+        {
+            _logger.LogDebug("WebFetch: host {Host} is explicitly allowed past the private-address check", host);
+            return null;
+        }
+
+        IPAddress[] addresses;
+        try
+        {
+            addresses = await Dns.GetHostAddressesAsync(host, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return "webfetch cancelled";
+        }
+        catch (OperationCanceledException)
+        {
+            return $"Request timed out after {HttpTimeoutSeconds}s.";
+        }
+        catch (SocketException ex)
+        {
+            return $"Blocked URL '{uri}' (fail-closed): host '{host}' could not be resolved ({ex.Message}).";
+        }
+        catch (ArgumentException ex)
+        {
+            return $"Blocked URL '{uri}' (fail-closed): invalid host '{host}' ({ex.Message}).";
+        }
+
+        if (addresses.Length == 0)
+        {
+            return $"Blocked URL '{uri}' (fail-closed): host '{host}' resolved to no addresses.";
+        }
+
+        foreach (IPAddress address in addresses)
+        {
+            if (!IsNonPublicAddress(address))
+            {
+                continue;
+            }
+
+            _logger.LogWarning(
+                "WebFetch blocked SSRF attempt: {Url} resolves to non-public address {Address}",
+                uri, address);
+            return $"Blocked URL '{uri}': host '{host}' resolves to non-public address {address}. " +
+                   "Fetching loopback/private/link-local targets is disabled by default; " +
+                   "add the host to WebFetchTool.AllowedHosts to allow it deliberately.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     True when <paramref name="address" /> must never be fetched:
+    ///     loopback, link-local (incl. cloud metadata), RFC1918 private,
+    ///     IPv6 unique-local, unspecified ("this network"), broadcast, and
+    ///     IPv6-mapped IPv4 forms of all of them.
+    /// </summary>
+    private static bool IsNonPublicAddress(IPAddress address)
+    {
+        // Normalize IPv6-mapped IPv4 (::ffff:a.b.c.d) down to plain IPv4 so
+        // the same v4 rules apply.
+        IPAddress normalized = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+
+        if (normalized.AddressFamily == AddressFamily.InterNetwork)
+        {
+            byte[] b = normalized.GetAddressBytes();
+            return b[0] == 0                             // 0.0.0.0/8 "this network"
+                || b[0] == 127                           // loopback 127.0.0.0/8
+                || b[0] == 10                            // RFC1918 10.0.0.0/8
+                || (b[0] == 172 && (b[1] & 0xF0) == 16)  // RFC1918 172.16.0.0/12
+                || (b[0] == 192 && b[1] == 168)          // RFC1918 192.168.0.0/16
+                || (b[0] == 169 && b[1] == 254)          // link-local 169.254.0.0/16 (cloud metadata!)
+                || normalized.Equals(IPAddress.Broadcast); // 255.255.255.255
+        }
+
+        byte[] v6 = normalized.GetAddressBytes();
+        return v6.Length == 16
+            && (IPAddress.IPv6Any.Equals(normalized)     // :: unspecified
+                || IPAddress.IPv6Loopback.Equals(normalized) // ::1
+                || normalized.IsIPv6LinkLocal            // fe80::/10
+                || (v6[0] & 0xFE) == 0xFC                // unique-local fc00::/7
+                || normalized.IsIPv6Multicast);          // ff00::/8 — never fetchable
     }
 
     private static async Task<byte[]> ReadCappedAsync(

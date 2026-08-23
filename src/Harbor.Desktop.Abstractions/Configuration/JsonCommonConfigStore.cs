@@ -1,8 +1,10 @@
 // JsonCommonConfigStore.cs — JSON-backed implementation of ICommonConfigStore.
 //
 // Persists the shared CommonConfig to ~/.harbor/config.json using
-// System.Text.Json. Writes are atomic (temp file + File.Move) and serialised
-// via a SemaphoreSlim so concurrent callers don't truncate each other's
+// System.Text.Json with SOURCE-GENERATED metadata (ConfigJsonContext) so it
+// works under NativeAOT — reflection-based serialization is unavailable
+// there. Writes are atomic (temp file + File.Move) and serialised via a
+// SemaphoreSlim so concurrent callers don't truncate each other's
 // writes. Reads fall back to the default CommonConfig when the file is missing
 // or corrupt — never throws for expected IO failures.
 //
@@ -15,6 +17,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
+using System.Text.Json.Serialization.Metadata;
 namespace Harbor.Desktop.Abstractions.Configuration;
 /// <summary>
 ///     JSON-backed <see cref="ICommonConfigStore" />. Reads and writes the
@@ -45,20 +48,11 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 /// </remarks>
 public sealed class JsonCommonConfigStore : ICommonConfigStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters =
-        {
-            // ImmutableList<T> + ImmutableDictionary<K,V> have no built-in
-            // System.Text.Json converters; these round-trip via mutable
-            // List<T> / Dictionary<K,V> and call the immutable ToImmutable*
-            // builders. Mirrors the approach in JsonAppConfigStore<T>.
-            ImmutableListConverter<string>.Instance,
-            ImmutableDictionaryConverter<string, string>.Instance
-        }
-    };
+    // AOT-safe metadata: seeded from the source-generated ConfigJsonContext,
+    // with the immutable-collection converters layered on top. Do NOT switch
+    // these calls back to the reflection-based JsonSerializer.Deserialize<T>(
+    // json, options) form — it breaks NativeAOT-published apps.
+    private static readonly JsonTypeInfo<CommonConfig> CommonConfigInfo = ConfigJson.CommonConfigInfo;
 
     private readonly CommonConfig _default;
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -92,7 +86,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            var config = JsonSerializer.Deserialize<CommonConfig>(json, JsonOptions);
+            var config = JsonSerializer.Deserialize(json, CommonConfigInfo);
             if (config is null)
             {
                 _logger.LogWarning("Common config at {Path} deserialized to null, using defaults", path);
@@ -150,7 +144,7 @@ public sealed class JsonCommonConfigStore : ICommonConfigStore
 
                 // Write CommonConfig fields
                 // JsonProperty.WriteTo writes BOTH name AND value — don't call WritePropertyName first!
-                byte[] commonJson = JsonSerializer.SerializeToUtf8Bytes(config, JsonOptions);
+                byte[] commonJson = JsonSerializer.SerializeToUtf8Bytes(config, CommonConfigInfo);
                 using var commonDoc = JsonDocument.Parse(commonJson);
                 foreach (var prop in commonDoc.RootElement.EnumerateObject())
                 {

@@ -11,7 +11,7 @@ namespace Harbor.Ipc.Protocol;
 ///     <list type="bullet">
 ///         <item>
 ///             <see cref="OkResponse" /> — success with optional
-///             <see cref="OkResponse.Payload" /> (MessagePack-typeless bytes
+///             <see cref="OkResponse.Payload" /> (MessagePack bytes
 ///             carrying a domain object).
 ///         </item>
 ///         <item>
@@ -48,15 +48,17 @@ public abstract record HarborResponse
 }
 
 /// <summary>
-///     Success response. <see cref="Payload" /> is a MessagePack-typeless-
-///     serialized domain object (or <see langword="null" /> for void methods).
+///     Success response. <see cref="Payload" /> is a MessagePack-serialized
+///     domain object produced by <see cref="WireCodec.SerializeDomain{T}" />
+///     (or <see langword="null" /> for void methods).
 /// </summary>
 [MessagePackObject]
 public sealed record OkResponse : HarborResponse
 {
     /// <summary>
-    ///     MessagePack-typeless serialized domain payload. <see langword="null" />
-    ///     for void-returning methods (StartAgent, AbortAgent, DeleteSession).
+    ///     MessagePack-serialized domain payload (typed, no wire type
+    ///     metadata). <see langword="null" /> for void-returning methods
+    ///     (StartAgent, AbortAgent, DeleteSession).
     /// </summary>
     [Key(1)]
     public byte[]? Payload { get; init; }

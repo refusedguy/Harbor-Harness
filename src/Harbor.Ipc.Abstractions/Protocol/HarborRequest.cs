@@ -18,16 +18,18 @@ namespace Harbor.Ipc.Protocol;
 ///         Concrete derived records therefore start their own keys at
 ///         <c>[Key(1)]</c> and MUST NOT redeclare <see cref="RequestId" />.
 ///     </para>
-///     <para>
-///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
-///         ModelInfo, ProviderId, ToolResult) are carried inside the
-///         concrete request/response payloads as
-///         <see cref="PayloadBytes" /> — a MessagePack-typeless-serialized
-///         <c>byte[]</c>. The TypelessContractlessStandardResolver handles
-///         them transparently (they are POCOs with public get/init properties).
-///         This keeps the wire contract small and decoupled from the domain
-///         layer's [MemoryPackable] attributes.
-///     </para>
+    /// <para>
+    ///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
+    ///         ModelInfo, ProviderId, ToolResult) are carried inside the
+    ///         concrete request/response payloads as
+    ///         <see cref="OkResponse.Payload" />-style <c>byte[]</c> —
+    ///         MessagePack-serialized via
+    ///         <see cref="WireCodec.SerializeDomain{T}" /> (typed, no wire
+    ///         type metadata; they are POCOs with public get/init properties
+    ///         handled by the StandardResolver). This keeps the wire contract
+    ///         small and decoupled from the domain layer's [MemoryPackable]
+    ///         attributes.
+    ///     </para>
 /// </remarks>
 [MessagePackObject]
 [Union(0, typeof(StartAgentRequest))]

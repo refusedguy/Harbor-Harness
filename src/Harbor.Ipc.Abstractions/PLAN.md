@@ -17,7 +17,7 @@
 
 - Add TLS transport variant (`TlsPipeTransport`) — see `docs/IPC.md` §Security.
 - Add WebSocket transport (`WebSocketPipeTransport`) for browser-based clients.
-- Migrate from MessagePack-typeless to a hand-rolled formatter for the
+- Migrate from typed MessagePack to a hand-rolled formatter for the
   domain types — would let us drop the MessagePack runtime dependency on
   the IPC client and ship a smaller client binary.
 - Add per-method throttling / rate-limiting to the server's `RequestDispatcher`.

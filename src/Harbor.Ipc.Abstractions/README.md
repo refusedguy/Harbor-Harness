@@ -30,13 +30,13 @@ Payload is one of:
 
 - `HarborRequest` (client → server)
 - `HarborResponse` (server → client), which is one of:
-    - `OkResponse` — with optional MessagePack-typeless `Payload` bytes (domain object)
+    - `OkResponse` — with optional MessagePack `Payload` bytes (domain object)
     - `ErrorResponse` — with `Message` string
     - `EventEnvelope` — with `EventBytes` (a serialized `HarborEventData` union member)
 
 ## Why parallel DTOs?
 
-The rich domain types (`Session`, `AgentMessage`, `ToolDescriptor`, `ModelInfo`, `ProviderId`, `ToolResult`) are `[MemoryPackable]` — not `[MessagePackObject]`. We carry them through the wire as **MessagePack-typeless `byte[]`** payloads (`OkResponse.Payload`, `EventEnvelope.EventBytes`). This:
+The rich domain types (`Session`, `AgentMessage`, `ToolDescriptor`, `ModelInfo`, `ProviderId`, `ToolResult`) are `[MemoryPackable]` — not `[MessagePackObject]`. We carry them through the wire as **typed MessagePack `byte[]`** payloads (`OkResponse.Payload`, `EventEnvelope.EventBytes`) — serialized via `WireCodec.SerializeDomain<T>` with the caller supplying the concrete type, so no type metadata travels on the wire. This:
 
 - keeps the wire contract small and explicit (only ~25 DTO records, not 100+);
 - decouples the wire from any future MemoryPack/MemoryPackable changes;
