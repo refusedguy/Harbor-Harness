@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Sprint 2 — contrib migration + documentation sweep
+
+- Moved optional components out of the main solution: TUI renderers (Spectre,
+  Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel) to
+  `contrib/tui/`, Wpf/Maui/Blazor apps + tests to `contrib/apps/` and
+  `contrib/tests/`, the Scripting stack (SharpTS/Jint) to `contrib/scripting/`.
+  Main `Harbor.slnx`: 82 → 66 projects; new `contrib/Contrib.slnx` builds
+  separately. Architecture layering rules now scope the main solution only.
+- Known issues: ViewInflationTests.MainWindow_Inflates pre-existing red (NRE,
+  ViewInflationTests.cs:211); LocatorConventionTests.TryGet_ReturnsNullForUnregistered
+  broken by sprint (passes isolated — state pollution, needs fix in sprint 3).
+
 ### Changed — R28-R31: UI component decomposition + business logic extraction
 
 **R28 — Platform-agnostic ToolCallViewModel + reusable components (Avalonia):**
