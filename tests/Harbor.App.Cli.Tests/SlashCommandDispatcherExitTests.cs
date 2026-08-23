@@ -129,7 +129,6 @@ public class SlashCommandDispatcherExitTests
 
         public void Steer(AgentMessage message) { }
 
-        public void FollowUp(AgentMessage message) { }
 
         public void Dispose() { }
 

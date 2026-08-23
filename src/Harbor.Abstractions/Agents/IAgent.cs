@@ -11,7 +11,7 @@ namespace Harbor.Abstractions.Agents;
 ///         <b>Why this exists (§ARCH-002):</b> before this interface was extracted,
 ///         <c>Harbor.Terminal.Abstractions</c> depended on the full <see cref="IAgent" />
 ///         contract (which includes <see cref="IAgent.Subscribe" />,
-///         <see cref="IAgent.Steer" />, <see cref="IAgent.FollowUp" />,
+///         <see cref="IAgent.Steer" />,
 ///         <see cref="IAgent.Initialize" /> — none of which a TUI effect host calls).
 ///         That violated the Interface Segregation Principle and made the TUI layer
 ///         rebuild whenever any IAgent member changed.
@@ -80,15 +80,15 @@ public interface IAgentRunner
 /// <remarks>
 ///     <para>
 ///         An <see cref="IAgent" /> owns the runtime state for a single conversation: the
-///         active <see cref="AgentState" />, the steering/follow-up queues, the abort token,
+///         active <see cref="AgentState" />, the steering queue, the abort token,
 ///         and the listener fan-out for agent events. The agent is paired with a
 ///         <see cref="Session" /> + <see cref="AgentDefinition" /> via
 ///         <see cref="Initialize" /> before its first <see cref="PromptAsync" /> call.
 ///     </para>
 ///     <para>
-///         Implementations MUST be thread-safe for <see cref="Subscribe" />, <see cref="Steer" />,
-///         and <see cref="FollowUp" />. <see cref="PromptAsync" /> is single-flight: a second call
-///         while the agent is running returns <see cref="Result.Failure" />.
+///         Implementations MUST be thread-safe for <see cref="Subscribe" /> and
+///         <see cref="Steer" />. <see cref="PromptAsync" /> is single-flight: a second call
+///         while the agent is running steers the active run instead of failing (Ф2/B1).
 ///     </para>
 ///     <para>
 ///         The default implementation is <c>DefaultAgent</c> in <c>Harbor.Core</c>.
@@ -97,7 +97,7 @@ public interface IAgentRunner
 ///         <b>ISP note (§ARCH-002):</b> the runner surface (<see cref="AbortSource" />,
 ///         <see cref="PromptAsync(string, CancellationToken)" />,
 ///         <see cref="WaitForIdleAsync" />) is also exposed on
-///         <see cref="IAgentRunner" />. Callers that do not need steering / follow-up /
+///         <see cref="IAgentRunner" />. Callers that do not need steering /
 ///         subscription should take <see cref="IAgentRunner" /> instead.
 ///     </para>
 /// </remarks>
@@ -137,12 +137,6 @@ public interface IAgent : IAgentRunner, IDisposable
     /// </summary>
     /// <param name="message">A message to inject into the steering queue.</param>
     public void Steer(AgentMessage message);
-
-    /// <summary>
-    ///     Queue a follow-up message after current turn completes.
-    /// </summary>
-    /// <param name="message">A message to append after the current run finishes.</param>
-    public void FollowUp(AgentMessage message);
 }
 
 /// <summary>

@@ -69,7 +69,6 @@ internal sealed class StubAgent : IAgent
     }
 
     public void Steer(AgentMessage message) { /* no-op */ }
-    public void FollowUp(AgentMessage message) { /* no-op */ }
 
     public void Dispose()
     {

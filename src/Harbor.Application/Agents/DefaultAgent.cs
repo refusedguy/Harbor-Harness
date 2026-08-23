@@ -10,7 +10,6 @@ public sealed class DefaultAgent : IAgent
     private readonly IAgentLoop _agentLoop;
     private readonly IEventBus _eventBus;
     private readonly IDisposable _eventBusSubscription;
-    private readonly Channel<AgentMessage> _followUpQueue;
     private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _listeners = new();
     private readonly object _listenersLock = new();
     private readonly ILogger<DefaultAgent> _logger;
@@ -85,12 +84,6 @@ public sealed class DefaultAgent : IAgent
         _logger = logger;
 
         _steeringQueue = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
-        {
-            SingleReader = true,
-            SingleWriter = false
-        });
-
-        _followUpQueue = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
@@ -186,17 +179,21 @@ public sealed class DefaultAgent : IAgent
     }
 
     /// <summary>
-    ///     Submit a plain-text prompt and run the agent loop to completion. Throws-free: returns
-    ///     <see cref="Result.Failure" /> if the agent is already running or not initialized.
+    ///     Submit a plain-text prompt and run the agent loop to completion.
+    ///     <para>
+    ///         Ф2/B1: when a run is already active, the text is NOT rejected —
+    ///         it is routed into the steering queue (the run picks it up at
+    ///         the next safe boundary) and this call returns
+    ///         <see cref="Result.Success()" /> immediately. Callers that need
+    ///         run-completion semantics must await <see cref="WaitForIdleAsync" />
+    ///         after a steered submission.
+    ///     </para>
     /// </summary>
     /// <param name="text">The user's prompt text.</param>
     /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
-    /// <returns>Success on completion, or failure with an error message.</returns>
+    /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(string text, CancellationToken ct = default)
     {
-        if (State?.IsRunning == true)
-            return Result.Failure("Agent is already running. Use Steer() to interrupt or wait for completion.");
-
         if (State is null)
             return Result.Failure("Agent is not initialized. Call InitializeAsync first.");
 
@@ -208,21 +205,32 @@ public sealed class DefaultAgent : IAgent
             State.Agent.Name.Value,
             State.Agent.Model);
 
+        // Ф2/B1: prompt during an active run → steer it instead of failing.
+        if (State.IsRunning)
+        {
+            Steer(userMessage);
+            return Result.Success();
+        }
+
         return await PromptAsync(userMessage, ct).ConfigureAwait(false);
     }
 
     /// <summary>
     ///     Submit a pre-built <see cref="UserMessage" /> and run the agent loop to completion.
+    ///     <para>
+    ///         Ф2/B1: when the run gate is held by an active run, the message
+    ///         is routed into the steering queue and this call returns
+    ///         <see cref="Result.Success()" /> immediately (steer-ack) instead
+    ///         of failing with "busy".
+    ///     </para>
     /// </summary>
     /// <remarks>
     ///     Entry is mutually exclusive via <see cref="_runGate" />: concurrent
-    ///     callers are serialized atomically and the loser receives
-    ///     <c>Result.Failure("Agent is busy...")</c> instead of both calls
-    ///     passing an unsynchronized <c>IsRunning</c> check (the previous race).
+    ///     callers are serialized atomically; the loser steers the active run.
     /// </remarks>
     /// <param name="message">The user message to submit.</param>
     /// <param name="ct">Optional cancellation token linked to <see cref="AbortSource" />.</param>
-    /// <returns>Success on completion, or failure with an error message.</returns>
+    /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
         if (State is null)
@@ -240,7 +248,23 @@ public sealed class DefaultAgent : IAgent
         }
 
         if (!acquired)
+        {
+            // Ф2/B1: busy → deliver as steering instead of dropping the input.
+            // The IsRunning re-check covers the narrow window where the gate is
+            // still held but the run already flipped its state to idle — in
+            // that case steering would strand the message until an unknown
+            // future run, so we keep the explicit failure instead.
+            if (State.IsRunning)
+            {
+                _logger.LogInformation(
+                    "Agent {Agent} is running; prompt routed to steering queue",
+                    State.Agent.Name.Value);
+                Steer(message);
+                return Result.Success();
+            }
+
             return Result.Failure("Agent is busy. Wait for the current run to complete or use Steer() to interrupt it.");
+        }
 
         try
         {
@@ -298,16 +322,10 @@ public sealed class DefaultAgent : IAgent
 
     /// <summary>
     ///     Inject a steering message into the current run. The message is processed at the next
-    ///     safe boundary (between turns).
+    ///     safe boundary (mid-turn after tool results, or between turns — Ф2/B2).
     /// </summary>
     /// <param name="message">The message to inject.</param>
     public void Steer(AgentMessage message) => _steeringQueue.Writer.TryWrite(message);
-
-    /// <summary>
-    ///     Queue a follow-up message to be processed after the current run completes.
-    /// </summary>
-    /// <param name="message">The message to queue.</param>
-    public void FollowUp(AgentMessage message) => _followUpQueue.Writer.TryWrite(message);
 
     /// <summary>
     ///     Wait for the agent to become idle (no <see cref="PromptAsync" /> in flight).
@@ -348,7 +366,7 @@ public sealed class DefaultAgent : IAgent
 
     /// <summary>
     ///     Release all resources held by this agent: event-bus subscription, abort source,
-    ///     run gate, steering/follow-up channels.
+    ///     run gate, steering channel.
     /// </summary>
     public void Dispose()
     {
@@ -356,7 +374,6 @@ public sealed class DefaultAgent : IAgent
         AbortSource?.Dispose();
         _runGate.Dispose();
         _steeringQueue.Writer.TryComplete();
-        _followUpQueue.Writer.TryComplete();
     }
 
     /// <summary>

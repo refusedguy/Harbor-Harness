@@ -303,16 +303,21 @@ public sealed class AgentLoop : IAgentLoop
                 // B3: tool results are pure appends — extend the running estimate.
                 _tokenTracker.RecordAppendedMessage(toolResults);
 
+                // Ф2/B2: mid-run steering injection INSIDE the turn. Drained
+                // right AFTER the tool results are persisted (never between
+                // the assistant tool_calls and their results — providers
+                // require that adjacency) so the NEXT LLM request of THIS run
+                // already carries the steering, not just the next turn.
+                await DrainSteeringAsync(session, ct).ConfigureAwait(false);
+
                 _logger.LogDebug("Turn {Turn} end (with tool results)", turn);
                 await _eventBus.PublishAsync(
                     new TurnEndEvent(partial, new[] { toolResults }), ct).ConfigureAwait(false);
 
-                // 9. Steering check — drain the whole queue at the turn boundary.
-                while (session.SteeringQueue.Reader.TryRead(out var steerMsg))
-                {
-                    await session.AppendMessageAsync(steerMsg, ct).ConfigureAwait(false);
-                    _tokenTracker.RecordAppendedMessage(steerMsg);
-                }
+                // 9. Boundary steering drain — kept for runs that reach max
+                // steps or a terminal stop reason right after execution; on
+                // the normal path it is a no-op (B2 drained above).
+                await DrainSteeringAsync(session, ct).ConfigureAwait(false);
 
                 // 10. Max steps — also honoured after a terminal stop reason.
                 if (turn >= agent.MaxSteps)
@@ -564,6 +569,19 @@ public sealed class AgentLoop : IAgentLoop
         /// <summary>Creates the error for deserialization paths.</summary>
         public LlmStreamErrorException()
         {
+        }
+    }
+
+    /// <summary>
+    ///     Drain the whole steering queue into the session history. Called
+    ///     mid-turn (after tool results) and at the turn boundary (Ф2/B2).
+    /// </summary>
+    private async Task DrainSteeringAsync(ISessionContext session, CancellationToken ct)
+    {
+        while (session.SteeringQueue.Reader.TryRead(out var steerMsg))
+        {
+            await session.AppendMessageAsync(steerMsg, ct).ConfigureAwait(false);
+            _tokenTracker.RecordAppendedMessage(steerMsg);
         }
     }
 
