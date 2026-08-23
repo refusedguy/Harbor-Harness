@@ -134,6 +134,10 @@ public sealed class SettingsTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
+        // Capture the ACTUAL persisted theme instead of assuming "dark" —
+        // CommonConfig defaults to "system" when config.json has no key.
+        var themeBefore = UI(() => Vm.Settings.ThemeSettings.Theme);
+
         UI(() =>
         {
             Vm.IsSettingsOpen = true;
@@ -145,7 +149,7 @@ public sealed class SettingsTests : ComponentTestBase
         await Task.Delay(200).ConfigureAwait(false);
 
         var themeAfter = UI(() => Vm.Settings.ThemeSettings.Theme);
-        await Assert.That(themeAfter).IsEqualTo("dark");
+        await Assert.That(themeAfter).IsEqualTo(themeBefore);
 
         var path = await CaptureAsync("settings-cancelled").ConfigureAwait(false);
 
