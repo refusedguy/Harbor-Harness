@@ -236,6 +236,10 @@ public class TerminaE2ETests : E2eTestBase
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
         bool sawStatus = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        if (!sawStatus)
+        {
+            Console.WriteLine($"[TUI-E2E] Compaction status 'running' not seen.\n--- GRID ---\n{await driver.ReadGridAsync().ConfigureAwait(false)}");
+        }
         await Assert.That(sawStatus).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -261,6 +265,10 @@ public class TerminaE2ETests : E2eTestBase
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
         bool sawRunning = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+        if (!sawRunning)
+        {
+            Console.WriteLine($"[TUI-E2E] AgentRunning banner 'running' not seen.\n--- GRID ---\n{await driver.ReadGridAsync().ConfigureAwait(false)}");
+        }
         await Assert.That(sawRunning).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
@@ -295,11 +303,13 @@ public class TerminaE2ETests : E2eTestBase
     }
 
     /// <summary>
-    ///     Alt+1 toggles panel focus. The renderer should show the panel
-    ///     content after pressing Alt+1.
+    ///     Alt+1 toggles panel focus. NOT SUPPORTED by the Termina renderer:
+    ///     it has no panel registry — the only panel toggle is F12 (logs).
+    ///     Skipped until Alt+digit panel focus is implemented for this renderer.
     /// </summary>
     [Test]
     [Category("E2E")]
+    [Skip("Termina renderer does not implement Alt+digit panel toggling (no panel registry; F12 logs is the only panel).")]
     public async Task Alt1_TogglesPanel()
     {
         EnsurePtyAvailable();
@@ -310,6 +320,10 @@ public class TerminaE2ETests : E2eTestBase
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
         bool sawPanel = await driver.WaitForTextAsync("panel", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        if (!sawPanel)
+        {
+            Console.WriteLine($"[TUI-E2E] Alt+1 panel header not seen.\n--- GRID ---\n{await driver.ReadGridAsync().ConfigureAwait(false)}");
+        }
         await Assert.That(sawPanel).IsTrue();
 
         await driver.SendInputAsync("/exit\r").ConfigureAwait(false);

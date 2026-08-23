@@ -19,6 +19,8 @@ public sealed class ChatViewModel : ReactiveViewModel
     private readonly TerminaTeaBridge _bridge;
     private readonly ILogger? _logger;
     private readonly Subject<string> _output = new();
+    private readonly Subject<string> _stream = new();
+    private bool _streamOpen;
     private readonly ChatView _chatView = new();
     private readonly DefaultUiProjector _projector = new();
     private readonly StatusBarView _statusBarView = new();
@@ -33,6 +35,13 @@ public sealed class ChatViewModel : ReactiveViewModel
     }
 
     public Observable<string> Output => _output;
+
+    /// <summary>
+    ///     Raw streaming deltas (no trailing newline) — appended inline to the
+    ///     StreamingTextNode. Kept separate from <see cref="Output" /> so line
+    ///     events can keep their newline semantics without splitting tokens.
+    /// </summary>
+    public Observable<string> Stream => _stream;
 
     public TerminaTeaBridge Bridge => _bridge;
 
@@ -53,6 +62,7 @@ public sealed class ChatViewModel : ReactiveViewModel
 
         if (lines.Count > _lastLineCount)
         {
+            CloseStreamBlock();
             for (int i = _lastLineCount; i < lines.Count; i++)
                 _output.OnNext(lines[i]);
             _lastLineCount = lines.Count;
@@ -64,23 +74,38 @@ public sealed class ChatViewModel : ReactiveViewModel
         {
             if (state.Active.ThinkBuffer.Length > _lastThinkLen)
             {
-                _output.OnNext(state.Active.ThinkBuffer[_lastThinkLen..]);
+                _streamOpen = true;
+                _stream.OnNext(state.Active.ThinkBuffer[_lastThinkLen..]);
                 _lastThinkLen = state.Active.ThinkBuffer.Length;
             }
             if (state.Active.TextBuffer.Length > _lastTextLen)
             {
-                _output.OnNext(state.Active.TextBuffer[_lastTextLen..]);
+                _streamOpen = true;
+                _stream.OnNext(state.Active.TextBuffer[_lastTextLen..]);
                 _lastTextLen = state.Active.TextBuffer.Length;
             }
         }
         else
         {
+            CloseStreamBlock();
             _lastTextLen = 0;
             _lastThinkLen = 0;
         }
 
         if (state.ShouldQuit)
             this.RequestShutdown();
+    }
+
+    /// <summary>
+    ///     Terminates an open streamed block by emitting a newline through the
+    ///     line channel, so the next transcript/status line starts on its own row.
+    /// </summary>
+    private void CloseStreamBlock()
+    {
+        if (!_streamOpen)
+            return;
+        _streamOpen = false;
+        _output.OnNext(string.Empty);
     }
 
     public void HandleSubmit(string prompt)
@@ -145,13 +170,20 @@ public sealed class ChatPage : ReactivePage<ChatViewModel>
             .Subscribe(line => _output?.Append(line + "\n", Color.Default))
             .DisposeWith(this.Subscriptions);
 
+        this.ViewModel.Stream
+            .Subscribe(chunk => _output?.Append(chunk, Color.Default))
+            .DisposeWith(this.Subscriptions);
+
         _bridge.Store.Changed += (_, _) =>
         {
             if (_statusNode is not null)
             {
                 _statusNode.Buffer.Clear();
                 var screen = _projector.Project(_bridge.Store.State);
-                _statusNode.Append(_statusBarView.Build(screen), Color.Gray);
+                // Append native-colored segments instead of a pre-ANSI-escaped
+                // string — StreamingTextNode's inline-SGR handling is unreliable.
+                foreach (var (text, style) in _statusBarView.BuildSegments(screen))
+                    _statusNode.Append(text, StatusBarView.MapColor(style));
             }
         };
 

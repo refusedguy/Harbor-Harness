@@ -8,6 +8,12 @@ namespace Harbor.Tui.Termina.Views;
 
 public sealed class StatusBarView
 {
+    /// <summary>Ordered (left→center→right) status segments with their styles.</summary>
+    public IReadOnlyList<(string Text, UiSpanStyle Style)> BuildSegments(UiScreenModel screen)
+        => OrderedSegments(screen.StatusBar.Segments)
+            .Select(s => (s.Text, s.Style ?? UiSpanStyle.Default))
+            .ToArray();
+
     public string Build(UiScreenModel screen)
     {
         var sb = new StringBuilder(128);
@@ -15,18 +21,21 @@ public sealed class StatusBarView
 
         foreach (var segment in OrderedSegments(screen.StatusBar.Segments))
         {
-            var color = segment.Style switch
-            {
-                UiSpanStyle.Accent => TerminaColor.Cyan,
-                UiSpanStyle.Dim => TerminaColor.DarkGray,
-                UiSpanStyle.Danger => TerminaColor.Red,
-                _ => TerminaColor.White
-            };
+            var color = MapColor(segment.Style);
             sb.Append(TerminaMarkdownRenderer.Ansi(color, segment.Text));
         }
 
         return sb.ToString();
     }
+
+    /// <summary>Maps a projection span style to a native Termina color.</summary>
+    public static TerminaColor MapColor(UiSpanStyle? style) => style switch
+    {
+        UiSpanStyle.Accent => TerminaColor.Cyan,
+        UiSpanStyle.Dim => TerminaColor.DarkGray,
+        UiSpanStyle.Danger => TerminaColor.Red,
+        _ => TerminaColor.White
+    };
 
     private static IReadOnlyList<UiStatusSegment> OrderedSegments(IReadOnlyList<UiStatusSegment> segments)
     {
