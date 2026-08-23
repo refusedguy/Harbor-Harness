@@ -65,7 +65,10 @@ public sealed class AgentLoop : IAgentLoop
         _providers = providers;
         _tools = tools;
         _agents = agents;
-        _promptBuilder = promptBuilder;
+        // Ф6/A2: memoize prompt builds — same (agent, model, tools, context)
+        // hash returns the cached string instead of re-running the ~180-line
+        // template assembly every turn.
+        _promptBuilder = new CachingSystemPromptBuilder(promptBuilder);
         _compaction = compaction;
         _tokenTracker = tokenTracker;
         _retryPolicy = retryPolicy;
