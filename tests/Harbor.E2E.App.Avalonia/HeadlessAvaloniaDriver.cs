@@ -604,6 +604,35 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Poll a SEPARATE window's visual tree (not MainWindow) until
+    ///     <paramref name="text" /> appears. Needed for tests that open their
+    ///     own window (onboarding wizard) — <see cref="WaitForTextAsync" />
+    ///     only walks MainWindow.
+    /// </summary>
+    public async Task<bool> WaitForTextInWindowAsync(
+        Window window,
+        string text,
+        TimeSpan? timeout = null)
+    {
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            string current = OnUIThread(() =>
+            {
+                var sb = new StringBuilder();
+                AppendText(window, sb);
+                return sb.ToString();
+            });
+            if (current.Contains(text, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            await Task.Delay(50).ConfigureAwait(false);
+        }
+        return false;
+    }
+
+    /// <summary>
     ///     Poll a condition until it returns <see langword="true" /> or the
     ///     timeout elapses. Replaces arbitrary <c>Task.Delay</c> calls for UI
     ///     settling with deterministic polling.
