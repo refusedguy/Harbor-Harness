@@ -224,8 +224,11 @@ public sealed class DefaultUiProjector : IUiProjector
                     Phase: MessageRenderPhase.Streaming));
             }
 
-            tailRendered = renderedBuilder.MoveToImmutable();
-            tailBlocks = blockBuilder.MoveToImmutable();
+            // Capacity-sized builders may hold fewer items (e.g. thinking
+            // without text); MoveToImmutable would throw — ToImmutable is
+            // count-safe on this small streaming-tail path.
+            tailRendered = renderedBuilder.ToImmutable();
+            tailBlocks = blockBuilder.ToImmutable();
         }
 
         // ── Compose the transcript (copy-on-write: only changed frames copy) ──
