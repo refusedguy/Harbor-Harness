@@ -212,6 +212,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         : base(shell.Dispatcher, shell.Logger)
     {
         _contentHost = (AvaloniaContentHost)contentHost;
+        // Palette-driven navigation (shellChrome.Navigate → TryNavigate)
+        // bypasses SwitchViewCommand; mirror the route into ActiveView so the
+        // tab strip and IsVisible bindings follow (CommandPalette_Enter test).
+        _contentHost.RouteNavigated += route => Dispatcher.Post(() => ActiveView = route);
         _effects = shell.EffectHost;
         _theme = shell.ThemeService;
         _toasts = shell.ToastService;
@@ -232,6 +236,23 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
         HasOverlay = _overlayController.HasOverlay;
         _costAnimator.Tick += () => OnPropertyChanged(nameof(AnimatedCostText));
+
+        // C2: declare state→VM projections ONCE, in the constructor. They
+        // were previously re-registered inside OnStoreChanged on EVERY
+        // transition AND never applied (ApplySelectors was not called), so
+        // MessageCount / StatusText / token labels stayed at their initial
+        // values forever while the raw ShellStatus writes moved — the status
+        // bar showed "0 msgs" after messages were sent.
+        Select(s => s.Status, v => StatusText = v);
+        Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Model, v => ModelLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Cost.TokensIn, v => TokensIn = v);
+        Select(s => s.Cost.TokensOut, v => TokensOut = v);
+        Select(s => s.Cost.CostUsd, v => CostUsd = v);
+        Select(s => s.IsAgentRunning, v => IsRunning = v);
+        Select(s => Math.Max(1, _contentHost.Sessions.Sessions.Count), v => ActiveSessionCount = v);
+        Select(s => s.Lines.Length, v => MessageCount = v);
 
         _messenger.Register<ModelPickedMessage>(this, (_, _) =>
         {
@@ -276,16 +297,8 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     {
         var wasRunning = IsRunning;
 
-        Select(s => s.Status, v => StatusText = v);
-        Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Model, v => ModelLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Cost.TokensIn, v => TokensIn = v);
-        Select(s => s.Cost.TokensOut, v => TokensOut = v);
-        Select(s => s.Cost.CostUsd, v => CostUsd = v);
-        Select(s => s.IsAgentRunning, v => IsRunning = v);
-        Select(s => Math.Max(1, _contentHost.Sessions.Sessions.Count), v => ActiveSessionCount = v);
-        Select(s => s.Lines.Length, v => MessageCount = v);
+        // C2: apply the projections registered once in the constructor.
+        ApplySelectors(state);
 
         var statusBar = StatusProjector.ProjectStatusBar(state);
 

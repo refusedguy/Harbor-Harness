@@ -180,9 +180,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         {
             if (_lifetime?.MainWindow is { } mw)
             {
-                Dispatcher.UIThread
-                    .InvokeAsync(() => mw.Hide())
-                    .GetAwaiter().GetResult();
+                OnUIThread(() => mw.Hide());
             }
         }
         catch
@@ -290,15 +288,15 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             // can save. UseSkia() must be called explicitly when
             // UseHeadlessDrawing=false — otherwise the headless platform errors
             // out with "No rendering system configured. Consider calling UseSkia()."
-            Dispatcher.UIThread.InvokeAsync(() =>
+            OnUIThread(() =>
             {
                 _lifetime = new ClassicDesktopStyleApplicationLifetime();
-                
+
                 // Force dark theme BEFORE the app initializes so
                 // OnFrameworkInitializationCompleted applies it deterministically
                 // regardless of the test host's OS theme (often Light/Default).
                 HarborApp.ThemeMode = "dark";
-                
+
                 AppBuilder.Configure<HarborApp>()
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions
                     {
@@ -307,7 +305,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                     .UseSkia()
                     .WithInterFont()
                     .SetupWithLifetime(_lifetime);
-            }).GetAwaiter().GetResult();
+            });
 
             _appInitialized = true;
         }
@@ -325,7 +323,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public async Task ShowMainWindowAsync()
     {
-        Dispatcher.UIThread.InvokeAsync(() =>
+        OnUIThread(() =>
         {
             var window = MainWindow;
             if (!window.IsVisible)
@@ -336,7 +334,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             // and CaptureRenderedFrame returns real pixels (not the empty default).
             window.UpdateLayout();
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-        }).GetAwaiter().GetResult();
+        });
 
         // Give the UI thread's MainLoop a moment to drain layout + render
         // jobs before the test reads back state. 80ms is enough on a
@@ -374,7 +372,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         // UpdateLayout + ForceRenderTimerTick three times — each cycle drains
         // one batch of layout/render work so containers are fully realised
         // before the final capture.
-        string path = Dispatcher.UIThread.InvokeAsync(() =>
+        string path = OnUIThread(() =>
         {
             var window = MainWindow;
             for (int i = 0; i < 3; i++)
@@ -396,7 +394,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             using var fs = File.Create(p);
             bitmap.Save(fs);
             return p;
-        }).GetAwaiter().GetResult();
+        });
 
         return path;
     }
@@ -419,10 +417,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </remarks>
     public T? FindControlByName<T>(string name) where T : Control
     {
-        return Dispatcher.UIThread
-            .InvokeAsync(() => FindByName<T>(MainWindow, name))
-            .GetAwaiter()
-            .GetResult();
+        return OnUIThread<T?>(() => FindByName<T>(MainWindow, name));
     }
 
     /// <summary>
@@ -436,6 +431,16 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// <returns>The delegate's return value.</returns>
     public T OnUIThread<T>(Func<T> func)
     {
+        // Reentrancy guard: when already ON the dispatcher thread (e.g. the
+        // ComponentTestBase.Vm helper called inside another UI(() => …) block),
+        // InvokeAsync(...).GetResult() would block the UI thread on a queued
+        // job that can never run — the MainLoop is busy inside THIS call.
+        // Execute inline instead, matching WPF Dispatcher.Invoke semantics.
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            return func();
+        }
+
         return Dispatcher.UIThread
             .InvokeAsync<T>(func)
             .GetAwaiter()
@@ -450,6 +455,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// <param name="action">The delegate to execute on the UI thread.</param>
     public void OnUIThread(Action action)
     {
+        // Same reentrancy guard as the generic overload — see above.
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+            return;
+        }
+
         Dispatcher.UIThread
             .InvokeAsync(action)
             .GetAwaiter()
@@ -465,13 +477,10 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public RadioButton? FindRadioButtonByText(string text)
     {
-        return Dispatcher.UIThread
-            .InvokeAsync(() =>
-                FindFirst<RadioButton>(MainWindow, b =>
-                    b.Content is { } c &&
-                    string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)))
-            .GetAwaiter()
-            .GetResult();
+        return OnUIThread<RadioButton?>(() =>
+            FindFirst<RadioButton>(MainWindow, b =>
+                b.Content is { } c &&
+                string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -481,13 +490,10 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public Button? FindButtonByText(string text)
     {
-        return Dispatcher.UIThread
-            .InvokeAsync(() =>
-                FindFirst<Button>(MainWindow, b =>
-                    b.Content is { } c &&
-                    string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)))
-            .GetAwaiter()
-            .GetResult();
+        return OnUIThread<Button?>(() =>
+            FindFirst<Button>(MainWindow, b =>
+                b.Content is { } c &&
+                string.Equals(c.ToString()?.Trim(), text, StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -497,7 +503,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public async Task TypeAsync(TextBox target, string text)
     {
-        Dispatcher.UIThread.InvokeAsync(() =>
+        OnUIThread(() =>
         {
             target.Text = text;
             target.CaretIndex = text.Length;
@@ -510,7 +516,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             // NOTE: do NOT call Dispatcher.UIThread.RunJobs() here — it causes
             // re-entrancy issues with the TwoWay binding and can revert the
             // TextBox to a stale VM value. The MainLoop pumps jobs continuously.
-        }).GetAwaiter().GetResult();
+        });
 
         // Two-way bindings with UpdateSourceTrigger=PropertyChanged fire
         // synchronously, but the ViewModel may schedule async work on the
@@ -533,7 +539,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </remarks>
     public async Task ClickAsync(Button button)
     {
-        Dispatcher.UIThread.InvokeAsync(() =>
+        OnUIThread(() =>
         {
             if (button is RadioButton rb)
             {
@@ -552,7 +558,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 // No command — simulate the routed Click event directly.
                 button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, button));
             }
-        }).GetAwaiter().GetResult();
+        });
 
         await Task.Delay(30).ConfigureAwait(false);
     }
@@ -568,6 +574,26 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         while (DateTimeOffset.UtcNow < deadline)
         {
             string current = GetAllVisibleText();
+            if (current.Contains(text, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            await Task.Delay(50).ConfigureAwait(false);
+        }
+        return false;
+    }
+
+    /// <summary>
+    ///     Poll until <paramref name="text" /> appears in
+    ///     <see cref="GetRenderedText" /> — i.e. it is genuinely VISIBLE, not
+    ///     merely attached to the visual tree inside a collapsed subtree (C1).
+    /// </summary>
+    public async Task<bool> WaitForRenderedTextAsync(string text, TimeSpan? timeout = null)
+    {
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            string current = GetRenderedText();
             if (current.Contains(text, StringComparison.Ordinal))
             {
                 return true;
@@ -619,15 +645,12 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </remarks>
     public string GetAllVisibleText()
     {
-        return Dispatcher.UIThread
-            .InvokeAsync(() =>
-            {
-                var sb = new StringBuilder();
-                AppendText(MainWindow, sb);
-                return sb.ToString();
-            })
-            .GetAwaiter()
-            .GetResult();
+        return OnUIThread(() =>
+        {
+            var sb = new StringBuilder();
+            AppendText(MainWindow, sb);
+            return sb.ToString();
+        });
     }
 
     /// <summary>
@@ -638,7 +661,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     /// </summary>
     public async Task ResetStateAsync()
     {
-        Dispatcher.UIThread.InvokeAsync(() =>
+        OnUIThread(() =>
         {
             // Use the visual-tree-walking FindByName, not FindControl — the
             // InputBox lives inside the ChatView UserControl, which FindControl
@@ -679,7 +702,7 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 catch { }
                 vm.SwitchViewCommand.Execute("chat");
             }
-        }).GetAwaiter().GetResult();
+        });
 
         await Task.Delay(20).ConfigureAwait(false);
     }
@@ -703,6 +726,52 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         foreach (var child in visual.GetVisualChildren())
         {
             AppendText(child, sb);
+        }
+    }
+
+    /// <summary>
+    ///     Visibility-honest variant of <see cref="GetAllVisibleText" /> (C1):
+    ///     a control with <c>IsVisible=false</c> stays ATTACHED to the visual
+    ///     tree in Avalonia — it is collapsed, not detached — so the legacy
+    ///     unfiltered walk feeds hidden text into assertions. This walk stops
+    ///     at every invisible subtree, so a positive match means the text is
+    ///     ACTUALLY rendered. Used by tests that assert visible UI states
+    ///     (streaming banner, status-bar counter); legacy tests keep using the
+    ///     unfiltered probe.
+    /// </summary>
+    public string GetRenderedText()
+    {
+        return OnUIThread(() =>
+        {
+            var sb = new StringBuilder();
+            AppendRenderedText(MainWindow, sb, parentVisible: true);
+            return sb.ToString();
+        });
+    }
+
+    private static void AppendRenderedText(Visual visual, StringBuilder sb, bool parentVisible)
+    {
+        if (!parentVisible || !visual.IsVisible)
+        {
+            return;
+        }
+
+        switch (visual)
+        {
+            case TextBlock tb when tb.Text is { } t:
+                sb.AppendLine(t);
+                break;
+            case TextBox txb when txb.Text is { } tx:
+                sb.AppendLine(tx);
+                break;
+            case ContentControl cc when cc.Content is string s:
+                sb.AppendLine(s);
+                break;
+        }
+
+        foreach (var child in visual.GetVisualChildren())
+        {
+            AppendRenderedText(child, sb, parentVisible: true);
         }
     }
 

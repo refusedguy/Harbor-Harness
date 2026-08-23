@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Harbor.Abstractions.Events;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.E2E.Framework;
@@ -290,6 +291,28 @@ public sealed class AvaloniaUiTests
             () => Driver.GetAllVisibleText().Contains("Hello AI!", StringComparison.Ordinal),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
 
+        // C2: the status-bar message counter must reflect the transcript
+        // before the capture. The exact number is whatever the store holds
+        // (user line + agent reply/error), so poll until the RENDERED
+        // counter matches the live Lines.Count instead of hardcoding it.
+        // NOTE: GetRenderedText and OnUIThread each block on the dispatcher,
+        // so they must NEVER be nested — both run at poll level instead.
+        bool counterUpdated = await Driver.WaitForConditionAsync(
+            () =>
+            {
+                int expected = Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm ? vm.Chat.Lines.Count : 0);
+                if (expected <= 0)
+                {
+                    return false;
+                }
+
+                return Driver.GetRenderedText()
+                    .Contains($"{expected} msgs", StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        await Assert.That(counterUpdated).IsTrue();
+
         await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }
 
@@ -308,7 +331,8 @@ public sealed class AvaloniaUiTests
 
         // Click the "Code" tab via the bound RadioButton. SwitchViewCommand
         // is invoked through the TwoWay IsChecked → ActiveView binding.
-        var codeTab = Driver.FindRadioButtonByText("📝 Code");
+        // (The tab strip dropped its emoji prefix — content is plain "Code".)
+        var codeTab = Driver.FindRadioButtonByText("Code");
         await Assert.That(codeTab).IsNotNull();
         await Driver.ClickAsync(codeTab!).ConfigureAwait(false);
 
@@ -803,43 +827,46 @@ public sealed class AvaloniaUiTests
     ///     agent-running banner. Captures <c>19-streaming-indicator.png</c>
     ///     and <c>20-streaming-done.png</c> after IsAgentRunning flips back.
     /// </summary>
+    /// <remarks>
+    ///     C1: the flag is driven through the REAL production path — an
+    ///     <see cref="AgentStartEvent" /> published on the DI event bus,
+    ///     routed to the session store, reduced into
+    ///     <c>UiState.IsAgentRunning</c>. Setting the VM property directly is
+    ///     stomped back by the selector pipeline on the next store transition.
+    /// </remarks>
     [Test]
     [Category("E2E")]
     public async Task Chat_ShowStreamingIndicator()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        Driver.OnUIThread(() =>
-        {
-            if (Driver.MainWindow.DataContext is MainViewModel vm)
-            {
-                vm.Chat.IsAgentRunning = true;
-                vm.Chat.StatusMessage = "Agent is running…";
-            }
-        });
-        // Poll for the streaming indicator instead of a fixed delay.
-        bool hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        var startModel = new Harbor.Abstractions.Models.ModelInfo(
+            "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
+            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
+        await eventBus.PublishAsync(new AgentStartEvent(
+            "e2e-streaming-session",
+            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(),
+            startModel)).ConfigureAwait(false);
+
+        // Honest visibility probe (C1): collapsed banners no longer satisfy it.
+        bool hasIndicator = await Driver.WaitForRenderedTextAsync("Agent is running", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasIndicator).IsTrue();
 
         await Driver.ScreenshotAsync("19-streaming-indicator").ConfigureAwait(false);
 
-        // Stop the agent.
-        Driver.OnUIThread(() =>
-        {
-            if (Driver.MainWindow.DataContext is MainViewModel vm)
-            {
-                vm.Chat.IsAgentRunning = false;
-                vm.Chat.StatusMessage = string.Empty;
-            }
-        });
+        // Stop the agent through the same production path.
+        await eventBus.PublishAsync(new AgentEndEvent(
+            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(), Cancelled: false)).ConfigureAwait(false);
+
         // Poll until the running indicator is gone instead of a fixed delay.
         await Driver.WaitForConditionAsync(
-            () => !Driver.GetAllVisibleText().Contains("Agent is running", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            () => !Driver.GetRenderedText().Contains("Agent is running", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(3)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("20-streaming-done").ConfigureAwait(false);
 
-        bool stillRunning = Driver.GetAllVisibleText().Contains("Agent is running", StringComparison.Ordinal);
+        bool stillRunning = Driver.GetRenderedText().Contains("Agent is running", StringComparison.Ordinal);
         await Assert.That(stillRunning).IsFalse();
     }
 
@@ -1211,23 +1238,44 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        // Add multiple chat lines to enable scrolling.
-        Driver.OnUIThread(() =>
+        // Add chat lines through the REAL event path: directly mutating
+        // vm.Chat.Lines is overwritten by the store-driven projection on the
+        // next transition (the app fully boots now). AgentStart seeds the
+        // user lines; each MessageStart→Text→End cycle appends one assistant
+        // line via the streaming buffer.
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        var model = new Harbor.Abstractions.Models.ModelInfo(
+            "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
+            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
+        var users = new[]
         {
-            if (Driver.MainWindow.DataContext is MainViewModel vm)
-            {
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 1: Hello"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 1"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 2: How are you?"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 2"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 3: What's up?"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 3"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.User, "Line 4: Goodbye"));
-                vm.Chat.Lines.Add(new ChatLineVm(ChatRole.Assistant, "Response 4"));
-            }
-        });
+            "Line 1: Hello", "Line 2: How are you?", "Line 3: What's up?", "Line 4: Goodbye"
+        };
+        var userMessages = users.Select(u => (Harbor.Abstractions.Models.AgentMessage)new Harbor.Abstractions.Models.UserMessage(
+            Guid.NewGuid().ToString("N"),
+            "e2e-scroll-session",
+            DateTimeOffset.UtcNow,
+            u,
+            "user",
+            "qwen2.5-coder:7b")).ToList();
+
+        await eventBus.PublishAsync(new AgentStartEvent("e2e-scroll-session", userMessages, model))
+            .ConfigureAwait(false);
+
+        foreach (string response in new[] { "Response 1", "Response 2", "Response 3", "Response 4" })
+        {
+            var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+                "e2e-scroll-session", "qwen2.5-coder:7b");
+            await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
+            await eventBus.PublishAsync(new MessageUpdateEvent(
+                new TextDeltaEvent("t-" + response, response), partial)).ConfigureAwait(false);
+            await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
+                Harbor.Abstractions.Models.StopReason.Stop,
+                new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+        }
+
         // Poll for the chat lines to render instead of a fixed delay.
-        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(2))
+        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawLines).IsTrue();
 
