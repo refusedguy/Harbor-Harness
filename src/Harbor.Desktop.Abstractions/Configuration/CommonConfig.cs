@@ -53,6 +53,22 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 public sealed record CommonConfig
 {
     /// <summary>
+    ///     Process-wide snapshot of the Harbor home directory (<c>~/.harbor</c>).
+    ///     Resolved ONCE at first access. Every consumer that needs the home
+    ///     must use this instead of calling
+    ///     <c>Environment.GetFolderPath(SpecialFolder.UserProfile)</c> directly —
+    ///     see the remarks on <see cref="ConfigDirectory"/>.
+    /// </summary>
+    public static string HarborHome { get; } =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } profile
+                ? profile
+                : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } homeEnv
+                    ? homeEnv
+                    : AppContext.BaseDirectory,
+            ".harbor");
+
+    /// <summary>
     ///     Schema version of the common config file. Bumped whenever the JSON
     ///     shape changes in a backward-incompatible way. The loader refuses to
     ///     read a file with a newer <c>ConfigVersion</c> and surfaces a
@@ -245,10 +261,15 @@ public sealed record CommonConfig
     ///     on Windows, <c>$HOME/.harbor</c> on Linux/macOS). Init-only so
     ///     tests can override via <c>new CommonConfig { ConfigDirectory = ... }</c>.
     /// </summary>
-    public string ConfigDirectory { get; init; } =
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".harbor");
+    /// <remarks>
+    ///     Resolved through <see cref="HarborHome"/> so the HOME lookup happens
+    ///     exactly once per process. Calling Environment.GetFolderPath(UserProfile)
+    ///     lazily is a trap: on Linux it re-resolves $HOME on every call, and after
+    ///     a mid-process HOME change (E2E driver, su, systemd unit) it can return
+    ///     the EMPTY string — silently turning '~/.harbor' into a CWD-relative
+    ///     '.harbor'. Snapshotted at type-init instead.
+    /// </remarks>
+    public string ConfigDirectory { get; init; } = HarborHome;
 
     /// <summary>
     ///     Filename (no directory) of the common JSON config file:
