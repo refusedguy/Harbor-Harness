@@ -266,6 +266,82 @@ public sealed class CompactionService(
         return kept;
     }
 
+    /// <summary>
+    ///     Materialize the effective post-compaction history from a raw session
+    ///     history that contains compaction summaries.
+    ///     <para>
+    ///         Compaction is lazy: the raw history keeps every message, and the
+    ///         newest <see cref="AssistantMessage.IsSummary" /> message anchors
+    ///         the cut through its <see cref="AssistantMessage.SummaryFirstKeptId" />.
+    ///         The returned view is <c>[summary] + tail-from-anchor +
+    ///         messages-appended-after-the-summary</c> — everything folded into
+    ///         the summary is dropped, so token estimation and LLM requests see
+    ///         the compacted history instead of an ever-growing raw list.
+    ///     </para>
+    ///     <para>
+    ///         Fail-safe: when no summary exists, or the anchor id cannot be
+    ///         resolved, the input instance is returned unchanged rather than
+    ///         risking silent history loss.
+    ///     </para>
+    /// </summary>
+    /// <param name="messages">The raw (append-only) session history.</param>
+    /// <returns>The compacted view, or <paramref name="messages" /> when nothing is compacted.</returns>
+    public static IReadOnlyList<AgentMessage> MaterializeCompactedView(IReadOnlyList<AgentMessage> messages)
+    {
+        int summaryIndex = -1;
+        for (int i = messages.Count - 1; i >= 0; i--)
+        {
+            if (messages[i] is AssistantMessage { IsSummary: true })
+            {
+                summaryIndex = i;
+                break;
+            }
+        }
+
+        if (summaryIndex < 0)
+        {
+            return messages;
+        }
+
+        var summary = (AssistantMessage)messages[summaryIndex];
+
+        // Resolve the kept-tail start. A null anchor means the summary folded
+        // in the ENTIRE pre-summary history (nothing was kept verbatim).
+        int keptStart = summaryIndex;
+        if (summary.SummaryFirstKeptId is string anchor)
+        {
+            bool resolved = false;
+            for (int i = 0; i < summaryIndex; i++)
+            {
+                if (string.Equals(messages[i].Id, anchor, StringComparison.Ordinal))
+                {
+                    keptStart = i;
+                    resolved = true;
+                    break;
+                }
+            }
+
+            if (!resolved)
+            {
+                return messages;
+            }
+        }
+
+        var view = new List<AgentMessage>(
+            1 + summaryIndex - keptStart + (messages.Count - summaryIndex - 1));
+        view.Add(summary);
+        for (int i = keptStart; i < summaryIndex; i++)
+        {
+            view.Add(messages[i]);
+        }
+        for (int i = summaryIndex + 1; i < messages.Count; i++)
+        {
+            view.Add(messages[i]);
+        }
+
+        return view;
+    }
+
     /// <inheritdoc />
     public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model)
     {

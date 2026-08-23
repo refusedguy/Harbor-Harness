@@ -94,9 +94,25 @@ internal sealed class ReplRunner
         {
             _logger.LogInformation("Interactive renderer detected — entering interactive loop");
             var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-            interactive.SetSlashHandler(raw => dispatcher.HandleAsync(
-                raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value));
+            int? slashExitCode = null;
+            interactive.SetSlashHandler(async raw =>
+            {
+                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                    raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value).ConfigureAwait(false);
+                if (outcome.ShouldQuit)
+                {
+                    // Record the requested exit code; the renderer owns its
+                    // input loop and ends the session through its own quit
+                    // mechanism. The recorded code wins over the renderer's.
+                    slashExitCode = outcome.ExitCode;
+                }
+            });
             int exitCode = await interactive.RunInteractiveAsync(agent, sp).ConfigureAwait(false);
+            if (slashExitCode is int quitCode)
+            {
+                _logger.LogInformation("Interactive loop ended via /exit with code {ExitCode}", quitCode);
+                return quitCode;
+            }
             _logger.LogInformation("Interactive loop ended with exit code {ExitCode}", exitCode);
             return exitCode;
         }
@@ -163,7 +179,15 @@ internal sealed class ReplRunner
             {
                 _logger.LogDebug("Slash command: {Command}", trimmed);
                 var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-                await dispatcher.HandleAsync(trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                    trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+                if (outcome.ShouldQuit)
+                {
+                    // Managed shutdown: returning the code lets Program run its
+                    // normal cleanup (IPC stop, host dispose) before exiting.
+                    _logger.LogInformation("Quit requested via slash command — REPL exiting with code {ExitCode}", outcome.ExitCode);
+                    return outcome.ExitCode;
+                }
                 continue;
             }
 

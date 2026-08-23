@@ -144,7 +144,11 @@ public sealed class AgentLoop : IAgentLoop
                 _logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
                 await _eventBus.PublishAsync(new TurnStartEvent(turn), ct).ConfigureAwait(false);
 
-                IReadOnlyList<AgentMessage> turnMessages = session.Messages;
+                // The compacted view of the history, not the raw append-only
+                // list: after a summary was produced, ShouldCompact and the
+                // request both see [summary] + kept tail, so compaction does
+                // not re-trigger on every subsequent turn.
+                IReadOnlyList<AgentMessage> turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
 
                 // 2. Compaction check. Never retried once the fallback is
                 // engaged — the summarizer just failed, so every turn after
@@ -165,6 +169,10 @@ public sealed class AgentLoop : IAgentLoop
                         async result =>
                         {
                             await session.AppendMessageAsync(result.SummaryMessage, ct).ConfigureAwait(false);
+                            // Recompute so THIS turn's request is already built
+                            // from the compacted view instead of the overfull
+                            // pre-compaction history.
+                            turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
                             await _eventBus.PublishAsync(new CompactionCompletedEvent(
                                 session.Session.Id,
                                 result.Summary,
@@ -189,7 +197,7 @@ public sealed class AgentLoop : IAgentLoop
                 // request from a strictly reduced recent tail instead.
                 if (truncationFallback)
                 {
-                    turnMessages = CompactionService.TruncateToFitStrict(session.Messages, model, _tokenTracker);
+                    turnMessages = CompactionService.TruncateToFitStrict(turnMessages, model, _tokenTracker);
                 }
 
                 // 3. Build system prompt

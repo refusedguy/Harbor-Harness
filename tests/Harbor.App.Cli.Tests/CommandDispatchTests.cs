@@ -21,12 +21,32 @@ public class CommandDispatchTests
     }
 
     [Test]
-    public async Task SlashCommandDispatcher_TryHandleAsync_DispatchesToMatchingCommand()
+    public async Task SlashCommandDispatcher_TryHandleAsync_PropagatesSuccessExitCode()
     {
-        var fake = new FakeCommand("test");
+        var fake = new FakeCommand("test", exitCode: 0);
         var result = await SlashCommandDispatcher.TryHandleAsync(
             "test", Array.Empty<string>(), new ICommand[] { fake });
         await Assert.That(result).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SlashCommandDispatcher_TryHandleAsync_PropagatesFailureExitCode()
+    {
+        // The dispatcher used to swallow the command result and always report 0;
+        // it must now thread the command's own exit code through.
+        var fake = new FakeCommand("test", exitCode: 42);
+        var result = await SlashCommandDispatcher.TryHandleAsync(
+            "test", Array.Empty<string>(), new ICommand[] { fake });
+        await Assert.That(result).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task SlashCommandDispatcher_TryHandleAsync_PropagatesOneForFailures()
+    {
+        var failing = new FakeCommand("failing", exitCode: 1);
+        var result = await SlashCommandDispatcher.TryHandleAsync(
+            "failing", Array.Empty<string>(), new ICommand[] { failing });
+        await Assert.That(result).IsEqualTo(1);
     }
 
     [Test]
@@ -61,9 +81,12 @@ public class CommandDispatchTests
 
     private sealed class FakeCommand : ICommand
     {
-        public string Name { get; }
-        public Task<int> ExecuteAsync(string[] args, CancellationToken ct = default) => Task.FromResult(42);
+        private readonly int _exitCode;
 
-        public FakeCommand(string name) => Name = name;
+        public FakeCommand(string name, int exitCode = 0) => (Name, _exitCode) = (name, exitCode);
+
+        public string Name { get; }
+
+        public Task<int> ExecuteAsync(string[] args, CancellationToken ct = default) => Task.FromResult(_exitCode);
     }
 }

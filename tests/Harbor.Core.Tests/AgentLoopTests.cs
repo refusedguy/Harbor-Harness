@@ -34,7 +34,9 @@ public class AgentLoopTests
         Pricing.Unknown,
         "openai");
 
-    private static (AgentLoop loop, ProviderRegistry providers, ToolRegistry tools, AgentRegistry agents, InMemoryEventBus bus) CreateLoop(MockLlmClient client)
+    private static (AgentLoop loop, ProviderRegistry providers, ToolRegistry tools, AgentRegistry agents, InMemoryEventBus bus) CreateLoop(
+        ILlmClient client,
+        Action<CompactionService>? configureCompaction = null)
     {
         var providers = new ProviderRegistry();
         providers.Register(ProviderId.Create("test"), () => client);
@@ -51,6 +53,7 @@ public class AgentLoopTests
             new TokenTracker(),
             providers,
             NullLogger<CompactionService>.Instance);
+        configureCompaction?.Invoke(compaction);
         var permissions = new PermissionService(agents, NullLogger<PermissionService>.Instance);
         var converter = new MessageConverter();
         var tokenTracker = new TokenTracker();
@@ -76,6 +79,53 @@ public class AgentLoopTests
     {
         var session = Session.Create("/tmp", "code", "test", "test-model");
         return new TestSessionContext(session, messages);
+    }
+
+    /// <summary>
+    ///     Model with a 32k window: the compaction threshold
+    ///     (window − default 16_384 reserve) is 15_616 estimated tokens, so a
+    ///     seeded history of twenty ~850-token messages (17_000) triggers
+    ///     compaction while the compacted view (~4 tail messages + summary)
+    ///     stays comfortably below it.
+    /// </summary>
+    private static readonly ModelInfo CompactibleModel = new(
+        "test-model",
+        "test",
+        "Test Model",
+        32_000,
+        1024,
+        false,
+        false,
+        true,
+        Pricing.Unknown,
+        "openai");
+
+    /// <summary>
+    ///     Session pre-seeded with <paramref name="seedCount" /> user messages of
+    ///     ~850 estimated tokens each (3000 chars / 4 + per-message overhead).
+    /// </summary>
+    private static TestSessionContext CreateSeededSession(int seedCount)
+    {
+        var session = Session.Create("/tmp", "code", "test", "test-model");
+        var messages = new List<AgentMessage>(seedCount);
+        for (int i = 0; i < seedCount; i++)
+        {
+            messages.Add(new UserMessage(
+                Guid.NewGuid().ToString("N"),
+                session.Id,
+                DateTimeOffset.UtcNow,
+                new string('x', 3000),
+                "code",
+                "test-model"));
+        }
+
+        return new TestSessionContext(session, messages);
+    }
+
+    private static void ConfigureAggressiveCompaction(CompactionService svc)
+    {
+        svc.KeepRecentTokens = 4000;
+        svc.TailTurns = 0;
     }
 
     [Test]
@@ -202,6 +252,99 @@ public class AgentLoopTests
     }
 
     /// <summary>
+    ///     Compaction must actually shrink the history the model sees. After a
+    ///     successful compaction the effective history (the compacted view
+    ///     materialized from <c>SummaryFirstKeptId</c>) is strictly shorter than
+    ///     the seeded history, contains the summary first, and preserves the
+    ///     kept tail verbatim — and the LLM request for the very same turn is
+    ///     already built from that truncated view.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_CompactionTriggers_RequestUsesShortenedView_AndTailIsPreserved()
+    {
+        var client = new ScriptedLlmClient(
+            new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
+            new LlmEvent[] { new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(5, 5)) });
+
+        var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
+        var session = CreateSeededSession(seedCount: 20);
+        var seedIds = session.Messages.Select(m => m.Id).ToArray();
+        var completed = new List<CompactionCompletedEvent>();
+        bus.Subscribe<CompactionCompletedEvent>(async (evt, ct) => completed.Add(evt));
+
+        var result = await loop.RunAsync(session, AgentDefinition.CodeDefault("test-model", "test"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(completed.Count).IsEqualTo(1);
+        await Assert.That(completed[0].PrunedMessageCount).IsEqualTo(16);
+
+        // Raw history is append-only: seed + summary + turn answer.
+        await Assert.That(session.Messages.Count).IsEqualTo(22);
+        var summaries = session.Messages.OfType<AssistantMessage>().Where(m => m.IsSummary).ToList();
+        await Assert.That(summaries.Count).IsEqualTo(1);
+        string anchorId = summaries[0].SummaryFirstKeptId ?? string.Empty;
+        await Assert.That(anchorId).IsEqualTo(seedIds[16]);
+
+        // The EFFECTIVE history is actually shorter: summary + kept tail + answer.
+        var view = CompactionService.MaterializeCompactedView(session.Messages);
+        await Assert.That(view.Count).IsEqualTo(6);
+        await Assert.That(view[0].Id).IsEqualTo(summaries[0].Id);
+        for (int i = 1; i <= 4; i++)
+        {
+            await Assert.That(view[i].Id).IsEqualTo(seedIds[15 + i]);
+        }
+        await Assert.That(view.Count).IsLessThan(20);
+
+        // The request of the compaction turn was already built from the
+        // truncated view (summarizer call sees 1 packed message; the turn
+        // request carries exactly summary + tail = 5 messages).
+        await Assert.That(client.RequestSizes.Count).IsEqualTo(2);
+        await Assert.That(client.RequestSizes[0]).IsEqualTo(1);
+        await Assert.That(client.RequestSizes[1]).IsEqualTo(5);
+    }
+
+    /// <summary>
+    ///     After one successful compaction the next turn's check runs against
+    ///     the shortened view and stays under the threshold — compaction is NOT
+    ///     re-triggered on every subsequent turn.
+    /// </summary>
+    [Test]
+    public async Task RunAsync_SecondTurnAfterCompaction_DoesNotRetriggerCompaction()
+    {
+        // Call order: (1) summarizer at turn-1 start, (2) turn-1 stream ending
+        // in a tool call, (3) turn-2 stream ending the run.
+        var client = new ScriptedLlmClient(
+            new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "read"),
+                new ToolCallDeltaEvent("call-1", "{}"),
+                new StepFinishEvent(0, "tool_use", new Usage(10, 5))
+            },
+            new LlmEvent[] { new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(5, 5)) });
+
+        var (loop, _, _, _, bus) = CreateLoop(client, ConfigureAggressiveCompaction);
+        var session = CreateSeededSession(seedCount: 20);
+        var started = new List<CompactionStartedEvent>();
+        var failed = new List<CompactionFailedEvent>();
+        bus.Subscribe<CompactionStartedEvent>(async (evt, ct) => started.Add(evt));
+        bus.Subscribe<CompactionFailedEvent>(async (evt, ct) => failed.Add(evt));
+
+        var result = await loop.RunAsync(session, AgentDefinition.CodeDefault("test-model", "test"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(failed.Count).IsEqualTo(0);
+        await Assert.That(started.Count).IsEqualTo(1);
+        await Assert.That(client.StreamCalls).IsEqualTo(3);
+        // Turn-2 request = summary + 4 kept tail + assistant + tool result.
+        await Assert.That(client.RequestSizes.Count).IsEqualTo(3);
+        await Assert.That(client.RequestSizes[0]).IsEqualTo(1);
+        await Assert.That(client.RequestSizes[1]).IsEqualTo(5);
+        await Assert.That(client.RequestSizes[2]).IsEqualTo(7);
+        await Assert.That(session.Messages.Count(m => m is AssistantMessage { IsSummary: true })).IsEqualTo(1);
+    }
+
+    /// <summary>
     ///     A scripted <see cref="ILlmClient" /> that replays a fixed sequence of events on each
     ///     <see cref="StreamAsync" /> call. <see cref="GetModelsAsync" /> always returns
     ///     <see cref="TestModel" />.
@@ -230,6 +373,41 @@ public class AgentLoopTests
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel }));
+    }
+
+    /// <summary>
+    ///     A scripted <see cref="ILlmClient" /> that replays a DIFFERENT event
+    ///     sequence per <see cref="StreamAsync" /> call (compaction summarizer,
+    ///     turn 1, turn 2, …); the last sequence repeats if more calls arrive.
+    ///     Records every request's message count so tests can assert exactly
+    ///     how much history each call carried.
+    /// </summary>
+    private sealed class ScriptedLlmClient(params LlmEvent[][] calls) : ILlmClient
+    {
+        private int _callIndex;
+
+        public List<int> RequestSizes { get; } = [];
+
+        public int StreamCalls => _callIndex;
+
+        public ProviderId ProviderId => ProviderId.Create("test");
+
+        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+            LlmRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            RequestSizes.Add(request.Messages.Count);
+            var events = calls[Math.Min(_callIndex, calls.Length - 1)];
+            _callIndex++;
+            foreach (var e in events)
+            {
+                yield return e;
+                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { CompactibleModel }));
     }
 
     /// <summary>

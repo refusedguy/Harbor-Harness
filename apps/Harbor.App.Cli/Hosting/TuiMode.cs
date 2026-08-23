@@ -110,7 +110,8 @@ internal static class TuiMode
         {
             "ask" or "providers" or "models" or "sessions" or "tui" or "storage"
                 or "setup" or "auth" or "config" or "logs" or "help" or "--help"
-                or "-h" or "version" or "--version" or "-v" => false,
+                or "-h" or "version" or "--version" or "-v"
+                or "--headless" or "headless" => false,
             _ => true // unknown command falls back to interactive
         };
     }

@@ -25,18 +25,29 @@ internal sealed class SlashCommandDispatcher
         _logger = logger;
     }
 
-    public async Task HandleAsync(
+    public async Task<SlashCommandOutcome> HandleAsync(
         string input, IServiceProvider sp, ITuiRenderer renderer,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
         IProviderRegistry providers, Session session)
     {
         string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return;
+        if (parts.Length == 0) return SlashCommandOutcome.Continue;
 
         string cmd = parts[0].ToLowerInvariant();
         string[] args = parts.Skip(1).ToArray();
         _logger.LogInformation("Slash command: /{Command} args={ArgCount}", cmd, args.Length);
+
+        // Quit commands are resolved before any dependency is touched so the
+        // shutdown decision never depends on renderer/DI state. Returning the
+        // outcome lets the caller run its normal cleanup (IPC stop, host
+        // dispose) — no Environment.Exit anywhere.
+        if (cmd is "exit" or "quit")
+        {
+            _logger.LogInformation("Quit requested via /{Command}", cmd);
+            return SlashCommandOutcome.Quit(0);
+        }
+
         var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
         var reader = (Func<string, Task<string>>)(async prompt =>
         {
@@ -70,18 +81,19 @@ internal sealed class SlashCommandDispatcher
                 case "sessions": await ListSessions(sp); break;
                 case "tui": PrintTuiOptions(); break;
                 case "storage": PrintStorageOptions(); break;
-                case "exit" or "quit": Environment.Exit(0); break;
                 default:
                     _logger.LogWarning("Unknown command: /{Command}", cmd);
                     writer($"Unknown: /{cmd}. /help for commands.");
                     break;
             }
             _logger.LogDebug("Command /{Command} completed", cmd);
+            return SlashCommandOutcome.Continue;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching command /{Command}", cmd);
             writer($"Error: {ex.Message}");
+            return SlashCommandOutcome.Continue;
         }
     }
 
@@ -116,11 +128,13 @@ internal sealed class SlashCommandDispatcher
     public static async Task<int?> TryHandleAsync(string commandName, string[] args, ICommand[] commands, CancellationToken ct = default)
     {
         var command = commands.FirstOrDefault(c => c.Name.Equals(commandName, StringComparison.OrdinalIgnoreCase));
-        if (command is not null)
+        if (command is null)
         {
-            await command.ExecuteAsync(args, ct).ConfigureAwait(false);
-            return 0;
+            return null;
         }
-        return null;
+
+        // Thread the command's own result through: 0 = success, non-zero =
+        // failure. The caller maps it directly onto the process exit code.
+        return await command.ExecuteAsync(args, ct).ConfigureAwait(false);
     }
 }

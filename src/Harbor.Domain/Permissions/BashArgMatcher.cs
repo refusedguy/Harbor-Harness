@@ -30,8 +30,11 @@ public static class BashArgMatcher
 {
     /// <summary>
     ///     Returns <see langword="true" /> if the command contains any of <c>; | &amp; ` $(&lt; &gt;</c>
-    ///   or a newline <b>outside quotes</b>, or has an unterminated quote / trailing escape.
-    ///     Such commands must never be silently allowed by a glob rule.
+    ///   or a newline <b>outside quotes</b>, or command-substitution / escape constructs
+    ///   (<c>$()</c>, backticks, backslashes) <b>inside double quotes</b>, or has an
+    ///     unterminated quote / trailing escape. Single-quoted content stays safe: POSIX
+    ///     single quotes are fully literal. Such commands must never be silently allowed
+    ///     by a glob rule.
     /// </summary>
     /// <param name="command">The raw command string from tool arguments.</param>
     public static bool HasShellMetacharacters(string command)
@@ -58,14 +61,16 @@ public static class BashArgMatcher
 
             if (inDouble)
             {
-                if (c == '\\')
+                // POSIX shells execute $() and backtick substitution inside double quotes
+                // and process backslash escapes there, so these must be flagged exactly
+                // like unquoted metacharacters (Allow rules must not match).
+                if (c == '\\' || c == '`'
+                    || (c == '$' && i + 1 < n && command[i + 1] == '('))
                 {
-                    escaped = true;
+                    return true;
                 }
-                else if (c == '"')
-                {
-                    inDouble = false;
-                }
+
+                if (c == '"') inDouble = false;
                 continue;
             }
 

@@ -16,6 +16,7 @@ using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
+using System.Runtime.InteropServices;
 #if HARBOR_WITH_PLUGINS
 #endif
 namespace Harbor.Cli;
@@ -123,6 +124,7 @@ public static class Program
         return command switch
         {
             "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
+            "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
             "providers" => await RunListProvidersAsync(),
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
             "sessions" => await RunListSessionsAsync(),
@@ -159,6 +161,85 @@ public static class Program
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
         await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
+    }
+
+    /// <summary>
+    ///     Headless daemon mode (<c>harbor --headless</c>, also used by
+    ///     <c>harbor daemon start</c>): run the full agent host (EventBus,
+    ///     tools, providers, storage) plus the IPC server — no UI, no REPL,
+    ///     no console interaction — and block until SIGINT/SIGTERM. Remote
+    ///     clients connect over IPC; the spawning parent typically redirects
+    ///     stdin/stdout.
+    /// </summary>
+    private static async Task<int> RunHeadlessAsync(string[] args)
+    {
+        _logger.LogInformation("Starting headless daemon mode");
+
+        // A headless host without a transport serves nobody: default to
+        // ipc-server unless the operator pinned another mode explicitly.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-server");
+        }
+
+        using var host = HostBuilder.Build(args);
+        var server = host.Services.GetService<IHarborServer>();
+        if (server is null)
+        {
+            _logger.LogError(
+                "Headless mode requires an IPC server, but no IHarborServer is registered (HARBOR_MODE={Mode})",
+                Environment.GetEnvironmentVariable("HARBOR_MODE"));
+            Console.Error.WriteLine("daemon: IPC server unavailable — cannot run headless.");
+            return 1;
+        }
+
+        await StartIpcAsync(host.Services).ConfigureAwait(false);
+        Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'");
+        _logger.LogInformation("Daemon ready on {Endpoint} — waiting for clients or shutdown signal", server.Endpoint);
+
+        using var shutdownCts = new CancellationTokenSource();
+
+        // Ctrl+C (SIGINT): cancel the wait but stay alive long enough for the
+        // graceful IPC stop + host dispose below.
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            shutdownCts.Cancel();
+        };
+
+        // SIGTERM (`kill`, `harbor daemon stop`). Registration is best-effort:
+        // without it the process still exits on SIGTERM, just ungracefully.
+        try
+        {
+            using PosixSignalRegistration sigterm = PosixSignalRegistration.Create(
+                PosixSignal.SIGTERM, _ => shutdownCts.Cancel());
+            await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
+        }
+        catch (PlatformNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "POSIX signal handling unavailable — falling back to SIGINT only");
+            await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
+        }
+
+        _logger.LogInformation("Shutdown requested — stopping IPC server");
+        await StopIpcAsync(host.Services).ConfigureAwait(false);
+        return 0;
+    }
+
+    /// <summary>
+    ///     Park the caller until the shutdown token fires. An infinite delay
+    ///     arms no timer — the await completes only via cancellation.
+    /// </summary>
+    private static async Task WaitForShutdownAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected shutdown path — the token is cancelled by SIGINT/SIGTERM.
+        }
     }
 
     private static async Task<int> RunAskAsync(string[] args, string? scriptPath = null)
@@ -326,8 +407,10 @@ public static class Program
             host.Services.GetRequiredService<IProviderRegistry>(),
             host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
-        await cmd.ExecuteAsync(args, ctx);
-        return 0;
+        // Propagate the command's own result (0 = success, non-zero = failure)
+        // instead of unconditionally reporting success.
+        var authResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
+        return authResult.IsSuccess ? 0 : 1;
     }
 
     private static async Task<int> RunConfigAsync(string[] args)
@@ -341,8 +424,10 @@ public static class Program
             host.Services.GetRequiredService<IProviderRegistry>(),
             host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
-        await cmd.ExecuteAsync(args, ctx);
-        return 0;
+        // Propagate the command's own result (0 = success, non-zero = failure)
+        // instead of unconditionally reporting success.
+        var configResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
+        return configResult.IsSuccess ? 0 : 1;
     }
 
     private static async Task<int> RunListProvidersAsync()
