@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Core.Sessions;
 using System.Diagnostics;
@@ -11,11 +13,98 @@ namespace Harbor.Core.Sessions;
 ///     Performance: pooled StringBuilder, index-based cut-point (no List allocations),
 ///     pooled buffers for serializing intermediate message text.
 /// </summary>
+/// <remarks>
+///     Ф8/A3: an optional <paramref name="secondaryModel" /> reference
+///     (<c>"provider/model"</c>) routes the summarization request to a cheap
+///     model instead of the primary one. Resolution is lazy and cached per
+///     successful pair; ANY resolution failure (provider missing, model not
+///     found, catalog fetch failed) falls back to the primary model so a bad
+///     secondary config can never break compaction itself.
+/// </remarks>
 public sealed class CompactionService(
     ITokenTracker tokenTracker,
     IProviderRegistry providers,
-    ILogger<CompactionService> logger) : ICompactionService
+    ILogger<CompactionService> logger,
+    string? secondaryModel = null) : ICompactionService
 {
+    /// <summary>
+    ///     A successfully resolved secondary (cheap) summarization client+model pair.
+    /// </summary>
+    private sealed record ResolvedSecondary(ILlmClient Client, ModelInfo Model);
+
+    // Ф8/A3: lazily resolved secondary client; successes are cached for the
+    // service lifetime, failures are NOT cached (a transient provider outage
+    // must not pin the fallback forever). Reference writes are atomic, so two
+    // concurrent first calls may both resolve once (benign and idempotent),
+    // while every later call reads the cached pair without locking.
+    private readonly ModelRef? _secondaryRef = ParseSecondary(secondaryModel);
+
+    /// <summary>Parse the configured reference; an invalid value silently disables the feature.</summary>
+    private static ModelRef? ParseSecondary(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        Result<ModelRef> parsed = ModelRef.TryParse(value);
+        return parsed.IsSuccess ? parsed.Value : null;
+    }
+
+    private ResolvedSecondary? _resolvedSecondary;
+
+    /// <summary>
+    ///     Resolve the secondary summarization client+model asynchronously, or
+    ///     null when no secondary is configured / it cannot be resolved right now.
+    /// </summary>
+    private async Task<ResolvedSecondary?> TryResolveSecondaryAsync(ModelInfo primaryModel, CancellationToken ct)
+    {
+        if (_secondaryRef is null)
+        {
+            return null;
+        }
+
+        ResolvedSecondary? cached = _resolvedSecondary;
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var clientResult = providers.GetClient(_secondaryRef.ProviderId);
+        if (clientResult.IsFailure)
+        {
+            return LogSecondaryFallback(primaryModel);
+        }
+
+        var modelsResult = await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
+        if (modelsResult.IsFailure)
+        {
+            return LogSecondaryFallback(primaryModel);
+        }
+
+        IReadOnlyList<ModelInfo> models = modelsResult.Value;
+        for (int i = 0; i < models.Count; i++)
+        {
+            if (string.Equals(models[i].Id, _secondaryRef.ModelId, StringComparison.Ordinal))
+            {
+                var resolved = new ResolvedSecondary(clientResult.Value, models[i]);
+                _resolvedSecondary = resolved;
+                return resolved;
+            }
+        }
+
+        return LogSecondaryFallback(primaryModel);
+    }
+
+    /// <summary>Log the fallback once per unresolved attempt and return null.</summary>
+    private ResolvedSecondary? LogSecondaryFallback(ModelInfo primaryModel)
+    {
+        logger.LogWarning(
+            "Secondary compaction model '{Secondary}' could not be resolved; falling back to primary model '{Primary}'",
+            _secondaryRef, primaryModel.Id);
+        return null;
+    }
+
     private const string SummarizationPrompt = 
         "You are creating a summary of the conversation so far to provide context to a teammate who is taking over the task.\n" +
         "\n" +
@@ -380,11 +469,23 @@ public sealed class CompactionService(
                 return Result.Failure<CompactionResult>(clientResult.Error);
             }
 
+            // Ф8/A3: prefer the configured cheap secondary model for the
+            // summarization call; fall back to the primary client/model when
+            // no secondary is configured or it cannot be resolved.
+            ILlmClient summaryClient = clientResult.Value;
+            ModelInfo summaryModel = model;
+            var secondary = await TryResolveSecondaryAsync(model, ct).ConfigureAwait(false);
+            if (secondary is not null)
+            {
+                summaryClient = secondary.Client;
+                summaryModel = secondary.Model;
+            }
+
             string prompt = BuildSummarizationPrompt(messages, tailStart);
             // Ф8/A1: the summarization system prompt is a compile-time constant, so the
             // request is a perfect prefix-cache candidate — flag it Ephemeral.
             var request = new LlmRequest(
-                model.Id,
+                summaryModel.Id,
                 new[] { LlmUserMessage.Text(prompt) },
                 SummarizationPrompt,
                 Array.Empty<ToolDefinition>(),
@@ -394,7 +495,7 @@ public sealed class CompactionService(
 
             // 3. Stream LLM (collect full text into pooled StringBuilder)
             using var summaryBuilder = StringBuilderPool.Rent(4096);
-            await foreach (var evt in clientResult.Value.StreamAsync(request, ct).ConfigureAwait(false))
+            await foreach (var evt in summaryClient.StreamAsync(request, ct).ConfigureAwait(false))
             {
                 if (evt is TextDeltaEvent td)
                 {
@@ -433,7 +534,7 @@ public sealed class CompactionService(
                 new[] { new TextPart(summary) },
                 StopReason.Stop,
                 new Usage(0, summaryTokens),
-                model.Id,
+                summaryModel.Id,
                 IsSummary: true,
                 SummaryFirstKeptId: summaryFirstKeptId);
 

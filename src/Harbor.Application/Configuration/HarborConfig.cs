@@ -36,6 +36,13 @@ public sealed class HarborConfig
     /// <summary>Compaction tuning.</summary>
     public CompactionConfig Compaction { get; set; } = CompactionConfig.Default;
 
+    /// <summary>
+    ///     Ф8/A3: optional cheap model reference (<c>"provider/model"</c>) used
+    ///     for background summarization (compaction). Empty/null → the primary
+    ///     model summarizes (previous behavior).
+    /// </summary>
+    public string? SecondaryModel { get; set; }
+
     /// <summary>Run limits (max steps per agent run).</summary>
     public RunLimitsConfig Run { get; set; } = RunLimitsConfig.Default;
 
@@ -187,7 +194,8 @@ public sealed class HarborConfig
         DisabledTools = Tooling.DisabledTools.ToList(),
         MaxSteps = Run.MaxSteps,
         CostLimit = Cost.Limit,
-        Compaction = Compaction
+        Compaction = Compaction,
+        SecondaryModel = SecondaryModel
     };
 
     /// <summary>
@@ -248,6 +256,7 @@ public sealed class RawConfigDto
     [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
+    [JsonPropertyName("secondaryModel")] public string? SecondaryModel { get; set; }
 }
 
 /// <summary>
@@ -306,6 +315,14 @@ public static class ConfigNormalizer
         config.Run = new RunLimitsConfig(raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps);
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
         if (raw.Compaction is not null) config.Compaction = raw.Compaction;
+
+        // ── Secondary (cheap) summarization model ──
+        if (!string.IsNullOrEmpty(raw.SecondaryModel))
+        {
+            var smr = ModelRef.TryParse(raw.SecondaryModel);
+            if (smr.IsFailure) return Result.Failure<HarborConfig>(smr.Error);
+            config.SecondaryModel = raw.SecondaryModel;
+        }
 
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;

@@ -230,7 +230,8 @@ internal static partial class HostBuilder
         builder.Services.AddSingleton<ICompactionService>(sp => new CompactionService(
             sp.GetRequiredService<ITokenTracker>(),
             sp.GetRequiredService<IProviderRegistry>(),
-            sp.GetRequiredService<ILogger<CompactionService>>()));
+            sp.GetRequiredService<ILogger<CompactionService>>(),
+            config.SecondaryModel));
         builder.Services.AddSingleton<IPermissionService>(sp => new PermissionService(
             sp.GetRequiredService<IAgentRegistry>(),
             sp.GetRequiredService<ILogger<PermissionService>>(),
