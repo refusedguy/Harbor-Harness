@@ -6,13 +6,15 @@
 # the Harbor solution layout: build project at .\build\_build.csproj, solution
 # file at .\Harbor.slnx).
 #
-# Examples:
-#   .\build.ps1                       # default target (Compile)
-#   .\build.ps1 Compile               # build the solution
-#   .\build.ps1 Test                  # run all tests
-#   .\build.ps1 PublishCliMinimal     # publish minimal CLI variant
-#   .\build.ps1 PublishAll            # publish every artifact
-#   .\build.ps1 Clean Compile Test    # chain targets
+# Examples (never invent commands — ask the build itself):
+#   .\build.ps1                                  # default target (Compile)
+#   .\build.ps1 list --format json               # machine-readable target catalog
+#   .\build.ps1 doctor --format json             # environment health checks
+#   .\build.ps1 what --path src\Foo\Bar.cs       # what to run after editing a file
+#   .\build.ps1 Compile --dry-run --format json  # plan without executing
+#   .\build.ps1 Compile                          # build the solution
+#   .\build.ps1 Test                             # run all tests
+#   .\build.ps1 Clean Compile Test               # chain targets
 #   .\build.ps1 Compile --configuration Debug
 
 [CmdletBinding()]

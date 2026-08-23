@@ -75,18 +75,28 @@ public sealed class ArchiveBuilder
     ///     Dispatches to <see cref="CreateTarGz" /> or <see cref="CreateZip" />
     ///     based on <paramref name="format" />. Returns the archive path, or
     ///     <c>null</c> if <paramref name="format" /> is <see cref="ArchiveFormat.None" />.
+    ///     When <paramref name="dryRun" /> is set the path is computed and
+    ///     returned but nothing is created on disk (no output directory, no
+    ///     archive, no tar invocation).
     /// </summary>
     public AbsolutePath? Create(
         AbsolutePath sourceDir,
         AbsolutePath outputDir,
         string name,
-        ArchiveFormat format) => format switch
+        ArchiveFormat format,
+        bool dryRun = false) => format switch
     {
         ArchiveFormat.None => null,
-        ArchiveFormat.TarGz => CreateTarGz(sourceDir, outputDir, name),
-        ArchiveFormat.Zip => CreateZip(sourceDir, outputDir, name),
+        ArchiveFormat.TarGz => dryRun
+            ? PlannedArchive(outputDir, name, ".tar.gz")
+            : CreateTarGz(sourceDir, outputDir, name),
+        ArchiveFormat.Zip => dryRun
+            ? PlannedArchive(outputDir, name, ".zip")
+            : CreateZip(sourceDir, outputDir, name),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown archive format")
     };
+    private static AbsolutePath PlannedArchive(AbsolutePath outputDir, string name, string extension) =>
+        outputDir / $"{name}{extension}";
 
     private static string Quote(AbsolutePath path) => $"\"{path}\"";
 }

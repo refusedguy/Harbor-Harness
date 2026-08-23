@@ -1,5 +1,6 @@
 using Harbor.Build.Components;
 using Harbor.Build.Extensions;
+using Harbor.Build.Meta;
 using Nuke.Common.IO;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
@@ -21,6 +22,7 @@ namespace Harbor.Build.Targets;
 ///         </item>
 ///     </list>
 ///     Both targets output to <c>artifacts/ipc-{server|client}/</c>.
+///     Dry-run prints the expanded argv and planned output directory.
 /// </summary>
 public static class IpcPublishTarget
 {
@@ -32,8 +34,8 @@ public static class IpcPublishTarget
     public static AbsolutePath ExecuteIpcServer(
         ArtifactPathResolver resolver,
         BuildSettings settings,
-        FeatureFlags flags) => PublishIpcVariant(resolver, settings, flags, "ipc-server");
-
+        FeatureFlags flags,
+        BuildOutput output) => PublishIpcVariant(resolver, settings, flags, "ipc-server", output);
     /// <summary>
     ///     Publish the <c>ipc-client</c> variant. The resulting binary is a
     ///     thin client that talks to a separately-running <c>ipc-server</c>.
@@ -42,20 +44,19 @@ public static class IpcPublishTarget
     public static AbsolutePath ExecuteIpcClient(
         ArtifactPathResolver resolver,
         BuildSettings settings,
-        FeatureFlags flags) => PublishIpcVariant(resolver, settings, flags, "ipc-client");
-
+        FeatureFlags flags,
+        BuildOutput output) => PublishIpcVariant(resolver, settings, flags, "ipc-client", output);
     private static AbsolutePath PublishIpcVariant(
         ArtifactPathResolver resolver,
         BuildSettings settings,
         FeatureFlags flags,
-        string mode)
+        string mode,
+        BuildOutput output)
     {
         var resolvedFlags = flags.Resolved();
-        Console.WriteLine($"==> PublishIpc: mode={mode} flags=[{resolvedFlags}]");
-
+        output.Info("PublishIpc", $"mode={mode} flags=[{resolvedFlags}]");
         var projectFile = resolver.GetAppProjectFile("Harbor.App.Cli");
         var outputDir = resolver.ArtifactsDirectory / $"ipc-{mode}";
-
         var publishSettings = new DotNetPublishSettings()
             .SetProject(projectFile)
             .SetConfiguration(settings.Configuration.ToString())
@@ -66,11 +67,15 @@ public static class IpcPublishTarget
             .SetProperty("HarborWithAllProviders", resolvedFlags.WithAllProviders.ToString().ToLowerInvariant())
             .SetProperty("HarborWithAllTools", resolvedFlags.WithAllTools.ToString().ToLowerInvariant())
             .SetOutput(outputDir);
-
+        output.Cmd("PublishIpc", DotNetArgv.RenderPublish(publishSettings));
+        if (output.IsDryRun)
+        {
+            output.Artifact("PublishIpc", outputDir.ToString(), bytes: null, planned: true);
+            return outputDir;
+        }
         DotNetTasks.DotNetPublish(publishSettings);
-
-        string size = outputDir.GetHumanReadableSize();
-        Console.WriteLine($"==> PublishIpc: done — {outputDir} ({size})");
+        long bytes = outputDir.GetDirectorySizeBytes();
+        output.Artifact("PublishIpc", outputDir.ToString(), bytes);
         return outputDir;
     }
 }

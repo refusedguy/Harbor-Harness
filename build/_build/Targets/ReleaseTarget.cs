@@ -1,11 +1,15 @@
 using Harbor.Build.Components;
+using Harbor.Build.Meta;
 using Nuke.Common.IO;
 namespace Harbor.Build.Targets;
 /// <summary>
 ///     Release target — publishes multiple variants, archives each, and
 ///     uploads the archives to a GitHub release identified by a tag.
-///     Requires <c>GH_TOKEN</c> environment variable (see
-///     <see cref="GitHubReleaseUploader" />).
+///     Requires <c>GH_TOKEN</c> environment variable for the upload step
+///     (see <see cref="GitHubReleaseUploader" />). Dry-run walks the full
+///     matrix and lists every planned archive + asset without publishing
+///     or touching the network; invalid flag combinations still fail
+///     exactly like a real run.
 /// </summary>
 public static class ReleaseTarget
 {
@@ -25,36 +29,31 @@ public static class ReleaseTarget
         BuildSettings settings,
         string releaseTag,
         string repo,
+        BuildOutput output,
         ArchiveFormat archiveFormat = ArchiveFormat.TarGz)
     {
         if (string.IsNullOrWhiteSpace(releaseTag))
         {
             throw new ArgumentException("Release tag is required (pass --release-tag v0.7.0)", nameof(releaseTag));
         }
-
-        Console.WriteLine($"==> Release: tag={releaseTag} repo={repo} variants={variants.Count}");
-        Console.WriteLine($"             app={appName} archiveFormat={archiveFormat}");
-        Console.WriteLine($"             flags=[{flags}]");
-
+        output.Info("Release", $"tag={releaseTag} repo={repo} variants={variants.Count}");
+        output.Info("Release", $"app={appName} archiveFormat={archiveFormat}");
+        output.Info("Release", $"flags=[{flags}]");
         var uploadedArchives = new List<AbsolutePath>();
-
         foreach (var variant in variants)
         {
-            Console.WriteLine($"--- Release: variant={variant} ---");
-            var publishDir = PublishTarget.Execute(resolver, variantBuilder, appName, variant, flags);
+            output.Info("Release", $"variant={variant}");
+            var publishDir = PublishTarget.Execute(resolver, variantBuilder, appName, variant, flags, output);
             var archive = ArchiveTarget.Execute(
-                resolver, archiveBuilder, publishDir, appName, variant, settings, archiveFormat);
+                resolver, archiveBuilder, publishDir, appName, variant, settings, archiveFormat, output);
             if (archive is not null)
             {
                 uploadedArchives.Add(archive);
             }
         }
-
-        Console.WriteLine($"==> Release: uploading {uploadedArchives.Count} archive(s) to GitHub");
-        await releaseUploader.UploadAsync(releaseTag, uploadedArchives, repo);
-        Console.WriteLine("==> Release: done");
+        output.Info("Release", $"uploading {uploadedArchives.Count} archive(s) to GitHub");
+        await releaseUploader.UploadAsync(releaseTag, uploadedArchives, repo, output, output.IsDryRun);
     }
-
     /// <summary>
     ///     Returns the standard release variant matrix: FrameworkDependent,
     ///     SelfContained, SingleFileSelfContained, AOT. AOT requires

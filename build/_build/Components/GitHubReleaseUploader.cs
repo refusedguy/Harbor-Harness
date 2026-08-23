@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Harbor.Build.Meta;
 using Nuke.Common.IO;
 namespace Harbor.Build.Components;
 /// <summary>
@@ -8,6 +9,7 @@ namespace Harbor.Build.Components;
 ///     (v3). Requires <c>GH_TOKEN</c> environment variable to be set with a
 ///     personal access token having <c>repo</c> scope. If <c>GH_TOKEN</c> is
 ///     absent, the upload is skipped with a warning (does not throw).
+///     In dry-run mode the asset list is reported and no network call happens.
 /// </summary>
 /// <remarks>
 ///     Single responsibility: GitHub release creation + asset upload.
@@ -18,7 +20,6 @@ public sealed class GitHubReleaseUploader
 {
     private const string ApiBaseUrl = "https://api.github.com";
     private readonly string _userAgent;
-
     /// <summary>
     ///     Construct an uploader. <paramref name="userAgent" /> is sent as the
     ///     <c>User-Agent</c> header (GitHub requires it).
@@ -27,12 +28,13 @@ public sealed class GitHubReleaseUploader
     {
         _userAgent = userAgent;
     }
-
     /// <summary>
     ///     Uploads <paramref name="assets" /> to the GitHub release identified
     ///     by <paramref name="tag" /> in the <paramref name="repo" /> (e.g.
-    ///     <c>harbor-sh/harbor</c>). If <c>GH_TOKEN</c> is missing, logs a
-    ///     warning and returns without throwing.
+    ///     <c>harbor-sh/harbor</c>). If <paramref name="dryRun" /> is set,
+    ///     lists what would be uploaded and returns without any network call.
+    ///     If <c>GH_TOKEN</c> is missing, logs a warning and returns without
+    ///     throwing.
     /// </summary>
     /// <returns>
     ///     <c>true</c> if all assets uploaded successfully (or skipped);
@@ -42,41 +44,50 @@ public sealed class GitHubReleaseUploader
         string tag,
         IReadOnlyList<AbsolutePath> assets,
         string repo,
+        BuildOutput output,
+        bool dryRun = false,
         CancellationToken ct = default)
     {
         if (assets.Count == 0)
         {
-            Console.WriteLine("  [github-release] No assets to upload — skipping.");
+            output.Info("github-release", "No assets to upload — skipping.");
             return true;
         }
-
         string? token = Environment.GetEnvironmentVariable("GH_TOKEN");
         if (string.IsNullOrEmpty(token))
         {
-            Console.WriteLine("  [github-release] GH_TOKEN not set — skipping upload. " +
-                              "Set GH_TOKEN with a PAT having 'repo' scope to enable.");
+            output.Warn("github-release", "GH_TOKEN not set — skipping upload. " +
+                                          "Set GH_TOKEN with a PAT having 'repo' scope to enable.");
             return true;
         }
-
+        if (dryRun)
+        {
+            output.Info("github-release",
+                $"dry-run: would upload {assets.Count} asset(s) to {repo} release {tag}:");
+            foreach (var asset in assets)
+            {
+                long bytes = File.Exists(asset) ? new FileInfo(asset).Length : 0;
+                output.Info("github-release", $"  asset {asset.Name} ({bytes} bytes)");
+            }
+            return true;
+        }
         using var http = new HttpClient();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         http.DefaultRequestHeaders.UserAgent.ParseAdd(_userAgent);
         http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-
         long releaseId = await GetOrCreateReleaseAsync(http, repo, tag, ct);
-        Console.WriteLine($"  [github-release] Uploading {assets.Count} asset(s) to release {releaseId}");
-
+        output.Info("github-release", $"Uploading {assets.Count} asset(s) to release {releaseId}");
         bool allOk = true;
         foreach (var asset in assets)
         {
             try
             {
                 await UploadAssetAsync(http, repo, releaseId, asset, ct);
-                Console.WriteLine($"  [github-release]   uploaded {asset.Name}");
+                output.Info("github-release", $"uploaded {asset.Name}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  [github-release]   FAILED {asset.Name}: {ex.Message}");
+                output.Error("github-release", $"FAILED {asset.Name}: {ex.Message}");
                 allOk = false;
             }
         }
@@ -98,7 +109,7 @@ public sealed class GitHubReleaseUploader
         }
 
         // 2. Create the release.
-        Console.WriteLine($"  [github-release] Creating release for tag {tag} in {repo}");
+        Console.Error.WriteLine($"  [github-release] Creating release for tag {tag} in {repo}");
         var createUri = new Uri($"{ApiBaseUrl}/repos/{repo}/releases");
         string body = JsonSerializer.Serialize(new
         {
