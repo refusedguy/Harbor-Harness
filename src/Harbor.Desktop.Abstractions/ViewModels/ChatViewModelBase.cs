@@ -112,6 +112,17 @@ public abstract partial class ChatViewModelBase : StoreSubscriberViewModel
     /// </summary>
     public ObservableCollection<ToolCallViewModel> ToolCalls { get; } = new();
 
+    /// <summary>
+    ///     Ф-A1b (sprint 4.5): single chronological timeline mixing chat rows
+    ///     and tool-call cards in true order — replaces two stacked
+    ///     ItemsControls whose VirtualizingStackPanels never virtualized
+    ///     (infinite-height StackPanel inside a ScrollViewer) and which broke
+    ///     chronology by rendering every tool card above every message.
+    ///     Items are ChatLineViewModel or ToolCallViewModel; XAML picks the
+    ///     template by item type.
+    /// </summary>
+    public ObservableCollection<object> Timeline { get; } = new();
+
     /// <summary>Pull-to-refresh status text for the indicator label.</summary>
     public string PullRefreshStatusText => IsLoadingHistory
         ? "Loading older messages..."

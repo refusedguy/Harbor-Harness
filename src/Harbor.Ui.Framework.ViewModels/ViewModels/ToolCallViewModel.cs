@@ -32,6 +32,9 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// </remarks>
 public sealed partial class ToolCallViewModel : ObservableObject
 {
+    /// <summary>Timeline discriminator (Ф-A1b): tool cards render the card view.</summary>
+    public bool IsToolCard => true;
+
 
     [ObservableProperty]
     private string _argsPreview = string.Empty;

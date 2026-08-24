@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
@@ -79,7 +80,12 @@ public partial class ChatView : UserControl
     private void ChatScrollViewer_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (Vm is not { } vm) return;
-        if (ChatScrollViewer is not { } scrollViewer) return;
+
+        // Ф-A1b: the timeline ListBox is now the scroller; resolve its inner
+        // ScrollViewer once (the template creates it lazily on layout).
+        var scrollViewer = this.FindControl<ScrollViewer>("PART_ContentViewer")
+            ?? TimelineList?.FindDescendantOfType<ScrollViewer>();
+        if (scrollViewer is null) return;
 
         bool atTop = scrollViewer.Offset.Y <= 0;
         bool scrollingUp = e.Delta.Y < 0;
