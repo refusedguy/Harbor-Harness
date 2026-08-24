@@ -17,7 +17,7 @@ namespace Harbor.Tools.Builtin;
 ///         a concurrent process could swap a link between the check and the write.
 ///     </para>
 /// </remarks>
-internal static class SymlinkGuard
+public static class SymlinkGuard
 {
     /// <summary>
     ///     Checks <paramref name="path" /> and its ancestors below the workspace root for symlinks.
