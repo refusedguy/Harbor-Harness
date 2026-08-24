@@ -11,7 +11,7 @@ public sealed class ActivityTracer : ITracer
 {
     public static readonly ActivityTracer Instance = new();
 
-    private ActivityTracer()
+    public ActivityTracer()
     {
     }
 
