@@ -232,13 +232,13 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        UI(() =>
-        {
-            var chat = Vm.Chat;
-            chat.Lines.Add(new ChatLineVm(
-                ChatRole.Error,
-                "Something went wrong: provider returned 503 Service Unavailable"));
-        });
+        // Drive the error through the REAL event path: direct chat.Lines.Add
+        // is stomped by SyncLines on the next store transition (the selector
+        // pipeline re-projects from UiState.Lines, which never saw our manual
+        // add). AgentErrorEvent is exactly what production raises.
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        await eventBus.PublishAsync(new Harbor.Abstractions.Events.AgentErrorEvent(
+            "Something went wrong: provider returned 503 Service Unavailable")).ConfigureAwait(false);
         await Task.Delay(200).ConfigureAwait(false);
 
         var hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))
