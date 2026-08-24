@@ -108,7 +108,6 @@ public class SymlinkGuardTests
     }
 
     [Test]
-    [Skip("CONFIRMED BUG A2: IsAtOrAboveWorkspace compares root.StartsWith(prefix) instead of dir.StartsWith(prefix) — a trailing separator on the workspace root bypasses ALL symlink checks. Fix follows.")]
     public async Task Check_RootWithTrailingSeparator_DoesNotBypassGuard()
     {
         // CONFIRMED BUG A2: IsAtOrAboveWorkspace compared `root.StartsWith(prefix)`

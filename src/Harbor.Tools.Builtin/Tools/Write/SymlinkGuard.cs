@@ -85,9 +85,15 @@ public static class SymlinkGuard
         if (string.Equals(dir, root, StringComparison.Ordinal))
             return true;
 
-        string prefix = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-        return root.StartsWith(prefix, StringComparison.Ordinal);
+        // A2 fix: "at or above" means dir == root OR dir is an ANCESTOR of
+        // root. The previous implementation compared `root` against its own
+        // prefix (always false), so only exact equality stopped the walk — and
+        // with a trailing separator on workspaceRoot even that failed, making
+        // the guard skip ALL inspection. Ancestors strictly below root do not
+        // match either branch here, so they keep being inspected.
+        string dirPrefix = dir.EndsWith(Path.DirectorySeparatorChar)
+            ? dir
+            : dir + Path.DirectorySeparatorChar;
+        return root.StartsWith(dirPrefix, StringComparison.Ordinal);
     }
 }
