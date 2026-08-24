@@ -185,6 +185,19 @@ public sealed class AgentLoop : IAgentLoop
                         },
                         error =>
                         {
+                            // F17: a cancelled run surfaces as a compaction
+                            // Failure, but it is NOT a summarizer failure —
+                            // engaging the destructive truncation fallback
+                            // here would irreversibly degrade the session on
+                            // a plain Esc.
+                            if (ct.IsCancellationRequested)
+                            {
+                                _logger.LogInformation(
+                                    "Compaction cancelled for session {SessionId}; no fallback",
+                                    session.Session.Id);
+                                return Task.CompletedTask;
+                            }
+
                             // Never continue silently with a known-invalid
                             // (overfull) context: publish the failure and
                             // switch to strict tail truncation for this and

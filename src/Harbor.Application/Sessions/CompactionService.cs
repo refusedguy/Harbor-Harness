@@ -511,6 +511,17 @@ public sealed class CompactionService(
 
             string summary = summaryBuilder.ToString();
 
+            // F19: an empty summary (content filter, silent provider) used to be
+            // accepted as success — the anchor would then discard the ENTIRE
+            // compressed history and the model silently lost all memory of it.
+            if (summary.Length == 0)
+            {
+                logger.LogWarning(
+                    "Summarization produced an empty summary for session {SessionId}; refusing to persist an empty anchor",
+                    sessionId);
+                return Result.Failure<CompactionResult>("Compaction produced an empty summary.");
+            }
+
             // 4. Compute tokens saved — iterate head slice directly without materializing a List.
             int headTokens = 0;
             for (int i = 0; i < tailStart; i++)
@@ -544,6 +555,16 @@ public sealed class CompactionService(
                 tokensSaved,
                 stopwatch.Elapsed,
                 summaryMessage));
+        }
+        catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+        {
+            // F17: cancellation is not a compaction failure. Treating Esc during
+            // summarisation as a generic Exception made the caller flip the
+            // session into destructive truncation fallback and report a spurious
+            // error — the run is simply ending.
+            stopwatch.Stop();
+            logger.LogInformation(ex, "Compaction cancelled for session {SessionId}", sessionId);
+            return Result.Failure<CompactionResult>("Compaction cancelled.");
         }
         catch (Exception ex)
         {
