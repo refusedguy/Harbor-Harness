@@ -1,19 +1,57 @@
-using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Tools;
-using Harbor.Core.Tools;
+using Harbor.Core.Agents;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
-using Microsoft.Extensions.DependencyInjection;
+using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Tools;
+using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Cli.Hosting;
+namespace Harbor.Hosting;
 
-internal static partial class HostBuilder
+internal static class ToolsCatalog
 {
-    private static ToolRegistry CreateToolRegistry(IServiceProvider sp, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry)
+    internal static AgentRegistry CreateAgentRegistry(HarborCompositionContext ctx)
+    {
+        var registry = new AgentRegistry();
+        var ab = new AgentRegistryBuilder(registry);
+        string[] parts = ctx.Harbor.EffectiveModel.Split('/', 2);
+        string providerId = parts[0];
+        string modelId = parts.Length > 1 ? parts[1] : ctx.Harbor.Model;
+        ab.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.PlanDefault(modelId, providerId));
+        ab.AddAgent(AgentDefinition.ExploreDefault(modelId, providerId));
+        return registry;
+    }
+
+    internal static McpRegistry CreateMcpRegistry(HarborCompositionContext ctx)
+    {
+        var mcpRegistry = new McpRegistry(ctx.LoggerFactory.CreateLogger<McpRegistry>());
+
+        // Load MCP servers from the standard mcp.json files in overlay order
+        // (later wins): an explicit HARBOR_MCP_CONFIG, then ~/.harbor/mcp.json,
+        // then <project>/.harbor/mcp.json.
+        string projectRoot = Directory.GetCurrentDirectory();
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string harborHome = Path.Combine(homeDir, ".harbor");
+        var mcpLoader = new McpServersConfigLoader(projectRoot, homeDir, harborHome);
+
+        var mcpConfigPaths = new List<string>();
+        string? explicitMcp = Environment.GetEnvironmentVariable("HARBOR_MCP_CONFIG");
+        if (!string.IsNullOrEmpty(explicitMcp))
+            mcpConfigPaths.Add(explicitMcp);
+        mcpConfigPaths.Add(Path.Combine(harborHome, "mcp.json"));
+        mcpConfigPaths.Add(Path.Combine(projectRoot, ".harbor", "mcp.json"));
+
+        foreach (var entry in mcpLoader.Load(mcpConfigPaths.ToArray()))
+            mcpRegistry.Register(entry.Name, entry.StartInfo);
+        return mcpRegistry;
+    }
+
+    internal static ToolRegistry CreateToolRegistry(
+        HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry)
     {
         var registry = new ToolRegistry();
-        var tb = new ToolRegistryBuilder(registry, sp.GetRequiredService<ILoggerFactory>());
+        var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
         tb.AddTool(new ReadToolFactory());
         tb.AddTool(new WriteToolFactory());
         tb.AddTool(new EditToolFactory());
@@ -31,7 +69,7 @@ internal static partial class HostBuilder
 
         registry.Freeze();
         const int toolCount = 14;
-        _logger.LogInformation("Registered {Count} tools", toolCount);
+        ctx.Logger.LogInformation("Registered {Count} tools", toolCount);
         return registry;
     }
 }

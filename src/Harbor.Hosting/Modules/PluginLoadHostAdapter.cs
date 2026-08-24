@@ -12,7 +12,7 @@ using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Hosting;
+namespace Harbor.Hosting;
 /// <summary>
 ///     Adapter that exposes the already-constructed <c>ToolRegistry</c>,
 ///     <c>ProviderRegistry</c>, and <c>AgentRegistry</c> instances (plus the host's

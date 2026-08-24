@@ -13,35 +13,6 @@ using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 #endif
 namespace Harbor.Cli.Hosting;
-#if HARBOR_WITH_ALL_PROVIDERS
-/// <summary>Adapter that resolves API key via AuthStore.</summary>
-/// <remarks>
-///     Excluded when <c>HARBOR_WITH_ALL_PROVIDERS</c> is undefined — the
-///     interfaces it implements (IAnthropicAuthResolver, IOpenAIAuthResolver,
-///     IAuthResolver) live in Harbor.Providers.{Anthropic,OpenAI,OpenAiCompatible}
-///     which are removed from the project reference graph when
-///     HarborWithAllProviders=false. Ollama (always included) has no auth
-///     resolver because OllamaLlmClient doesn't take an auth resolver — it
-///     talks to a local daemon that doesn't require an API key.
-/// </remarks>
-internal sealed class ConfigAuthResolver : IAnthropicAuthResolver, IOpenAIAuthResolver, IAuthResolver
-{
-    private readonly AuthStore _authStore;
-    private readonly string _providerId;
-
-    public ConfigAuthResolver(AuthStore authStore, string providerId)
-    {
-        _authStore = authStore;
-        _providerId = providerId;
-    }
-
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
-        => _authStore.GetApiKeyAsync(_providerId, ct);
-
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default)
-        => _authStore.GetApiKeyAsync(string.IsNullOrEmpty(providerId) ? _providerId : providerId, ct);
-}
-#endif
 
 /// <summary>Simple ICommandContext for REPL.</summary>
 internal sealed class SimpleCommandContext : ICommandContext

@@ -1,41 +1,29 @@
-using System.IO;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
 using Harbor.Providers.Ollama;
+using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 #endif
-namespace Harbor.Cli.Hosting;
 
-internal static partial class HostBuilder
+namespace Harbor.Hosting;
+
+// Provider factories shared by every app. Auth resolution goes through
+// ConfigAuthResolver (AuthStore-backed) — Avalonia swaps the resolver via its
+// own auth path before these factories are used.
+internal static class ProviderFactories
 {
-    private static void RegisterHttpClients(HostApplicationBuilder builder)
-    {
-        _logger.LogInformation("Registering HTTP clients");
-        builder.Services.AddHttpClient("ollama");
-#if HARBOR_WITH_ALL_PROVIDERS
-        builder.Services.AddHttpClient("anthropic");
-        builder.Services.AddHttpClient("openai");
-        builder.Services.AddHttpClient("providers");
-        builder.Services.AddHttpClient("default");
-#else
-        _logger.LogInformation("HARBOR_WITH_ALL_PROVIDERS=false — registered only the ollama HTTP client");
-#endif
-    }
-
-    private static ProviderRegistry CreateProviderRegistry(IServiceProvider sp, string harborDir, HarborConfig config)
+    internal static ProviderRegistry CreateProviderRegistry(HarborCompositionContext ctx, IServiceProvider sp)
     {
         var registry = new ProviderRegistry(sp.GetRequiredService<ILogger<ProviderRegistry>>());
         var pb = new ProviderRegistryBuilder(registry, sp.GetRequiredService<ILoggerFactory>());
         var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
         var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
         var authStore = sp.GetRequiredService<AuthStore>();
-        string cacheDir = Path.Combine(harborDir, "cache", "providers");
+        string cacheDir = Path.Combine(ctx.Options.HarborDir, "cache", "providers");
 
         pb.AddProvider(new OllamaProviderFactory(httpFactory));
 
@@ -43,11 +31,11 @@ internal static partial class HostBuilder
         pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));
         pb.AddProvider(new OpenAiProviderFactory(httpFactory, authStore));
 
-        ProviderRegistration.RegisterJsonProviders(pb, httpFactory, loggerFactory, cacheDir, authStore);
+        JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory, cacheDir, authStore);
 #endif
 
         registry.Freeze();
-        _logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
+        ctx.Logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
         return registry;
     }
 }

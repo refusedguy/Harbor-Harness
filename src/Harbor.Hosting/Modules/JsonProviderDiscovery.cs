@@ -1,23 +1,25 @@
 using System.Reflection;
 using System.Text.Json;
-using Harbor.Abstractions.Providers;
 using Harbor.Core.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
 #endif
-namespace Harbor.Cli.Hosting;
-/// <summary>
-///     Provider registration — single responsibility: discover and register LLM providers.
-///     Extracted from Program.cs.
-/// </summary>
-internal static class ProviderRegistration
-{
 
+namespace Harbor.Hosting;
+
+/// <summary>
+///     Json-provider discovery (providers/*.json): user config first, then
+///     bundled directories, then embedded resources. Shared by CLI and desktop.
+/// </summary>
+internal static class JsonProviderDiscovery
+{
     private static IEnumerable<(string Name, string Content)> LoadEmbeddedProviders()
     {
-        var assembly = Assembly.GetExecutingAssembly();
+        var assembly = typeof(JsonProviderDiscovery).Assembly;
         foreach (string name in assembly.GetManifestResourceNames()
                      .Where(n => n.Contains("providers.") && n.EndsWith(".json")))
         {
@@ -29,9 +31,6 @@ internal static class ProviderRegistration
             yield return (shortName, content);
         }
     }
-
-    public static string? FindProvidersDirectory() =>
-        FindProvidersDirectories().FirstOrDefault(Directory.Exists);
 
     /// <summary>
     ///     Enumerate every candidate providers directory in precedence order:
@@ -62,6 +61,7 @@ internal static class ProviderRegistration
             current = Path.GetDirectoryName(current);
         }
     }
+
 #if HARBOR_WITH_ALL_PROVIDERS
     public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
@@ -76,9 +76,7 @@ internal static class ProviderRegistration
             loggerFactory.CreateLogger<DynamicModelCatalog>());
 
         // Discover providers from EVERY candidate directory (user config first,
-        // then bundled). User config (~/.harbor/providers/) wins on id collisions
-        // so E2E tests can override a bundled provider with a mock pointing at
-        // an in-process server. Tracked-registered ids guard against duplicates.
+        // then bundled). Tracked-registered ids guard against duplicates.
         var seenIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (string dir in FindProvidersDirectories())
         {
@@ -101,8 +99,7 @@ internal static class ProviderRegistration
                 http.Timeout = TimeSpan.FromSeconds(config.Timeout);
                 // §OOP-002 (RESOLVED): attach provider-specific compat flags
                 // (Strategy pattern) so the client can apply them without hardcoding
-                // provider ids. ProviderCompatFlags.For returns null when there are
-                // no flags for this provider, which the client treats as no-op.
+                // provider ids.
                 config.Quirks = ProviderCompatFlags.For(config.GetProviderId());
                 builder.AddProvider(config.Id, () => new OpenAiCompatibleLlmClient(
                     http, config,
@@ -132,10 +129,6 @@ internal static class ProviderRegistration
 
             var http = httpClientFactory.CreateClient($"provider:{config.Value.Id}");
             http.Timeout = TimeSpan.FromSeconds(config.Value.Timeout);
-            // §OOP-002 (RESOLVED): attach provider-specific compat flags
-            // (Strategy pattern) so the client can apply them without hardcoding
-            // provider ids. ProviderCompatFlags.For returns null when there are
-            // no flags for this provider, which the client treats as no-op.
             config.Value.Quirks = ProviderCompatFlags.For(config.Value.GetProviderId());
             builder.AddProvider(config.Value.Id, () => new OpenAiCompatibleLlmClient(
                 http, config.Value,
