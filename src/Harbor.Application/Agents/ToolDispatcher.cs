@@ -222,10 +222,16 @@ internal sealed class ToolDispatcher(
             var permResponse = await permissions.CheckAsync(
                 agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt).ConfigureAwait(false);
 
-            if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
+            // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
+            // registry, invalid name) used to fall through to execution — i.e.
+            // every tool ran as "allow all". Any non-success verdict now denies.
+            if (permResponse.IsFailure || permResponse.Value.Action == PermissionAction.Deny)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
-                var denied = ToolResult.Error("Permission denied");
+                string reason = permResponse.IsFailure
+                    ? $"Permission check failed: {permResponse.Error}"
+                    : "Permission denied";
+                var denied = ToolResult.Error(reason);
                 await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, denied, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
