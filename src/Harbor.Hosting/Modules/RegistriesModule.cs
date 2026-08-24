@@ -2,6 +2,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
+using Harbor.Telemetry;
 #if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
@@ -50,9 +51,14 @@ internal static class RegistriesModule
         toolRegistry.Freeze();
         providerRegistry.Freeze();
 
+        // sprint3-C C1: instrument at the DI boundary. Plugins keep mutating the
+        // RAW registries (ctx.Registries) before Freeze; consumers resolving the
+        // interfaces get the instrumented views.
+        services.AddSingleton<IToolRegistry>(new InstrumentedToolRegistry(
+            toolRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
+        services.AddSingleton<IProviderRegistry>(new InstrumentedProviderRegistry(
+            providerRegistry, MeterMetrics.Instance, ActivityTracer.Instance));
         services.AddSingleton<IAgentRegistry>(agentRegistry);
-        services.AddSingleton<IToolRegistry>(toolRegistry);
-        services.AddSingleton<IProviderRegistry>(providerRegistry);
         services.AddSingleton<IMcpRegistry>(mcpRegistry);
         services.AddSingleton(panelRegistry);
         services.AddSingleton<IPanelRegistry>(panelRegistry);

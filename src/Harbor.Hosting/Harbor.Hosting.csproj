@@ -49,6 +49,8 @@
     <!-- Base graph: abstractions + contracts + core pipeline + desktop config types -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
 

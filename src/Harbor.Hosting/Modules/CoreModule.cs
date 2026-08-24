@@ -2,6 +2,8 @@ using Harbor.Core.Onboarding;
 using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
 using Harbor.Abstractions.Sessions;
+using Harbor.Diagnostics;
+using Harbor.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -27,7 +29,14 @@ internal static class CoreModule
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IAgentLoop, AgentLoop>();
-        services.AddSingleton<IAgent, DefaultAgent>();
+        services.AddSingleton<DefaultAgent>();
+        // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,
+        // turn metrics, ambient correlation scope); DefaultAgent stays resolvable
+        // for code that must bypass telemetry.
+        services.AddSingleton<IAgent>(sp => new TracingAgentProxy(
+            sp.GetRequiredService<DefaultAgent>(),
+            sp.GetRequiredService<IMetrics>(),
+            sp.GetRequiredService<ITracer>()));
         // Forward IAgentRunner → IAgent (canonical MS DI interface-forwarding pattern).
         services.AddSingleton<IAgentRunner>(sp => sp.GetRequiredService<IAgent>());
 

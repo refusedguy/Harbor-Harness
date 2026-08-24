@@ -19,7 +19,8 @@ public static class Registration
         ctx.Logger.LogInformation("Feature flags: plugins={Plugins}, spectre-tui={SpectreTui}, all-providers={AllProviders}",
             ctx.Options.Features.Plugins, ctx.Options.Features.SpectreTui, ctx.Options.Features.AllProviders);
 
-        services.AddHarborCore(ctx)
+        services.AddHarborTelemetry()
+                .AddHarborCore(ctx)
                 .AddHarborHttpClients(ctx)
                 .AddHarborRegistries(ctx)
                 .AddHarborIntelligence(ctx)

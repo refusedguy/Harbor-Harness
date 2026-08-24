@@ -123,9 +123,15 @@ public class RegistrationCompositionTests
         var toolRegistry = sp.GetRequiredService<IToolRegistry>();
         var providerRegistry = sp.GetRequiredService<IProviderRegistry>();
 
-        // Same instance published to DI and captured in the composition context.
-        await Assert.That(ReferenceEquals(toolRegistry, ctx.Registries.Tools)).IsTrue();
-        await Assert.That(ReferenceEquals(providerRegistry, ctx.Registries.Providers)).IsTrue();
+        // sprint3-C C1: DI publishes an INSTRUMENTED VIEW over the same frozen
+        // registries captured in the composition context — identical tool and
+        // provider surfaces prove both views wrap one post-Freeze snapshot.
+        await Assert.That(toolRegistry.GetAllTools().Count)
+            .IsEqualTo(ctx.Registries.Tools.GetAllTools().Count);
+        await Assert.That(toolRegistry.GetAllTools().Select(t => t.Name.Value).OrderBy(n => n).ToArray())
+            .IsEquivalentTo(ctx.Registries.Tools.GetAllTools().Select(t => t.Name.Value).OrderBy(n => n).ToArray());
+        await Assert.That(providerRegistry.GetRegisteredProviderIds())
+            .IsEquivalentTo(ctx.Registries.Providers.GetRegisteredProviderIds());
 
         // Singleton lifetime.
         await Assert.That(toolRegistry).IsSameReferenceAs(sp.GetRequiredService<IToolRegistry>());
