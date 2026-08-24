@@ -78,116 +78,33 @@ internal static class ToolsCatalog
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
         bool full = ctx.Options.ToolSet == HarborToolSetKind.Full14;
 
-        tb.AddTool(new ReadToolFactory());
-        tb.AddTool(new WriteToolFactory());
-        tb.AddTool(new EditToolFactory());
-        tb.AddTool(new BashToolFactory());
-        tb.AddTool(new GlobToolFactory());
-        tb.AddTool(new GrepToolFactory());
-        tb.AddTool(new LsToolFactory());
+        // P.2: logger-aware lambdas replaced 14 IToolFactory ceremony classes.
+        tb.AddTool(lf => new ReadTool(lf.CreateLogger<ReadTool>()));
+        tb.AddTool(lf => new WriteTool(lf.CreateLogger<WriteTool>()));
+        tb.AddTool(lf => new EditTool(lf.CreateLogger<EditTool>()));
+        tb.AddTool(lf => new BashTool(lf.CreateLogger<BashTool>()));
+        tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
+        tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
+        tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
         if (full)
         {
-            tb.AddTool(new TaskToolFactory(agentRegistry));
-            tb.AddTool(new WebFetchToolFactory());
+            tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>()));
+            tb.AddTool(lf => new WebFetchTool(lf.CreateLogger<WebFetchTool>()));
         }
-        tb.AddTool(new PatchToolFactory());
-        tb.AddTool(new NotebookToolFactory());
+        tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));
+        tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
         if (full)
         {
-            tb.AddTool(new RipGrepToolFactory());
+            tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));
         }
-        tb.AddTool(new TreeToolFactory());
+        tb.AddTool(lf => new TreeTool(lf.CreateLogger<TreeTool>()));
         if (full)
         {
-            tb.AddTool(new McpToolToolFactory(mcpRegistry));
+            tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));
         }
 
         registry.Freeze();
         ctx.Logger.LogInformation("Registered {Count} tools", full ? 14 : 10);
         return registry;
     }
-}
-
-file sealed class ReadToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new ReadTool(loggerFactory.CreateLogger<ReadTool>());
-}
-
-file sealed class WriteToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new WriteTool(loggerFactory.CreateLogger<WriteTool>());
-}
-
-file sealed class EditToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new EditTool(loggerFactory.CreateLogger<EditTool>());
-}
-
-file sealed class BashToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new BashTool(loggerFactory.CreateLogger<BashTool>());
-}
-
-file sealed class GlobToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new GlobTool(loggerFactory.CreateLogger<GlobTool>());
-}
-
-file sealed class GrepToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new GrepTool(loggerFactory.CreateLogger<GrepTool>());
-}
-
-file sealed class LsToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new LsTool(loggerFactory.CreateLogger<LsTool>());
-}
-
-file sealed class TaskToolFactory : IToolFactory
-{
-    private readonly IAgentRegistry _agentRegistry;
-
-    public TaskToolFactory(IAgentRegistry agentRegistry)
-    {
-        _agentRegistry = agentRegistry;
-    }
-
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new TaskTool(_agentRegistry, loggerFactory.CreateLogger<TaskTool>());
-}
-
-file sealed class WebFetchToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new WebFetchTool(loggerFactory.CreateLogger<WebFetchTool>());
-}
-
-file sealed class PatchToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new PatchTool(loggerFactory.CreateLogger<PatchTool>());
-}
-
-file sealed class NotebookToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new NotebookTool(loggerFactory.CreateLogger<NotebookTool>());
-}
-
-file sealed class RipGrepToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new RipGrepTool(loggerFactory.CreateLogger<RipGrepTool>());
-}
-
-file sealed class TreeToolFactory : IToolFactory
-{
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new TreeTool(loggerFactory.CreateLogger<TreeTool>());
-}
-
-file sealed class McpToolToolFactory : IToolFactory
-{
-    private readonly IMcpRegistry _mcpRegistry;
-
-    public McpToolToolFactory(IMcpRegistry mcpRegistry)
-    {
-        _mcpRegistry = mcpRegistry;
-    }
-
-    public ITool CreateTool(ILoggerFactory loggerFactory) => new McpToolTool(_mcpRegistry, loggerFactory.CreateLogger<McpToolTool>());
 }

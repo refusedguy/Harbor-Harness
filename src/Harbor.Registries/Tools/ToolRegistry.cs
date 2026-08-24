@@ -238,4 +238,7 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
     /// </summary>
     /// <param name="factory">The factory producing the tool instance.</param>
     public void AddTool(IToolFactory factory) => AddTool(factory.CreateTool(_loggerFactory));
+
+    /// <inheritdoc />
+    public void AddTool(Func<ILoggerFactory, ITool> factory) => AddTool(factory(_loggerFactory));
 }

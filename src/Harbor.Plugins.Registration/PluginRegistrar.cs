@@ -129,6 +129,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
         public void AddTool<T>() where T : ITool, new() => AddTool(new T());
         public void AddTool(Func<ITool> factory) => AddTool(factory());
         public void AddTool(IToolFactory factory) => AddTool(factory.CreateTool(_loggerFactory));
+        public void AddTool(Func<ILoggerFactory, ITool> factory) => AddTool(factory(_loggerFactory));
     }
 
     private sealed class ProviderRegistryBuilderAdapter : IProviderRegistryBuilder
