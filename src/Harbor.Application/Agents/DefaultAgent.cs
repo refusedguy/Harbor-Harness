@@ -143,17 +143,25 @@ public sealed class DefaultAgent : IAgent
     {
         // Only swap if the current source is already cancelled — otherwise
         // we'd blow away the cancellation token the in-flight PromptAsync is
-        // linked to. The session manager calls this AFTER abort + WaitForIdle,
-        // so the source is guaranteed cancelled by then; the guard still
-        // protects against accidental mid-run calls.
-        if (!_abortSource.IsCancellationRequested)
+        // linked to. The CAS below makes the read→swap→dispose sequence
+        // atomic (F2): two concurrent resets can no longer double-dispose or
+        // publish two sources with a lost window in between.
+        CancellationTokenSource observed = Volatile.Read(ref _abortSource);
+        if (!observed.IsCancellationRequested)
         {
             return;
         }
 
-        var old = _abortSource;
-        _abortSource = new CancellationTokenSource();
-        old.Dispose();
+        var fresh = new CancellationTokenSource();
+        CancellationTokenSource winner = Interlocked.CompareExchange(ref _abortSource, fresh, observed);
+        if (ReferenceEquals(winner, observed))
+        {
+            observed.Dispose();
+        }
+        else
+        {
+            fresh.Dispose(); // another caller completed the reset first
+        }
     }
 
     /// <summary>
@@ -268,6 +276,15 @@ public sealed class DefaultAgent : IAgent
 
         try
         {
+            // G1 self-heal: an aborted run leaves AbortSource permanently cancelled,
+            // so every later prompt would die on an already-cancelled token unless
+            // someone remembered to reset it (IPC abort paths never did). Resetting
+            // here, under the run gate, removes that external temporal coupling.
+            if (_abortSource.IsCancellationRequested)
+            {
+                ResetAbortSource();
+            }
+
             await _sessionStore.AppendMessageAsync(State.SessionId, message, ct).ConfigureAwait(false);
 
             // Swap in a fresh per-run completion source so WaitForIdleAsync callers
