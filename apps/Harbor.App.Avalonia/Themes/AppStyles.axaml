@@ -55,16 +55,16 @@
         <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
         <Setter Property="Padding" Value="16,16,16,16" />
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderBrush" Value="#12FFFFFF" />
         <Setter Property="BorderThickness" Value="1,1,1,1" />
-        <Setter Property="BoxShadow" Value="{StaticResource ShadowSm}" />
     </Style>
 
     <Style Selector="Border.CardElevated">
         <Setter Property="Background" Value="{StaticResource CardElevatedBackgroundBrush}" />
         <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
         <Setter Property="Padding" Value="20,20,20,20" />
-        <Setter Property="BoxShadow" Value="{StaticResource ShadowLg}" />
+        <Setter Property="BorderBrush" Value="#12FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
     </Style>
 
     <Style Selector="Border.CodeBlock">
@@ -181,16 +181,16 @@
     <Style Selector="RadioButton.TabButton">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Padding" Value="16,7" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
-        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="CornerRadius" Value="999" />
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.12" />
-                <BrushTransition Property="Foreground" Duration="0:0:0.12" />
+                <BrushTransition Property="Background" Duration="0:0:0.15" />
+                <BrushTransition Property="Foreground" Duration="0:0:0.15" />
             </Transitions>
         </Setter>
     </Style>
@@ -201,16 +201,17 @@
         <Setter Property="TextElement.Foreground" Value="{StaticResource TextBrush}" />
     </Style>
 
-    <!-- Checked (active tab) → accent-tinted background + accent foreground. -->
+    <!-- Checked (active tab) → B3: neutral pill — white/8% fill, WHITE text
+         (no accent fill: the previous blue highlight read as "selected error"). -->
     <Style Selector="RadioButton.TabButton:checked /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource SelectedBackgroundBrush}" />
-        <Setter Property="TextElement.Foreground" Value="{StaticResource MochaBlue}" />
-        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Background" Value="#14FFFFFF" />
+        <Setter Property="TextElement.Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
-    <!-- Checked+hover → brighter accent. -->
+    <!-- Checked+hover → slightly brighter pill. -->
     <Style Selector="RadioButton.TabButton:checked:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="{StaticResource HoverStrongBackgroundBrush}" />
+        <Setter Property="Background" Value="#1CFFFFFF" />
     </Style>
 
     <!-- ════════════ Custom Windows caption buttons (Task U1) ════════════
@@ -326,7 +327,9 @@
     <Style Selector="Border.SessionCard">
         <Setter Property="Background" Value="{DynamicResource BgPanelBrush}" />
         <Setter Property="CornerRadius" Value="{DynamicResource RadiusMd}" />
-        <Setter Property="BoxShadow" Value="{StaticResource ShadowSm}" />
+        <!-- B4: hairline border instead of shadow. -->
+        <Setter Property="BorderBrush" Value="#12FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Padding" Value="12" />
         <Setter Property="Transitions">
@@ -337,7 +340,7 @@
     </Style>
     <Style Selector="Border.SessionCard:pointerover">
         <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
-        <Setter Property="BoxShadow" Value="{StaticResource ShadowMd}" />
+        <Setter Property="BorderBrush" Value="#20FFFFFF" />
     </Style>
 
     <!-- ════════════ A3: entrance animations (fade + slide, 150ms ease-out) ════════════ -->

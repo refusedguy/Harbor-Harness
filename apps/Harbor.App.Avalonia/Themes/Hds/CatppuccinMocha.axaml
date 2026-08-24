@@ -27,7 +27,7 @@
     <Color x:Key="MochaSubtext1">#BAC2DE</Color>
     <Color x:Key="MochaSubtext0">#A6ADC8</Color>
     <Color x:Key="MochaOverlay2">#9399B2</Color>
-    <Color x:Key="MochaOverlay1">#7F849C</Color>
+    <Color x:Key="MochaOverlay1">#8B90A6</Color><!-- B5: ≥4.5:1 on base -->
     <Color x:Key="MochaOverlay0">#6C7086</Color>
 
     <Color x:Key="MochaBlue">#89B4FA</Color>

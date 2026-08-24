@@ -231,11 +231,11 @@ public sealed class UiRenderEngine
                 "read" => "▸",
                 "patch" => "⌥",
                 "bash" => "$",
-                "grep" => "🔍",
-                "glob" => "🌐",
-                "ls" => "📁",
+                "grep" => "⌕",
+                "glob" => "◎",
+                "ls" => "▤",
                 "task" => "☐",
-                "web_fetch" => "🌍",
+                "web_fetch" => "⇣",
                 _ => "?"
             }
         };

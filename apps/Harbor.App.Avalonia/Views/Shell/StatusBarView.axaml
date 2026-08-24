@@ -88,16 +88,18 @@
                                Foreground="{DynamicResource StateInfoBrush}"
                                VerticalAlignment="Center"
                                IsVisible="{Binding ShowAnimatedCost}"/>
-                    <TextBlock Text="{Binding AnimatedCostText, StringFormat='running · ${0:F4}'}"
+                    <!-- B6: money is neutral-green $0.00 and hidden at zero —
+                         the old orange $0.0000 read as a billing error. -->
+                    <TextBlock Text="{Binding AnimatedCostText, StringFormat='running · ${0:F2}'}"
                                FontFamily="{DynamicResource FontMono}" FontSize="11"
-                               Foreground="{DynamicResource StateWarningBrush}"
+                               Foreground="{DynamicResource StateSuccessBrush}"
                                VerticalAlignment="Center"
-                               IsVisible="{Binding ShowAnimatedCost}"/>
-                    <TextBlock Text="{Binding CostText, StringFormat='${0:F4}'}"
+                               IsVisible="{Binding ShowLiveCost}"/>
+                    <TextBlock Text="{Binding CostText, StringFormat='${0:F2}'}"
                                FontFamily="{DynamicResource FontMono}" FontSize="11"
-                               Foreground="{DynamicResource StateWarningBrush}"
+                               Foreground="{DynamicResource StateSuccessBrush}"
                                VerticalAlignment="Center"
-                               IsVisible="{Binding !ShowAnimatedCost}"/>
+                               IsVisible="{Binding HasCost}"/>
                 </StackPanel>
 
                 <Border Classes="StatusBarSeparator"/>

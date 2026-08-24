@@ -76,6 +76,8 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     [NotifyPropertyChangedFor(nameof(RunningDurationText))]
     [NotifyPropertyChangedFor(nameof(AnimatedCostText))]
     [NotifyPropertyChangedFor(nameof(ShowAnimatedCost))]
+    [NotifyPropertyChangedFor(nameof(HasCost))]
+    [NotifyPropertyChangedFor(nameof(ShowLiveCost))]
     private decimal _costUsd;
 
     public bool IsCommandPaletteOpen
@@ -291,6 +293,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     public string RunningDurationText => _runningStartTime is { } start ? FormatDuration(DateTime.UtcNow - start) : string.Empty;
     public string AnimatedCostText => StatusMappers.CostToUsd(_displayCost);
     public bool ShowAnimatedCost => _runningStartTime is not null;
+
+    /// <summary>B6: hide the money readout entirely while nothing was spent.</summary>
+    public bool HasCost => CostUsd > 0m;
+    public bool ShowLiveCost => ShowAnimatedCost && _displayCost > 0m;
     public IThemeService ThemeService => _theme;
 
     protected override void OnStoreChanged(UiState state)
