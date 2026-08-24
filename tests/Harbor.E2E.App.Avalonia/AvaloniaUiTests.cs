@@ -978,33 +978,27 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        Driver.OnUIThread(() =>
-        {
-            if (Driver.MainWindow.DataContext is MainViewModel vm)
-            {
-                var toolCall = new ToolCallVm
-                {
-                    ToolName = "read",
-                    ArgsPreview = "path=/test.txt",
-                    Status = ToolCallStatus.Running
-                };
-                vm.Chat.ToolCalls.Add(toolCall);
-            }
-        });
+        // A1b: the view renders the Timeline, which is projected from store
+        // state — seed through the REAL event path instead of mutating
+        // vm.Chat.ToolCalls (that collection no longer drives the UI).
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+            "e2e-tool-session", "qwen2.5-coder:7b");
+        await eventBus.PublishAsync(new MessageUpdateEvent(
+            new ToolCallStartEvent("tc-e2e-1", "read"), partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(new MessageUpdateEvent(
+            new ToolCallDeltaEvent("tc-e2e-1", "{\"path\":\"/test.txt\"}"), partial)).ConfigureAwait(false);
+
         // Poll for the tool call card text instead of a fixed delay.
-        bool sawTool = await Driver.WaitForTextAsync("read", TimeSpan.FromSeconds(2))
+        bool sawTool = await Driver.WaitForRenderedTextAsync("read", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
 
         await Driver.ScreenshotAsync("24-tool-call-card").ConfigureAwait(false);
 
-        Driver.OnUIThread(() =>
-        {
-            if (Driver.MainWindow.DataContext is MainViewModel vm)
-            {
-                vm.Chat.ToolCalls.Clear();
-            }
-        });
+        // Close the call through the matching production event.
+        await eventBus.PublishAsync(new MessageUpdateEvent(
+            new ToolCallEndEvent("tc-e2e-1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement), partial)).ConfigureAwait(false);
     }
 
     /// <summary>
