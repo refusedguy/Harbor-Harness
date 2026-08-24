@@ -55,6 +55,21 @@
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="IsTabStop" Value="False" />
                     <Setter Property="Focusable" Value="False" />
+                    <!-- A3: fade+slide entrance for realized rows. -->
+                    <Style Selector="^">
+                        <Style.Animations>
+                            <Animation Duration="0:0:0.15" Easing="CubicEaseOut" FillMode="Forward">
+                                <KeyFrame Cue="0%">
+                                    <Setter Property="Opacity" Value="0" />
+                                    <Setter Property="TranslateTransform.Y" Value="8" />
+                                </KeyFrame>
+                                <KeyFrame Cue="100%">
+                                    <Setter Property="Opacity" Value="1" />
+                                    <Setter Property="TranslateTransform.Y" Value="0" />
+                                </KeyFrame>
+                            </Animation>
+                        </Style.Animations>
+                    </Style>
                 </ControlTheme>
             </ListBox.ItemContainerTheme>
             <ListBox.ItemsPanel>

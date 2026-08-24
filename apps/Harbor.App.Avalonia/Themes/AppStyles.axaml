@@ -340,4 +340,40 @@
         <Setter Property="BoxShadow" Value="{StaticResource ShadowMd}" />
     </Style>
 
+    <!-- ════════════ A3: entrance animations (fade + slide, 150ms ease-out) ════════════ -->
+
+    <!-- Toasts rise in from below the status bar. -->
+    <Style Selector="Border.ToastCard">
+        <Style.Animations>
+            <Animation Duration="0:0:0.15" Easing="CubicEaseOut" FillMode="Forward">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0" />
+                    <Setter Property="TranslateTransform.Y" Value="12" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1" />
+                    <Setter Property="TranslateTransform.Y" Value="0" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
+    <!-- Chat timeline rows fade in as containers realize (new messages,
+         tool cards; history replay animates once per container creation —
+         virtualization keeps this cheap). Opt-in via Classes="tl-row". -->
+    <Style Selector="ListBoxItem.tl-row">
+        <Style.Animations>
+            <Animation Duration="0:0:0.15" Easing="CubicEaseOut" FillMode="Forward">
+                <KeyFrame Cue="0%">
+                    <Setter Property="Opacity" Value="0" />
+                    <Setter Property="TranslateTransform.Y" Value="8" />
+                </KeyFrame>
+                <KeyFrame Cue="100%">
+                    <Setter Property="Opacity" Value="1" />
+                    <Setter Property="TranslateTransform.Y" Value="0" />
+                </KeyFrame>
+            </Animation>
+        </Style.Animations>
+    </Style>
+
 </Styles>
