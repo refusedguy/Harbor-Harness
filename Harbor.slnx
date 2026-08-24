@@ -87,6 +87,7 @@
 
     <Folder Name="/tests/Unit/">
         <Project Path="tests/Harbor.Abstractions.Tests/Harbor.Abstractions.Tests.csproj"/>
+        <Project Path="tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>

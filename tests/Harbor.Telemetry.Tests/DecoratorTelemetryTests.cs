@@ -137,10 +137,14 @@ public class DecoratorTelemetryTests : IDisposable
     {
         var client = new InstrumentedLlmClient(
             ProviderId.Create("test"),
-            new StubLlmClient([
-                new TextDeltaEvent("t1", "hello"),
-                new StepFinishEvent(0, "stop", new Usage(10, 5)),
-                new StepFinishEvent(1, "stop", new Usage(0, 0)),
+            new Harbor.TestKit.ScriptedLlmClient(
+            [
+                new LlmEvent[]
+                {
+                    new TextDeltaEvent("t1", "hello"),
+                    new StepFinishEvent(0, "stop", new Usage(10, 5)),
+                    new StepFinishEvent(1, "stop", new Usage(0, 0)),
+                }
             ]),
             new MeterMetrics(),
             new ActivityTracer());
@@ -174,7 +178,7 @@ public class DecoratorTelemetryTests : IDisposable
     {
         var client = new InstrumentedLlmClient(
             ProviderId.Create("test"),
-            new ThrowingLlmClient(),
+            new Harbor.TestKit.ThrowingLlmClient(),
             new MeterMetrics(),
             new ActivityTracer());
 
@@ -238,7 +242,7 @@ public class DecoratorTelemetryTests : IDisposable
     public async Task ProviderRegistry_GetClient_ReturnsInstrumentedClient()
     {
         var registry = new InstrumentedProviderRegistry(
-            new SingleProviderRegistry(new StubLlmClient([]), ProviderId.Create("test")),
+            new SingleProviderRegistry(new Harbor.TestKit.ScriptedLlmClient([]), ProviderId.Create("test")),
             new MeterMetrics(),
             new ActivityTracer());
 
@@ -336,44 +340,6 @@ public class DecoratorTelemetryTests : IDisposable
                 Outcome.Throw => throw new InvalidOperationException("stub threw"),
                 _ => ToolResult.Success("stub ok"),
             });
-    }
-
-    private sealed class StubLlmClient(IReadOnlyList<LlmEvent> script) : ILlmClient
-    {
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            foreach (LlmEvent evt in script)
-            {
-                yield return evt;
-                await Task.Yield();
-            }
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-    }
-
-    private sealed class ThrowingLlmClient : ILlmClient
-    {
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.Yield();
-            throw new InvalidOperationException("stream blew up");
-#pragma warning disable CS0162
-            yield break;
-#pragma warning restore CS0162
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
     }
 
     private sealed class StubAgent(Func<string, Result> outcome, Action<CorrelationContext> onPrompt) : IAgent

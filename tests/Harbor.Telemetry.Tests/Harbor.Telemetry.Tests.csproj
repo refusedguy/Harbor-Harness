@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj"/>
+    <ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
