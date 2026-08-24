@@ -88,7 +88,15 @@ internal static class AppHost
     [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        // HOME may have been re-pointed by an embedding harness (E2E driver)
+        // AFTER .NET cached the special-folder table — GetFolderPath then
+        // returns EMPTY. $HOME env is always authoritative on Unix; fall back
+        // to it explicitly, and to the app base dir as a last resort.
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } p
+            ? p
+            : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } h
+                ? h
+                : AppContext.BaseDirectory;
         string harborDir = Path.Combine(homeDir, ".harbor");
         string sessionsDir = Path.Combine(harborDir, "sessions");
         Directory.CreateDirectory(harborDir);
