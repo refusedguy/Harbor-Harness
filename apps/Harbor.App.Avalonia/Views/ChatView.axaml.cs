@@ -58,6 +58,10 @@ public partial class ChatView : UserControl
         var vm = Vm;
         if (vm is null) return;
 
+        // B2: both composers (hero + docked) share this handler; refocus
+        // whichever box the user was typing in.
+        var originBox = sender as TextBox ?? InputBox;
+
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
@@ -68,7 +72,7 @@ public partial class ChatView : UserControl
             if (vm.SendCommand.CanExecute(null))
             {
                 vm.SendCommand.Execute(null);
-                InputBox.Focus();
+                originBox.Focus();
             }
         }
     }

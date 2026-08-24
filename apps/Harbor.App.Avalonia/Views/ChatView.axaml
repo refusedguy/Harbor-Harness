@@ -149,6 +149,33 @@
             <comp:EmptyState.Icon>
                 <PathIcon Data="{StaticResource IcMessage}" Width="40" Height="40" />
             </comp:EmptyState.Icon>
+
+            <!-- B2: hero composer — a real input in the center card while the
+                 transcript is empty. Shares InputText/SendCommand with the
+                 docked composer below; the docked one stays for continuity.
+                 Injected via the Cta SLOT: a direct child element would replace
+                 the whole UserControl content tree. -->
+            <comp:EmptyState.Cta>
+            <Border HorizontalAlignment="Center"
+                    Width="560"
+                    Background="{DynamicResource BgRailBrush}"
+                    BorderBrush="#12FFFFFF"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="4">
+                <TextBox x:Name="HeroInputBox"
+                         Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         PlaceholderText="Ask Harbor anything…  ⏎ send · ⇧⏎ newline"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         MaxHeight="120"
+                         FontSize="14"
+                         Padding="12,10"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         KeyDown="InputBox_KeyDown" />
+            </Border>
+            </comp:EmptyState.Cta>
         </comp:EmptyState>
 
         <!-- ════════════ Streaming / thinking indicators ════════════
