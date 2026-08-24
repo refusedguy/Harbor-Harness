@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Agents;
 /// <summary>
 ///     Default IAgent implementation. Stateful wrapper around <see cref="AgentLoop" />.
@@ -285,7 +286,19 @@ public sealed class DefaultAgent : IAgent
                 ResetAbortSource();
             }
 
-            await _sessionStore.AppendMessageAsync(State.SessionId, message, ct).ConfigureAwait(false);
+            // F14: a failed persist used to be invisible — the run continued,
+            // the reloaded context lacked the user's message (model answered
+            // stale history), and memory/disk/model diverged silently. Fail
+            // the run BEFORE any completion-source/state swap instead.
+            Result persisted = await _sessionStore.AppendMessageAsync(State.SessionId, message, ct)
+                .ConfigureAwait(false);
+            if (persisted.IsFailure)
+            {
+                _logger.LogError(
+                    "Failed to persist user message {MessageId} for session {SessionId}: {Error}",
+                    message.Id, State.SessionId, persisted.Error);
+                return Result.Failure($"Failed to persist prompt: {persisted.Error}");
+            }
 
             // Swap in a fresh per-run completion source so WaitForIdleAsync callers
             // awaiting the PREVIOUS source see THIS run's terminal result. The old
@@ -467,12 +480,14 @@ internal sealed class DefaultSessionContext : ISessionContext
 {
     private readonly List<AgentMessage> _messages;
     private readonly ISessionStore _store;
+    private readonly ILogger _logger;
 
     public DefaultSessionContext(
         Session session,
         IReadOnlyList<AgentMessage> messages,
         ISessionStore store,
-        Channel<AgentMessage> steeringQueue)
+        Channel<AgentMessage> steeringQueue,
+        ILogger? logger = null)
     {
         Session = session;
         // Pre-size the internal list to the known count. The previous `.ToList()` always
@@ -483,6 +498,7 @@ internal sealed class DefaultSessionContext : ISessionContext
             _messages.Add(messages[i]);
         }
         _store = store;
+        _logger = logger ?? NullLogger.Instance;
         SteeringQueue = steeringQueue;
     }
 
@@ -497,8 +513,17 @@ internal sealed class DefaultSessionContext : ISessionContext
 
     public async Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
     {
+        // Memory-first by design (F14 detail): the store append below must not
+        // lose its Result silently — a failed write means disk diverges from
+        // memory/model, so surface it in the log keyed by session.
         _messages.Add(message);
-        await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
+        Result persisted = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
+        if (persisted.IsFailure)
+        {
+            _logger.LogError(
+                "Failed to persist message {MessageId} for session {SessionId}: {Error}",
+                message.Id, Session.Id, persisted.Error);
+        }
     }
 
     public async Task UpdateStatsAsync(Usage usage, CancellationToken ct = default)
