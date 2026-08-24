@@ -12,17 +12,14 @@
     Domain models, value objects, events, and permission rules live in
     Harbor.Domain. Infrastructure helpers (ArrayPool, StringBuilderPool,
     FrozenSet materializers, MemoryPack round-trip helpers) live in
-    Harbor.Extensions.
+    Harbor.Extensions — consumers that need the pool helpers reference
+    Harbor.Extensions DIRECTLY (the facade does not re-export them).
 
-    This project references both via <ProjectReference>, so consumers that
-    reference Harbor.Abstractions continue to see the full surface area
-    transitively — no consumer code needs to change. The split enforces a
-    cleaner Clean Architecture dependency direction:
+    The split enforces a cleaner Clean Architecture dependency direction:
 
-        Harbor.Domain       → 0                (pure models, value objects)
-        Harbor.Extensions   → Harbor.Domain    (helpers using domain types)
+        Harbor.Domain       → Harbor.Abstractions.Contracts only
+        Harbor.Extensions   → 0                (pure BCL + NuGet helpers)
         Harbor.Abstractions → Harbor.Domain    (interfaces reference domain types)
-                          + → Harbor.Extensions (exposes pool helpers transitively)
 
     All existing namespaces are preserved in the moved files (e.g. files in
     Harbor.Domain/Models still declare `namespace Harbor.Abstractions.Models;`),
@@ -33,20 +30,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Abstractions</PackageId>
-    <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Domain (models) and Harbor.Extensions (pooling helpers) transitively.</Description>
+    <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Domain (models) transitively.</Description>
     <PackageTags>harbor;ai;agent;abstractions;interfaces</PackageTags>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!--
-    Facade: pull in the domain models and the infrastructure helpers. Any
-    consumer that references Harbor.Abstractions gets these transitively,
-    so `using Harbor.Abstractions.Models;` etc. keep resolving without
-    changes.
+    Facade: pull in the domain models the interfaces reference. Pool helpers
+    (Harbor.Extensions) are NOT re-exported — direct consumers add their own
+    reference, so `using Harbor.Abstractions.Extensions;` keeps resolving.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
-    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

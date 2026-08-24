@@ -7,12 +7,13 @@
 // This file adds the post-A1 split rules:
 //
 //   Harbor.Domain        → zero Harbor project references — pure domain models
-//   Harbor.Extensions    → references Harbor.Domain only — pool helpers may
-//                          use IMemoryPackable<T> types from Domain
-//   Harbor.Abstractions  → references Harbor.Domain + Harbor.Extensions only —
-//                          the facade; interfaces reference domain types,
-//                          pool helpers re-exported transitively for downstream
-//                          consumers
+//   Harbor.Extensions    → zero Harbor project references — pure BCL/NuGet
+//                          pool helpers; consumers reference it DIRECTLY
+//   Harbor.Abstractions  → references Harbor.Domain only — the facade;
+//                          interfaces reference domain types. Pool helpers are
+//                          NOT re-exported: direct consumers (Harbor.Application,
+//                          Harbor.Tools.Builtin) add their own Harbor.Extensions
+//                          reference
 //
 // Namespaces are preserved — Harbor.Abstractions.Models, .Events, .Permissions,
 // .Models.Identifiers, .Extensions — so consumer code requires zero using
@@ -84,11 +85,14 @@ public class AbstractionsSplitLayerRules
         "Harbor.Cli"
     ];
 
-    // The set of Harbor assemblies that Harbor.Extensions must NOT reference
-    // (it may reference Harbor.Domain only — pool helpers may use MemoryPackable
-    // types from Domain, e.g. via MemoryPackExtensions.ToMemoryPackBytes<T>).
+    // The set of Harbor assemblies that Harbor.Extensions must NOT reference.
+    // Harbor.Extensions is a pure BCL/NuGet helper layer (ArrayPool,
+    // StringBuilderPool, FrozenSet materializers, generic MemoryPack
+    // round-trips) — zero Harbor project references are allowed. Consumers
+    // that use the helpers reference Harbor.Extensions directly.
     private static readonly string[] ExtensionsForbiddenRefs =
     [
+        "Harbor.Domain",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
         "Harbor.Core",
@@ -119,11 +123,13 @@ public class AbstractionsSplitLayerRules
     ];
 
     // The set of Harbor assemblies that Harbor.Abstractions (the thin facade)
-    // must NOT reference. It may reference Harbor.Domain (interfaces reference
-    // domain types like Session, AgentMessage) and Harbor.Extensions (the
-    // facade re-exports pool helpers transitively for downstream consumers).
+    // must NOT reference. It may reference Harbor.Domain only (interfaces
+    // reference domain types like Session, AgentMessage). Pool helpers
+    // (Harbor.Extensions) are not re-exported — direct consumers reference
+    // Harbor.Extensions themselves.
     private static readonly string[] AbstractionsForbiddenRefs =
     [
+        "Harbor.Extensions",
         "Harbor.Terminal.Abstractions",
         "Harbor.Core",
         "Harbor.Application",
@@ -177,11 +183,9 @@ public class AbstractionsSplitLayerRules
 
     /// <summary>
     ///     Harbor.Extensions (infrastructure helpers: ArrayPool, StringBuilder
-    ///     pool, FrozenSet materializers, MemoryPack round-trip helpers) may
-    ///     reference Harbor.Domain only — never Harbor.Abstractions, never
-    ///     Application / Infrastructure / Presentation. Verifies the
-    ///     Infrastructure-as-helper layer keeps its dependency direction
-    ///     outward-only.
+    ///     pool, FrozenSet materializers, MemoryPack round-trip helpers) must
+    ///     reference ZERO Harbor assemblies — it is a pure BCL/NuGet helper
+    ///     layer. Consumers that use the helpers reference it directly.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -193,7 +197,7 @@ public class AbstractionsSplitLayerRules
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task Extensions_ReferencesOnlyDomain()
+    public async Task Extensions_HasZeroHarborProjectReferences()
     {
         var asm = typeof(StringBuilderPool).Assembly;
         await Assert.That(asm.GetName().Name).IsEqualTo("Harbor.Extensions");
@@ -203,11 +207,9 @@ public class AbstractionsSplitLayerRules
 
     /// <summary>
     ///     Harbor.Abstractions (the thin facade, interfaces-only after the A1
-    ///     split) may reference Harbor.Domain (interfaces reference domain
-    ///     types like <see cref="AgentMessage" />, <see cref="Session" />) and
-    ///     Harbor.Extensions (re-exports pool helpers transitively for
-    ///     downstream consumers) — nothing else. Verifies the facade doesn't
-    ///     reach past the Domain layer it forwards.
+    ///     split) may reference Harbor.Domain only (interfaces reference domain
+    ///     types like <see cref="AgentMessage" />, <see cref="Session" />) —
+    ///     pool helpers are not re-exported.
     /// </summary>
     /// <remarks>
     ///     <para>
@@ -217,7 +219,7 @@ public class AbstractionsSplitLayerRules
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task Abstractions_ReferencesOnlyDomainAndExtensions()
+    public async Task Abstractions_ReferencesOnlyDomain()
     {
         var asm = typeof(ITool).Assembly;
         await Assert.That(asm.GetName().Name).IsEqualTo("Harbor.Abstractions");
