@@ -1,6 +1,5 @@
 using Harbor.Abstractions.Events;
 using Harbor.Cli.Configuration;
-using Harbor.Core.Configuration;
 using Harbor.Core.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
@@ -26,12 +25,7 @@ internal static partial class HostBuilder
 
     public static IHost Build(params string[] args)
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string harborDir = Path.Combine(homeDir, ".harbor");
-        Directory.CreateDirectory(harborDir);
-        Directory.CreateDirectory(Path.Combine(harborDir, "sessions"));
-        Directory.CreateDirectory(Path.Combine(harborDir, "cache"));
-
+        string harborDir = EnsureHarborLayout();
         var builder = Host.CreateApplicationBuilder();
         ConfigureLogging(builder, args);
 
@@ -41,20 +35,38 @@ internal static partial class HostBuilder
 
         builder.Services.AddCliConfiguration(_loggerFactory, out var cliConfig);
 
-        builder.Services.AddHarbor(new HarborComposeOptions
-        {
-            HarborDir = harborDir,
-            DefaultStorageBackend = "jsonl",
-            EventBusScrollback = 1000,
-            EventBusMiddlewares = lf =>
-                new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
-            DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,
-            Configuration = builder.Configuration,
-            BootstrapLoggerFactory = () => _loggerFactory,
-        });
+        // Весь граф — один вызов. Специфика CLI выражена пресетом (§3.3).
+        builder.Services.AddHarbor(CliOptions(harborDir, cliConfig, builder.Configuration));
 
         builder.Services.AddCliCompositeConfig();
 
         return builder.Build();
+    }
+
+    /// <summary>CLI preset (di-design §3.3): jsonl storage, scrollback + TypeFilter middleware.</summary>
+    private static HarborComposeOptions CliOptions(
+        string harborDir,
+        CliConfig cliConfig,
+        Microsoft.Extensions.Configuration.IConfiguration configuration) => new()
+    {
+        HarborDir = harborDir,
+        DefaultStorageBackend = "jsonl",
+        EventBusScrollback = 1000,
+        EventBusMiddlewares = lf =>
+            new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
+        DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,
+        Configuration = configuration,
+        BootstrapLoggerFactory = () => _loggerFactory,
+    };
+
+    /// <summary>Create ~/.harbor and its session/cache subdirectories.</summary>
+    private static string EnsureHarborLayout()
+    {
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string harborDir = Path.Combine(homeDir, ".harbor");
+        Directory.CreateDirectory(harborDir);
+        Directory.CreateDirectory(Path.Combine(harborDir, "sessions"));
+        Directory.CreateDirectory(Path.Combine(harborDir, "cache"));
+        return harborDir;
     }
 }
