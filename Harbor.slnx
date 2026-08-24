@@ -87,6 +87,7 @@
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>
+        <Project Path="tests/Harbor.Transport.Remote.Tests/Harbor.Transport.Remote.Tests.csproj"/>
         <Project Path="tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj"/>
         <!-- Ipc.Tests re-included (sprint 5 A1): classes are [NotInParallel];
              the timing-flaky named-pipe event-stream class self-skips unless

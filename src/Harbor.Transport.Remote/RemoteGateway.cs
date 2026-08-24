@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.WebSockets;
 using System.Net.WebSockets;
 
 namespace Harbor.Transport.Remote;
@@ -19,9 +18,15 @@ public sealed class RemoteGateway
     public async Task StartAsync(int port, CancellationToken ct)
     {
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddWebSockets(options = { KeepAliveInterval = TimeSpan.FromSeconds(30) });
         _app = builder.Build();
-        _app.UseWebSockets();
+
+        // Single-endpoint gateway: keep-alive and buffering are configured
+        // directly on the WebSocket middleware; no service registration is
+        // needed for this shape.
+        _app.UseWebSockets(new WebSocketOptions
+        {
+            KeepAliveInterval = TimeSpan.FromSeconds(30)
+        });
         _app.Map("/ws", async ctx =>
         {
             if (!ctx.WebSockets.IsWebSocketRequest)
@@ -66,7 +71,7 @@ public sealed class RemoteGateway
     {
         if (_app is null) return;
         await _app.StopAsync(ct).ConfigureAwait(false);
-        _app.Dispose();
+        await _app.DisposeAsync().ConfigureAwait(false);
         _app = null;
     }
 }
