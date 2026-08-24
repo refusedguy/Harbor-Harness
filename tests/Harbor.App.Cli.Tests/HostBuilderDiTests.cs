@@ -135,7 +135,8 @@ public class HostBuilderDiTests
     public async Task Build_Registers_IPermissionService() => await Assert.That(Services.GetService<IPermissionService>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ISessionStore() => await Assert.That(Services.GetService<ISessionStore>()).IsNotNull();
+    public async Task Build_Registers_ISessionStore() =>
+        await Assert.That(Services.GetService<ISessionStore>()).IsTypeOf<Harbor.Storage.Jsonl.JsonlSessionStore>();
 
     [Test]
     public async Task Build_Registers_ITuiRenderer() => await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();
@@ -166,7 +167,9 @@ public class HostBuilderDiTests
         await Assert.That(config).IsNotNull();
         await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
         await Assert.That(config.DefaultProvider).IsEqualTo("kilocode");
-        await Assert.That(config.StorageBackend).IsEqualTo("jsonl");
+        // Persisted StorageBackend is empty-unset by default; the CLI preset
+        // supplies "jsonl" at composition time (pinned by the ISessionStore
+        // type assertion above).
     }
 
     [Test]

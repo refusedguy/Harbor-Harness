@@ -31,12 +31,16 @@ internal static class ConfigurationModule
         if (options.RegisterCommonConfigStore)
         {
             services.AddSingleton<ICommonConfigStore>(sp => new JsonCommonConfigStore(
-                new CommonConfig(),
+                new CommonConfig { ConfigDirectory = options.HarborDir },
                 sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
         }
 
         // ---- eager loads: exactly one read per file ------------------------
-        var commonStore = new JsonCommonConfigStore(new CommonConfig(), loggerFactory.CreateLogger<JsonCommonConfigStore>());
+        // Scoped to options.HarborDir (NOT the process-wide ~/HarborHome) so
+        // embedded hosts and tests get a hermetic config graph.
+        var commonStore = new JsonCommonConfigStore(
+            new CommonConfig { ConfigDirectory = options.HarborDir },
+            loggerFactory.CreateLogger<JsonCommonConfigStore>());
         var commonResult = commonStore.LoadAsync().GetAwaiter().GetResult();
         if (commonResult.IsFailure)
             ctx.Logger.LogWarning("Failed to load CommonConfig, using defaults: {Error}", commonResult.Error);

@@ -142,11 +142,12 @@ public sealed record CommonConfig
 
     /// <summary>
     ///     Session storage backend: <c>"jsonl"</c>, <c>"sqlite"</c>, or
-    ///     <c>"memory"</c>. Defaults to <c>"jsonl"</c>. Each app's
-    ///     composition root may honour an env-var override (e.g.
-    ///     <c>HARBOR_STORAGE</c>) that wins over this persisted value.
+    ///     <c>"memory"</c>. Empty (the default) means "not chosen" — each
+    ///     app's composition preset then supplies its own fallback (CLI:
+    ///     <c>jsonl</c>, desktop: <c>memory</c>), overridable via env (e.g.
+    ///     <c>HARBOR_STORAGE</c>) that wins over both.
     /// </summary>
-    public string StorageBackend { get; init; } = "jsonl";
+    public string StorageBackend { get; init; } = "";
 
     /// <summary>
     ///     Optional override for the session-storage directory. Empty (the
