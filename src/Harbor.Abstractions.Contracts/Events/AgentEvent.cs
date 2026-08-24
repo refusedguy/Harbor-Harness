@@ -21,6 +21,7 @@ namespace Harbor.Abstractions.Events;
 [JsonDerivedType(typeof(CompactionCompletedEvent), "compaction_completed")]
 [JsonDerivedType(typeof(CompactionFailedEvent), "compaction_failed")]
 [JsonDerivedType(typeof(SessionStatsEvent), "session_stats")]
+[JsonDerivedType(typeof(SessionChangedEvent), "session_changed")]
 public abstract record AgentEvent
 {
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
