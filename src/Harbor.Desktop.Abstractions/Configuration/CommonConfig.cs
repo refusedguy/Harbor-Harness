@@ -54,12 +54,21 @@ public sealed record CommonConfig
 {
     /// <summary>
     ///     Process-wide snapshot of the Harbor home directory (<c>~/.harbor</c>).
-    ///     Resolved ONCE at first access. Every consumer that needs the home
-    ///     must use this instead of calling
-    ///     <c>Environment.GetFolderPath(SpecialFolder.UserProfile)</c> directly —
-    ///     see the remarks on <see cref="ConfigDirectory"/>.
+    ///     Resolved lazily at first access; test hosts may pin it via
+    ///     <see cref="OverrideHarborHomeForTests" /> BEFORE building the app
+    ///     host (A11: per-class isolation — the previous process-wide
+    ///     one-shot snapshot froze the FIRST test class's home for every
+    ///     later class, cross-wiring their config files).
     /// </summary>
-    public static string HarborHome { get; } =
+    public static string HarborHome => _harborHomeOverride ?? ComputeDefaultHarborHome();
+
+    private static string? _harborHomeOverride;
+
+    /// <summary>Pin the harbor home for the current test scope. Not for production use.</summary>
+    public static void OverrideHarborHomeForTests(string harborDirectory)
+        => _harborHomeOverride = harborDirectory;
+
+    private static string ComputeDefaultHarborHome() =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } profile
                 ? profile
