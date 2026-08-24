@@ -160,4 +160,53 @@ public class CachingSystemPromptBuilderTests
             return Task.FromResult("built");
         }
     }
+    // ── A10 (sprint 5): tool-list mutation invalidation ──
+
+    [Test]
+    public async Task BuildAsync_ToolAddedBetweenCalls_RebuildsPrompt()
+    {
+        var inner = new CountingPromptBuilder();
+        var caching = new CachingSystemPromptBuilder(inner);
+
+        _ = await caching.BuildAsync(Context(Tool("alpha", """{"type":"object"}""")));
+        _ = await caching.BuildAsync(Context(
+            Tool("alpha", """{"type":"object"}"""),
+            Tool("beta", """{"type":"object"}""")));
+
+        // New tool → new rendered prompt → cache must miss.
+        await Assert.That(inner.BuildCalls).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task BuildAsync_ToolRemovedBetweenCalls_RebuildsPrompt()
+    {
+        var inner = new CountingPromptBuilder();
+        var caching = new CachingSystemPromptBuilder(inner);
+
+        _ = await caching.BuildAsync(Context(
+            Tool("alpha", """{"type":"object"}"""),
+            Tool("beta", """{"type":"object"}""")));
+        _ = await caching.BuildAsync(Context(Tool("alpha", """{"type":"object"}""")));
+
+        await Assert.That(inner.BuildCalls).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task BuildAsync_SameToolsDifferentOrder_TreatedAsChange()
+    {
+        // The key preserves order because the rendered system prompt lists
+        // tools in order — a reorder changes the prompt text.
+        var inner = new CountingPromptBuilder();
+        var caching = new CachingSystemPromptBuilder(inner);
+
+        _ = await caching.BuildAsync(Context(
+            Tool("alpha", """{"type":"object"}"""),
+            Tool("beta", """{"type":"object"}""")));
+        _ = await caching.BuildAsync(Context(
+            Tool("beta", """{"type":"object"}"""),
+            Tool("alpha", """{"type":"object"}""")));
+
+        await Assert.That(inner.BuildCalls).IsEqualTo(2);
+    }
+
 }
