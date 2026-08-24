@@ -1,60 +1,53 @@
 // AbstractionsSplitLayerRules.cs — layer-dependency rules for the
-// Harbor.Abstractions → Harbor.Domain + Harbor.Extensions + Harbor.Abstractions
-// interfaces-only split. Task A1, round-6 architecture polish.
+// Harbor.Abstractions contract split (F1 decoupling, sprint 5v2).
 //
-// The existing LayerDependencyTests.cs file covers the post-S1/S2 splits
-// — Harbor.Core → Application+Registries; Harbor.Tools.Builtin → 14 leaves.
-// This file adds the post-A1 split rules:
+// History: the round-6 A1 split created Harbor.Domain + Harbor.Extensions with
+// Harbor.Abstractions as a transitive facade. Sprint 5v2 F1 completed the
+// decoupling ("no compromises"):
 //
-//   Harbor.Domain        → zero Harbor project references — pure domain models
-//   Harbor.Extensions    → zero Harbor project references — pure BCL/NuGet
-//                          pool helpers; consumers reference it DIRECTLY
-//   Harbor.Abstractions  → references Harbor.Domain only — the facade;
-//                          interfaces reference domain types. Pool helpers are
-//                          NOT re-exported: direct consumers (Harbor.Application,
-//                          Harbor.Tools.Builtin) add their own Harbor.Extensions
-//                          reference
+//   Harbor.Abstractions.Contracts -> zero Harbor project references — pure
+//                                    contract models (former Harbor.Domain,
+//                                    project deleted)
+//   Harbor.Extensions             -> zero Harbor project references — pure
+//                                    BCL/NuGet pool helpers; consumers reference
+//                                    it DIRECTLY
+//   Harbor.Abstractions           -> references Harbor.Abstractions.Contracts
+//                                    only — the facade; interfaces reference
+//                                    contract types. Pool helpers are NOT
+//                                    re-exported.
 //
 // Namespaces are preserved — Harbor.Abstractions.Models, .Events, .Permissions,
 // .Models.Identifiers, .Extensions — so consumer code requires zero using
-// changes; types are picked up transitively via the Harbor.Abstractions facade.
-// These tests enforce that the dependency direction stays clean across future
-// edits.
+// changes; contract types are picked up transitively via the Harbor.Abstractions
+// facade. These tests enforce that the dependency direction stays clean across
+// future edits. See docs/adr/ADR-007 for the decision record.
 
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 namespace Harbor.Architecture.Tests;
 /// <summary>
-///     Layer-dependency rules for the Harbor.Abstractions god-project split
-///     (Task A1). See file header for the canonical allowed/forbidden matrix.
+///     Layer-dependency rules for the Harbor.Abstractions contract split.
+///     See file header for the canonical allowed/forbidden matrix and
+///     docs/adr/ADR-007 for the decision record.
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Why a separate file:</b> the existing
-///         <c>LayerDependencyTests.cs</c> covers the S1 (Harbor.Core →
-///         Application + Registries) and S2 (Harbor.Tools.Builtin → 14 leaves)
-///         splits. This file isolates the A1 split rules so a regression in
-///         either layer doesn't accidentally disable the other's invariants.
-///     </para>
-///     <para>
-///         <b>Namespaces preserved:</b> the moved files keep their original
-///         <c>
-///             namespace Harbor.Abstractions.{Models,Events,Permissions,
-///             Models.Identifiers,Extensions};
-///         </c>
-///         declarations so consumer code
-///         keeps compiling without <c>using</c> changes. The tests probe by
-///         assembly (via <c>typeof(...).Assembly</c>), not by namespace.
+///         The tests probe by assembly (via <c>typeof(...).Assembly</c>), not by
+///         namespace: the moved files keep their original
+///         <c>namespace Harbor.Abstractions.{Models,Events,Permissions,
+///         Models.Identifiers,Extensions};</c> declarations so consumer code
+///         keeps compiling without <c>using</c> changes.
 ///     </para>
 /// </remarks>
 public class AbstractionsSplitLayerRules
 {
-    // The full set of Harbor assemblies that Harbor.Domain must NOT reference.
-    // Harbor.Domain is the pure domain layer — zero Harbor project references
-    // are allowed. (Self-reference is structurally impossible.)
+    // The full set of Harbor assemblies that Harbor.Abstractions.Contracts must
+    // NOT reference. The contract layer is the bottom of the pyramid — zero
+    // Harbor project references are allowed.
     private static readonly string[] NoHarborProjectRefs =
     [
+        "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
@@ -92,6 +85,7 @@ public class AbstractionsSplitLayerRules
     // that use the helpers reference Harbor.Extensions directly.
     private static readonly string[] ExtensionsForbiddenRefs =
     [
+        "Harbor.Abstractions.Contracts",
         "Harbor.Domain",
         "Harbor.Abstractions",
         "Harbor.Terminal.Abstractions",
@@ -123,12 +117,13 @@ public class AbstractionsSplitLayerRules
     ];
 
     // The set of Harbor assemblies that Harbor.Abstractions (the thin facade)
-    // must NOT reference. It may reference Harbor.Domain only (interfaces
-    // reference domain types like Session, AgentMessage). Pool helpers
-    // (Harbor.Extensions) are not re-exported — direct consumers reference
-    // Harbor.Extensions themselves.
+    // must NOT reference. It may reference Harbor.Abstractions.Contracts only
+    // (interfaces reference contract types like Session, AgentMessage). Pool
+    // helpers (Harbor.Extensions) are not re-exported — direct consumers
+    // reference Harbor.Extensions themselves.
     private static readonly string[] AbstractionsForbiddenRefs =
     [
+        "Harbor.Domain",
         "Harbor.Extensions",
         "Harbor.Terminal.Abstractions",
         "Harbor.Core",
@@ -159,24 +154,25 @@ public class AbstractionsSplitLayerRules
     ];
 
     /// <summary>
-    ///     Harbor.Domain (pure domain models, value objects, events, permission
-    ///     rules) must reference ZERO Harbor assemblies. Verifies the Domain
-    ///     layer stays at the bottom of the dependency pyramid — any leak here
-    ///     would re-create the god-project coupling that the A1 split removed.
+    ///     Harbor.Abstractions.Contracts (pure contract models, value objects,
+    ///     events, permission rules — the former Harbor.Domain) must reference
+    ///     ZERO Harbor assemblies. Verifies the contract layer stays at the
+    ///     bottom of the dependency pyramid.
     /// </summary>
     /// <remarks>
     ///     <para>
     ///         Probed via <c>typeof(Session).Assembly</c> — <c>Session</c> is
-    ///         declared in <c>Harbor.Domain.dll</c> after the split (its
-    ///         <c>namespace Harbor.Abstractions.Models;</c> declaration is
-    ///         preserved so consumer code requires zero <c>using</c> changes).
+    ///         declared in <c>Harbor.Abstractions.Contracts.dll</c> after the
+    ///         F1 decoupling (its <c>namespace Harbor.Abstractions.Models;</c>
+    ///         declaration is preserved so consumer code requires zero
+    ///         <c>using</c> changes).
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task Domain_HasZeroHarborProjectReferences()
+    public async Task Contracts_HasZeroHarborProjectReferences()
     {
         var asm = typeof(Session).Assembly;
-        await Assert.That(asm.GetName().Name).IsEqualTo("Harbor.Domain");
+        await Assert.That(asm.GetName().Name).IsEqualTo("Harbor.Abstractions.Contracts");
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, NoHarborProjectRefs);
         await Assert.That(violations).IsEmpty();
     }
@@ -191,7 +187,7 @@ public class AbstractionsSplitLayerRules
     ///     <para>
     ///         Probed via <c>typeof(StringBuilderPool).Assembly</c> —
     ///         <c>StringBuilderPool</c> is declared in
-    ///         <c>Harbor.Extensions.dll</c> after the split (its
+    ///         <c>Harbor.Extensions.dll</c> (its
     ///         <c>namespace Harbor.Abstractions.Extensions;</c> declaration is
     ///         preserved so consumer code requires zero <c>using</c> changes).
     ///     </para>
@@ -206,20 +202,20 @@ public class AbstractionsSplitLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Abstractions (the thin facade, interfaces-only after the A1
-    ///     split) may reference Harbor.Domain only (interfaces reference domain
+    ///     Harbor.Abstractions (the thin facade, interfaces-only) may reference
+    ///     Harbor.Abstractions.Contracts only (interfaces reference contract
     ///     types like <see cref="AgentMessage" />, <see cref="Session" />) —
     ///     pool helpers are not re-exported.
     /// </summary>
     /// <remarks>
     ///     <para>
     ///         Probed via <c>typeof(ITool).Assembly</c> — <c>ITool</c> stays
-    ///         in <c>Harbor.Abstractions.dll</c> after the split (interfaces
-    ///         are the facade's reason for existing).
+    ///         in <c>Harbor.Abstractions.dll</c> (interfaces are the facade's
+    ///         reason for existing).
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task Abstractions_ReferencesOnlyDomain()
+    public async Task Abstractions_ReferencesOnlyContracts()
     {
         var asm = typeof(ITool).Assembly;
         await Assert.That(asm.GetName().Name).IsEqualTo("Harbor.Abstractions");

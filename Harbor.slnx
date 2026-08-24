@@ -16,7 +16,7 @@
 
     <Folder Name="/src/Abstractions/">
         <Project Path="src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
-        <Project Path="src/Harbor.Domain/Harbor.Domain.csproj"/>
+        <Project Path="src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
         <Project Path="src/Harbor.Logging/Harbor.Logging.csproj"/>
         <Project Path="src/Harbor.Application/Harbor.Application.csproj"/>
         <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj"/>

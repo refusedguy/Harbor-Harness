@@ -1,0 +1,245 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "definitions": {
+    "ArchiveFormat": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "None",
+        "TarGz",
+        "Zip"
+      ]
+    },
+    "BuildConfiguration": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "Debug",
+        "Release"
+      ]
+    },
+    "OutputFormat": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "Pretty",
+        "Json"
+      ]
+    },
+    "Host": {
+      "type": "string",
+      "enum": [
+        "AppVeyor",
+        "AzurePipelines",
+        "Bamboo",
+        "Bitbucket",
+        "Bitrise",
+        "GitHubActions",
+        "GitLab",
+        "Jenkins",
+        "Rider",
+        "SpaceAutomation",
+        "TeamCity",
+        "Terminal",
+        "TravisCI",
+        "VisualStudio",
+        "VSCode"
+      ]
+    },
+    "ExecutableTarget": {
+      "type": "string",
+      "enum": [
+        "ArchitectureTests",
+        "Clean",
+        "Compile",
+        "Doctor",
+        "Help",
+        "List",
+        "Publish",
+        "PublishArchive",
+        "PublishIpcClient",
+        "PublishIpcServer",
+        "Release",
+        "Restore",
+        "Test",
+        "What"
+      ]
+    },
+    "PublishVariant": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "FrameworkDependent",
+        "SelfContained",
+        "SingleFile",
+        "SingleFileSelfContained",
+        "Trimmed",
+        "AOT"
+      ]
+    },
+    "Verbosity": {
+      "type": "string",
+      "description": "",
+      "enum": [
+        "Verbose",
+        "Normal",
+        "Minimal",
+        "Quiet"
+      ]
+    },
+    "NukeBuild": {
+      "properties": {
+        "Continue": {
+          "type": "boolean",
+          "description": "Indicates to continue a previously failed build attempt"
+        },
+        "Help": {
+          "type": "boolean",
+          "description": "Shows the help text for this build assembly"
+        },
+        "Host": {
+          "description": "Host for execution. Default is 'automatic'",
+          "$ref": "#/definitions/Host"
+        },
+        "NoLogo": {
+          "type": "boolean",
+          "description": "Disables displaying the NUKE logo"
+        },
+        "Partition": {
+          "type": "string",
+          "description": "Partition to use on CI"
+        },
+        "Plan": {
+          "type": "boolean",
+          "description": "Shows the execution plan (HTML)"
+        },
+        "Profile": {
+          "type": "array",
+          "description": "Defines the profiles to load",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Root": {
+          "type": "string",
+          "description": "Root directory during build execution"
+        },
+        "Skip": {
+          "type": "array",
+          "description": "List of targets to be skipped. Empty list skips all dependencies",
+          "items": {
+            "$ref": "#/definitions/ExecutableTarget"
+          }
+        },
+        "Target": {
+          "type": "array",
+          "description": "List of targets to be invoked. Default is '{default_target}'",
+          "items": {
+            "$ref": "#/definitions/ExecutableTarget"
+          }
+        },
+        "Verbosity": {
+          "description": "Logging verbosity during build execution. Default is 'Normal'",
+          "$ref": "#/definitions/Verbosity"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "AppName": {
+          "type": "string",
+          "description": "App name to publish (default Harbor.App.Cli)"
+        },
+        "Archive": {
+          "description": "Archive format (None, TarGz, Zip)",
+          "$ref": "#/definitions/ArchiveFormat"
+        },
+        "Check": {
+          "type": "string",
+          "description": "Comma-separated doctor check ids to run (default: all)"
+        },
+        "Configuration": {
+          "description": "Configuration: Debug or Release",
+          "$ref": "#/definitions/BuildConfiguration"
+        },
+        "DryRun": {
+          "type": "boolean",
+          "description": "Show the plan (argv + planned artifacts) without executing"
+        },
+        "Format": {
+          "description": "Output format: Pretty (human) or Json (JSON-lines on stdout)",
+          "$ref": "#/definitions/OutputFormat"
+        },
+        "IncludePublish": {
+          "type": "boolean",
+          "description": "Include Publish commands in the 'what' plan for app changes"
+        },
+        "Minimal": {
+          "type": "boolean",
+          "description": "Minimal build — shorthand for all of the above = false"
+        },
+        "Out": {
+          "type": "string",
+          "description": "Duplicate the machine-readable stream to this file"
+        },
+        "Path": {
+          "type": "string",
+          "description": "Path for the 'what' command (file or directory)"
+        },
+        "ReleaseRepo": {
+          "type": "string",
+          "description": "GitHub repo (owner/name) for the Release target"
+        },
+        "ReleaseTag": {
+          "type": "string",
+          "description": "Release tag (e.g. v0.7.0) for the Release target"
+        },
+        "Runtime": {
+          "type": "string",
+          "description": "Runtime identifier (default linux-x64)"
+        },
+        "Solution": {
+          "type": "string",
+          "description": "Path to a solution file that is automatically loaded. Default is Harbor.slnx"
+        },
+        "Strict": {
+          "type": "boolean",
+          "description": "Exit 4 when 'what' confidence is low"
+        },
+        "TargetFramework": {
+          "type": "string",
+          "description": "Target framework (default net10.0)"
+        },
+        "Variant": {
+          "description": "Publish variant (FrameworkDependent, SelfContained, SingleFile, SingleFileSelfContained, Trimmed, AOT)",
+          "$ref": "#/definitions/PublishVariant"
+        },
+        "WithAllProviders": {
+          "type": "boolean",
+          "description": "Include all 4 LLM providers (false = Ollama only)"
+        },
+        "WithAllTools": {
+          "type": "boolean",
+          "description": "Include all 14 builtin tools (false = 6 core tools only)"
+        },
+        "WithPlugins": {
+          "type": "boolean",
+          "description": "Include plugin runtime (Roslyn) — not AOT-compatible"
+        },
+        "WithScripting": {
+          "type": "boolean",
+          "description": "Include scripting (Jint JS engine) — not AOT-compatible"
+        },
+        "WithSpectreTui": {
+          "type": "boolean",
+          "description": "Include Spectre.TUI interactive renderer — not AOT-compatible"
+        }
+      }
+    },
+    {
+      "$ref": "#/definitions/NukeBuild"
+    }
+  ]
+}

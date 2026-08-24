@@ -10,16 +10,17 @@
       - GlobalUsings.cs
 
     Domain models, value objects, events, and permission rules live in
-    Harbor.Domain. Infrastructure helpers (ArrayPool, StringBuilderPool,
+    Harbor.Abstractions.Contracts (formerly Harbor.Domain, deleted in the F1
+    decoupling). Infrastructure helpers (ArrayPool, StringBuilderPool,
     FrozenSet materializers, MemoryPack round-trip helpers) live in
     Harbor.Extensions — consumers that need the pool helpers reference
     Harbor.Extensions DIRECTLY (the facade does not re-export them).
 
     The split enforces a cleaner Clean Architecture dependency direction:
 
-        Harbor.Domain       → Harbor.Abstractions.Contracts only
-        Harbor.Extensions   → 0                (pure BCL + NuGet helpers)
-        Harbor.Abstractions → Harbor.Domain    (interfaces reference domain types)
+        Harbor.Abstractions.Contracts -> 0                (pure contracts)
+        Harbor.Extensions              -> 0                (pure BCL/NuGet)
+        Harbor.Abstractions            -> Contracts only   (interface signatures)
 
     All existing namespaces are preserved in the moved files (e.g. files in
     Harbor.Domain/Models still declare `namespace Harbor.Abstractions.Models;`),
@@ -30,18 +31,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Abstractions</PackageId>
-    <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Domain (models) transitively.</Description>
+    <Description>Harbor abstractions — interface contracts (tools, providers, sessions, agents, events, plugins). References Harbor.Abstractions.Contracts (models) transitively.</Description>
     <PackageTags>harbor;ai;agent;abstractions;interfaces</PackageTags>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!--
-    Facade: pull in the domain models the interfaces reference. Pool helpers
+    Facade: pull in the contract models the interfaces reference. Pool helpers
     (Harbor.Extensions) are NOT re-exported — direct consumers add their own
     reference, so `using Harbor.Abstractions.Extensions;` keeps resolving.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

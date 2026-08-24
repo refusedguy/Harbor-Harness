@@ -12,7 +12,7 @@
     <Project Path="src/Harbor.Core/Harbor.Core.csproj" />
     <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj" />
     <Project Path="src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj" />
-    <Project Path="src/Harbor.Domain/Harbor.Domain.csproj" />
+    <Project Path="src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj" />
     <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj" />
     <Project Path="src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj" />
     <Project Path="src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj" />

@@ -419,7 +419,9 @@ public class LayerDependencyTests
         // tests skip rather than fail).
         string[] expected =
         [
-            "Harbor.Domain",
+            // Harbor.Domain deleted in the F1 decoupling — its content lives in
+            // Harbor.Abstractions.Contracts now (see AbstractionsSplitLayerRules).
+            "Harbor.Abstractions.Contracts",
             "Harbor.Extensions",
             "Harbor.Abstractions",
             "Harbor.Terminal.Abstractions",
