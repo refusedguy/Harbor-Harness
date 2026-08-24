@@ -10,7 +10,8 @@ namespace Harbor.Ipc.Tests;
 ///     <c>[Key]</c> ordering bugs and missing <c>[Union]</c> tags early
 ///     — long before they reach a non-.NET client.
 /// </summary>
-public class ProtocolSerializationTests
+[NotInParallel]
+    public class ProtocolSerializationTests
 {
     /// <summary>
     ///     Every concrete HarborRequest subtype must round-trip through
@@ -162,4 +163,5 @@ public class ProtocolSerializationTests
         await Assert.That(restored!.Count).IsEqualTo(2);
         await Assert.That(restored[0].Id).IsEqualTo(sessions[0].Id);
     }
+
 }

@@ -29,7 +29,8 @@ namespace Harbor.Ipc.Tests;
 ///         parallel without colliding on the same socket file.
 ///     </para>
 /// </remarks>
-public class IpcRoundTripTests
+[NotInParallel]
+    public class IpcRoundTripTests
 {
     /// <summary>
     ///     CreateSession should round-trip through the server and return
@@ -104,6 +105,10 @@ public class IpcRoundTripTests
             await client.ConnectAsync();
 
             var result = await client.ListProvidersAsync();
+            if (result.IsFailure)
+            {
+                System.IO.File.WriteAllText("/tmp/kilo/lp-err.txt", result.Error);
+            }
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value).IsNotNull();
         }

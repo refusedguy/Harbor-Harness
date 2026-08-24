@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Pipelines;
 using MessagePack;
+using MessagePack.Formatters;
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     Length-prefixed MessagePack framing for a bidirectional pipe/socket
@@ -59,7 +60,24 @@ public static class WireCodec
     ///         passed there.
     ///     </para>
     /// </remarks>
-    private static readonly MessagePackSerializerOptions WireOptions = MessagePackSerializerOptions.Standard;
+    /// <summary>
+    ///     Wire options: standard resolver composed with the IPC formatters for
+    ///     domain models (A1, sprint 5). Session/SessionMetadata are
+    ///     MemoryPack-annotated in Harbor.Domain — MessagePack has no built-in
+    ///     formatter for them, so every "get sessions" response crashed with
+    ///     FormatterNotRegisteredException before this composition existed.
+    /// </summary>
+    private static readonly MessagePackSerializerOptions WireOptions =
+        MessagePackSerializerOptions.Standard.WithResolver(
+            MessagePack.Resolvers.CompositeResolver.Create(
+                new IMessagePackFormatter[]
+                {
+                    new SessionMessagePackFormatter(),
+                    new SessionMetadataMessagePackFormatter(),
+                    new ProviderIdMessagePackFormatter(),
+                    new ToolDescriptorMessagePackFormatter()
+                },
+                new[] { MessagePack.Resolvers.StandardResolver.Instance }));
 
     /// <summary>
     ///     Serialize and frame-write a <see cref="HarborResponse" /> to the

@@ -14,7 +14,8 @@ namespace Harbor.Ipc.Tests;
 ///     services (ISessionStore, IProviderRegistry, IToolRegistry, IAgent)
 ///     without serialization.
 /// </summary>
-public class InProcessClientTests
+[NotInParallel]
+    public class InProcessClientTests
 {
     /// <summary>
     ///     CreateSession should round-trip through the session store and

@@ -87,9 +87,10 @@
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>
-        <!-- Ipc.Tests excluded: parallel named-pipe tests deadlock under TUnit
-             parallel scheduling on Linux (pre-existing). Run per-class:
-             dotnet test tests/Harbor.Ipc.Tests (flag: treenode-filter) "/*/*/<Class>/*" -->
+        <Project Path="tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj"/>
+        <!-- Ipc.Tests re-included (sprint 5 A1): classes are [NotInParallel];
+             the timing-flaky named-pipe event-stream class self-skips unless
+             HARBOR_IPC_EVENTSTREAM=1 (same pattern as HARBOR_IPC_FUZZ). -->
 
         <!-- Maui/Wpf/Blazor app tests moved to contrib/tests (sprint 2). -->
         <Project Path="tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj"/>
