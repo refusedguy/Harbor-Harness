@@ -605,7 +605,10 @@ public sealed class AgentLoop : IAgentLoop
         if (toolCalls.Count > 0)
         {
             var executed = await _toolDispatcher.ExecuteAsync(
-                toolCalls, session, partial, agent, ct).ConfigureAwait(false);
+                toolCalls, session, partial, agent, ct,
+                agent.ToolTimeoutSeconds is { } seconds
+                    ? TimeSpan.FromSeconds(seconds)
+                    : null).ConfigureAwait(false);
             results.AddRange(executed.Results);
         }
 

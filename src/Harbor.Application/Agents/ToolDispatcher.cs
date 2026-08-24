@@ -62,7 +62,8 @@ internal sealed class ToolDispatcher(
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout = null)
     {
         bool hasSequential = HasSequentialTool(toolCalls);
 
@@ -72,7 +73,7 @@ internal sealed class ToolDispatcher(
         {
             foreach (var tc in toolCalls)
             {
-                var result = await ExecuteSingleAsync(tc, session, partial, agent, ct).ConfigureAwait(false);
+                var result = await ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout).ConfigureAwait(false);
                 results.Add(result);
             }
         }
@@ -88,7 +89,7 @@ internal sealed class ToolDispatcher(
                 tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(toolCalls.Count);
                 for (int i = 0; i < toolCalls.Count; i++)
                 {
-                    tasks[i] = ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct);
+                    tasks[i] = ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
                 }
 
                 var resolved = await Task.WhenAll(
@@ -146,7 +147,8 @@ internal sealed class ToolDispatcher(
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout = null)
     {
         using var activity = Source.StartActivity("Tool.Execute");
         activity?.SetTag(ToolNameTag, toolCall.ToolName);
@@ -187,8 +189,21 @@ internal sealed class ToolDispatcher(
             toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
         logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
 
-        try
+        // A9: arm the per-call deadline (if configured). The linked token is
+        // passed to permission check AND execution so a hanging tool's awaits
+        // observe the cancel and the dispatcher can synthesize an error entry.
+        CancellationTokenSource? timeoutCts = null;
+        if (toolExecutionTimeout is { } deadline)
         {
+            timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(deadline);
+        }
+
+        using (timeoutCts)
+        {
+            CancellationToken effectiveCt = timeoutCts?.Token ?? ct;
+            try
+            {
             var tool = toolResult.Value;
 
             // Argument validation — returns a tool error instead of letting the
@@ -205,7 +220,7 @@ internal sealed class ToolDispatcher(
 
             // Permission check
             var permResponse = await permissions.CheckAsync(
-                agent.Name.Value, toolCall.ToolName, toolCall.Args, ct).ConfigureAwait(false);
+                agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt).ConfigureAwait(false);
 
             if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
             {
@@ -231,7 +246,7 @@ internal sealed class ToolDispatcher(
                 partial.Id,
                 toolCall.Id,
                 agent.Name.Value,
-                ct,
+                effectiveCt,
                 session.Messages,
                 async (update, c) =>
                 {
@@ -258,11 +273,11 @@ internal sealed class ToolDispatcher(
                 async (req, c) => (await permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
                 null!);
 
-            var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);
+            var result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
 
             logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, result, result.IsError), ct).ConfigureAwait(false);
+                toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
 
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
         }
@@ -273,6 +288,20 @@ internal sealed class ToolDispatcher(
                 toolCall.Id, cancelled, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
         }
+        catch (OperationCanceledException oce) when (!ct.IsCancellationRequested)
+        {
+            // A9: the per-call deadline fired (outer token NOT cancelled) —
+            // synthesize an error entry so the loop keeps going.
+            activity?.SetStatus(ActivityStatusCode.Error, "tool timed out");
+            string message = toolExecutionTimeout is { } t
+                ? $"Tool '{toolCall.ToolName}' timed out after {t.TotalSeconds:0.#}s."
+                : "Tool execution was cancelled.";
+            logger.LogWarning(oce, "Tool {ToolName} (call {CallId}) hit its execution deadline", toolCall.ToolName, toolCall.Id);
+            var timeout = ToolResult.Error(message);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                toolCall.Id, timeout, true), ct).ConfigureAwait(false);
+            return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, timeout);
+        }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
@@ -280,8 +309,9 @@ internal sealed class ToolDispatcher(
             logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             var errored = ToolResult.Error($"Tool execution failed: {ex.Message}");
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, errored, true), ct).ConfigureAwait(false);
+                toolCall.Id, errored, true), effectiveCt).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
+        }
         }
     }
 }
