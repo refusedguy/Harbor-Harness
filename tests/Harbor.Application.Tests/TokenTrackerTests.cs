@@ -79,7 +79,7 @@ public class TokenTrackerTests
         }
 
         // Compaction prunes the head externally.
-        var pruned = bigHistory.Skip(45).ToList();
+        var pruned = bigHistory.GetRange(45, bigHistory.Count - 45);
 
         // Old cache says huge; rescan must shrink to the tail's estimate.
         await Assert.That(tracker.ShouldCompact(pruned, Model(1_000_000))).IsFalse();

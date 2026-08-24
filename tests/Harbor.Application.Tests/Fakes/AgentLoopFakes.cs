@@ -155,9 +155,19 @@ public sealed class FakeToolRegistry(params ITool[] tools) : IToolRegistry
             ? Result.Success()
             : Result.Failure($"Tool '{name.Value}' is not registered.");
 
-    private IReadOnlyList<ToolDescriptor> Snapshot() =>
-        [.. _tools.Values.Select(t => new ToolDescriptor(
-            t.Name, t.DisplayName, t.Description, t.ParameterSchema, t.ExecutionMode, t.PromptSnippet, t.PromptGuidelines))];
+    private IReadOnlyList<ToolDescriptor> Snapshot()
+    {
+        // A6 rebuild fix: ZLinq drop-in breaks `..` spread over Select() on
+        // arrays — materialize explicitly instead.
+        var list = new List<ToolDescriptor>(_tools.Values.Count);
+        foreach (var t in _tools.Values)
+        {
+            list.Add(new ToolDescriptor(
+                t.Name, t.DisplayName, t.Description, t.ParameterSchema,
+                t.ExecutionMode, t.PromptSnippet, t.PromptGuidelines));
+        }
+        return list;
+    }
 }
 
 public sealed class FakeEventBus : IEventBus

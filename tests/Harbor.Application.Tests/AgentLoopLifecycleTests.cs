@@ -119,7 +119,7 @@ public class AgentLoopLifecycleTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(counter.Executions).IsEqualTo(1);
-        await Assert.That(session.Messages.OfType<ToolResultMessage>().Count()).IsEqualTo(1);
+        await Assert.That(System.Linq.Enumerable.Count(session.Messages.OfType<ToolResultMessage>())).IsEqualTo(1);
     }
 
     [Test]

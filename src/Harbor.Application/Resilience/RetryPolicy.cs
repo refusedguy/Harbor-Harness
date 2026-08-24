@@ -81,7 +81,7 @@ public sealed class RetryPolicy : IRetryPolicy
     ///     Classify an exception as transient (<see langword="true" />, may be
     ///     retried) or fatal (<see langword="false" />, propagate immediately).
     /// </summary>
-    internal static bool IsTransient(Exception ex, out TimeSpan? retryAfter)
+    public static bool IsTransient(Exception ex, out TimeSpan? retryAfter)
     {
         retryAfter = null;
 
