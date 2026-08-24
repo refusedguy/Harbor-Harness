@@ -247,7 +247,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // bar showed "0 msgs" after messages were sent.
         Select(s => s.Status, v => StatusText = v);
         Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Model, v => ModelLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Model, v => ModelLabel = PrettifyModel(v));
         Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
         Select(s => s.Cost.TokensIn, v => TokensIn = v);
         Select(s => s.Cost.TokensOut, v => TokensOut = v);
@@ -289,6 +289,23 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     public string StatusBrushKey => StatusMappers.StatusToBrushKey(StatusText);
     public string TokensInText => StatusMappers.TokensToCompact(TokensIn);
     public string TokensOutText => StatusMappers.TokensToCompact(TokensOut);
+    /// <summary>C2: raw provider ids like "kilo-auto/free" render as the
+    /// friendly tail ("kilo free") instead of plumbing jargon.</summary>
+    private static string PrettifyModel(string? model)
+    {
+        if (string.IsNullOrEmpty(model))
+        {
+            return "—";
+        }
+
+        if (model.StartsWith("kilo-auto/", StringComparison.Ordinal))
+        {
+            return model.Replace("kilo-auto/", "kilo ", StringComparison.Ordinal);
+        }
+
+        return model;
+    }
+
     public string CostText => StatusMappers.CostToUsd(CostUsd);
     public string RunningDurationText => _runningStartTime is { } start ? FormatDuration(DateTime.UtcNow - start) : string.Empty;
     public string AnimatedCostText => StatusMappers.CostToUsd(_displayCost);
