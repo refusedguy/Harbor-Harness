@@ -593,6 +593,18 @@ public sealed class AgentLoop : IAgentLoop
     {
         while (session.SteeringQueue.Reader.TryRead(out var steerMsg))
         {
+            // G2: the steering channel is one-per-agent and outlives session
+            // rebinds. A message authored against another session must never
+            // enter this history — least of all be persisted under this
+            // session's id.
+            if (!string.Equals(steerMsg.SessionId, session.Session.Id, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "Dropped steering message {MessageId} authored for session {MessageSession} while agent is bound to {Session}",
+                    steerMsg.Id, steerMsg.SessionId, session.Session.Id);
+                continue;
+            }
+
             await session.AppendMessageAsync(steerMsg, ct).ConfigureAwait(false);
             _tokenTracker.RecordAppendedMessage(steerMsg);
         }

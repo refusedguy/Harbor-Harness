@@ -379,7 +379,30 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     /// <param name="session">The session to bind to.</param>
     /// <param name="agent">The agent definition to use.</param>
-    public void Initialize(Session session, AgentDefinition agent) => State = AgentState.Idle(session.Id, agent);
+    public void Initialize(Session session, AgentDefinition agent)
+    {
+        // G2: the steering channel is created once per agent lifetime and
+        // survives rebinds. Stale messages authored for a PREVIOUS session
+        // would otherwise be drained into the new session's history on its
+        // first run. Same-session rebind keeps queued steering intact.
+        if (State is not null && !string.Equals(State.SessionId, session.Id, StringComparison.Ordinal))
+        {
+            int dropped = 0;
+            while (_steeringQueue.Reader.TryRead(out _))
+            {
+                dropped++;
+            }
+
+            if (dropped > 0)
+            {
+                _logger.LogWarning(
+                    "Dropped {Count} stale steering message(s) while rebinding agent from session {OldSession} to {NewSession}",
+                    dropped, State.SessionId, session.Id);
+            }
+        }
+
+        State = AgentState.Idle(session.Id, agent);
+    }
 
     /// <summary>
     ///     Release all resources held by this agent: event-bus subscription, abort source,
