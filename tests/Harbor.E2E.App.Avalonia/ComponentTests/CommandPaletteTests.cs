@@ -21,7 +21,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class CommandPaletteTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("CommandPalette").ConfigureAwait(false);
 
     /// <summary>
     ///     Open (Ctrl+P equivalent): the palette is visible with a search

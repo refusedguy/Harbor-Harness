@@ -32,7 +32,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class ChatViewTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("ChatView").ConfigureAwait(false);
 
     /// <summary>
     ///     Empty state: should show "What are we building today?" placeholder, the

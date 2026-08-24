@@ -33,7 +33,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class OnboardingTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("Onboarding").ConfigureAwait(false);
 
     /// <summary>Open a fresh onboarding window bound to a fresh VM at the given step.</summary>
     private async Task<(OnboardingWindow window, OnboardingViewModel vm)> OpenOnboardingAsync(int step)

@@ -23,7 +23,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class StatusBarTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("StatusBar").ConfigureAwait(false);
 
     /// <summary>
     ///     Idle state: grey status dot + 'idle' text.

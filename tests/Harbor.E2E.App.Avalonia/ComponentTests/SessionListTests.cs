@@ -28,7 +28,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class SessionListTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("SessionList").ConfigureAwait(false);
 
     /// <summary>Create a persisted session with the given title (real store path).</summary>
     private static async Task<string> SeedSessionAsync(string title)
@@ -40,36 +40,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(renamed).IsTrue();
         return session.Id;
     }
-
-    /// <summary>
-    ///     Select the titled row so the ListBox scrolls it into view — with
-    ///     many accumulated sessions the target can sit below the virtualized
-    ///     viewport, where its TextBlock is not realized.
-    /// </summary>
-    private static void Reveal(string title) => UI(() =>
-    {
-        var item = Vm.Sessions.Sessions.FirstOrDefault(s => s.Title == title);
-        if (item is null)
-        {
-            return;
-        }
-
-        // Select DIRECTLY on the ListBox: going through the VM property would
-        // fire OpenCommand → OpenSessionAsync (full session switch), whose
-        // rebind churn races the very render pass we need for text probes.
-        var flyout = Driver.MainWindow.GetVisualDescendants()
-            .OfType<global::Harbor.App.Avalonia.Views.Shell.SessionsFlyoutView>()
-            .FirstOrDefault();
-        var list = flyout?.GetVisualDescendants().OfType<global::Avalonia.Controls.ListBox>().FirstOrDefault();
-        if (list is not null)
-        {
-            int index = Vm.Sessions.Sessions.IndexOf(item);
-            if (index >= 0)
-            {
-                list.SelectedIndex = index;
-            }
-        }
-    });
 
     /// <summary>Reload the sidebar from the store and let the UI settle.</summary>
     private static async Task RefreshSidebarAsync()
@@ -244,12 +214,14 @@ public sealed class SessionListTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
-    [Skip("order-dependent: seeds sessions into shared store, needs per-test store isolation")]
     public async Task SessionList_Deleted_RemovedFromList()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsSessionsFlyoutOpen = true);
+        // A11: a previous test's search filter must not leak into this
+        // class's store-driven refreshes.
+        UI(() => Vm.Sessions.SearchText = string.Empty);
         string keepId = await SeedSessionAsync("Keep me").ConfigureAwait(false);
         string deleteId = await SeedSessionAsync("Delete me").ConfigureAwait(false);
         await RefreshSidebarAsync().ConfigureAwait(false);
@@ -260,7 +232,6 @@ public sealed class SessionListTests : ComponentTestBase
         await Assert.That(deleted).IsTrue();
         _ = keepId;
         await RefreshSidebarAsync().ConfigureAwait(false);
-        Reveal("Keep me");
         // Scrolling a virtualized ListBox into view needs its own layout+render
         // pass before the row container exists for text probes.
         await Driver.ShowMainWindowAsync().ConfigureAwait(false);
@@ -269,15 +240,26 @@ public sealed class SessionListTests : ComponentTestBase
         // render so virtualized ListBox containers realize deterministically;
         // a plain text poll can starve when no render tick fires.
         bool hasKeep = false;
-        for (int i = 0; i < 10 && !hasKeep; i++)
+        for (int i = 0; i < 20 && !hasKeep; i++)
         {
             await Driver.ShowMainWindowAsync().ConfigureAwait(false);
             hasKeep = Driver.GetAllVisibleText().Contains("Keep me", StringComparison.Ordinal);
+            if (!hasKeep)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
         }
         await Assert.That(hasKeep).IsTrue();
 
-        var hasDeleted = Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal);
-        await Assert.That(hasDeleted).IsFalse();
+        // The "Opened: Delete me" toast lingers ~4s and mentions the deleted
+        // title; wait it out before asserting absence.
+        bool toastGone = false;
+        for (int i = 0; i < 40 && !toastGone; i++)
+        {
+            await Task.Delay(150).ConfigureAwait(false);
+            toastGone = !Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal);
+        }
+        await Assert.That(toastGone).IsTrue();
 
         var path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
 
@@ -291,7 +273,6 @@ public sealed class SessionListTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
-    [Skip("order-dependent: seeds sessions into shared store, needs per-test store isolation")]
     public async Task SessionList_WithGitInfo_ShowsBranchBadge()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -299,17 +280,21 @@ public sealed class SessionListTests : ComponentTestBase
         // Seeded with workingDirectory = this repo (a real git worktree), so
         // RefreshAsync attaches actual branch/dirty info from the manager.
         UI(() => Vm.IsSessionsFlyoutOpen = true);
+        UI(() => Vm.Sessions.SearchText = string.Empty);
         await SeedSessionAsync("Feature work").ConfigureAwait(false);
         await RefreshSidebarAsync().ConfigureAwait(false);
-        Reveal("Feature work");
         // Same virtualization note as SessionList_Deleted: tick after reveal.
         await Driver.ShowMainWindowAsync().ConfigureAwait(false);
 
         bool hasFeature = false;
-        for (int i = 0; i < 10 && !hasFeature; i++)
+        for (int i = 0; i < 20 && !hasFeature; i++)
         {
             await Driver.ShowMainWindowAsync().ConfigureAwait(false);
             hasFeature = Driver.GetAllVisibleText().Contains("Feature work", StringComparison.Ordinal);
+            if (!hasFeature)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
         }
         await Assert.That(hasFeature).IsTrue();
 

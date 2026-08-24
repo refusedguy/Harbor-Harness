@@ -951,7 +951,7 @@ public sealed class AvaloniaUiTests
             }
         });
         // Poll for the thinking indicator instead of a fixed delay.
-        bool sawThinking = await Driver.WaitForTextAsync("Thinking", TimeSpan.FromSeconds(2))
+        bool sawThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawThinking).IsTrue();
 

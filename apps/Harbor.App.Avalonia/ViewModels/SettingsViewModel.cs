@@ -113,6 +113,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </summary>
     public ThemeSettingsViewModel ThemeSettings { get; }
 
+    /// <summary>Diagnostics (A11): theme as seen by the LAST store load.</summary>
+    public string DebugPersistedTheme => _common.Theme;
+
+    /// <summary>Diagnostics (A11): directory the common store reads/writes.</summary>
+    public string DebugConfigDirectory => _common.ConfigDirectory;
+
     /// <summary>
     ///     Per-provider configuration rows (API key input + auth status +
     ///     Save / Test commands). Built from the registry + persisted
