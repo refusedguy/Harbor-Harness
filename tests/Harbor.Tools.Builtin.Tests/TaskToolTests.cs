@@ -134,7 +134,7 @@ public class TaskToolTests
     }
 
     [Test]
-    public async Task ExecuteAsync_ValidSubAgent_ReturnsQueuedMessage()
+    public async Task ExecuteAsync_ValidSubAgent_HonestNotImplementedError()
     {
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
@@ -143,9 +143,11 @@ public class TaskToolTests
         var args = Args(("agent", "explore"), ("prompt", "find all TODO comments in src/"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
-        await Assert.That(result.IsError).IsFalse();
+        // G4: the tool must never fabricate a "queued" success — no sub-agent
+        // runner exists. A valid agent still yields an explicit honest error.
+        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result.Output).Contains("not implemented");
         await Assert.That(result.Output).Contains("explore");
-        await Assert.That(result.Output).Contains("queued");
     }
 
     [Test]
@@ -192,12 +194,15 @@ public class TaskToolTests
     }
 
     [Test]
-    public async Task PromptGuidelines_ContainsSubAgentExamples()
+    public async Task PromptGuidelines_WarnNotImplemented()
     {
         var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         await Assert.That(tool.PromptGuidelines.Count).IsGreaterThan(0);
-        // The guidelines should mention at least one of the builtin sub-agents.
-        bool mentionsExplore = tool.PromptGuidelines.Any(g => g.Contains("explore"));
-        await Assert.That(mentionsExplore).IsTrue();
+        // G4: guidelines must not advertise delegation the build cannot do —
+        // they must steer the model away from calling the tool.
+        bool warnsNotImplemented = tool.PromptGuidelines.Any(g =>
+            g.Contains("not functional", StringComparison.OrdinalIgnoreCase) ||
+            g.Contains("not implemented", StringComparison.OrdinalIgnoreCase));
+        await Assert.That(warnsNotImplemented).IsTrue();
     }
 }

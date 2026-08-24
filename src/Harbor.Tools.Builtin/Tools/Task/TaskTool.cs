@@ -4,27 +4,11 @@ using Result = CSharpFunctionalExtensions.Result;
 
 namespace Harbor.Tools.Builtin;
 /// <summary>
-///     Delegates work to a sub-agent (Command). Long-running: fully async, cancel via context.Abort.
-///     Sequential so it doesn't race side-effect tools in the same turn.
+///     Sub-agent delegation surface. VALIDATES the requested sub-agent (name,
+///     registry membership, IsSubAgent flag) but does NOT run it yet — a real
+///     sub-agent runner does not exist in this build, so execution fails with an
+///     explicit "not implemented" error instead of fabricating success (G4).
 /// </summary>
-/// <remarks>
-///     <para>
-///         The tool ENQUEUES the sub-agent task on the parent session's steering queue
-///         (carried via <see cref="ToolContext.Messages" /> snapshot is not the queue itself —
-///         the queue is resolved at runtime by the agent loop) and returns immediately with a
-///         "queued" acknowledgement. The actual sub-agent invocation runs on a subsequent turn
-///         when the agent loop drains the queue. This matches the design intent in
-///         <c>docs/FEATURE_RESEARCH.md</c> §S2.4 ("steering vs queued prompts") and keeps the
-///         tool non-blocking so the parent agent can continue with other tool calls in the
-///         same turn.
-///     </para>
-///     <para>
-///         Pre-conditions enforced here: agent name parses, agent exists in
-///         <see cref="IAgentRegistry" />, and the agent is flagged <c>IsSubAgent</c>. The
-///         full sub-agent run (session creation, provider streaming, message extraction) is
-///         deferred to the queue consumer.
-///     </para>
-/// </remarks>
 public sealed class TaskTool : ITool
 {
     private readonly IAgentRegistry _agents;
@@ -39,17 +23,14 @@ public sealed class TaskTool : ITool
     public ToolName Name => ToolName.Create("task");
     public string DisplayName => "Task";
     public string Description =>
-        "Delegate a task to a sub-agent. The sub-agent runs in its own context with limited permissions. " +
-        "Use this to parallelize work, isolate file operations, or use specialized agents like 'explore'.";
+        "Delegate a task to a sub-agent (currently NOT functional: sub-agent execution is not implemented " +
+        "in this build and calls return an error). Reserved for future use.";
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-    public string? PromptSnippet => "task: Delegate to a sub-agent (e.g. explore, plan, code)";
+    public string? PromptSnippet => "task: sub-agent delegation (not implemented in this build — do not call)";
 
     public IReadOnlyList<string> PromptGuidelines { get; } =
     [
-        "Use `task` for sub-tasks that should run in isolation",
-        "Common sub-agents: `explore` (fast read-only codebase exploration), `plan` (read-only planning)",
-        "Sub-agents have their own context window — they don't see this conversation",
-        "Provide a clear, self-contained prompt to the sub-agent"
+        "`task` is not functional yet — never call it; do the work yourself with the available tools"
     ];
 
     public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
@@ -117,22 +98,14 @@ public sealed class TaskTool : ITool
                 $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be used with task."));
         }
 
-        _logger.LogInformation("Queued sub-agent task: {Agent}", agentName);
-
-        // Enqueue semantics: the parent agent loop drains the steering queue on the next
-        // turn and invokes the sub-agent with the supplied prompt. Returning a "queued"
-        // acknowledgement keeps the tool non-blocking and lets the parent agent continue
-        // with other tool calls in the same turn.
-        return Task.FromResult(ToolResult.Success(
-            $"Task queued for sub-agent '{agentName}' (prompt: {TruncateForDisplay(prompt)}). " +
-            "The sub-agent will run on the next turn and its result will be merged into the conversation.",
-            new { queued = true, agent = agentName, promptLength = prompt.Length }));
-    }
-
-    private static string TruncateForDisplay(string text, int max = 80)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        if (text.Length <= max) return text;
-        return string.Concat(text.AsSpan(0, max - 1), "…");
+        // G4: this used to fabricate a Success ("task queued… result merged next
+        // turn") while NOTHING was enqueued anywhere — no sub-agent runner exists
+        // in the codebase. The model would hallucinate results of a run that never
+        // happened. An honest error keeps the contract clean until a real runner lands.
+        _logger.LogWarning(
+            "Sub-agent execution requested but not implemented: agent={Agent} promptLength={Length}",
+            agentName, prompt.Length);
+        return Task.FromResult(ToolResult.Error(
+            $"Sub-agent execution is not implemented yet. Agent '{agentName}' exists, but Harbor cannot run sub-agents in this build. Do the work yourself with the available tools instead."));
     }
 }
