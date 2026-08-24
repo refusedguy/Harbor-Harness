@@ -390,7 +390,17 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     }
 
     [RelayCommand]
-    private void SwitchView(string view) => ActiveView = view;
+    private void SwitchView(string view)
+    {
+        ActiveView = view;
+        // A2 (sprint 4.5): the sessions board reads the session store on
+        // demand — refresh it when its tab becomes visible so the user never
+        // sees a stale/empty board after chatting in another tab.
+        if (view == "board")
+        {
+            _ = _contentHost.Board.RefreshCommand.ExecuteAsync(null);
+        }
+    }
 
     [RelayCommand]
     private void ToggleRightDrawer(string? tab)
