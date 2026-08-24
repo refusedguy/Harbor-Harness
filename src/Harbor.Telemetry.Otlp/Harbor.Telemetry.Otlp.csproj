@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Telemetry.Otlp</PackageId>
+    <Description>Harbor OTLP telemetry exporter — daemon/server publish profiles ONLY. Must never be referenced by the CLI/TUI binaries (sprint3-C rule).</Description>
+    <PackageTags>harbor;telemetry;otlp;opentelemetry;exporter</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- OTEL SDK lives physically outside the CLI/TUI dependency graph. -->
+    <PackageReference Include="OpenTelemetry"/>
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol"/>
+  </ItemGroup>
+
+</Project>

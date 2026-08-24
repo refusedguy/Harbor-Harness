@@ -49,6 +49,8 @@
         <Project Path="src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj"/>
         <Project Path="src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
         <Project Path="src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj"/>
+        <Project Path="src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj"/>
+        <Project Path="src/Harbor.Telemetry.Otlp/Harbor.Telemetry.Otlp.csproj"/>
     </Folder>
 
     <Folder Name="/src/Tools/">

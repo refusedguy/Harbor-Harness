@@ -91,6 +91,8 @@
       newer release is blocked until RazorConsole publishes a build that
       targets Spectre.Console 0.55+.
     -->
+    <PackageVersion Include="OpenTelemetry" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
     <PackageVersion Include="Spectre.Console" Version="0.54.0" />
     <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
     <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
