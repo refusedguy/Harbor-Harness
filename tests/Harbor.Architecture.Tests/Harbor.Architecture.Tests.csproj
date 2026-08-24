@@ -32,7 +32,7 @@
     on each to assert that the layering invariants from docs/ARCHITECTURE_LAYERS.md hold.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Harbor.Domain\Harbor.Domain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
