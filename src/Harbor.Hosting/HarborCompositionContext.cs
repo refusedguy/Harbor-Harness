@@ -34,8 +34,8 @@ public sealed class HarborCompositionContext
 
     public ILogger Logger { get; }
 
-    /// <summary>Eagerly loaded common config (loaded once, §3.4 of di-design).</summary>
-    public CommonConfig Common { get; internal set; } = new();
+    /// <summary>Eagerly loaded common config (loaded once, §3.4 of di-design). Apps may override via AfterConfiguration.</summary>
+    public CommonConfig Common { get; set; } = new();
 
     /// <summary>config.json → HarborConfig (model/tools overrides), env-overridden.</summary>
     public HarborConfig Harbor { get; internal set; } = new();

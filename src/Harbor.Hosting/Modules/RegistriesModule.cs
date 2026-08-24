@@ -37,8 +37,7 @@ internal static class RegistriesModule
         var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
         var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx);
         var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry);
-        var tempSp = services.BuildServiceProvider();
-        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, tempSp);
+        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
         var eventBus = ctx.EventBus;
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
 

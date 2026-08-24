@@ -7,6 +7,36 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Hosting;
 
+/// <summary>Builtin tool catalog size (§3.3).</summary>
+public enum HarborToolSetKind
+{
+    /// <summary>Read/Write/Edit/Bash/Glob/Grep/Ls/Patch/Notebook/Tree — desktop-safe subset.</summary>
+    Standard10,
+
+    /// <summary>All 14 builtins (+ Task, WebFetch, RipGrep, McpTool).</summary>
+    Full14,
+}
+
+/// <summary>Where the agent registry takes its default provider/model from.</summary>
+public enum HarborAgentModelSource
+{
+    /// <summary>config.json → HarborConfig.EffectiveModel (CLI).</summary>
+    HarborConfig,
+
+    /// <summary>HARBOR_MODEL env or CommonConfig.DefaultProvider/DefaultModel (desktop).</summary>
+    CommonConfig,
+}
+
+/// <summary>Provider registry construction flavor.</summary>
+public enum HarborProviderFlavor
+{
+    /// <summary>Ollama via IHttpClientFactory + native Anthropic/OpenAI + AuthStore-backed json discovery.</summary>
+    CliFull,
+
+    /// <summary>Ollama direct (OLLAMA_HOST) + json discovery over injected resolver/catalog.</summary>
+    Desktop,
+}
+
 /// <summary>
 ///     App-provided composition specifics. Presets (CliFull / Desktop) are plain
 ///     data — release variants are options, not <c>#if</c> scatter (§3.3).
@@ -52,6 +82,33 @@ public sealed class HarborComposeOptions
 
     /// <summary>Compile-time feature set (single mapping point: HarborBuildFeatures).</summary>
     public HarborFeatureSet Features { get; init; } = HarborBuildFeatures.Detect;
+
+    /// <summary>Builtin tool catalog size (default: Full14).</summary>
+    public HarborToolSetKind ToolSet { get; init; } = HarborToolSetKind.Full14;
+
+    /// <summary>Load mcp.json overlays and register McpToolTool (default: true).</summary>
+    public bool IncludeMcpTools { get; init; } = true;
+
+    /// <summary>Where the agent registry reads its default model (default: HarborConfig).</summary>
+    public HarborAgentModelSource ModelSource { get; init; } = HarborAgentModelSource.HarborConfig;
+
+    /// <summary>Provider registry construction flavor (default: CliFull).</summary>
+    public HarborProviderFlavor Providers { get; init; } = HarborProviderFlavor.CliFull;
+
+    /// <summary>Desktop flavor only: auth resolver handed to OpenAI-compatible clients.</summary>
+    public Harbor.Providers.OpenAiCompatible.IAuthResolver? DesktopAuthResolver { get; init; }
+
+    /// <summary>Desktop flavor only: model catalog handed to OpenAI-compatible clients.</summary>
+    public Harbor.Providers.OpenAiCompatible.IModelCatalog? DesktopModelCatalog { get; init; }
+
+    /// <summary>
+    ///     Register the Hosting-owned ICommonConfigStore + CommonConfig singleton.
+    ///     Desktop apps bring their own async-loaded store — set false there.
+    /// </summary>
+    public bool RegisterCommonConfigStore { get; init; } = true;
+
+    /// <summary>Hook invoked right after the configuration module ran (e.g. override ctx.Common).</summary>
+    public Action<HarborCompositionContext>? AfterConfiguration { get; init; }
 
     /// <summary>Full CLI preset: jsonl storage by default, env overrides apply at runtime.</summary>
     public static HarborComposeOptions CliDefault() => new()

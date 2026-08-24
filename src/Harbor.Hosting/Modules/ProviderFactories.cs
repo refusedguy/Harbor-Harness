@@ -16,23 +16,41 @@ namespace Harbor.Hosting;
 // own auth path before these factories are used.
 internal static class ProviderFactories
 {
-    internal static ProviderRegistry CreateProviderRegistry(HarborCompositionContext ctx, IServiceProvider sp)
+    internal static ProviderRegistry CreateProviderRegistry(HarborCompositionContext ctx, IServiceCollection services)
     {
-        var registry = new ProviderRegistry(sp.GetRequiredService<ILogger<ProviderRegistry>>());
-        var pb = new ProviderRegistryBuilder(registry, sp.GetRequiredService<ILoggerFactory>());
-        var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
-        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-        var authStore = sp.GetRequiredService<AuthStore>();
-        string cacheDir = Path.Combine(ctx.Options.HarborDir, "cache", "providers");
+        var registry = new ProviderRegistry(ctx.LoggerFactory.CreateLogger<ProviderRegistry>());
+        var pb = new ProviderRegistryBuilder(registry, ctx.LoggerFactory);
 
-        pb.AddProvider(new OllamaProviderFactory(httpFactory));
+        if (ctx.Options.Providers == HarborProviderFlavor.Desktop)
+        {
+            // Ollama talks to a local daemon: direct HttpClient from OLLAMA_HOST.
+            pb.AddProvider(new DesktopOllamaProviderFactory(new HttpClient
+            {
+                BaseAddress = new Uri(Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434"),
+                Timeout = TimeSpan.FromSeconds(10)
+            }));
+            if (ctx.Options.DesktopAuthResolver is not null && ctx.Options.DesktopModelCatalog is not null)
+            {
+                JsonProviderDiscovery.RegisterDesktopProviders(
+                    pb, ctx.Options.DesktopAuthResolver, ctx.Options.DesktopModelCatalog, ctx.LoggerFactory);
+            }
+        }
+        else
+        {
+            // CLI flavor needs IHttpClientFactory named clients + AuthStore.
+            using var tempSp = services.BuildServiceProvider();
+            var httpFactory = tempSp.GetRequiredService<IHttpClientFactory>();
+            var authStore = tempSp.GetRequiredService<AuthStore>();
+            string cacheDir = Path.Combine(ctx.Options.HarborDir, "cache", "providers");
+
+            pb.AddProvider(new OllamaProviderFactory(httpFactory));
 
 #if HARBOR_WITH_ALL_PROVIDERS
-        pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));
-        pb.AddProvider(new OpenAiProviderFactory(httpFactory, authStore));
-
-        JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory, cacheDir, authStore);
+            pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));
+            pb.AddProvider(new OpenAiProviderFactory(httpFactory, authStore));
+            JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory: ctx.LoggerFactory, cacheDir, authStore);
 #endif
+        }
 
         registry.Freeze();
         ctx.Logger.LogInformation("Registered providers: {Count}", registry.GetRegisteredProviderIds().Count);
@@ -98,3 +116,21 @@ internal sealed class OpenAiProviderFactory : IProviderFactory
         loggerFactory.CreateLogger<OpenAILlmClient>());
 }
 #endif
+
+/// <summary>Ollama over a direct HttpClient (OLLAMA_HOST), no IHttpClientFactory.</summary>
+internal sealed class DesktopOllamaProviderFactory : IProviderFactory
+{
+    private readonly HttpClient _httpClient;
+
+    public DesktopOllamaProviderFactory(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
+
+    public ProviderId ProviderId => ProviderId.Create("ollama");
+
+    public ILlmClient CreateClient(ILoggerFactory loggerFactory) => new OllamaLlmClient(
+        _httpClient,
+        new OllamaConfig(),
+        loggerFactory.CreateLogger<OllamaLlmClient>());
+}

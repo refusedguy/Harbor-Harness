@@ -11,6 +11,7 @@ using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
 using Harbor.Core.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Hosting;
 using Harbor.Ipc;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,32 +107,32 @@ internal static class AppHost
 
         // 1. Logging (Serilog) — replaces .NET logging providers.
         LoggingConfiguration.Configure(builder);
-        builder.Services.AddHttpClient(); // per-provider HttpClient w/ timeout for OpenAI-compatible clients
-
-        // 2. Bootstrap logger factory — used by eager singletons constructed
-        // BEFORE the host is built (config stores, registries, auth resolver).
         var loggerFactory = LoggingConfiguration.CreateBootstrapLoggerFactory();
 
-        // 3. Config — load CommonConfig + AvaloniaConfig eagerly, register
+        // 2. Config — load CommonConfig + AvaloniaConfig eagerly, register
         // stores + auth resolver + composite. Returns the loaded configs.
         var config = await ConfigRegistration.RegisterAsync(builder.Services, loggerFactory, harborDir).ConfigureAwait(false);
 
-        // 4. Storage — pick jsonl/memory based on CommonConfig.StorageBackend (or HARBOR_STORAGE env).
-        StorageRegistration.Register(builder.Services, sessionsDir, config.CommonConfig);
+        // 3. Весь граф Harbor — один вызов композиционного корня (§7.3).
+        builder.Services.AddHarbor(new HarborComposeOptions
+        {
+            HarborDir = harborDir,
+            DefaultStorageBackend = "memory",
+            ToolSet = HarborToolSetKind.Standard10,
+            IncludeMcpTools = false,
+            ModelSource = HarborAgentModelSource.CommonConfig,
+            Providers = HarborProviderFlavor.Desktop,
+            DesktopAuthResolver = config.AuthResolver,
+            DesktopModelCatalog = config.ModelCatalog,
+            RegisterCommonConfigStore = false,
+            AfterConfiguration = c => c.Common = config.CommonConfig,
+            BootstrapLoggerFactory = () => loggerFactory,
+            Configuration = builder.Configuration,
+        });
 
-        // 5. Registries — build eagerly so the agent can be initialized with them.
-        var toolRegistry = ToolRegistration.Build(loggerFactory);
-        var providerRegistry = ProviderRegistration.Build(loggerFactory, config.AuthResolver, config.ModelCatalog);
-        var agentRegistry = AgentRegistration.Build(config.CommonConfig);
-
-        // 6. Core services + compaction/permissions + eager registries + app-local services + IHarborClient.
-        ServiceRegistration.Register(builder.Services);
-        ServiceRegistration.RegisterCompactionAndPermissions(builder.Services, providerRegistry, agentRegistry);
-        ServiceRegistration.RegisterEagerRegistries(builder.Services, toolRegistry, providerRegistry, agentRegistry, loggerFactory);
+        // 4. Avalonia-специфика: UI-shell сервисы, IHarborClient и view-models.
         ServiceRegistration.RegisterAppServices(builder.Services);
         ServiceRegistration.RegisterHarborClient(builder.Services);
-
-        // 7. View-models.
         ViewModelRegistration.Register(builder.Services);
 
         var host = builder.Build();

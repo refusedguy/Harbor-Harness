@@ -28,9 +28,12 @@ internal static class ConfigurationModule
         // ---- stores -------------------------------------------------------
         services.AddSingleton<IConfigStore>(sp => new JsonConfigStore(
             logger: sp.GetRequiredService<ILogger<JsonConfigStore>>()));
-        services.AddSingleton<ICommonConfigStore>(sp => new JsonCommonConfigStore(
-            new CommonConfig(),
-            sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        if (options.RegisterCommonConfigStore)
+        {
+            services.AddSingleton<ICommonConfigStore>(sp => new JsonCommonConfigStore(
+                new CommonConfig(),
+                sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
+        }
 
         // ---- eager loads: exactly one read per file ------------------------
         var commonStore = new JsonCommonConfigStore(new CommonConfig(), loggerFactory.CreateLogger<JsonCommonConfigStore>());
@@ -58,6 +61,11 @@ internal static class ConfigurationModule
         string? envModel = Environment.GetEnvironmentVariable("HARBOR_MODEL");
         if (!string.IsNullOrEmpty(envModel))
             ctx.Harbor.Model = envModel;
+
+        // App hook (desktop overrides ctx.Common with its async-loaded instance).
+        options.AfterConfiguration?.Invoke(ctx);
+
+        services.AddSingleton(ctx.Common);
 
         // ---- event bus: constructed explicitly, registered as instance -----
         var middlewares = options.EventBusMiddlewares?.Invoke(loggerFactory) ?? Array.Empty<IEventBusMiddleware>();

@@ -28,6 +28,8 @@ internal static class CoreModule
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<IAgent, DefaultAgent>();
+        // Forward IAgentRunner → IAgent (canonical MS DI interface-forwarding pattern).
+        services.AddSingleton<IAgentRunner>(sp => sp.GetRequiredService<IAgent>());
 
         // One event bus for the whole process: the same instance is visible to
         // the eager registries/plugins AND to the final container (the old CLI

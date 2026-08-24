@@ -62,6 +62,7 @@
 
     <!-- Baseline providers -->
     <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
 
     <!-- Tools (Mcp lives inside Harbor.Tools.Builtin: namespace Harbor.Tools.Mcp) -->
     <ProjectReference Include="..\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
@@ -84,7 +85,6 @@
 
   <ItemGroup Condition="'$(HarborWithAllProviders)' == 'true'">
     <ProjectReference Include="..\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
-    <ProjectReference Include="..\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
     <ProjectReference Include="..\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
     <ProjectReference Include="..\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
   </ItemGroup>

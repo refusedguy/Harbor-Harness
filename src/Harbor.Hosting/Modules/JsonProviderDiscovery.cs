@@ -62,6 +62,62 @@ internal static class JsonProviderDiscovery
         }
     }
 
+    /// <summary>
+    ///     Desktop flavor: OpenAI-compatible providers only (apiType filter),
+    ///     resolver + catalog injected by the app (async-loaded config).
+    ///     Mirrors the former Avalonia ProviderRegistration.RegisterJsonProviders.
+    /// </summary>
+    public static void RegisterDesktopProviders(
+        IProviderRegistryBuilder pb,
+        Harbor.Providers.OpenAiCompatible.IAuthResolver authResolver,
+        Harbor.Providers.OpenAiCompatible.IModelCatalog modelCatalog,
+        ILoggerFactory loggerFactory)
+    {
+        var seenIds = new HashSet<string>(StringComparer.Ordinal) { "ollama" };
+        var logger = loggerFactory.CreateLogger(typeof(JsonProviderDiscovery).FullName ?? "JsonProviderDiscovery");
+
+        foreach (string dir in FindProvidersDirectories())
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (string file in Directory.EnumerateFiles(dir, "*.json"))
+            {
+                try
+                {
+                    var result = Harbor.Providers.OpenAiCompatible.ProviderConfig.LoadFromFile(file);
+                    if (result.IsFailure)
+                    {
+                        logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
+                        continue;
+                    }
+                    var config = result.Value;
+                    if (config.ApiType != "openai-compatible")
+                    {
+                        logger.LogDebug("Skipping provider '{Id}' (apiType={Type}, not openai-compatible)",
+                            config.Id, config.ApiType);
+                        continue;
+                    }
+                    if (!seenIds.Add(config.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate provider '{Id}' from '{File}'", config.Id, file);
+                        continue;
+                    }
+
+                    var http = new HttpClient { Timeout = TimeSpan.FromSeconds(config.Timeout) };
+                    config.Quirks = Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId());
+                    var configRef = config;
+                    pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
+                        http, configRef, authResolver, modelCatalog,
+                        loggerFactory.CreateLogger<Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient>()));
+                    logger.LogInformation("Registered OpenAI-compatible provider '{Id}' from '{File}'", config.Id, file);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to load provider config '{File}'", file);
+                }
+            }
+        }
+    }
+
 #if HARBOR_WITH_ALL_PROVIDERS
     public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,

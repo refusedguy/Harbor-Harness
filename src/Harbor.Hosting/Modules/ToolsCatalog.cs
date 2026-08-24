@@ -14,17 +14,41 @@ internal static class ToolsCatalog
     {
         var registry = new AgentRegistry();
         var ab = new AgentRegistryBuilder(registry);
-        string[] parts = ctx.Harbor.EffectiveModel.Split('/', 2);
+
+        string defaultModel = ctx.Options.ModelSource == HarborAgentModelSource.CommonConfig
+            ? ResolveDefaultModelFromCommon(ctx.Common)
+            : ctx.Harbor.EffectiveModel;
+        string[] parts = defaultModel.Split('/', 2);
         string providerId = parts[0];
-        string modelId = parts.Length > 1 ? parts[1] : ctx.Harbor.Model;
+        string modelId = parts.Length > 1 ? parts[1] : defaultModel;
         ab.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
         ab.AddAgent(AgentDefinition.PlanDefault(modelId, providerId));
         ab.AddAgent(AgentDefinition.ExploreDefault(modelId, providerId));
         return registry;
     }
 
-    internal static McpRegistry CreateMcpRegistry(HarborCompositionContext ctx)
+    /// <summary>HARBOR_MODEL env, else CommonConfig DefaultProvider/DefaultModel (desktop).</summary>
+    internal static string ResolveDefaultModelFromCommon(Harbor.Desktop.Abstractions.Configuration.CommonConfig commonConfig)
     {
+        string? env = Environment.GetEnvironmentVariable("HARBOR_MODEL");
+        if (!string.IsNullOrWhiteSpace(env)) return env;
+
+        string model = commonConfig.DefaultModel;
+        string provider = commonConfig.DefaultProvider;
+        string prefix = provider + "/";
+        return model.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? model
+            : prefix + model;
+    }
+
+    internal static IMcpRegistry CreateMcpRegistry(HarborCompositionContext ctx)
+    {
+        if (!ctx.Options.IncludeMcpTools)
+        {
+            // Desktop subset: empty registry so view-models can resolve IMcpRegistry.
+            return new InMemoryMcpRegistry(ctx.LoggerFactory.CreateLogger<InMemoryMcpRegistry>());
+        }
+
         var mcpRegistry = new McpRegistry(ctx.LoggerFactory.CreateLogger<McpRegistry>());
 
         // Load MCP servers from the standard mcp.json files in overlay order
@@ -52,6 +76,8 @@ internal static class ToolsCatalog
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
+        bool full = ctx.Options.ToolSet == HarborToolSetKind.Full14;
+
         tb.AddTool(new ReadToolFactory());
         tb.AddTool(new WriteToolFactory());
         tb.AddTool(new EditToolFactory());
@@ -59,17 +85,25 @@ internal static class ToolsCatalog
         tb.AddTool(new GlobToolFactory());
         tb.AddTool(new GrepToolFactory());
         tb.AddTool(new LsToolFactory());
-        tb.AddTool(new TaskToolFactory(agentRegistry));
-        tb.AddTool(new WebFetchToolFactory());
+        if (full)
+        {
+            tb.AddTool(new TaskToolFactory(agentRegistry));
+            tb.AddTool(new WebFetchToolFactory());
+        }
         tb.AddTool(new PatchToolFactory());
         tb.AddTool(new NotebookToolFactory());
-        tb.AddTool(new RipGrepToolFactory());
+        if (full)
+        {
+            tb.AddTool(new RipGrepToolFactory());
+        }
         tb.AddTool(new TreeToolFactory());
-        tb.AddTool(new McpToolToolFactory(mcpRegistry));
+        if (full)
+        {
+            tb.AddTool(new McpToolToolFactory(mcpRegistry));
+        }
 
         registry.Freeze();
-        const int toolCount = 14;
-        ctx.Logger.LogInformation("Registered {Count} tools", toolCount);
+        ctx.Logger.LogInformation("Registered {Count} tools", full ? 14 : 10);
         return registry;
     }
 }
