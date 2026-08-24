@@ -227,14 +227,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         _commandPalette = commandPalette;
         _messenger = shell.Messenger;
 
-        _overlayController.Register("palette", v => IsCommandPaletteOpen = v);
-        _overlayController.Register("settings", v => IsSettingsOpen = v);
-        _overlayController.Register("providerBrowser", v => IsProviderBrowserOpen = v);
-        _overlayController.Register("modelPicker", v => IsModelPickerOpen = v);
-        _overlayController.Register("diff", v => IsDiffOpen = v);
-        _overlayController.Register("tokenUsage", v => IsTokenUsageOpen = v);
-        _overlayController.Register("focusSession", v => IsFocusSessionOpen = v);
-        _overlayController.Register("sessionsFlyout", v => IsSessionsFlyoutOpen = v);
+        _overlayController.Register(OverlayIds.Palette, v => IsCommandPaletteOpen = v);
+        _overlayController.Register(OverlayIds.Settings, v => IsSettingsOpen = v);
+        _overlayController.Register(OverlayIds.ProviderBrowser, v => IsProviderBrowserOpen = v);
+        _overlayController.Register(OverlayIds.ModelPicker, v => IsModelPickerOpen = v);
+        _overlayController.Register(OverlayIds.Diff, v => IsDiffOpen = v);
+        _overlayController.Register(OverlayIds.TokenUsage, v => IsTokenUsageOpen = v);
+        _overlayController.Register(OverlayIds.FocusSession, v => IsFocusSessionOpen = v);
+        _overlayController.Register(OverlayIds.SessionsFlyout, v => IsSessionsFlyoutOpen = v);
 
         HasOverlay = _overlayController.HasOverlay;
         _costAnimator.Tick += () => OnPropertyChanged(nameof(AnimatedCostText));

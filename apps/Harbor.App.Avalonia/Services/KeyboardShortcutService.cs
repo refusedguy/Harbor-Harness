@@ -39,7 +39,7 @@ public sealed class KeyboardShortcutService
         // Ctrl+P / Ctrl+Shift+P → command palette.
         if (ctrl && e.Key == Key.P)
         {
-            _shellChrome.OpenOverlay("palette");
+            _shellChrome.OpenOverlay(OverlayIds.Palette);
             return true;
         }
 

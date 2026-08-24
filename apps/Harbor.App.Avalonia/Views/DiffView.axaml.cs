@@ -35,7 +35,7 @@ public partial class DiffView : UserControl
 
     private void CloseModal()
     {
-        ShellChrome.CloseOverlay("diff");
+        ShellChrome.CloseOverlay(OverlayIds.Diff);
     }
 
     private IShellChrome? _shellChrome;

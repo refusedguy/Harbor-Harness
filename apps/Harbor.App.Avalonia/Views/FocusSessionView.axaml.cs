@@ -25,7 +25,7 @@ public partial class FocusSessionView : UserControl
 
     private void CloseModal()
     {
-        ShellChrome.CloseOverlay("focusSession");
+        ShellChrome.CloseOverlay(OverlayIds.FocusSession);
     }
 
     private IShellChrome? _shellChrome;

@@ -49,13 +49,13 @@ public partial class ActivityRailView : UserControl
     private void Board_Click(object? sender, RoutedEventArgs e)
     {
         MarkActive(sender);
-        ShellChrome.OpenOverlay("sessionsFlyout");
+        ShellChrome.OpenOverlay(OverlayIds.SessionsFlyout);
     }
 
     private void Search_Click(object? sender, RoutedEventArgs e)
     {
         MarkActive(sender);
-        ShellChrome.OpenOverlay("palette");
+        ShellChrome.OpenOverlay(OverlayIds.Palette);
     }
 
     private void Diff_Click(object? sender, RoutedEventArgs e)
@@ -71,6 +71,6 @@ public partial class ActivityRailView : UserControl
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
     {
-        ShellChrome.OpenOverlay("settings");
+        ShellChrome.OpenOverlay(OverlayIds.Settings);
     }
 }

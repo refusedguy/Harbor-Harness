@@ -66,10 +66,10 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
 
     private void SwitchToChat() => _shellChrome.Navigate("chat");
     private void SwitchToCode() => _shellChrome.Navigate("code");
-    private void OpenSettings() => _shellChrome.OpenOverlay("settings");
-    private void OpenProviderBrowser() => _shellChrome.OpenOverlay("providerBrowser");
-    private void OpenDiff() => _shellChrome.OpenOverlay("diff");
-    private void OpenTokenUsage() => _shellChrome.OpenOverlay("tokenUsage");
+    private void OpenSettings() => _shellChrome.OpenOverlay(OverlayIds.Settings);
+    private void OpenProviderBrowser() => _shellChrome.OpenOverlay(OverlayIds.ProviderBrowser);
+    private void OpenDiff() => _shellChrome.OpenOverlay(OverlayIds.Diff);
+    private void OpenTokenUsage() => _shellChrome.OpenOverlay(OverlayIds.TokenUsage);
     private void ToggleSidebar() => _shellChrome.ToggleSidebar();
     private void ToggleTheme() => _shellChrome.ToggleTheme();
     private void NewSession() => _workspaceCommands.NewSession();
@@ -83,6 +83,6 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     private void RunSlash(string command)
     {
         _effects.Run(new TuiEffect.RunSlash(command));
-        _shellChrome.CloseOverlay("palette");
+        _shellChrome.CloseOverlay(OverlayIds.Palette);
     }
 }

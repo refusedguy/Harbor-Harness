@@ -32,7 +32,7 @@ public partial class TokenUsageView : UserControl
 
     private void CloseModal()
     {
-        ShellChrome.CloseOverlay("tokenUsage");
+        ShellChrome.CloseOverlay(OverlayIds.TokenUsage);
     }
 
     private IShellChrome? _shellChrome;
