@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using Harbor.Diagnostics;
 using Harbor.Abstractions.Sessions;
 using Harbor.Core.Resilience;
 using Harbor.Core.Resources;
@@ -35,6 +36,8 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ITokenTracker _tokenTracker;
     private readonly ToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
+    private readonly IMetrics _metrics;
+    private readonly ITracer _tracer;
 
     // C6: model-catalog cache. GetModelsAsync is a real HTTP round-trip on some
     // providers (Ollama), yet the catalog rarely changes within minutes — serve
@@ -61,7 +64,9 @@ public sealed class AgentLoop : IAgentLoop
         IEventBus eventBus,
         IPermissionService permissions,
         MessageConverter messageConverter,
-        ILogger<AgentLoop> logger)
+        ILogger<AgentLoop> logger,
+        IMetrics? metrics = null,
+        ITracer? tracer = null)
     {
         _providers = providers;
         _tools = tools;
@@ -77,6 +82,8 @@ public sealed class AgentLoop : IAgentLoop
         _permissions = permissions;
         _messageConverter = messageConverter;
         _logger = logger;
+        _metrics = metrics ?? NullMetrics.Instance;
+        _tracer = tracer ?? NullTracer.Instance;
         _toolDispatcher = new ToolDispatcher(tools, permissions, eventBus, logger);
     }
 
@@ -162,6 +169,12 @@ public sealed class AgentLoop : IAgentLoop
                     using var compactionActivity = HarborTelemetry.Source.StartActivity("Compaction");
                     _logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
                     await _eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
+                    // O9/T.6: record the PRE-compaction context size so the drop
+                    // is observable per transformation, not just via TokensSaved.
+                    _metrics.Histogram(
+                        "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
+                        new KeyValuePair<string, object?>("context.phase", "pre-compaction"),
+                        new KeyValuePair<string, object?>("session.id", session.Session.Id));
                     var compactionResult = await _compaction.CompactAsync(session.Session.Id, turnMessages, model, ct).ConfigureAwait(false);
 
                     // Railway Oriented Programming: Match dispatches to the
@@ -177,6 +190,10 @@ public sealed class AgentLoop : IAgentLoop
                             // from the compacted view instead of the overfull
                             // pre-compaction history.
                             turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
+                            _metrics.Histogram(
+                                "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
+                                new KeyValuePair<string, object?>("context.phase", "post-compaction"),
+                                new KeyValuePair<string, object?>("session.id", session.Session.Id));
                             await _eventBus.PublishAsync(new CompactionCompletedEvent(
                                 session.Session.Id,
                                 result.Summary,
@@ -215,6 +232,10 @@ public sealed class AgentLoop : IAgentLoop
                 if (truncationFallback)
                 {
                     turnMessages = CompactionService.TruncateToFitStrict(turnMessages, model, _tokenTracker);
+                    _metrics.Histogram(
+                        "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
+                        new KeyValuePair<string, object?>("context.phase", "truncated"),
+                        new KeyValuePair<string, object?>("session.id", session.Session.Id));
                 }
 
                 // 3. Build system prompt
