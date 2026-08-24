@@ -35,7 +35,7 @@ public sealed class ChatViewTests : ComponentTestBase
     public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
 
     /// <summary>
-    ///     Empty state: should show "Start a conversation" placeholder, the
+    ///     Empty state: should show "What are we building today?" placeholder, the
     ///     InputBox, and a DISABLED Send button.
     /// </summary>
     [Test]
@@ -45,7 +45,7 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(3))
+        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
@@ -210,7 +210,7 @@ public sealed class ChatViewTests : ComponentTestBase
         UI(() => Vm.Chat.ClearCommand.Execute(null));
         await Task.Delay(200).ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(2))
+        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 

@@ -177,10 +177,10 @@ public sealed class AvaloniaUiTests
         bool inputVisible = Driver.OnUIThread(() => input!.IsVisible);
         await Assert.That(inputVisible).IsTrue();
 
-        // The empty-state placeholder "Start a conversation" must be visible
+        // The empty-state placeholder "What are we building today?" must be visible
         // — proves the chat history area is showing (not the code editor's
         // "No file open" placeholder).
-        bool sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(3))
+        bool sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
