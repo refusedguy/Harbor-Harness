@@ -115,7 +115,7 @@ public sealed class DefaultAgent : IAgent
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Listener failed");
+                    _logger.LogError(ex, "Listener failed: session={SessionId}", State?.SessionId ?? "unbound");
                 }
             }
         });
@@ -334,7 +334,7 @@ public sealed class DefaultAgent : IAgent
             catch (Exception ex)
             {
                 State = State with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
-                _logger.LogError(ex, "Agent run failed");
+                _logger.LogError(ex, "Agent run failed: session={SessionId}", State.SessionId);
                 var failed = Result.Failure(ex.Message);
                 completion.TrySetException(ex);
                 return failed;

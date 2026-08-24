@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Harbor.Abstractions.Sessions;
 using Harbor.Core.Resilience;
 using Harbor.Core.Resources;
@@ -352,14 +353,14 @@ public sealed class AgentLoop : IAgentLoop
                 // (and WaitForIdleAsync consumers) can distinguish it from normal
                 // completion. The AgentEndEvent carries Cancelled=true so renderers
                 // can reflect the aborted state instead of a clean finish.
-                _logger.LogInformation("Agent run cancelled: agent={Agent}", agent.Name.Value);
+                _logger.LogInformation("Agent run cancelled: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
                 await _eventBus.PublishAsync(
                     new AgentEndEvent(SnapshotMessages(session.Messages), Cancelled: true), CancellationToken.None).ConfigureAwait(false);
 
                 return Result.Failure("Agent run was cancelled.");
             }
 
-            _logger.LogInformation("Agent loop completed: agent={Agent}", agent.Name.Value);
+            _logger.LogInformation("Agent loop completed: session={SessionId} agent={Agent}", session.Session.Id, agent.Name.Value);
             await _eventBus.PublishAsync(
                 new AgentEndEvent(SnapshotMessages(session.Messages)), ct).ConfigureAwait(false);
 
@@ -368,7 +369,9 @@ public sealed class AgentLoop : IAgentLoop
         catch (Exception ex)
         {
             activity?.AddException(ex);
-            _logger.LogError(ex, CoreResources.GetError("AgentFailed"), ex.Message);
+            // O1: keep the localized message AND the correlation key in one record.
+            string failure = string.Format(CultureInfo.InvariantCulture, CoreResources.GetError("AgentFailed"), ex.Message);
+            _logger.LogError(ex, "Agent run failed: session={SessionId} error={Error}", session.Session.Id, failure);
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }

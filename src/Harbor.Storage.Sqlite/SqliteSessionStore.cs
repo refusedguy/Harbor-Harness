@@ -95,6 +95,7 @@ public sealed class SqliteSessionStore : ISessionStore
         }
         catch (Exception ex)
         {
+            // Nothing to correlate yet — the session id is generated inside the try.
             _logger.LogError(ex, "Failed to create session");
             return Task.FromResult(Result.Failure<Session>(ex.Message));
         }
@@ -191,7 +192,7 @@ public sealed class SqliteSessionStore : ISessionStore
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to append message");
+            _logger.LogError(ex, "Failed to append message to session {SessionId}", sessionId);
             return Result.Failure(ex.Message);
         }
     }
@@ -341,7 +342,7 @@ public sealed class SqliteSessionStore : ISessionStore
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update session");
+            _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
             return Result.Failure(ex.Message);
         }
     }
