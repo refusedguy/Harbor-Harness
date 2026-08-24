@@ -142,11 +142,14 @@
              Shown when there are no chat lines and no tool calls and the
              agent isn't streaming/thinking. -->
         <comp:EmptyState Grid.Row="0"
-                         Title="Start a conversation"
-                         Subtitle="Type a message below to begin chatting with the AI agent"
-                         Icon="💬"
+                         Title="What are we building today?"
+                         Subtitle="Harbor runs local-first agents over your tools and files — ask anything."
                          Suggestions="{Binding ContextualSuggestions}"
-                         IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}" />
+                         IsVisible="{Binding Lines.Count, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=0}">
+            <comp:EmptyState.Icon>
+                <PathIcon Data="{StaticResource IcMessage}" Width="40" Height="40" />
+            </comp:EmptyState.Icon>
+        </comp:EmptyState>
 
         <!-- ════════════ Streaming / thinking indicators ════════════
              All three indicators live in a StackPanel so they don't overlap.
