@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAI;
 /// <summary>
@@ -82,65 +83,15 @@ public sealed class OpenAILlmClient : ILlmClient
                     ? BuildResponsesRequest(request, apiKeyResult.Value)
                     : BuildChatCompletionsRequest(request, apiKeyResult.Value);
 
-                HttpResponseMessage response;
-
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent(
-                        $"HTTP request failed: {ex.Message}", ex.ToString(),
-                        ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent(
-                            $"OpenAI API error {(int)response.StatusCode}: {errorBody}",
-                            Kind: ProviderErrors.FromStatus(response.StatusCode),
-                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        string data = line.Substring(6);
-                        if (data == "[DONE]")
-                        {
-                            await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
-                            return;
-                        }
-
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        if (useResponsesApi)
-                        {
-                            await WriteResponsesEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            await WriteChatChunkEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
+                // live in SsePump; it emits exactly one FinishEvent on graceful
+                // end-of-stream ([DONE] or EOF) and none on error/cancel.
+                await SsePump.RunSseAsync(
+                    writer, _http, httpRequest,
+                    (data, token) => useResponsesApi
+                        ? WriteResponsesEventsAsync(data, writer, token)
+                        : WriteChatChunkEventsAsync(data, writer, token),
+                    "OpenAI API", _logger, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -536,8 +487,8 @@ public sealed class OpenAILlmClient : ILlmClient
                         usageEl.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0,
                         usageEl.TryGetProperty("output_tokens_details", out var od) && od.TryGetProperty("reasoning_tokens", out var rt) ? rt.GetInt32() : null)
                     : null;
+                // No FinishEvent here (ROP-A ПР.1): the shared pump emits exactly one.
                 yield return new StepFinishEvent(0, "stop", usage);
-                yield return new FinishEvent();
                 break;
         }
     }

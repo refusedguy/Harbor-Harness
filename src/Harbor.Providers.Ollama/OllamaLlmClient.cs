@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.Ollama;
 /// <summary>
@@ -64,51 +65,26 @@ public sealed class OllamaLlmClient : ILlmClient
             try
             {
                 var httpRequest = BuildRequest(request);
-                HttpResponseMessage response;
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (HttpRequestException ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent(
-                        $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
-                        $"Is `ollama serve` running? Error: {ex.Message}",
-                        Kind: ProviderErrorKind.Network), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
+                // Shared pump (ROP-A ПР.1) in raw-line (NDJSON) mode: Ollama has
+                // no "data:" prefix and no [DONE] sentinel — every line is a
+                // JSON chunk, EOF is the end of stream.
+                await SsePump.RunAsync(
+                    writer, _http, httpRequest,
+                    async (line, token) =>
                     {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent(
-                            $"Ollama error {(int)response.StatusCode}: {errorBody}",
-                            Kind: ProviderErrors.FromStatus(response.StatusCode),
-                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    // NDJSON: one JSON object per line (not SSE)
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        await WriteNdjsonEventsAsync(line, writer, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                        await WriteNdjsonEventsAsync(line, writer, token).ConfigureAwait(false);
+                        return true;
+                    },
+                    "Ollama", _logger, cancellationToken,
+                    mapSendFailure: (ex, token) => ex is HttpRequestException hre
+                        ? new ErrorEvent(
+                            $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
+                            $"Is `ollama serve` running? Error: {hre.Message}",
+                            Kind: ProviderErrorKind.Network)
+                        : new ErrorEvent(
+                            $"HTTP request failed: {ex.Message}", ex.ToString(),
+                            ProviderErrors.FromException(ex, token))).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.Anthropic;
 /// <summary>
@@ -81,55 +82,13 @@ public sealed class AnthropicLlmClient : ILlmClient
                 }
 
                 var httpRequest = BuildRequest(request, apiKeyResult.Value);
-                HttpResponseMessage response;
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent(
-                        $"HTTP request failed: {ex.Message}", ex.ToString(),
-                        ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent(
-                            $"Anthropic API error {(int)response.StatusCode}: {errorBody}",
-                            Kind: ProviderErrors.FromStatus(response.StatusCode),
-                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        // Anthropic SSE format: "event: type\ndata: {...}"
-                        if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        // Slice the payload portion without allocating a new substring when
-                        // possible — Substring is the cleanest cross-target helper here.
-                        string data = line.Substring(6);
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        await WriteAnthropicEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                // Shared pump (ROP-A ПР.1): exactly one FinishEvent on graceful
+                // end-of-stream; parsers never emit FinishEvent themselves.
+                await SsePump.RunSseAsync(
+                    writer, _http, httpRequest,
+                    (data, token) => WriteAnthropicEventsAsync(data, writer, token),
+                    "Anthropic API", _logger, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -456,7 +415,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                 break;
 
             case "message_stop":
-                yield return new FinishEvent();
+                // No FinishEvent here (ROP-A ПР.1): the shared pump emits exactly one.
                 break;
         }
     }

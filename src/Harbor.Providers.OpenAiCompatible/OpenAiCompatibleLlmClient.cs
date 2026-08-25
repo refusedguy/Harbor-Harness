@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
+using Harbor.Providers.Internal;
 using Harbor.Providers.OpenAiCompatible.Compat;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
@@ -67,61 +68,18 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                 }
 
                 var httpRequest = BuildRequest(request, apiKeyResult.Value);
-                HttpResponseMessage response;
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                    activity?.SetTag("http.status_code", (int)response.StatusCode);
-                }
-                catch (Exception ex)
-                {
-                    activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    activity?.AddException(ex);
-                    await writer.WriteAsync(new ErrorEvent(
-                        $"HTTP request failed: {ex.Message}", ex.ToString(),
-                        ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+                // §OOP-001 (RESOLVED): the tool-call index→id map is per-StreamAsync-call
+                // state captured by the onData closure below, so concurrent StreamAsync
+                // calls each get their own map without any synchronisation.
+                var indexToId = new Dictionary<int, string>(capacity: 4);
 
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
+                // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
+                // live in SsePump; activity observability is preserved via hooks.
+                await SsePump.RunSseAsync(
+                    writer, _http, httpRequest,
+                    async (data, token) =>
                     {
-                        activity?.SetTag("http.status_code", (int)response.StatusCode);
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent(
-                            $"API error {(int)response.StatusCode}: {errorBody}",
-                            Kind: ProviderErrors.FromStatus(response.StatusCode),
-                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    // §OOP-001 (RESOLVED): the tool-call index→id map is per-StreamAsync-call
-                    // state. It used to be a shared instance field on the client (a singleton),
-                    // which raced when two sessions shared one provider client. It now lives
-                    // as a local captured by the MapChunk closure, so concurrent StreamAsync
-                    // calls each get their own map without any synchronisation.
-                    var indexToId = new Dictionary<int, string>(capacity: 4);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        string data = line.Substring(6);
-                        if (data == "[DONE]")
-                        {
-                            await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
-                            return;
-                        }
-
                         foreach (var evt in OpenAiSseParser.ParseChunk(data.AsSpan(), indexToId, _logger))
                         {
                             if (evt is StepFinishEvent { Usage: not null } sfe)
@@ -129,13 +87,25 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                                 activity?.SetTag(PromptTokensTag, sfe.Usage.InputTokens);
                                 activity?.SetTag(CompletionTokensTag, sfe.Usage.OutputTokens);
                             }
-                            await writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
+                            await writer.WriteAsync(evt, token).ConfigureAwait(false);
                         }
-                    }
-                }
-
-                activity?.SetStatus(ActivityStatusCode.Ok);
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                    },
+                    "API", _logger, cancellationToken,
+                    onResponse: response => activity?.SetTag("http.status_code", (int)response.StatusCode),
+                    mapSendFailure: (ex, _) =>
+                    {
+                        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                        activity?.AddException(ex);
+                        return new ErrorEvent(
+                            $"HTTP request failed: {ex.Message}", ex.ToString(),
+                            ProviderErrors.FromException(ex, cancellationToken));
+                    },
+                    onTransportError: ex =>
+                    {
+                        activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                        activity?.AddException(ex);
+                    },
+                    onComplete: () => activity?.SetStatus(ActivityStatusCode.Ok)).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
