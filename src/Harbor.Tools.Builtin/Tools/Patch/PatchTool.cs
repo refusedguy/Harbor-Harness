@@ -92,42 +92,15 @@ public sealed class PatchTool : ITool
             return ToolResult.Error(resolvedPath.Error);
         string path = resolvedPath.Value;
 
-        if (Directory.Exists(path))
-            return ToolResult.Error($"Path is a directory: {path}");
-        if (!File.Exists(path))
-            return ToolResult.Error($"File not found: {path}");
+        // ROP-A Z1 п.3: the six sequential guards became one named railway —
+        // a single failure exit instead of six early returns.
+        var prep = await LoadPatchInputAsync(path, patch, cancellationToken).ConfigureAwait(false);
+        if (prep.IsFailure)
+            return ToolResult.Error(prep.Error);
 
-        string original;
-        try
-        {
-            original = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Failed to read: {ex.Message}");
-        }
-
-        if (original.Length > MaxFileChars)
-            return ToolResult.Error($"File too large ({original.Length} chars; max {MaxFileChars}).");
-
-        string[] originalLines = SplitLines(original);
-
-        List<Hunk> hunks;
-        try
-        {
-            hunks = ParseHunks(patch);
-        }
-        catch (FormatException ex)
-        {
-            return ToolResult.Error($"Failed to parse patch: {ex.Message}");
-        }
-
-        if (hunks.Count == 0)
-            return ToolResult.Error("Patch contains no hunks (no @@ ... @@ headers found).");
-
-        if (hunks.Count > MaxPatchLines)
-            return ToolResult.Error($"Patch has too many hunks ({hunks.Count}; max {MaxPatchLines}).");
+        string original = prep.Value.Original;
+        string[] originalLines = prep.Value.Lines;
+        List<Hunk> hunks = prep.Value.Hunks;
 
         // B7perf: stream applied lines straight into the temp file instead of
         // materializing List<string> + one giant string.Join copy (~9 MB at
@@ -151,12 +124,15 @@ public sealed class PatchTool : ITool
                 bufferSize: 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             using var writer = new StreamWriter(file, utf8);
 
-            PatchApplyState apply = ApplyHunks(originalLines, hunks, writer, originalEndsWithNewline, originalHasCr);
-            if (apply.Failure is not null)
+            var applied = ApplyHunks(originalLines, hunks, writer, originalEndsWithNewline, originalHasCr);
+            if (applied.IsFailure)
             {
                 TryDelete(tempPath);
-                return apply.Failure;
+                // ROP-A Z1 п.4: pure Result return instead of a mutable
+                // Failure field on stateful DTO.
+                return ToolResult.Error(applied.Error);
             }
+            PatchApplyState apply = applied.Value;
 
             await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
 
@@ -199,13 +175,11 @@ public sealed class PatchTool : ITool
     }
 
     /// <summary>
-    ///     Outcome of <see cref="ApplyHunks" />.
+    ///     Outcome of <see cref="ApplyHunks" /> (ROP-A Z1 п.4: failures travel
+    ///     through <c>Result</c>, not through a mutable field).
     /// </summary>
     private sealed class PatchApplyState
     {
-        /// <summary>Validation failure to surface to the caller (file untouched), or null on success.</summary>
-        public ToolResult? Failure;
-
         /// <summary>True when the patched output is byte-identical to the original (historical "already applied?" error).</summary>
         public bool ProducedNoChanges;
 
@@ -243,7 +217,7 @@ public sealed class PatchTool : ITool
     ///         </item>
     ///     </list>
     /// </summary>
-    private static PatchApplyState ApplyHunks(
+    private static Result<PatchApplyState> ApplyHunks(
         string[] originalLines,
         List<Hunk> hunks,
         TextWriter output,
@@ -303,10 +277,9 @@ public sealed class PatchTool : ITool
             int? resolvedStart = ResolveHunkStart(originalLines, h, targetStart);
             if (resolvedStart is null)
             {
-                state.Failure = ToolResult.Error(
+                return Result.Failure<PatchApplyState>(
                     $"Hunk at line {h.OldStart} did not match (context mismatch). " +
                     "File left untouched.");
-                return state;
             }
 
             // Copy unchanged lines up to hunk start.
@@ -325,10 +298,9 @@ public sealed class PatchTool : ITool
                         if (originalCursor >= originalLines.Length
                             || originalLines[originalCursor] != hl.Text)
                         {
-                            state.Failure = ToolResult.Error(
+                            return Result.Failure<PatchApplyState>(
                                 $"Context line did not match at file line {originalCursor + 1}: " +
                                 $"expected «{hl.Text}». File left untouched.");
-                            return state;
                         }
                         Emit(originalLines[originalCursor]);
                         originalCursor++;
@@ -337,10 +309,9 @@ public sealed class PatchTool : ITool
                         if (originalCursor >= originalLines.Length
                             || originalLines[originalCursor] != hl.Text)
                         {
-                            state.Failure = ToolResult.Error(
+                            return Result.Failure<PatchApplyState>(
                                 $"Deletion line did not match at file line {originalCursor + 1}: " +
                                 $"expected «{hl.Text}». File left untouched.");
-                            return state;
                         }
                         originalCursor++;
                         break;
@@ -382,7 +353,49 @@ public sealed class PatchTool : ITool
         // written without a leading separator).
         state.TrailingArtifactLfBytes = artifacts > 0 ? artifacts - (emitted == artifacts ? 1 : 0) : 0;
 
-        return state;
+        return Result.Success(state);
+    }
+
+    /// <summary>
+    ///     ROP-A Z1 п.3: prelude railway — existence guards, capped read and
+    ///     hunk parsing compose into one result; FormatException stops being a
+    ///     cross-method control-flow channel.
+    /// </summary>
+    private sealed record PatchInput(string Original, string[] Lines, List<Hunk> Hunks);
+
+    private async Task<Result<PatchInput>> LoadPatchInputAsync(string path, string patch, CancellationToken ct)
+    {
+        Result<string> exists =
+            Result.Success(path)
+                .Ensure(static p => !Directory.Exists(p), p => $"Path is a directory: {p}")
+                .Ensure(static p => File.Exists(p), p => $"File not found: {p}");
+        if (exists.IsFailure)
+            return Result.Failure<PatchInput>(exists.Error);
+
+        Result<string> read = await Result.Try(
+                () => File.ReadAllTextAsync(path, Encoding.UTF8, ct),
+                ex => $"Failed to read: {ex.Message}")
+            .ConfigureAwait(false);
+        if (read.IsFailure)
+            return Result.Failure<PatchInput>(read.Error);
+
+        Result<string> sized =
+            read.Ensure(s => s.Length <= MaxFileChars,
+                s => $"File too large ({s.Length} chars; max {MaxFileChars}).");
+        if (sized.IsFailure)
+            return Result.Failure<PatchInput>(sized.Error);
+
+        Result<List<Hunk>> parsed = Result.Try(
+                () => ParseHunks(patch),
+                ex => $"Failed to parse patch: {ex.Message}");
+        if (parsed.IsFailure)
+            return Result.Failure<PatchInput>(parsed.Error);
+
+        return Result.Success(new PatchInput(sized.Value, SplitLines(sized.Value), parsed.Value))
+            .Ensure(pi => pi.Hunks.Count > 0,
+                "Patch contains no hunks (no @@ ... @@ headers found).")
+            .Ensure(pi => pi.Hunks.Count <= MaxPatchLines,
+                pi => $"Patch has too many hunks ({pi.Hunks.Count}; max {MaxPatchLines}).");
     }
 
     private static int? ResolveHunkStart(string[] lines, Hunk h, int targetStart)
