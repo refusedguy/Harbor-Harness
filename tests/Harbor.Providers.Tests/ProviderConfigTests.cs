@@ -47,7 +47,6 @@ public class ProviderConfigTests
             await Assert.That(result.Value.AuthEnvVar).IsEqualTo("OPENROUTER_API_KEY");
             await Assert.That(result.Value.ModelsRefreshHours).IsEqualTo(24);
             await Assert.That(result.Value.Timeout).IsEqualTo(120);
-            await Assert.That(result.Value.Retries).IsEqualTo(3);
         }
         finally
         {

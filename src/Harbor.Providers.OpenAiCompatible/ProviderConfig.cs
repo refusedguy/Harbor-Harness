@@ -31,7 +31,6 @@ public sealed class ProviderConfig
     public Dictionary<string, string>? Headers { get; set; }
     public Dictionary<string, string>? Capabilities { get; set; }
     public int Timeout { get; set; } = 60;
-    public int Retries { get; set; } = 3;
 
     /// <summary>
     ///     §OOP-002 (RESOLVED): provider-specific request quirks (Strategy pattern).
@@ -43,24 +42,13 @@ public sealed class ProviderConfig
 
     public ProviderId GetProviderId() => ProviderId.Create(Id);
 
-    public static Result<ProviderConfig> LoadFromFile(string path)
-    {
-        try
-        {
-            string json = File.ReadAllText(path);
-            var config = JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions) 
-                ?? throw new InvalidOperationException("Deserialization returned null");
-            if (string.IsNullOrEmpty(config.Id))
-                return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'id'.");
-            if (string.IsNullOrEmpty(config.BaseUrl))
-                return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'baseUrl'.");
-            return Result.Success(config);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<ProviderConfig>($"Failed to load provider config '{path}': {ex.Message}");
-        }
-    }
+    public static Result<ProviderConfig> LoadFromFile(string path) =>
+        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(File.ReadAllText(path), JsonOptions))
+            .MapError(ex => $"Failed to load provider config '{path}': {ex}")
+            .Ensure(c => c is not null, $"Provider config '{path}' deserialized to null.")
+            .Ensure(c => !string.IsNullOrEmpty(c!.Id), $"Provider config '{path}' is missing 'id'.")
+            .Ensure(c => !string.IsNullOrEmpty(c!.BaseUrl), $"Provider config '{path}' is missing 'baseUrl'.")
+            .Map(c => c!);
 }
 
 public sealed class ModelMapping
