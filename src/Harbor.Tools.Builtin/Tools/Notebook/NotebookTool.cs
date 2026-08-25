@@ -80,6 +80,23 @@ public sealed class NotebookTool : ITool
                                                                       }
                                                                       """);
 
+    private enum NoteAction { Get, Set, Add, Clear, List }
+
+    /// <summary>
+    ///     ROP-A Z1 п.9: the action string parses into an enum exactly once —
+    ///     validation, dispatch and the requirement matrix below all derive
+    ///     from it, so an unknown action cannot reach the switch.
+    /// </summary>
+    private static NoteAction? ParseAction(string raw) => raw.ToLowerInvariant() switch
+    {
+        "get" => NoteAction.Get,
+        "set" => NoteAction.Set,
+        "add" => NoteAction.Add,
+        "clear" => NoteAction.Clear,
+        "list" => NoteAction.List,
+        _ => null
+    };
+
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
     {
@@ -89,22 +106,11 @@ public sealed class NotebookTool : ITool
             return Result.Failure("Missing or empty 'action'.");
 
         string action = aEl.GetString()!;
-        string[] valid = ["get", "set", "add", "clear", "list"];
-#pragma warning disable S3267 // Hot-path loop with early-exit; LINQ Where + Any allocates enumerator.
-        bool ok = false;
-        foreach (string v in valid)
-        {
-            if (string.Equals(action, v, StringComparison.OrdinalIgnoreCase))
-            {
-                ok = true;
-                break;
-            }
-        }
-#pragma warning restore S3267
-        if (!ok)
+        var parsed = ParseAction(action);
+        if (parsed is null)
             return Result.Failure($"Unknown action '{action}'. Valid: get, set, add, clear, list.");
 
-        if (action is "get" or "set" or "add" or "clear")
+        if (parsed is not NoteAction.List)
         {
             if (!args.TryGetProperty("key", out var kEl)
                 || kEl.ValueKind != JsonValueKind.String
@@ -114,7 +120,7 @@ public sealed class NotebookTool : ITool
                 return Result.Failure($"'key' too long (max {MaxKeyChars} chars).");
         }
 
-        if (action is "set" or "add")
+        if (parsed is NoteAction.Set or NoteAction.Add)
         {
             if (!args.TryGetProperty("content", out var cEl) || cEl.ValueKind != JsonValueKind.String)
                 return Result.Failure($"Action '{action}' requires 'content' string.");
@@ -131,86 +137,86 @@ public sealed class NotebookTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        string action = args.GetProperty("action").GetString()!.ToLowerInvariant();
+        // Validation already pinned the action and its required fields
+        // (fail-closed dispatcher runs ValidateArguments first), so the switch
+        // below is exhaustive over the enum and needs no null re-checks.
+        var action = ParseAction(args.GetProperty("action").GetString()!) ?? NoteAction.List;
         string? key = JsonArgs.GetString(args, "key");
         string? content = JsonArgs.GetString(args, "content");
 
         string sessionId = SanitizeSessionId(context.SessionId);
         string path = Path.Combine(_notesRoot, sessionId + ".json");
 
-        Dictionary<string, NoteEntry> notes;
-        try
-        {
-            notes = await LoadAsync(path, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return ToolResult.Error("notebook cancelled");
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Failed to load notes: {ex.Message}");
-        }
+        // ROP-A Z1 п.10: Load and Save are guarded symmetrically now — a write
+        // failure surfaces as a tool error instead of escaping the contract.
+        Result<Dictionary<string, NoteEntry>> loaded = await Result.Try(
+                () => LoadAsync(path, cancellationToken),
+                ToolErrors.Handler("notebook", cancellationToken, failurePrefix: "Failed to load notes: "))
+            .ConfigureAwait(false);
+        if (loaded.IsFailure)
+            return ToolResult.Error(loaded.Error);
+        Dictionary<string, NoteEntry> notes = loaded.Value;
 
         switch (action)
         {
-            case "get":
+            case NoteAction.Get:
             {
-                if (key is null) return ToolResult.Error("Internal: key null for get.");
-                if (!notes.TryGetValue(key, out var entry))
+                if (!notes.TryGetValue(key!, out var entry))
                     return ToolResult.Error($"No note with key '{key}'.");
                 return ToolResult.Success(
                     $"# {key}\n\n{entry.Content}",
                     new { key, content = entry.Content, updatedAt = entry.UpdatedAt });
             }
-            case "set":
+            case NoteAction.Set:
             {
-                if (key is null || content is null) return ToolResult.Error("Internal: key/content null for set.");
-                if (notes.Count >= MaxNotesPerSession && !notes.ContainsKey(key))
+                if (notes.Count >= MaxNotesPerSession && !notes.ContainsKey(key!))
                     return ToolResult.Error($"Too many notes (max {MaxNotesPerSession}).");
-                notes[key] = new NoteEntry(content, DateTimeOffset.UtcNow);
-                await SaveAsync(path, notes, cancellationToken).ConfigureAwait(false);
-                _logger.LogDebug("Notebook set {Key} ({Chars} chars) for {Session}", key, content.Length, sessionId);
-                return ToolResult.Success(
-                    $"Set note '{key}' ({content.Length} chars).",
-                    new { key, chars = content.Length, totalNotes = notes.Count });
+                notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
+                _logger.LogDebug("Notebook set {Key} ({Chars} chars) for {Session}", key, content!.Length, sessionId);
+                return await SaveNotesAsync(path, notes, cancellationToken,
+                    () => ToolResult.Success(
+                        $"Set note '{key}' ({content.Length} chars).",
+                        new { key, chars = content.Length, totalNotes = notes.Count }))
+                    .ConfigureAwait(false);
             }
-            case "add":
+            case NoteAction.Add:
             {
-                if (key is null || content is null) return ToolResult.Error("Internal: key/content null for add.");
-                if (notes.TryGetValue(key, out var existing))
+                if (notes.TryGetValue(key!, out var existing))
                 {
                     string combined = existing.Content + "\n\n" + content;
                     if (combined.Length > MaxContentChars)
                         return ToolResult.Error(
                             $"Combined content would exceed {MaxContentChars} chars " +
-                            $"(currently {existing.Content.Length}, adding {content.Length}).");
-                    notes[key] = existing with { Content = combined, UpdatedAt = DateTimeOffset.UtcNow };
+                            $"(currently {existing.Content.Length}, adding {content!.Length}).");
+                    notes[key!] = existing with { Content = combined, UpdatedAt = DateTimeOffset.UtcNow };
                 }
                 else
                 {
-                    notes[key] = new NoteEntry(content, DateTimeOffset.UtcNow);
+                    notes[key!] = new NoteEntry(content!, DateTimeOffset.UtcNow);
                 }
-                await SaveAsync(path, notes, cancellationToken).ConfigureAwait(false);
-                return ToolResult.Success(
-                    $"Appended to note '{key}' (now {notes[key].Content.Length} chars).",
-                    new { key, chars = notes[key].Content.Length, totalNotes = notes.Count });
+                return await SaveNotesAsync(path, notes, cancellationToken,
+                    () => ToolResult.Success(
+                        $"Appended to note '{key}' (now {notes[key!].Content.Length} chars).",
+                        new { key, chars = notes[key!].Content.Length, totalNotes = notes.Count }))
+                    .ConfigureAwait(false);
             }
-            case "clear":
+            case NoteAction.Clear:
             {
                 if (key is null)
                 {
                     int removed = notes.Count;
                     notes.Clear();
-                    await SaveAsync(path, notes, cancellationToken).ConfigureAwait(false);
-                    return ToolResult.Success($"Cleared {removed} note(s).", new { removed });
+                    return await SaveNotesAsync(path, notes, cancellationToken,
+                        () => ToolResult.Success($"Cleared {removed} note(s).", new { removed }))
+                        .ConfigureAwait(false);
                 }
                 if (!notes.Remove(key))
                     return ToolResult.Error($"No note with key '{key}'.");
-                await SaveAsync(path, notes, cancellationToken).ConfigureAwait(false);
-                return ToolResult.Success($"Cleared note '{key}'.", new { key, remaining = notes.Count });
+                return await SaveNotesAsync(path, notes, cancellationToken,
+                    () => ToolResult.Success($"Cleared note '{key}'.", new { key, remaining = notes.Count }))
+                    .ConfigureAwait(false);
             }
-            case "list":
+            case NoteAction.List:
             {
                 if (notes.Count == 0)
                     return ToolResult.Success("(no notes in this session)");
@@ -230,8 +236,23 @@ public sealed class NotebookTool : ITool
                     new { count = notes.Count, keys = notes.Keys.ToArray() });
             }
             default:
-                return ToolResult.Error($"Unknown action '{action}'.");
+                // Unreachable: ParseAction admits only the five known actions.
+                return ToolResult.Error("Unknown notebook action.");
         }
+    }
+
+    /// <summary>
+    ///     ROP-A Z1 п.10: Save under the same guard contract as Load; the
+    ///     caller's success payload is built only after a verified save.
+    /// </summary>
+    private async Task<ToolResult> SaveNotesAsync(
+        string path, Dictionary<string, NoteEntry> notes, CancellationToken ct, Func<ToolResult> success)
+    {
+        Result saved = await Result.Try(() => SaveAsync(path, notes, ct),
+                ToolErrors.Handler("notebook", ct, failurePrefix: "Failed to save notes: "))
+            .ConfigureAwait(false);
+
+        return saved.IsSuccess ? success() : ToolResult.Error(saved.Error);
     }
 
     private static async Task<Dictionary<string, NoteEntry>> LoadAsync(string path, CancellationToken ct)
