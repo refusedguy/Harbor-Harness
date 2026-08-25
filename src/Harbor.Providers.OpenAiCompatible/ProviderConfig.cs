@@ -135,19 +135,26 @@ public sealed class DynamicModelCatalog : IModelCatalog
         if (string.IsNullOrEmpty(config.ModelsUrl))
             return Result.Failure<IReadOnlyList<ModelInfo>>($"Provider '{config.Id}' has no modelsUrl and no hardcoded models.");
 
+        // ROP-A ПР.8 — canonical Compensate chain: fresh cache → network →
+        // stale cache. Each fallback fires only when the previous source
+        // failed; the headline error stays the FETCH failure, not a cache miss.
         string cachePath = Path.Combine(_cacheDir, $"{config.Id}.json");
-        var cacheAge = GetCacheAge(cachePath);
+        TimeSpan maxAge = TimeSpan.FromHours(config.ModelsRefreshHours);
 
-        if (cacheAge < TimeSpan.FromHours(config.ModelsRefreshHours))
-        {
-            var cached = await TryReadCacheAsync(cachePath, config, ct).ConfigureAwait(false);
-            if (cached.IsSuccess)
-                return cached;
-        }
+        return await ReadCacheAsync(cachePath, config, ct, freshOnly: true, maxAge: maxAge)
+            .Compensate(_ => FetchAndCacheAsync(config, config.ModelsUrl!, cachePath, ct))
+            .Compensate(fetchError => ReadCacheAsync(cachePath, config, ct, freshOnly: false, maxAge: maxAge)
+                .MapError(_ => fetchError))
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>Fetch the live model list and seed the cache.</summary>
+    private async Task<Result<IReadOnlyList<ModelInfo>>> FetchAndCacheAsync(
+        ProviderConfig config, string modelsUrl, string cachePath, CancellationToken ct)
+    {
         try
         {
-            string response = await _http.GetStringAsync(config.ModelsUrl, ct).ConfigureAwait(false);
+            string response = await _http.GetStringAsync(modelsUrl, ct).ConfigureAwait(false);
             Directory.CreateDirectory(_cacheDir);
             await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
             return ParseModelsResponse(response, config);
@@ -155,21 +162,26 @@ public sealed class DynamicModelCatalog : IModelCatalog
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch models for {Provider}, trying stale cache", config.Id);
-            var stale = await TryReadCacheAsync(cachePath, config, ct).ConfigureAwait(false);
-            return stale.IsSuccess ? stale : Result.Failure<IReadOnlyList<ModelInfo>>(ex.Message);
+            return Result.Failure<IReadOnlyList<ModelInfo>>(ex.Message);
         }
     }
 
-    private static TimeSpan GetCacheAge(string path)
+    /// <summary>
+    ///     Read the cached model list. <paramref name="freshOnly" /> enforces
+    ///     the <paramref name="maxAge" /> window (a missing or aged-out cache is
+    ///     a MISS, reported distinctly from a corrupt cache).
+    /// </summary>
+    private async Task<Result<IReadOnlyList<ModelInfo>>> ReadCacheAsync(
+        string path, ProviderConfig config, CancellationToken ct, bool freshOnly, TimeSpan maxAge)
     {
-        if (!File.Exists(path)) return TimeSpan.MaxValue;
-        return DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(path);
-    }
+        if (freshOnly)
+        {
+            if (!File.Exists(path))
+                return Result.Failure<IReadOnlyList<ModelInfo>>("no cached model catalog");
 
-    private async Task<Result<IReadOnlyList<ModelInfo>>> TryReadCacheAsync(string path, ProviderConfig config, CancellationToken ct)
-    {
-        if (!File.Exists(path))
-            return Result.Failure<IReadOnlyList<ModelInfo>>("No cache.");
+            if (DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(path) >= maxAge)
+                return Result.Failure<IReadOnlyList<ModelInfo>>("cached model catalog is stale");
+        }
 
         try
         {
