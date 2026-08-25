@@ -9,8 +9,9 @@ Harbor runs three layers of static analysis + DI validation:
    `tests/Harbor.App.*.Tests/` (Wpf/Maui/Blazor variants live in
    `contrib/tests/` since sprint-2) that build the host and assert every
    expected service is resolvable.
-3. **`dotnet-arch-analyzer`** — optional namespace-level layer validation
-   via `dotnetarch.json` (circular deps + layer violations).
+3. **Architecture tests** — `tests/Harbor.Architecture.Tests/` enforce layer
+   dependencies at `dotnet test` time (the external `dotnet-arch` tool and its
+   stale `dotnetarch.json` were removed in ROP-D; see §3).
 
 ---
 
@@ -139,45 +140,20 @@ The DI tests will fail at PR time if a registration is accidentally removed.
 
 ---
 
-## 3. `dotnet-arch-analyzer`
+## 3. Architecture tests (replaced `dotnet-arch-analyzer`, ROP-D Z2)
 
-Optional namespace-level architecture validation. The config lives in
-`dotnetarch.json` at the repo root.
+The optional external `dotnet-arch` tool and its `dotnetarch.json` config were
+**removed** in ROP-D: the config had rotted (it still listed the deleted
+Harbor.Domain, per-tool Harbor.Tools.* projects that were merged into
+Harbor.Tools.Builtin, contrib TUI renderers, and Wpf/Maui apps — while missing
+every Ipc.*, Ui.Framework.* and Desktop.* project), and it duplicated rules
+that are already enforced mechanically.
 
-### Install
-
-```bash
-dotnet tool install -g dotnet-arch
-```
-
-### Run
-
-```bash
-dotnet-arch analyze --config dotnetarch.json --solution Harbor.slnx
-```
-
-### Layers
-
-| Layer | Assemblies | Depends on |
-|-------|------------|------------|
-| **Domain** | `Harbor.Abstractions` | (none) |
-| **Application** | `Harbor.Core`, `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`, `Harbor.Scripting.Abstractions` | Domain |
-| **Infrastructure** | `Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`, `Harbor.Plugins.Runtime`, `Harbor.Plugins.Hosting`, `Harbor.Plugins.Compilation`, `Harbor.Plugins.Instantiation`, `Harbor.Plugins.Registration`, `Harbor.Plugins.Storage`, `Harbor.Scripting.*` | Domain, Application |
-| **Presentation** | `Harbor.Tui.*`, `Harbor.Desktop.*`, `Harbor.Ui.Framework` | Domain, Application |
-| **CompositionRoot** | `Harbor.App.*` | Domain, Application, Infrastructure, Presentation |
-
-> Since sprint-2, `Harbor.Scripting.{Abstractions,Bridge,Compilation,Engines,Hosting,Storage}`
-> live in `contrib/scripting/` (outside `Harbor.slnx`) — layer rules apply to them only
-> via the contrib build.
-
-### Rules
-
-- `arch/circular-dependency` → error
-- `arch/layer-violation` → error
-
-Mechanical enforcement of the layering rules documented in
-`docs/ARCHITECTURE_LAYERS.md` and exercised by
-`tests/Harbor.Architecture.Tests/`.
+Canonical enforcement now lives in `tests/Harbor.Architecture.Tests/`
+(46 tests: reflection-based + NetArchTest + the ROP-D full-project matrix in
+`FullLayerMatrixTests.cs` covering all 45 main-solution src assemblies). It runs
+as part of the regular `dotnet test` step — no extra tool install, single source
+of truth. See docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
 
 ---
 
