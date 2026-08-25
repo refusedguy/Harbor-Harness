@@ -61,7 +61,7 @@ public class PromptBufferTests
     {
         var b = new PromptBuffer();
         _ = b.InsertText("alpha\nbeta");
-        await Assert.That(b.LineCount).IsEqualTo(3 == 3 ? 2 : 2); // two logical lines
+        await Assert.That(b.LineCount).IsEqualTo(2); // two logical lines
 
         _ = b.MoveToStart();
         int before = b.Cursor;
