@@ -11,10 +11,9 @@ namespace Harbor.Tui.ConsoleEx.Parsing;
 /// UTF-8 tails, paste payload) lives inside the parser instance.
 ///
 /// Allocation budget (§5.4): key/mouse/resize/capability events are enqueued
-/// into a reused ring buffer — zero allocations steady-state. Heap strings
-/// appear only for <see cref="KeyCode.Char"/> runes are boxed? No — Char events
-/// are allocation-free too (<see cref="Rune"/> is a struct); the sole heap
-/// allocation is the payload string of a completed <see cref="PasteEvent"/>.
+/// into a reused ring buffer — zero allocations steady-state. Char events
+/// are allocation-free as well (<see cref="Rune"/> is a struct); the sole
+/// heap allocation is the payload string of a completed <see cref="PasteEvent"/>.
 /// </summary>
 public sealed class EscapeSequenceParser
 {
@@ -1135,52 +1134,6 @@ public sealed class EscapeSequenceParser
         }
 
         return group == index && digits > 0 ? value : -1;
-    }
-
-    private static int LastIntParam(ReadOnlySpan<byte> parameters)
-    {
-        var result = -1;
-        var value = 0;
-        var digits = 0;
-        foreach (var b in parameters)
-        {
-            if (b == (byte)';')
-            {
-                if (digits > 0)
-                {
-                    result = value;
-                }
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b == (byte)':')
-            {
-                if (digits > 0)
-                {
-                    result = value;
-                }
-                else if (result < 0)
-                {
-                    result = -1;
-                }
-                value = 0;
-                digits = 0;
-                continue;
-            }
-            if (b is >= (byte)'0' and <= (byte)'9')
-            {
-                value = value * 10 + (b - (byte)'0');
-                digits++;
-            }
-        }
-
-        if (digits > 0)
-        {
-            result = value;
-        }
-
-        return result;
     }
 
     // ── Event queue ───────────────────────────────────────────────────────
