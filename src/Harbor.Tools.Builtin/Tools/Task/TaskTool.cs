@@ -78,26 +78,25 @@ public sealed class TaskTool : ITool
         string agentName = args.GetProperty("agent").GetString()!;
         string prompt = args.GetProperty("prompt").GetString()!;
 
-        var nameResult = AgentName.TryCreate(agentName);
-        if (nameResult.IsFailure)
-            return Task.FromResult(ToolResult.Error($"Invalid agent name: {nameResult.Error}"));
+        // ROP-A Z1 п.6: the three hand-threaded guard blocks compose into one
+        // railway; each failure keeps its own message at its source, and the
+        // available-agents hint is built only on the failure path.
+        return Task.FromResult(
+            AgentName.TryCreate(agentName)
+                .MapError(e => $"Invalid agent name: {e}")
+                .Bind(name => _agents.GetAgent(name).MapError(_ =>
+                    $"Unknown sub-agent: '{agentName}'. Available sub-agents: " +
+                    string.Join(", ", _agents.GetAllAgents()
+                        .Where(a => a.IsSubAgent).Select(a => a.Name.Value))))
+                .Ensure(a => a.IsSubAgent,
+                    $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be used with task.")
+                .Match(
+                    _ => NotImplementedResult(agentName, prompt),
+                    err => ToolResult.Error(err)));
+    }
 
-        var agentDefResult = _agents.GetAgent(nameResult.Value);
-        if (agentDefResult.IsFailure)
-        {
-            string available = string.Join(", ",
-                _agents.GetAllAgents().Where(a => a.IsSubAgent).Select(a => a.Name.Value));
-            return Task.FromResult(ToolResult.Error(
-                $"Unknown sub-agent: '{agentName}'. Available sub-agents: {available}"));
-        }
-
-        var agentDef = agentDefResult.Value;
-        if (!agentDef.IsSubAgent)
-        {
-            return Task.FromResult(ToolResult.Error(
-                $"Agent '{agentName}' is not a sub-agent. Only agents with IsSubAgent=true can be used with task."));
-        }
-
+    private ToolResult NotImplementedResult(string agentName, string prompt)
+    {
         // G4: this used to fabricate a Success ("task queued… result merged next
         // turn") while NOTHING was enqueued anywhere — no sub-agent runner exists
         // in the codebase. The model would hallucinate results of a run that never
@@ -105,7 +104,7 @@ public sealed class TaskTool : ITool
         _logger.LogWarning(
             "Sub-agent execution requested but not implemented: agent={Agent} promptLength={Length}",
             agentName, prompt.Length);
-        return Task.FromResult(ToolResult.Error(
-            $"Sub-agent execution is not implemented yet. Agent '{agentName}' exists, but Harbor cannot run sub-agents in this build. Do the work yourself with the available tools instead."));
+        return ToolResult.Error(
+            $"Sub-agent execution is not implemented yet. Agent '{agentName}' exists, but Harbor cannot run sub-agents in this build. Do the work yourself with the available tools instead.");
     }
 }
