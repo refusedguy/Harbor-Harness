@@ -14,6 +14,7 @@ using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Ui.Framework.State;
+using Harbor.Terminal.Abstractions.Renderers;
 using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
@@ -92,15 +93,38 @@ public class LayerDependencyTests
     }
 
     /// <summary>
-    ///     Harbor.Terminal.Abstractions (Domain) may reference Harbor.Abstractions but
-    ///     nothing else from Harbor.
+    ///     Harbor.Terminal.Abstractions (Domain vocabulary: ITuiRenderer,
+    ///     ITuiRenderContext, ViewRegistry) may reference Harbor.Abstractions and
+    ///     the Ui.Framework family it is layered on, but nothing else from Harbor.
+    ///     ROP-D Z2: this test previously probed <c>typeof(UiStore)</c>, which
+    ///     lives in Harbor.Ui.Framework.State (Presentation) — Terminal.Abstractions
+    ///     itself had zero layer rules. The known
+    ///     Terminal.Abstractions → Harbor.Ui.Framework edge is documented tech debt
+    ///     (see docs/ROADMAP.md "Circular project reference workaround").
     /// </summary>
     [Test]
     public async Task TuiAbstractions_ReferencesOnlyAbstractions()
     {
+        var asm = typeof(ITuiRenderContext).Assembly;
+        string[] forbidden = NonDomainHarborAssemblies
+            .Where(n => n != "Harbor.Abstractions")
+            .ToArray();
+        var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    ///     Harbor.Ui.Framework.State (Presentation state store) may reference
+    ///     Harbor.Abstractions + Harbor.Ui.Framework.Abstractions only — NOT
+    ///     Application / Infrastructure / sibling Presentation projects.
+    /// </summary>
+    [Test]
+    public async Task UiFrameworkState_ReferencesOnlyAbstractionsFamily()
+    {
         var asm = typeof(UiStore).Assembly;
         string[] forbidden = NonDomainHarborAssemblies
             .Where(n => n != "Harbor.Abstractions")
+            .Append("Harbor.Terminal.Abstractions")
             .ToArray();
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();

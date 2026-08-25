@@ -27,6 +27,7 @@ using Harbor.Tools.Builtin;
 using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Ui.Framework.State;
+using Harbor.Terminal.Abstractions.Renderers;
 using NetArchTest.Rules;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
@@ -152,11 +153,41 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Terminal.Abstractions (Domain) may reference Harbor.Abstractions
-    ///     but no other Harbor assembly.
+    ///     Harbor.Terminal.Abstractions (Domain vocabulary) may reference
+    ///     Harbor.Abstractions and the Ui.Framework family it is layered on,
+    ///     but no Application / Infrastructure assembly.
+    ///     ROP-D Z2: previously probed <c>typeof(UiStore)</c> from
+    ///     Harbor.Ui.Framework.State — Terminal.Abstractions itself had zero
+    ///     NetArch rules.
     /// </summary>
     [Test]
     public async Task NetArch_TuiAbstractions_DoesNotDependOn_Application_Or_Infrastructure()
+    {
+        var types = Types.InAssembly(typeof(ITuiRenderContext).Assembly);
+        var result = types
+            .Should()
+            .NotHaveDependencyOn("Harbor.Core")
+            .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
+            .And().NotHaveDependencyOn("Harbor.Scripting")
+            .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
+            .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
+            .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
+            .And().NotHaveDependencyOn("Harbor.Providers.Ollama")
+            .And().NotHaveDependencyOn("Harbor.Storage.Jsonl")
+            .And().NotHaveDependencyOn("Harbor.Storage.Memory")
+            .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
+            .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
+            .And().NotHaveDependencyOn("Harbor.Cli")
+            .GetResult();
+        await Assert.That(result.IsSuccessful).IsTrue();
+    }
+
+    /// <summary>
+    ///     Harbor.Ui.Framework.State (Presentation state store) must NOT depend
+    ///     on Application or Infrastructure.
+    /// </summary>
+    [Test]
+    public async Task NetArch_UiFrameworkState_DoesNotDependOn_Application_Or_Infrastructure()
     {
         var types = Types.InAssembly(typeof(UiStore).Assembly);
         var result = types
