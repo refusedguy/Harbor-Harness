@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Registries.Tools;
 /// <summary>
@@ -58,6 +59,10 @@ public sealed class InMemoryMcpRegistry : IMcpRegistry
             names[i++] = k;
         return names;
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<McpServerInstructions> GetInstructions() =>
+        Array.Empty<McpServerInstructions>();
 
     /// <inheritdoc />
     public Task<Result<string>> InvokeAsync(

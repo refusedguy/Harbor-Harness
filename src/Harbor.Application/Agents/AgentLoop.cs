@@ -36,6 +36,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ITokenTracker _tokenTracker;
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
+    private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
 
@@ -59,7 +60,8 @@ public sealed class AgentLoop : IAgentLoop
         ILogger<AgentLoop> logger,
         IMetrics? metrics = null,
         ITracer? tracer = null,
-        IToolDispatcher? toolDispatcher = null)
+        IToolDispatcher? toolDispatcher = null,
+        IMcpRegistry? mcpRegistry = null)
     {
         _providers = providers;
         _tools = tools;
@@ -83,6 +85,9 @@ public sealed class AgentLoop : IAgentLoop
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
             ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
+        // ROP-D Z3: MCP server instructions flow into the system prompt when a
+        // registry is composed in; tests without one keep the section absent.
+        _mcpRegistry = mcpRegistry;
     }
 
     /// <summary>
@@ -213,16 +218,15 @@ public sealed class AgentLoop : IAgentLoop
 
                 // 3. Build system prompt
                 var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
-                // ROP-C Z3: the skills / context-files sections were rendered by
-                // the prompt builder but never fed. MCP instructions stay null —
-                // IMcpRegistry has no instruction-aggregation API yet.
+                // ROP-C Z3: skills / context files come from the workspace.
+                // ROP-D Z3: MCP instructions aggregate from connected servers.
                 var promptContext = new SystemPromptContext(
                     agent,
                     model,
                     tools,
                     WorkspaceContextSource.LoadContextFiles(session.Session.Directory),
                     WorkspaceContextSource.LoadSkills(session.Session.Directory),
-                    null,
+                    WorkspaceContextSource.FormatMcpInstructions(_mcpRegistry?.GetInstructions()),
                     session.Session.Directory);
                 string systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
 

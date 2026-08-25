@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
 using TUnit.Assertions;
 
@@ -116,5 +117,32 @@ public class WorkspaceContextSourceTests : IDisposable
 
         await Assert.That(skills.Count).IsEqualTo(1);
         await Assert.That(skills[0].Name).IsEqualTo("real");
+    }
+
+    // ---- ROP-D Z3: MCP instruction aggregation formatting ------------------
+
+    [Test]
+    public async Task FormatMcpInstructions_NullOrEmpty_ReturnsNull()
+    {
+        await Assert.That(WorkspaceContextSource.FormatMcpInstructions(null)).IsNull();
+        await Assert.That(
+            WorkspaceContextSource.FormatMcpInstructions(Array.Empty<McpServerInstructions>())).IsNull();
+    }
+
+    [Test]
+    public async Task FormatMcpInstructions_MultipleServers_RendersOneBulletPerServer()
+    {
+        var servers = new[]
+        {
+            new McpServerInstructions("filesystem", "Read files only."),
+            new McpServerInstructions("git", "Never force-push.\nUse dry runs."),
+        };
+
+        string? block = WorkspaceContextSource.FormatMcpInstructions(servers);
+
+        await Assert.That(block).IsNotNull();
+        await Assert.That(block!).Contains("- filesystem: Read files only.");
+        // Multi-line server text is flattened to one line per bullet.
+        await Assert.That(block).Contains("- git: Never force-push. Use dry runs.");
     }
 }

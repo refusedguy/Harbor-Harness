@@ -1,3 +1,6 @@
+using System.Text;
+using Harbor.Abstractions.Tools;
+
 namespace Harbor.Application.Sessions;
 
 /// <summary>
@@ -67,6 +70,28 @@ public static class WorkspaceContextSource
         }
 
         return files;
+    }
+
+    /// <summary>
+    ///     Render aggregated MCP server instructions as a prompt block
+    ///     (ROP-D Z3). Returns <c>null</c> when no server reported instructions
+    ///     so the builder skips the section entirely.
+    /// </summary>
+    public static string? FormatMcpInstructions(IReadOnlyList<McpServerInstructions>? servers)
+    {
+        if (servers is null || servers.Count == 0)
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder("Instructions from connected MCP servers:");
+        foreach (McpServerInstructions server in servers)
+        {
+            sb.Append("\n- ").Append(server.ServerName).Append(": ")
+              .Append(server.Instructions.ReplaceLineEndings(" "));
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>

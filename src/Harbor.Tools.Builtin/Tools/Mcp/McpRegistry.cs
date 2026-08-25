@@ -132,6 +132,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                     continue;
                 }
 
+                // Static instructions hint (ROP-D Z3): surfaced to the system
+                // prompt via IMcpRegistry.GetInstructions() without any
+                // process spawn — the dynamic source is the `initialize`
+                // response harvested in InvokeAsync.
+                string? staticInstructions =
+                    value.TryGetProperty("instructions", out var insEl) && insEl.ValueKind == JsonValueKind.String
+                        ? insEl.GetString()
+                        : null;
+
                 var command = commandEl.GetString() ?? string.Empty;
                 var args = new List<string>();
                 if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
@@ -161,9 +170,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
                 var result = RegisterInternal(name, startInfo);
                 if (result.IsSuccess)
+                {
                     loaded++;
+                    if (!string.IsNullOrWhiteSpace(staticInstructions))
+                        _servers[name].SetInstructions(staticInstructions);
+                }
                 else
+                {
                     _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, result.Error);
+                }
             }
 
             _logger?.LogInformation("Loaded {Count} MCP server(s) from config", loaded);
@@ -188,6 +203,33 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     public IReadOnlyList<string> GetServerNames() => _servers.Keys.ToArray();
+
+    /// <inheritdoc />
+    public IReadOnlyList<McpServerInstructions> GetInstructions()
+    {
+        // Stable snapshot ordered by server name so the prompt block is
+        // deterministic across turns (feeds the prompt-builder content hash).
+        List<McpServerInstructions>? snapshot = null;
+        foreach (string name in _servers.Keys.ToArray())
+        {
+            string? instructions = _servers[name].Instructions;
+            if (string.IsNullOrWhiteSpace(instructions))
+            {
+                continue;
+            }
+
+            snapshot ??= new List<McpServerInstructions>();
+            snapshot.Add(new McpServerInstructions(name, instructions));
+        }
+
+        if (snapshot is null)
+        {
+            return Array.Empty<McpServerInstructions>();
+        }
+
+        snapshot.Sort(static (a, b) => string.CompareOrdinal(a.ServerName, b.ServerName));
+        return snapshot;
+    }
 
     public async Task<Result<string>> InvokeAsync(string server, string method, JsonElement args, CancellationToken cancellationToken = default)
     {
@@ -216,7 +258,19 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 return Result.Failure<string>($"MCP error from '{server}': {msg}");
             }
 
-            return Result.Success(response.RootElement.GetProperty("result").GetRawText());
+            var resultElement = response.RootElement.GetProperty("result");
+            // ROP-D Z3: harvest the `instructions` field of an `initialize`
+            // result so later turns can surface it in the system prompt.
+            if (method == "initialize"
+                && resultElement.ValueKind == JsonValueKind.Object
+                && resultElement.TryGetProperty("instructions", out var initIns)
+                && initIns.ValueKind == JsonValueKind.String
+                && entry.TrySetInstructions(initIns.GetString()))
+            {
+                _logger?.LogDebug("Captured MCP instructions from '{Server}' initialize", server);
+            }
+
+            return Result.Success(resultElement.GetRawText());
         }
         catch (Exception ex)
         {
@@ -244,8 +298,25 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     {
         private readonly McpServerStartInfo _startInfo;
         private McpProcessClient? _process;
+        private volatile string? _instructions;
 
         public ServerEntry(McpServerStartInfo startInfo) => _startInfo = startInfo;
+
+        public string? Instructions => _instructions;
+
+        public void SetInstructions(string? instructions) => _instructions = instructions;
+
+        /// <summary>First writer wins; later handshakes never clobber a hint.</summary>
+        public bool TrySetInstructions(string? instructions)
+        {
+            if (string.IsNullOrWhiteSpace(instructions) || _instructions is not null)
+            {
+                return false;
+            }
+
+            _instructions = instructions;
+            return true;
+        }
 
         public McpProcessClient? GetProcess()
         {
