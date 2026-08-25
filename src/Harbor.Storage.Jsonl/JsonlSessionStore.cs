@@ -131,24 +131,33 @@ public sealed class JsonlSessionStore : ISessionStore
 
             _messageCache.TryRemove(session.Id, out _);
             return session;
-        }, Harbor.Abstractions.Results.ResultErrors.Message)
+        }, ResultErrors.Message)
             .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
     }
 
+    /// <summary>
+    ///     Read one session by id. <b>ROP-C Z1:</b> disk access rides
+    ///     <see cref="Result.Try" /> with <see cref="ResultErrors.Message" /> —
+    ///     cancellation propagates instead of being masked as a store failure.
+    ///     The expected "not found" outcome stays a plain <see cref="Result.Failure{T}" />
+    ///     (no exception, no error log); only unexpected I/O failures are converted.
+    /// </summary>
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
-        try
-        {
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (!File.Exists(sessionFile))
-                return Result.Failure<Session>($"Session '{sessionId}' not found.");
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        string sessionFile = GetSessionFilePath(sessionId);
+        if (!File.Exists(sessionFile))
+            return Result.Failure<Session>($"Session '{sessionId}' not found.");
 
-            var header = await ReadHeaderAsync(sessionFile, ct).ConfigureAwait(false);
-            if (header is null)
-                return Result.Failure<Session>($"Session '{sessionId}' is corrupt (no header).");
+        Result<Session> loaded = await Result.Try(async () =>
+        {
+            ct.ThrowIfCancellationRequested();
+            var header = await ReadHeaderAsync(sessionFile, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"Session '{sessionId}' is corrupt (no header).");
 
             var metadata = await GetStatsAsync(sessionId, ct).ConfigureAwait(false);
-            var session = new Session(
+            return new Session(
                 header.Id,
                 header.ProjectId,
                 header.Directory,
@@ -159,18 +168,14 @@ public sealed class JsonlSessionStore : ISessionStore
                 header.CreatedAt,
                 DateTimeOffset.UtcNow,
                 metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty);
+        }, ResultErrors.Message).ConfigureAwait(false);
 
-            return Result.Success(session);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Result.Failure<Session>(ex.Message);
-        }
+        return loaded.TapError(e => _logger.LogError("Failed to read session {SessionId}: {Error}", sessionId, e));
     }
 
-    public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+    public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
     {
-        try
+        return Result.Try(async () =>
         {
             var sessions = new List<Session>();
             foreach (string file in Directory.EnumerateFiles(_rootDirectory, "*.jsonl"))
@@ -185,12 +190,9 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
-            return Result.Success<IReadOnlyList<Session>>(sessions);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Result.Failure<IReadOnlyList<Session>>(ex.Message);
-        }
+            return (IReadOnlyList<Session>)sessions;
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to list sessions: {Error}", e));
     }
 
     /// <summary>
@@ -199,26 +201,25 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     re-parses from disk (the file has changed).
     /// </summary>
     /// <remarks>
-    ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is observed
-    ///     via <see cref="CancellationToken.ThrowIfCancellationRequested" />
-    ///     before the lock is acquired and before the file write.
-    ///     <c>File.AppendAllText</c> itself is synchronous I/O that does not
-    ///     accept a CT; a 30 MB message write therefore cannot be interrupted
-    ///     mid-write. The guard at least prevents a write that has already been
-    ///     cancelled by the time the call enters the critical section.
+    ///     <b>ROP-C Z1:</b> the write rides <see cref="Result.Try" /> with
+    ///     <see cref="ResultErrors.Message" /> — cancellation propagates
+    ///     instead of being masked as a store failure. The expected
+    ///     "not found" outcome is decided before the try boundary.
     /// </remarks>
     public async Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        try
+        // §3.4: observe cancellation BEFORE the existence policy — an Esc must
+        // never surface as "session not found".
+        ct.ThrowIfCancellationRequested();
+        string sessionFile = GetSessionFilePath(sessionId);
+        if (!File.Exists(sessionFile))
         {
-            ct.ThrowIfCancellationRequested();
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (!File.Exists(sessionFile))
-            {
-                _messageCache.TryRemove(sessionId, out _);
-                return Result.Failure($"Session '{sessionId}' not found.");
-            }
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure($"Session '{sessionId}' not found.");
+        }
 
+        return await Result.Try(async () =>
+        {
             var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -241,13 +242,8 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             _messageCache.TryRemove(sessionId, out _);
-            return Result.Success();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Failed to append message to session {SessionId}", sessionId);
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
@@ -275,15 +271,17 @@ public sealed class JsonlSessionStore : ISessionStore
     /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        string sessionFile = GetSessionFilePath(sessionId);
+        if (!File.Exists(sessionFile))
         {
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (!File.Exists(sessionFile))
-            {
-                _messageCache.TryRemove(sessionId, out _);
-                return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
-            }
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found.");
+        }
 
+        return await Result.Try(async () =>
+        {
             // §3.3 cache: freshness check via file mtime. Most filesystems have
             // second-level mtime granularity, which is fine here — every write
             // bumps the mtime.
@@ -291,7 +289,7 @@ public sealed class JsonlSessionStore : ISessionStore
             if (_messageCache.TryGetValue(sessionId, out var cached) && cached.FileLastWriteUtc == fileMtime)
             {
                 // Cache hit — return the cached list directly. Zero allocations.
-                return Result.Success<IReadOnlyList<AgentMessage>>(cached.Messages);
+                return cached.Messages;
             }
 
             // Cache miss (or stale) — parse from disk.
@@ -305,12 +303,9 @@ public sealed class JsonlSessionStore : ISessionStore
                 // half-built one.
                 _messageCache[sessionId] = new SessionCacheEntry(fileMtime, parseResult.Value);
             }
-            return parseResult;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
-        }
+            return parseResult.Value;
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to read messages of session {SessionId}: {Error}", sessionId, e));
     }
 
     /// <summary>
@@ -318,14 +313,13 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     session is also removed (§3.3 cache).
     /// </summary>
     /// <remarks>
-    ///     <b>CT note (§3.4):</b> the supplied <paramref name="ct" /> is
-    ///     observed via <see cref="CancellationToken.ThrowIfCancellationRequested" />
-    ///     before the file delete. <c>File.Delete</c> itself is synchronous I/O
-    ///     that does not accept a CT.
+    ///     <b>ROP-C Z1:</b> the delete rides <see cref="Result.Try" /> with
+    ///     <see cref="ResultErrors.Message" /> — cancellation propagates
+    ///     instead of being masked as a store failure.
     /// </remarks>
-    public async Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
+    public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
             _messageCache.TryRemove(sessionId, out _);
@@ -340,64 +334,58 @@ public sealed class JsonlSessionStore : ISessionStore
                     File.Delete(sessionFile);
                 }
                 _sessionLocks.TryRemove(sessionId, out _);
-                return Result.Success();
             }
             finally
             {
                 semaphore.Release();
             }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Failed to delete session {SessionId}", sessionId);
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to delete session {SessionId}: {Error}", sessionId, e));
     }
-    
+
+    /// <summary>
+    ///     Aggregate per-session stats from the message history. Every fallible
+    ///     step (<see cref="GetMessagesAsync" />) already returns a
+    ///     <see cref="Result{T}" /> and nothing here throws, so no try boundary
+    ///     is needed at all (ROP-C Z1: the vestigial catch→Failure was removed).
+    /// </summary>
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
+        if (messagesResult.IsFailure)
+            return Result.Failure<SessionMetadata>(messagesResult.Error);
+
+        var messages = messagesResult.Value;
+        decimal cost = 0m;
+        int inputTokens = 0;
+        int outputTokens = 0;
+        int reasoningTokens = 0;
+        int cacheRead = 0;
+        int cacheWrite = 0;
+        int count = 0;
+
+        foreach (var msg in messages)
         {
-            var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-            if (messagesResult.IsFailure)
-                return Result.Failure<SessionMetadata>(messagesResult.Error);
-
-            var messages = messagesResult.Value;
-            decimal cost = 0m;
-            int inputTokens = 0;
-            int outputTokens = 0;
-            int reasoningTokens = 0;
-            int cacheRead = 0;
-            int cacheWrite = 0;
-            int count = 0;
-
-            foreach (var msg in messages)
+            if (msg is AssistantMessage a)
             {
-                if (msg is AssistantMessage a)
-                {
-                    inputTokens += a.Usage.InputTokens;
-                    outputTokens += a.Usage.OutputTokens;
-                    reasoningTokens += a.Usage.ReasoningTokens ?? 0;
-                    cacheRead += a.Usage.CacheReadTokens ?? 0;
-                    cacheWrite += a.Usage.CacheWriteTokens ?? 0;
-                    count++;
-                }
+                inputTokens += a.Usage.InputTokens;
+                outputTokens += a.Usage.OutputTokens;
+                reasoningTokens += a.Usage.ReasoningTokens ?? 0;
+                cacheRead += a.Usage.CacheReadTokens ?? 0;
+                cacheWrite += a.Usage.CacheWriteTokens ?? 0;
+                count++;
             }
+        }
 
-            return Result.Success(new SessionMetadata(
-                cost,
-                inputTokens,
-                outputTokens,
-                reasoningTokens,
-                cacheRead,
-                cacheWrite,
-                count,
-                null));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Result.Failure<SessionMetadata>(ex.Message);
-        }
+        return Result.Success(new SessionMetadata(
+            cost,
+            inputTokens,
+            outputTokens,
+            reasoningTokens,
+            cacheRead,
+            cacheWrite,
+            count,
+            null));
     }
 
     public async Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
@@ -407,15 +395,23 @@ public sealed class JsonlSessionStore : ISessionStore
         return Result.Success();
     }
 
+    /// <summary>
+    ///     Rewrite the session header line (title/agent/model edits).
+    ///     <b>ROP-C Z1:</b> the rewrite rides <see cref="Result.Try" /> with
+    ///     <see cref="ResultErrors.Message" />; the expected "not found" outcome
+    ///     is decided before the try boundary.
+    /// </summary>
     public async Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
     {
-        try
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        string sessionFile = GetSessionFilePath(session.Id);
+        if (!File.Exists(sessionFile))
+            return Result.Failure($"Session '{session.Id}' not found.");
+
+        return await Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
-            string sessionFile = GetSessionFilePath(session.Id);
-            if (!File.Exists(sessionFile))
-                return Result.Failure($"Session '{session.Id}' not found.");
-
             var semaphore = await GetSessionLockAsync(session.Id, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -423,7 +419,7 @@ public sealed class JsonlSessionStore : ISessionStore
                 ct.ThrowIfCancellationRequested();
                 var lines = File.ReadAllLines(sessionFile).ToList();
                 if (lines.Count == 0)
-                    return Result.Failure($"Session '{session.Id}' is empty.");
+                    throw new InvalidOperationException($"Session '{session.Id}' is empty.");
 
                 var header = new SessionHeaderEntry(
                     "session",
@@ -446,13 +442,8 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             _messageCache.TryRemove(session.Id, out _);
-            return Result.Success();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e));
     }
 
     /// <summary>

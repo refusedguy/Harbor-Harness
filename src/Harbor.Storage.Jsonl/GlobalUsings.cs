@@ -7,4 +7,5 @@ global using System.Threading;
 global using System.Threading.Tasks;
 global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Models;
+global using Harbor.Abstractions.Results;
 global using Harbor.Abstractions.Sessions;
