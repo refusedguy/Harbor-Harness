@@ -220,6 +220,55 @@ public static class BashArgMatcher
     }
 
     /// <summary>
+    ///     Token-level prefix matching for Allow rules (sprint 6 C1): the
+    ///     rule pattern is parsed into expected tokens; every non-wildcard
+    ///     token must equal the corresponding leading argv token EXACTLY
+    ///     (case-sensitive, Ordinal); a trailing <c>*</c> allows any further
+    ///     arguments; without it the segment's argv must match the tokens
+    ///     exactly. <c>git *</c> therefore matches <c>git status -sb</c> but
+    ///     not <c>gitk</c>, <c>GIT push</c>, or <c>git status; rm x</c>.
+    /// </summary>
+    /// <param name="pattern">The rule pattern, e.g. <c>"git diff *"</c>.</param>
+    /// <param name="command">The raw command string.</param>
+    public static bool IsAllowedByPrefixRule(string pattern, string command)
+    {
+        if (HasShellMetacharacters(command)) return false;
+
+        var expected = SplitArgv(pattern);
+        if (expected.Count == 0) return false;
+
+        bool openEnded = expected[expected.Count - 1] == "*";
+        int fixedCount = openEnded ? expected.Count - 1 : expected.Count;
+        if (fixedCount == 0) return openEnded;
+
+        var segments = SplitSegments(command);
+        for (int s = 0; s < segments.Count; s++)
+        {
+            var argv = SplitArgv(segments[s]);
+            if (!SegmentMatchesPrefix(argv, expected, fixedCount, openEnded)) return false;
+        }
+
+        return true;
+    }
+
+    private static bool SegmentMatchesPrefix(
+        IReadOnlyList<string> argv,
+        IReadOnlyList<string> expected,
+        int fixedCount,
+        bool openEnded)
+    {
+        // Open-ended rules ("git *") allow extra arguments; exact rules
+        // ("git status") require the full token sequence and nothing more.
+        if (openEnded ? argv.Count < fixedCount : argv.Count != fixedCount) return false;
+        for (int k = 0; k < fixedCount; k++)
+        {
+            if (!argv[k].Equals(expected[k], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     ///     Splits a command into argv using shlex-like rules: whitespace separates tokens,
     ///     single quotes are literal, double quotes allow backslash escapes, backslash escapes
     ///     the next character outside quotes. Quote characters themselves are not part of tokens.
@@ -321,6 +370,9 @@ public static class BashArgMatcher
         }
 
         // S127: manual loop control — the body may skip a second operator char (||, &&).
+        // Every branch must advance the index: quote/escape paths copy
+        // verbatim and jump straight to the next character. A missing advance
+        // here used to spin forever on any quoted command.
         int i = 0;
         while (i < command.Length)
         {
@@ -329,6 +381,7 @@ public static class BashArgMatcher
             {
                 sb.Append(c);
                 escaped = false;
+                i++;
                 continue;
             }
 
@@ -336,6 +389,7 @@ public static class BashArgMatcher
             {
                 if (c == '\'') inSingle = false;
                 sb.Append(c);
+                i++;
                 continue;
             }
 
@@ -344,6 +398,7 @@ public static class BashArgMatcher
                 if (c == '\\') escaped = true;
                 else if (c == '"') inDouble = false;
                 sb.Append(c);
+                i++;
                 continue;
             }
 

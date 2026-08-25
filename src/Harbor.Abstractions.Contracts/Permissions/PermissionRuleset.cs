@@ -216,6 +216,10 @@ public sealed record PermissionRuleset
             {
                 if (bashMetachars) continue; // Allow must not match; anything else falls through to Ask.
                 if (pathGuard && !IsLiteralPattern(rule.Pattern)) continue;
+                // C1 (sprint 6): bash Allow rules match TOKEN-wise, not
+                // string-glob-wise — "git *" allows real git invocations only
+                // (exact argv[0], case-sensitive), never "gitk" or "GIT push".
+                if (isBash && !BashArgMatcher.IsAllowedByPrefixRule(rule.Pattern, argPath)) continue;
             }
 
             if (!rule.MatchesPattern(argPath)) continue;
