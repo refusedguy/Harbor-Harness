@@ -40,13 +40,17 @@ namespace Harbor.Core.Agents;
 ///         successful "tool returned an error" rather than throwing.
 ///     </para>
 /// </remarks>
-internal sealed class ToolDispatcher(
+/// <remarks>
+///     <b>ROP-C П.5:</b> public so hosts can construct the default dispatcher
+///     when wiring <see cref="IToolDispatcher" /> in DI.
+/// </remarks>
+public sealed class ToolDispatcher(
     IToolRegistry tools,
     IPermissionService permissions,
     IEventBus eventBus,
-#pragma warning disable S6672
-    ILogger<AgentLoop> logger)
-#pragma warning restore S6672
+    // ROP-C П.8: own category instead of the borrowed ILogger<AgentLoop>
+    // (S6672) — dispatcher records are filterable by their own type.
+    ILogger<ToolDispatcher> logger) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
@@ -142,6 +146,34 @@ internal sealed class ToolDispatcher(
     }
 
     /// <summary>
+    ///     Parse a raw tool name and resolve it to a registered tool on one
+    ///     railway. Failure text is produced at the source of each failure:
+    ///     invalid format via MapError, unknown tool (with the available-tools
+    ///     inventory) via the registry-miss branch.
+    /// </summary>
+    private Result<ITool> ResolveTool(string rawName) =>
+        ToolName.TryCreate(rawName)
+            .MapError(e => $"Invalid tool name: {e}")
+            .Bind(name => tools.GetTool(name).MapError(_ => UnknownToolDiagnostic(rawName)));
+
+    /// <summary>
+    ///     Build the "available tools" list with a pooled StringBuilder instead of
+    ///     `.Select(...).JoinToString(...)` (which allocates an iterator + intermediate list).
+    /// </summary>
+    private string UnknownToolDiagnostic(string rawName)
+    {
+        using var avail = StringBuilderPool.Rent(128);
+        var allTools = tools.GetAllTools();
+        for (int i = 0; i < allTools.Count; i++)
+        {
+            if (avail.Builder.Length > 0) avail.Builder.Append(", ");
+            avail.Builder.Append(allTools[i].Name.Value);
+        }
+
+        return $"Unknown tool: '{rawName}'. Available: {avail}";
+    }
+
+    /// <summary>
     ///     Execute a single tool call: validate name → validate args → check
     ///     permission → publish start event → execute → publish end event.
     ///     All error paths return a <see cref="ToolResultEntry" /> with
@@ -157,38 +189,18 @@ internal sealed class ToolDispatcher(
     {
         using var activity = Source.StartActivity("Tool.Execute");
         activity?.SetTag(ToolNameTag, toolCall.ToolName);
-        var toolNameResult = ToolName.TryCreate(toolCall.ToolName);
-        if (toolNameResult.IsFailure)
+
+        // ROP-C П.4: the two guard ladders (name parse → registry lookup) ride
+        // one Bind railway. Diagnostics stay distinct by construction: MapError
+        // localizes "invalid name" at its source and the registry-miss branch
+        // carries the available-tools inventory (rop-final-mile L5 boundary).
+        Result<ITool> resolved = ResolveTool(toolCall.ToolName);
+        if (resolved.IsFailure)
         {
-            return new ToolResultEntry(
-                toolCall.Id,
-                toolCall.ToolName,
-                $"Invalid tool name: {toolNameResult.Error}",
-                true);
+            return new ToolResultEntry(toolCall.Id, toolCall.ToolName, resolved.Error, true);
         }
 
-        var toolResult = tools.GetTool(toolNameResult.Value);
-        if (toolResult.IsFailure)
-        {
-            // Build the "available tools" list with a pooled StringBuilder instead of
-            // `.Select(...).JoinToString(...)` (which allocates an iterator + intermediate list).
-            string available;
-            using (var avail = StringBuilderPool.Rent(128))
-            {
-                var allTools = tools.GetAllTools();
-                for (int i = 0; i < allTools.Count; i++)
-                {
-                    if (avail.Builder.Length > 0) avail.Builder.Append(", ");
-                    avail.Builder.Append(allTools[i].Name.Value);
-                }
-                available = avail.ToString();
-            }
-            return new ToolResultEntry(
-                toolCall.Id,
-                toolCall.ToolName,
-                $"Unknown tool: '{toolCall.ToolName}'. Available: {available}",
-                true);
-        }
+        ITool tool = resolved.Value;
 
         await eventBus.PublishAsync(new ToolExecutionStartEvent(
             toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
@@ -209,8 +221,6 @@ internal sealed class ToolDispatcher(
             CancellationToken effectiveCt = timeoutCts?.Token ?? ct;
             try
             {
-            var tool = toolResult.Value;
-
             // Argument validation — returns a tool error instead of letting the
             // tool throw (e.g. KeyNotFoundException on a missing required prop).
             var validation = tool.ValidateArguments(toolCall.Args);

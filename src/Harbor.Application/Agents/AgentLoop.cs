@@ -6,6 +6,7 @@ using Harbor.Core.Resources;
 using Harbor.Core.Sessions;
 using Harbor.Core.Telemetry;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Agents;
 /// <summary>
 ///     Default agent loop. Implements Chain of Responsibility pattern (GOF):
@@ -33,7 +34,7 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ISystemPromptBuilder _promptBuilder;
     private readonly IProviderRegistry _providers;
     private readonly ITokenTracker _tokenTracker;
-    private readonly ToolDispatcher _toolDispatcher;
+    private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
@@ -57,7 +58,8 @@ public sealed class AgentLoop : IAgentLoop
         MessageConverter messageConverter,
         ILogger<AgentLoop> logger,
         IMetrics? metrics = null,
-        ITracer? tracer = null)
+        ITracer? tracer = null,
+        IToolDispatcher? toolDispatcher = null)
     {
         _providers = providers;
         _tools = tools;
@@ -75,7 +77,12 @@ public sealed class AgentLoop : IAgentLoop
         _logger = logger;
         _metrics = metrics ?? NullMetrics.Instance;
         _tracer = tracer ?? NullTracer.Instance;
-        _toolDispatcher = new ToolDispatcher(tools, permissions, eventBus, logger);
+        // ROP-C П.5: the dispatcher is injected via DI when composed by the host,
+        // while tests and benchmarks fall back to a locally built one. That
+        // fallback uses a NullLogger because the loop's own typed logger must
+        // not be lent out under a foreign category (S6672).
+        _toolDispatcher = toolDispatcher
+            ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
     }
 
     /// <summary>

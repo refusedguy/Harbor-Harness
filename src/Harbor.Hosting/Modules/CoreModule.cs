@@ -1,7 +1,9 @@
+using Harbor.Core.Agents;
 using Harbor.Core.Onboarding;
 using Harbor.Core.Resilience;
 using Harbor.Core.Sessions;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
 using Harbor.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +30,14 @@ internal static class CoreModule
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
+        // ROP-C П.5: the loop depends on the IToolDispatcher seam; the concrete
+        // dispatcher logs under its own category instead of borrowing the
+        // AgentLoop's (ROP-C П.8).
+        services.AddSingleton<IToolDispatcher>(sp => new ToolDispatcher(
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IPermissionService>(),
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetRequiredService<ILogger<ToolDispatcher>>()));
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<DefaultAgent>();
         // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,
