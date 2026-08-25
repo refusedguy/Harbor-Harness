@@ -162,7 +162,7 @@ public sealed class JsonlSessionStore : ISessionStore
 
             return Result.Success(session);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Result.Failure<Session>(ex.Message);
         }
@@ -187,7 +187,7 @@ public sealed class JsonlSessionStore : ISessionStore
             sessions.Sort((a, b) => b.UpdatedAt.CompareTo(a.UpdatedAt));
             return Result.Success<IReadOnlyList<Session>>(sessions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Result.Failure<IReadOnlyList<Session>>(ex.Message);
         }
@@ -394,7 +394,7 @@ public sealed class JsonlSessionStore : ISessionStore
                 count,
                 null));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Result.Failure<SessionMetadata>(ex.Message);
         }
