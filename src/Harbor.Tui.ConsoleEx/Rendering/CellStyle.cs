@@ -37,6 +37,9 @@ public readonly struct PackedColor : IEquatable<PackedColor>
     /// <summary>Terminal-default foreground/background.</summary>
     public static PackedColor Default { get; } = default;
 
+    /// <summary>Rebuilds a color from its packed representation.</summary>
+    internal static PackedColor FromRaw(uint value) => new(value);
+
     /// <summary>256-color palette entry.</summary>
     public static PackedColor Indexed(byte index) => new((uint)index + 1);
 
