@@ -192,15 +192,16 @@ public sealed class WebFetchTool : ITool
         // Manual redirect following with per-hop re-validation (SSRF guard):
         // the original URL and every redirect hop are resolved via DNS and
         // all resulting IPs are checked before connecting.
-        FetchOutcome fetched = await FetchWithRedirectsAsync(
+        var fetched = await FetchWithRedirectsAsync(
             client, url, cancellationToken).ConfigureAwait(false);
-        if (fetched.Error is not null)
+        if (fetched.IsFailure)
         {
             return ToolResult.Error(fetched.Error);
         }
 
-        HttpResponseMessage response = fetched.Response!;
-        Uri finalUri = fetched.FinalUri!;
+        HttpResponseMessage response = fetched.Value.Response;
+        Uri finalUri = fetched.Value.FinalUri;
+        int hops = fetched.Value.Hops;
 
         using (response)
         {
@@ -271,7 +272,7 @@ public sealed class WebFetchTool : ITool
                     status = (int)response.StatusCode,
                     contentType,
                     sizeBytes = bytes.Length,
-                    hops = fetched.Hops,
+                    hops,
                     selector,
                     truncated = markdown.Length >= maxChars,
                     chars = markdown.Length
@@ -297,12 +298,15 @@ public sealed class WebFetchTool : ITool
         };
     }
 
-    /// <summary>Terminal result of a redirect-aware fetch.</summary>
+    /// <summary>Successful terminal state of a redirect-aware fetch (ROP-A Z1 п.1).</summary>
     /// <param name="FinalUri">The URI the response ultimately came from.</param>
-    /// <param name="Response">The final (non-redirect) response. Null on error.</param>
+    /// <param name="Response">The final (non-redirect) response.</param>
     /// <param name="Hops">Number of HTTP requests issued (1 = no redirects).</param>
-    /// <param name="Error">Human-readable failure reason, null on success.</param>
-    private sealed record FetchOutcome(Uri? FinalUri, HttpResponseMessage? Response, int Hops, string? Error);
+    /// <remarks>
+    ///     Replaces the former nullable-quadruple <c>FetchOutcome</c>: an
+    ///     invalid "error AND response present" state is now unrepresentable.
+    /// </remarks>
+    private sealed record FetchOk(Uri FinalUri, HttpResponseMessage Response, int Hops);
 
     /// <summary>
     ///     GET a URL following up to <see cref="MaxRedirectHops" /> redirects
@@ -311,7 +315,7 @@ public sealed class WebFetchTool : ITool
     ///     before connecting; DNS is therefore re-resolved whenever the host
     ///     changes (and even when it does not).
     /// </summary>
-    private async Task<FetchOutcome> FetchWithRedirectsAsync(
+    private async Task<Result<FetchOk>> FetchWithRedirectsAsync(
         HttpClient client,
         string url,
         CancellationToken ct)
@@ -319,23 +323,33 @@ public sealed class WebFetchTool : ITool
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? current)
             || current.Scheme != "http" && current.Scheme != "https")
         {
-            return new FetchOutcome(null, null, 0, $"'url' must be an absolute http(s) URL: {url}");
+            return Result.Failure<FetchOk>($"'url' must be an absolute http(s) URL: {url}");
         }
+
+        // ROP-A Z1 п.2: one exception classifier instead of two hand-copied
+        // catch ladders (send loop here, DNS gate below).
+        Result<FetchOk> SendFailure(Exception ex) => Result.Failure<FetchOk>(
+            ex is OperationCanceledException
+                ? CancelOrTimeoutMessage(ct, ex)
+                : ex switch
+                {
+                    HttpRequestException h => $"HTTP request failed: {h.Message}",
+                    _ => $"webfetch failed: {ex.Message}"
+                });
 
         for (int hop = 0; hop <= MaxRedirectHops + 1; hop++)
         {
             // Cap total requests at 1 + MaxRedirectHops.
             if (hop > MaxRedirectHops)
             {
-                return new FetchOutcome(
-                    null, null, hop,
+                return Result.Failure<FetchOk>(
                     $"Blocked URL '{url}': exceeded {MaxRedirectHops} redirects.");
             }
 
             string? blocked = await GetBlockedReasonAsync(current, ct).ConfigureAwait(false);
             if (blocked is not null)
             {
-                return new FetchOutcome(null, null, hop, blocked);
+                return Result.Failure<FetchOk>(blocked);
             }
 
             HttpResponseMessage resp;
@@ -353,21 +367,9 @@ public sealed class WebFetchTool : ITool
                         HttpCompletionOption.ResponseHeadersRead,
                         cts.Token).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    return new FetchOutcome(null, null, hop, "webfetch cancelled");
-                }
-                catch (OperationCanceledException)
-                {
-                    return new FetchOutcome(null, null, hop, $"Request timed out after {HttpTimeoutSeconds}s.");
-                }
-                catch (HttpRequestException ex)
-                {
-                    return new FetchOutcome(null, null, hop, $"HTTP request failed: {ex.Message}");
-                }
                 catch (Exception ex)
                 {
-                    return new FetchOutcome(null, null, hop, $"webfetch failed: {ex.Message}");
+                    return SendFailure(ex);
                 }
             }
 
@@ -380,7 +382,7 @@ public sealed class WebFetchTool : ITool
 
             if (!isRedirect)
             {
-                return new FetchOutcome(current, resp, hop + 1, null);
+                return Result.Success(new FetchOk(current, resp, hop + 1));
             }
 
             Uri? location = resp.Headers.Location;
@@ -388,7 +390,7 @@ public sealed class WebFetchTool : ITool
             {
                 // 3xx without Location — no hop to follow; hand the response
                 // back like HttpClient's auto-redirect would.
-                return new FetchOutcome(current, resp, hop + 1, null);
+                return Result.Success(new FetchOk(current, resp, hop + 1));
             }
 
             Uri next = location.IsAbsoluteUri ? location : new Uri(current, location);
@@ -396,8 +398,7 @@ public sealed class WebFetchTool : ITool
 
             if (next.Scheme != "http" && next.Scheme != "https")
             {
-                return new FetchOutcome(
-                    null, null, hop + 1,
+                return Result.Failure<FetchOk>(
                     $"Blocked redirect from '{current}' to '{next}': only http/https schemes are supported.");
             }
 
@@ -406,10 +407,16 @@ public sealed class WebFetchTool : ITool
 
         // Not reachable: the final loop iteration returns the redirect-cap
         // outcome above. Kept so the compiler sees every path returns.
-        return new FetchOutcome(
-            null, null, MaxRedirectHops + 1,
+        return Result.Failure<FetchOk>(
             $"Blocked URL '{url}': exceeded {MaxRedirectHops} redirects.");
     }
+
+    /// <summary>Shared cancel-vs-timeout wording (ROP-A Z1 п.2): one source.</summary>
+    private string CancelOrTimeoutMessage(CancellationToken ct, Exception ex) => ex switch
+    {
+        OperationCanceledException when ct.IsCancellationRequested => "webfetch cancelled",
+        _ => $"Request timed out after {HttpTimeoutSeconds}s."
+    };
 
     /// <summary>
     ///     SSRF gate for one request target. Returns <see langword="null" />
@@ -438,13 +445,10 @@ public sealed class WebFetchTool : ITool
         {
             addresses = await Dns.GetHostAddressesAsync(host, ct).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException ex)
         {
-            return "webfetch cancelled";
-        }
-        catch (OperationCanceledException)
-        {
-            return $"Request timed out after {HttpTimeoutSeconds}s.";
+            // ROP-A Z1 п.2: same cancel/timeout wording as the send loop.
+            return CancelOrTimeoutMessage(ct, ex);
         }
         catch (SocketException ex)
         {
