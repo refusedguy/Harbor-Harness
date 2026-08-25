@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.ConsoleEx</PackageId>
+    <Description>Harbor TUI — next-generation terminal input layer: kitty keyboard protocol, SGR mouse, bracketed paste with anti-injection, raw stdin byte state-machine parser. BCL-only, AOT-compatible.</Description>
+    <PackageTags>harbor;tui;terminal;input;kitty-keyboard;sgr-mouse;bracketed-paste</PackageTags>
+    <!-- ConsoleEx must stay trim/AOT-clean: analyzers enforce zero IL2xxx warnings at build time. -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.ConsoleEx.Tests"/>
+  </ItemGroup>
+
+</Project>
