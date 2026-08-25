@@ -12,6 +12,22 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.Internal;
 
 /// <summary>
+///     Per-stream chunk-parsing state: the tool-call index→id map (ROP-A ПР.3)
+///     plus the malformed-chunk counter (ROP-A ПР.4).
+/// </summary>
+internal sealed class ChunkStreamState
+{
+    /// <summary>First seen id wins per tool-call index.</summary>
+    public Dictionary<int, string> IndexToId { get; } = new(capacity: 4);
+
+    /// <summary>How many wire chunks were skipped as unparseable this stream.</summary>
+    public int MalformedChunks { get; private set; }
+
+    /// <summary>Record one skipped chunk.</summary>
+    public void CountMalformed() => MalformedChunks++;
+}
+
+/// <summary>
 ///     The one SSE/NDJSON stream pump behind every ILlmClient (ROP-A ПР.1).
 ///     Owns the whole transport pipeline: send → status check → line loop →
 ///     completion, with canonical error classification (ROP-A ПР.5) and the

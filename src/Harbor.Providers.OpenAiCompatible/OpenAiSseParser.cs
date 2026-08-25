@@ -6,25 +6,22 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAiCompatible;
 
 /// <summary>
-///     Thin wrapper over the shared <see cref="OpenAiWire" /> chunk parser
-///     (ROP-A ПР.2) — the canonical wire code is compiled into this assembly
-///     and the native OpenAI client alike, so the two cannot drift. The
-///     per-stream index→id map keeps tool-call ids stable across delta
-///     chunks (ROP-A ПР.3).
+///     Thin wrapper over the shared <see cref="OpenAiWire" /> helpers — the
+///     canonical wire code is compiled into this assembly and the native
+///     OpenAI client alike, so the two cannot drift. Kept for the parser
+///     benchmark; production clients call <c>OpenAiWire.TryParseChatChunkLine</c>
+///     directly (ROP-A ПР.2/ПР.4).
 /// </summary>
 internal static class OpenAiSseParser
 {
     public static IEnumerable<LlmEvent> ParseChunk(ReadOnlySpan<char> data, Dictionary<int, string> indexToId, ILogger logger)
     {
-        try
+        var state = new ChunkStreamState();
+        foreach ((int index, string id) in indexToId)
         {
-            using var doc = JsonDocument.Parse(data.ToString());
-            return OpenAiWire.ParseChatChunk(doc.RootElement, indexToId).ToList();
+            state.IndexToId[index] = id;
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to parse chunk: {Data}", data.ToString());
-            return new[] { new ErrorEvent($"Parse failed: {ex.Message}", Kind: ProviderErrorKind.Malformed) };
-        }
+
+        return OpenAiWire.TryParseChatChunkLine(data.ToString(), state, logger);
     }
 }

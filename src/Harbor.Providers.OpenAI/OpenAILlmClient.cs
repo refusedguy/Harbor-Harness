@@ -83,8 +83,8 @@ public sealed class OpenAILlmClient : ILlmClient
                     ? BuildResponsesRequest(request, apiKeyResult.Value)
                     : BuildChatCompletionsRequest(request, apiKeyResult.Value);
 
-                // ROP-A ПР.3: per-stream tool-call index→id map for stable ids.
-                var indexToId = new Dictionary<int, string>(capacity: 4);
+                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
+                var chunkState = new ChunkStreamState();
 
                 // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
                 // live in SsePump; it emits exactly one FinishEvent on graceful
@@ -93,8 +93,17 @@ public sealed class OpenAILlmClient : ILlmClient
                     writer, _http, httpRequest,
                     (data, token) => useResponsesApi
                         ? WriteResponsesEventsAsync(data, writer, token)
-                        : WriteChatChunkEventsAsync(data, writer, indexToId, token),
-                    "OpenAI API", _logger, cancellationToken).ConfigureAwait(false);
+                        : WriteChatChunkEventsAsync(data, writer, chunkState, token),
+                    "OpenAI API", _logger, cancellationToken,
+                    onComplete: () =>
+                    {
+                        if (chunkState.MalformedChunks > 0)
+                        {
+                            _logger.LogInformation(
+                                "OpenAI stream completed with {Count} malformed chunk(s) skipped",
+                                chunkState.MalformedChunks);
+                        }
+                    }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -316,23 +325,14 @@ public sealed class OpenAILlmClient : ILlmClient
 
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the channel.
-    ///     Chunk parsing is delegated to the shared <see cref="OpenAiWire" /> parser
-    ///     (ROP-A ПР.2) — the same canonical code the compat adapter uses, so wire
-    ///     handling cannot drift between native and generic clients.
+    ///     Chunk parsing is delegated to the shared <see cref="OpenAiWire" /> helpers
+    ///     (ROP-A ПР.2) with the unified skip-and-count malformed-chunk policy (ПР.4).
     /// </summary>
-    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, Dictionary<int, string> indexToId, CancellationToken ct)
+    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
-        try
+        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, _logger))
         {
-            using var doc = JsonDocument.Parse(data);
-            foreach (var evt in OpenAiWire.ParseChatChunk(doc.RootElement, indexToId))
-            {
-                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse OpenAI chunk: {Data}", data);
+            await writer.WriteAsync(evt, ct).ConfigureAwait(false);
         }
     }
 

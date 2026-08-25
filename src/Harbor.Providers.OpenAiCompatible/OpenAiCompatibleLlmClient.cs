@@ -69,10 +69,9 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
                 var httpRequest = BuildRequest(request, apiKeyResult.Value);
 
-                // §OOP-001 (RESOLVED): the tool-call index→id map is per-StreamAsync-call
-                // state captured by the onData closure below, so concurrent StreamAsync
-                // calls each get their own map without any synchronisation.
-                var indexToId = new Dictionary<int, string>(capacity: 4);
+                // §OOP-001 (RESOLVED): per-StreamAsync-call parsing state —
+                // tool-call id map + malformed-chunk counter (ROP-A ПР.3/ПР.4).
+                var chunkState = new ChunkStreamState();
 
                 // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
                 // live in SsePump; activity observability is preserved via hooks.
@@ -80,7 +79,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                     writer, _http, httpRequest,
                     async (data, token) =>
                     {
-                        foreach (var evt in OpenAiSseParser.ParseChunk(data.AsSpan(), indexToId, _logger))
+                        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, _logger))
                         {
                             if (evt is StepFinishEvent { Usage: not null } sfe)
                             {
@@ -105,7 +104,16 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
                         activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
                         activity?.AddException(ex);
                     },
-                    onComplete: () => activity?.SetStatus(ActivityStatusCode.Ok)).ConfigureAwait(false);
+                    onComplete: () =>
+                    {
+                        activity?.SetStatus(ActivityStatusCode.Ok);
+                        if (chunkState.MalformedChunks > 0)
+                        {
+                            _logger.LogInformation(
+                                "Stream for {Provider} completed with {Count} malformed chunk(s) skipped",
+                                ProviderId.Value, chunkState.MalformedChunks);
+                        }
+                    }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {

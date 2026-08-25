@@ -6,6 +6,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Providers.Internal;
 
@@ -106,5 +107,28 @@ internal static class OpenAiWire
         return new Usage(
             usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
             usage.TryGetProperty("completion_tokens", out var ct2) ? ct2.GetInt32() : 0);
+    }
+
+    /// <summary>
+    ///     Unified malformed-chunk policy (ROP-A ПР.4): a chunk that fails to
+    ///     parse is logged, counted and SKIPPED — the stream survives a single
+    ///     bad line. Terminal error events are reserved for auth/HTTP/network
+    ///     failures; they never fire for wire noise.
+    /// </summary>
+    public static IReadOnlyList<LlmEvent> TryParseChatChunkLine(
+        string data, ChunkStreamState state, ILogger logger)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(data);
+            return ParseChatChunk(doc.RootElement, state.IndexToId).ToArray();
+        }
+        catch (Exception ex)
+        {
+            state.CountMalformed();
+            logger.LogWarning(ex, "Skipping malformed chat-completions chunk #{Count}: {Data}",
+                state.MalformedChunks, data);
+            return Array.Empty<LlmEvent>();
+        }
     }
 }

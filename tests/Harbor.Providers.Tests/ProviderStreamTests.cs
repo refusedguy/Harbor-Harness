@@ -117,4 +117,32 @@ public class ProviderStreamTests
         await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
         await Assert.That(events.Count(e => e is StepFinishEvent)).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task MalformedChunk_IsSkipped_StreamSurvives()
+    {
+        // ROP-A ПР.4: one unparseable line must NOT terminate the stream
+        // (previously the compat adapter emitted a terminal ErrorEvent here).
+        var handler = new StubHttpHandler(_ => Sse(
+            """{"choices":[{"delta":{"content":"before"}}]}""",
+            "{NOT VALID JSON",
+            """{"choices":[{"delta":{"content":"after"}}],"finish_reason":"stop"}""",
+            "[DONE]"));
+
+        var config = new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" };
+        var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
+            new HttpClient(handler),
+            config,
+            StubGenericAuthResolver.Instance,
+            StubModelCatalog.Instance,
+            NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
+
+        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+            "m1", [LlmUserMessage.Text("hello")], "", [])));
+
+        string text = string.Concat(events.OfType<TextDeltaEvent>().Select(t => t.Delta));
+        await Assert.That(text).IsEqualTo("beforeafter");
+        await Assert.That(events.Count(e => e is ErrorEvent)).IsEqualTo(0);
+        await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
+    }
 }

@@ -66,8 +66,8 @@ public sealed class OllamaLlmClient : ILlmClient
             {
                 var httpRequest = BuildRequest(request);
 
-                // ROP-A ПР.3: per-stream tool-call index→id map for stable ids.
-                var indexToId = new Dictionary<int, string>(capacity: 4);
+                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
+                var chunkState = new ChunkStreamState();
 
                 // Shared pump (ROP-A ПР.1) in raw-line (NDJSON) mode: Ollama has
                 // no "data:" prefix and no [DONE] sentinel — every line is a
@@ -76,7 +76,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     writer, _http, httpRequest,
                     async (line, token) =>
                     {
-                        await WriteNdjsonEventsAsync(line, writer, indexToId, token).ConfigureAwait(false);
+                        await WriteNdjsonEventsAsync(line, writer, chunkState, token).ConfigureAwait(false);
                         return true;
                     },
                     "Ollama", _logger, cancellationToken,
@@ -242,23 +242,23 @@ public sealed class OllamaLlmClient : ILlmClient
 
     /// <summary>
     ///     Parse one NDJSON line and write any emitted events directly into the channel.
-    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
-    ///     materialization that the previous MapNdjsonChunk helper required to keep JsonElement
-    ///     values alive after dispose.
+    ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
     /// </summary>
-    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, Dictionary<int, string> indexToId, CancellationToken ct)
+    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(line);
-            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement, indexToId))
+            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement, chunkState.IndexToId))
             {
                 await writer.WriteAsync(evt, ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse Ollama NDJSON chunk: {Line}", line);
+            chunkState.CountMalformed();
+            _logger.LogWarning(ex, "Skipping malformed Ollama NDJSON line #{Count}: {Line}",
+                chunkState.MalformedChunks, line);
         }
     }
 
