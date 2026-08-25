@@ -30,8 +30,12 @@ public sealed class InstrumentedProviderRegistry(IProviderRegistry inner, IMetri
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
         => inner.GetAllModelsAsync(cancellationToken);
 
+    // ROP-A ПР.10: instrumentation is exclusively GetClient's job. Wrapping
+    // here TOO would double-instrument any client registered through this
+    // registry (TTFB histogram ×2, token counters ×2) — the invariant "exactly
+    // one decorator layer" is now structural, not convention.
     public void Register(ProviderId providerId, Func<ILlmClient> factory) =>
-        inner.Register(providerId, () => new InstrumentedLlmClient(providerId, factory(), metrics, tracer));
+        inner.Register(providerId, factory);
 
     public Result Unregister(ProviderId providerId) => inner.Unregister(providerId);
 }
