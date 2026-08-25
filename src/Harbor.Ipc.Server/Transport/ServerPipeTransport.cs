@@ -26,7 +26,7 @@ using System.Runtime.Versioning;
     ///         an explicit error instead of silently stealing the endpoint.
     ///     </para>
 /// </remarks>
-public sealed class ServerPipeTransport : IPipeTransport
+public sealed class ServerPipeTransport : IIpcServerTransport
 {
     private readonly Channel<Stream> _acceptChannel;
     private readonly CancellationTokenSource _cts = new();

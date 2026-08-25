@@ -18,7 +18,7 @@ namespace Harbor.Ipc.Transport;
 ///         transport picks the right mechanism (matches <see cref="ServerPipeTransport" />).
 ///     </para>
 /// </remarks>
-public sealed class ClientPipeTransport : IPipeTransport
+public sealed class ClientPipeTransport : IIpcClientTransport
 {
     private readonly ILogger _logger;
     private bool _disposed;

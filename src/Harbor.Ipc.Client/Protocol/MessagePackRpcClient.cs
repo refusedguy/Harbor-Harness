@@ -31,10 +31,11 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             SingleWriter = true
         });
     private readonly ILogger _logger;
+    private readonly string? _psk;
 
     private readonly Dictionary<Guid, TaskCompletionSource<HarborResponse>> _pending = new();
     private readonly Lock _pendingLock = new();
-    private readonly ClientPipeTransport _transport;
+    private readonly IIpcClientTransport _transport;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed;
     private Task? _readLoopTask;
@@ -43,10 +44,18 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     /// <summary>
     ///     Construct an RPC client over the given transport.
     /// </summary>
-    public MessagePackRpcClient(ClientPipeTransport transport, ILogger logger)
+    /// <param name="transport">Transport to dial through.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="psk">
+    ///     Optional pre-shared key: sent as a <see cref="PskAuthRequest" />
+    ///     immediately after the stream opens. Required against PSK-gated
+    ///     (TCP/tailscale) listeners; ignored by ungated ones.
+    /// </param>
+    public MessagePackRpcClient(IIpcClientTransport transport, ILogger logger, string? psk = null)
     {
         _transport = transport;
         _logger = logger;
+        _psk = psk;
     }
 
     /// <summary>
@@ -96,6 +105,15 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         if (_stream is not null) return;
         _stream = await _transport.ConnectAsync(ct).ConfigureAwait(false);
         _readLoopTask = ReadLoopAsync(_cts.Token);
+
+        if (_psk is not null)
+        {
+            HarborResponse authResponse = await SendAsync(new PskAuthRequest(_psk), ct).ConfigureAwait(false);
+            if (authResponse is ErrorResponse authError)
+            {
+                throw new IOException($"PSK authentication failed: {authError.Message}");
+            }
+        }
     }
 
     /// <summary>

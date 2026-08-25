@@ -55,23 +55,37 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly RequestDispatcher _dispatcher;
     private readonly ILogger<MessagePackRpcServer> _logger;
-    private readonly ServerPipeTransport _transport;
+    private readonly string? _expectedPsk;
+    private readonly IIpcServerTransport _transport;
     private Task? _acceptTask;
     private int _disposed;
 
     /// <summary>
     ///     Construct an RPC server bound to the given transport.
     /// </summary>
+    /// <param name="transport">The bound transport clients connect through.</param>
+    /// <param name="dispatcher">Request dispatcher.</param>
+    /// <param name="broadcaster">Event broadcaster.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="expectedPsk">
+    ///     When non-null, every connection must authenticate with a
+    ///     <see cref="PskAuthRequest" /> carrying this key BEFORE any other
+    ///     request — all earlier requests are rejected with a structured
+    ///     PSK_REQUIRED error (fail-closed). Mandatory for TCP/tailscale
+    ///     listeners; optional for UDS.
+    /// </param>
     public MessagePackRpcServer(
-        ServerPipeTransport transport,
+        IIpcServerTransport transport,
         RequestDispatcher dispatcher,
         EventBroadcaster broadcaster,
-        ILogger<MessagePackRpcServer> logger)
+        ILogger<MessagePackRpcServer> logger,
+        string? expectedPsk = null)
     {
         _transport = transport;
         _dispatcher = dispatcher;
         _broadcaster = broadcaster;
         _logger = logger;
+        _expectedPsk = expectedPsk;
     }
 
     /// <inheritdoc />
@@ -129,6 +143,11 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         // events never interleave half-frames on the wire.
         var writeLock = new SemaphoreSlim(1, 1);
 
+        // PSK gate: connections to a gated listener are unauthenticated
+        // until a valid PskAuthRequest passes; everything before that gets
+        // the structured PSK_REQUIRED error and nothing else.
+        bool authenticated = _expectedPsk is null;
+
         // D1: one frame reader per connection — it owns that connection's
         // frame-size / outstanding-bytes budgets.
         var frameReader = new ResilientFrameReader();
@@ -181,6 +200,38 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 }
 
                 var request = read.Request!;
+
+                // PSK gate (fail-closed): before authentication the only
+                // request honored is PskAuthRequest. A wrong key closes the
+                // connection immediately; a missing key gets the structured
+                // error and another chance to authenticate.
+                if (!authenticated)
+                {
+                    if (request is PskAuthRequest pskRequest)
+                    {
+                        if (!PskStore.Matches(pskRequest.Psk, _expectedPsk!))
+                        {
+                            _logger.LogWarning("PSK auth failed; closing connection");
+                            await TryWriteErrorResponse(
+                                stream, writeLock, pskRequest.RequestId, "PSK_AUTH_FAILED", connectionCt)
+                                .ConfigureAwait(false);
+                            return;
+                        }
+
+                        authenticated = true;
+                        _logger.LogInformation("PSK auth succeeded");
+                        await WriteResponseAsync(
+                            stream, writeLock, new OkResponse { RequestId = pskRequest.RequestId }, connectionCt)
+                            .ConfigureAwait(false);
+                        continue;
+                    }
+
+                    await TryWriteErrorResponse(
+                        stream, writeLock, request.RequestId,
+                        "PSK_REQUIRED: this listener requires pre-shared-key authentication first",
+                        connectionCt).ConfigureAwait(false);
+                    continue;
+                }
 
                 // D1: prompts run as tracked background tasks so the read loop
                 // keeps reading — this is what keeps AbortAgentRequest reachable

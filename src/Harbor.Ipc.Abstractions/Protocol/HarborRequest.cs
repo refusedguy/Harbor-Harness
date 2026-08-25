@@ -46,6 +46,7 @@ namespace Harbor.Ipc.Protocol;
 [Union(11, typeof(SubscribeToEventsRequest))]
 [Union(12, typeof(ConnectRequest))]
 [Union(13, typeof(DisconnectRequest))]
+[Union(14, typeof(PskAuthRequest))]
 public abstract record HarborRequest
 {
     /// <summary>
@@ -172,3 +173,17 @@ public sealed record ConnectRequest : HarborRequest;
 /// <summary>Disconnect handshake.</summary>
 [MessagePackObject]
 public sealed record DisconnectRequest : HarborRequest;
+
+/// <summary>
+///     Pre-shared-key authentication frame. Required as the FIRST request
+///     on any connection to a PSK-gated listener (TCP / tailscale); UDS
+///     listeners may opt in via configuration. The server compares in
+///     constant time and closes the connection on a failed attempt.
+/// </summary>
+[MessagePackObject]
+public sealed record PskAuthRequest(
+    [property: Key(1)] string Psk) : HarborRequest
+{
+    /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
+    public PskAuthRequest() : this(string.Empty) { }
+}
