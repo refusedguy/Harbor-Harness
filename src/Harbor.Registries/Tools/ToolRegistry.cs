@@ -221,7 +221,7 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
     public void AddTool(ITool tool)
     {
         var result = _registry.Register(tool);
-        if (result.IsFailure)
+        if (result.IsFailure) // §4.6-ok: void-контракт, программная ошибка регистрации → исключение.
         {
             throw new InvalidOperationException(result.Error);
         }

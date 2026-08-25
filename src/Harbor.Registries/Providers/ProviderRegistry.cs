@@ -110,7 +110,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         }
 
         var client = GetClient(providerId);
-        if (client.IsFailure)
+        if (client.IsFailure) // §4.6-ok: одиночный passthrough после cache-miss (граница честности).
         {
             return Result.Failure<IReadOnlyList<ModelInfo>>(client.Error);
         }
@@ -151,7 +151,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         }
 
                         var client = GetClient(pid);
-                        if (client.IsFailure)
+                        if (client.IsFailure) // §4.6-ok: батч-перечисление — ранний выход в record ошибки провайдера.
                         {
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), client.Error);
                         }
@@ -159,7 +159,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         using var perProviderCts = new CancellationTokenSource(PerProviderTimeoutMs);
                         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, perProviderCts.Token);
                         var models = await client.Value.GetModelsAsync(linkedCts.Token).ConfigureAwait(false);
-                        if (models.IsFailure)
+                        if (models.IsFailure) // §4.6-ok: батч-перечисление — частичный результат собирается как данные.
                         {
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), models.Error);
                         }
@@ -358,7 +358,7 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
     public void AddProvider(string providerId, Func<ILlmClient> factory)
     {
         var result = ProviderId.TryCreate(providerId);
-        if (result.IsFailure)
+        if (result.IsFailure) // §4.6-ok: ArgumentException с nameof — контракт API, не поток управления.
         {
             throw new ArgumentException(result.Error, nameof(providerId));
         }

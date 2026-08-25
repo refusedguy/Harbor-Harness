@@ -58,7 +58,7 @@ internal static class IpcModule
         }
 
         var bindAddress = DaemonBindPolicy.ResolveBindAddress(listenOn);
-        if (bindAddress.IsFailure)
+        if (bindAddress.IsFailure) // §4.6-ok: fail-fast composition-root с РАЗНЫМИ типами исключений — Bind склеил бы диагностику.
         {
             throw new ArgumentException(bindAddress.Error);
         }
@@ -71,7 +71,7 @@ internal static class IpcModule
         }
 
         var psk = PskStore.LoadOrBootstrap(PskStore.DefaultPath);
-        if (psk.IsFailure)
+        if (psk.IsFailure) // §4.6-ok: см. выше — типизированный fail-fast запуска демона.
         {
             throw new InvalidOperationException($"Networked listener requires a PSK: {psk.Error}");
         }

@@ -292,7 +292,7 @@ public sealed class DefaultAgent : IAgent
             // the run BEFORE any completion-source/state swap instead.
             Result persisted = await _sessionStore.AppendMessageAsync(State.SessionId, message, ct)
                 .ConfigureAwait(false);
-            if (persisted.IsFailure)
+            if (persisted.IsFailure) // §4.6-ok: F14-политика — специфичный лог + текст провала, одиночный шаг.
             {
                 _logger.LogError(
                     "Failed to persist user message {MessageId} for session {SessionId}: {Error}",
@@ -312,8 +312,10 @@ public sealed class DefaultAgent : IAgent
 
             try
             {
-                var session = await LoadSessionContextAsync(State.SessionId, ct).ConfigureAwait(false);
-                var result = await _agentLoop.RunAsync(session, State.Agent, linkedCts.Token).ConfigureAwait(false);
+                var loaded = await LoadSessionContextAsync(State.SessionId, linkedCts.Token).ConfigureAwait(false);
+                if (loaded.IsFailure) // §4.6-ok: единственный мост Result→исключение на границе рана (catch ниже всё равно нужен ради RunAsync).
+                    throw new InvalidOperationException(loaded.Error);
+                var result = await _agentLoop.RunAsync(loaded.Value, State.Agent, linkedCts.Token).ConfigureAwait(false);
 
                 State = State with
                 {
@@ -445,18 +447,17 @@ public sealed class DefaultAgent : IAgent
         return fresh;
     }
 
-    private async Task<ISessionContext> LoadSessionContextAsync(string sessionId, CancellationToken ct)
-    {
-        var session = await _sessionStore.GetAsync(sessionId, ct).ConfigureAwait(false);
-        if (session.IsFailure)
-            throw new InvalidOperationException(session.Error);
-
-        var messages = await _sessionStore.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-        if (messages.IsFailure)
-            throw new InvalidOperationException(messages.Error);
-
-        return new DefaultSessionContext(session.Value, messages.Value, _sessionStore, _steeringQueue);
-    }
+    // rop-final-mile L6 / §4.6: the old shape unwrapped Results into exceptions
+    // only for PromptAsync's catch to re-wrap them into a Failure — one Bind
+    // railway replaces both throw bridges; the single bridge left lives at the
+    // run boundary below where the catch is needed for RunAsync anyway.
+    // No awaits here — the chain is returned to the caller, so there is no
+    // SynchronizationContext capture point inside this method.
+    private Task<Result<ISessionContext>> LoadSessionContextAsync(string sessionId, CancellationToken ct)
+        => _sessionStore.GetAsync(sessionId, ct)
+            .Bind(session => _sessionStore.GetMessagesAsync(sessionId, ct)
+                .Map(messages => (ISessionContext)new DefaultSessionContext(
+                    session, messages, _sessionStore, _steeringQueue)));
 
     private sealed class Unsubscriber : IDisposable
     {
@@ -518,7 +519,7 @@ internal sealed class DefaultSessionContext : ISessionContext
         // memory/model, so surface it in the log keyed by session.
         _messages.Add(message);
         Result persisted = await _store.AppendMessageAsync(Session.Id, message, ct).ConfigureAwait(false);
-        if (persisted.IsFailure)
+        if (persisted.IsFailure) // §4.6-ok: best-effort persist, ветка только логирует (F14 detail).
         {
             _logger.LogError(
                 "Failed to persist message {MessageId} for session {SessionId}: {Error}",
@@ -531,7 +532,10 @@ internal sealed class DefaultSessionContext : ISessionContext
         var stats = await _store.GetStatsAsync(Session.Id, ct).ConfigureAwait(false);
         if (stats.IsFailure)
         {
-            _ = stats.Error;
+            // §4.6-ok + rop-final-mile N3: best-effort usage update — store
+            // closed / IO failure loses this delta; log instead of the old
+            // no-op discard so the loss is observable.
+            _logger.LogError("Failed to read session stats for {SessionId}: {Error}", Session.Id, stats.Error);
             return;
         }
 

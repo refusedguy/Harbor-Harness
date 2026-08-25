@@ -84,7 +84,7 @@ internal static class JsonProviderDiscovery
                 try
                 {
                     var result = Harbor.Providers.OpenAiCompatible.ProviderConfig.LoadFromFile(file);
-                    if (result.IsFailure)
+                    if (result.IsFailure) // §4.6-ok: discovery-резильенс — skip-and-log, битый файл не валид discovery.
                     {
                         logger.LogWarning("Skipping provider config '{File}': {Error}", file, result.Error);
                         continue;
@@ -179,7 +179,7 @@ internal static class JsonProviderDiscovery
         try
         {
             var config = ProviderConfig.LoadFromFile(file);
-            if (config.IsFailure) return;
+            if (config.IsFailure) return; // §4.6-ok: skip-and-log discovery (ранний выход перечисления).
             if (config.Value.Id is "anthropic" or "openai" or "ollama") return;
             if (!seenIds.Add(config.Value.Id)) return;
 

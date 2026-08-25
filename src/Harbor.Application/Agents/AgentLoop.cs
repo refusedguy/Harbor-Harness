@@ -114,7 +114,7 @@ public sealed class AgentLoop : IAgentLoop
             // one Bind railway with a single failure exit; the TTL-cached catalog
             // lives in the shared provider registry, not per-loop.
             var resolved = await ResolveModelAsync(agent, ct).ConfigureAwait(false);
-            if (resolved.IsFailure)
+            if (resolved.IsFailure) // §4.6-ok: единственный выход Bind-рельсы setup'а (rop-final-mile L1).
                 return Result.Failure(resolved.Error);
 
             var (client, model) = resolved.Value;
@@ -394,7 +394,7 @@ public sealed class AgentLoop : IAgentLoop
                 .Bind(async id =>
                 {
                     var clientResult = _providers.GetClient(id);
-                    if (clientResult.IsFailure)
+                    if (clientResult.IsFailure) // §4.6-ok: тело рельсы ResolveModelAsync — ранний выход внутри Bind-лямбды.
                         return Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(clientResult.Error);
 
                     var models = await _providers.GetModelsCachedAsync(id, ct).ConfigureAwait(false);
@@ -404,7 +404,7 @@ public sealed class AgentLoop : IAgentLoop
                 })
                 .ConfigureAwait(false);
 
-        if (provider.IsFailure)
+        if (provider.IsFailure) // §4.6-ok: Match-граница рельсы — один выход вместо трёх if.
         {
             return Result.Failure<(ILlmClient, ModelInfo)>(provider.Error);
         }

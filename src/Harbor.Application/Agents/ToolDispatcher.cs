@@ -195,7 +195,7 @@ public sealed class ToolDispatcher(
         // localizes "invalid name" at its source and the registry-miss branch
         // carries the available-tools inventory (rop-final-mile L5 boundary).
         Result<ITool> resolved = ResolveTool(toolCall.ToolName);
-        if (resolved.IsFailure)
+        if (resolved.IsFailure) // §4.6-ok: выход Bind-рельсы (ROP-C П.4), диагностики различаются по построению (L5).
         {
             return new ToolResultEntry(toolCall.Id, toolCall.ToolName, resolved.Error, true);
         }

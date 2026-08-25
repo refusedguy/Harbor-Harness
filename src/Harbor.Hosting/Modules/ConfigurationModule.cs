@@ -4,6 +4,8 @@ using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
+using CSharpFunctionalExtensions;
+
 namespace Harbor.Hosting;
 
 // DI014/DI016: config is loaded synchronously at composition time by explicit
@@ -41,24 +43,16 @@ internal static class ConfigurationModule
         var commonStore = new JsonCommonConfigStore(
             new CommonConfig { ConfigDirectory = options.HarborDir },
             loggerFactory.CreateLogger<JsonCommonConfigStore>());
-        var commonResult = commonStore.LoadAsync().GetAwaiter().GetResult();
-        if (commonResult.IsFailure)
-            ctx.Logger.LogWarning("Failed to load CommonConfig, using defaults: {Error}", commonResult.Error);
-        ctx.Common = commonResult.IsSuccess ? commonResult.Value : new CommonConfig();
+        ctx.Common = LoadOrDefault(
+            () => commonStore.LoadAsync().GetAwaiter().GetResult(),
+            new CommonConfig(), "CommonConfig", ctx);
 
         var harborStore = new JsonConfigStore(
             ctx.Options.ConfigPath,
             loggerFactory.CreateLogger<JsonConfigStore>());
-        var harborResult = harborStore.LoadAsync().GetAwaiter().GetResult();
-        if (harborResult.IsSuccess)
-        {
-            ctx.Harbor = harborResult.Value;
-        }
-        else
-        {
-            ctx.Logger.LogWarning("Failed to load HarborConfig, using defaults: {Error}", harborResult.Error);
-            ctx.Harbor = new HarborConfig();
-        }
+        ctx.Harbor = LoadOrDefault(
+            () => harborStore.LoadAsync().GetAwaiter().GetResult(),
+            new HarborConfig(), "HarborConfig", ctx);
 
         services.AddSingleton(ctx.Common);
 
@@ -79,5 +73,18 @@ internal static class ConfigurationModule
             : new InMemoryEventBus(eventBusLogger);
 
         return ctx;
+    }
+
+    /// <summary>
+    ///     rop-final-mile L7 / §4.6: one load→warn→default shape for every
+    ///     eager config store; the next store is a single call, not a copy of
+    ///     the ten-line block.
+    /// </summary>
+    private static T LoadOrDefault<T>(Func<Result<T>> load, T fallback, string name, HarborCompositionContext ctx)
+    {
+        Result<T> result = load();
+        if (result.IsFailure) // §4.6-ok: единственная проверка формы load→default.
+            ctx.Logger.LogWarning("Failed to load {Name}, using defaults: {Error}", name, result.Error);
+        return result.IsSuccess ? result.Value : fallback;
     }
 }

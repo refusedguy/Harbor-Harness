@@ -115,7 +115,7 @@ internal static class RegistriesModule
 #pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load.
         var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
 #pragma warning restore RS0030
-        if (pluginResult.IsSuccess)
+        if (pluginResult.IsSuccess) // §4.6-ok: ветка логирования успеха/провала, не конверсия.
         {
             ctx.Logger.LogInformation("Loaded {Count} CS plugin(s)", pluginResult.Value.Count);
             foreach (var p in pluginResult.Value)

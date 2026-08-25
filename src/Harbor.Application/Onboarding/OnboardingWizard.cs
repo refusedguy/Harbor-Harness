@@ -163,7 +163,7 @@ public sealed class OnboardingWizard
 
         // Check if already set
         var existing = await _authStore.GetApiKeyAsync(provider.Id, ct).ConfigureAwait(false);
-        if (existing.IsSuccess)
+        if (existing.IsSuccess) // §4.6-ok: предикат UI-ветвления (сообщение «уже установлен»), не лесенка.
         {
             writer($"  ✓ API key for {provider.Id} already set (use `/auth reset {provider.Id}` to change).");
             return existing.Value;

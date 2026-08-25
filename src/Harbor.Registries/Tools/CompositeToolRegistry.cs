@@ -82,6 +82,8 @@ public sealed class CompositeToolRegistry : IToolRegistry
             return Result.Success(tool);
         }
 
+        // §4.6-ok: fold «первый успех» (rop-final-mile L8) — осознанный императивный цикл,
+        // LINQ-эквивалент требует Result?-нуля либо ToArray+Match (дороже/опаснее на горячем пути).
         foreach (var source in _sources)
         {
             var result = source.GetTool(name);
