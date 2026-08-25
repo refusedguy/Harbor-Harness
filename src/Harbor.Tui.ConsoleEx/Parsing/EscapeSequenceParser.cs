@@ -516,16 +516,33 @@ public sealed class EscapeSequenceParser
         DecodeCsiFinal(finalByte, wasPrivate, paramSpan, intermediateSpan);
     }
 
-    /// <summary>Routes a complete CSI sequence to its decoder. Zones З.1–З.3
-    /// extend this switch (kitty 'u', mouse M/m, paste ~).</summary>
+    /// <summary>Routes a complete CSI sequence to its decoder. Zone З.2 adds
+    /// mouse M/m, zone З.3 adds paste ~ markers.</summary>
     private void DecodeCsiFinal(byte finalByte, bool privatePrefix, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> intermediates)
     {
         if (privatePrefix)
         {
-            // Private-mode reports we did not request (h/l) and probe answers
-            // (kitty u / DECRQM $y / DA c — wired up in zone З.1).
-            IgnoredSequenceCount++;
-            return;
+            switch (finalByte)
+            {
+                case (byte)'u':
+                    // Answer to our kitty probe CSI ? u → CSI ? flags u.
+                    EnqueueCapability(CapabilityEvent.KittyFlags((uint)Math.Max(0, FirstIntParam(parameters))));
+                    return;
+                case (byte)'y' when intermediates.Length == 1 && intermediates[0] == (byte)'$':
+                    // DECRQM answer: CSI ? Ps ; Pv $ y.
+                    EnqueueCapability(CapabilityEvent.DecRqm(
+                        Math.Max(0, FirstIntParam(parameters)),
+                        Math.Max(0, IntParamAt(parameters, 1))));
+                    return;
+                case (byte)'c':
+                    // Primary device attributes: CSI [ ? Ps ; … c.
+                    EnqueueCapability(CapabilityEvent.Da(Math.Max(0, FirstIntParam(parameters))));
+                    return;
+                default:
+                    // Private-mode reports we did not request (h/l and friends).
+                    IgnoredSequenceCount++;
+                    return;
+            }
         }
 
         switch (finalByte)
@@ -551,11 +568,116 @@ public sealed class EscapeSequenceParser
             case (byte)'~':
                 DecodeLegacyTilde(parameters);
                 return;
+            case (byte)'u':
+                DecodeKittyKey(parameters);
+                return;
+            case (byte)'R':
+                // Cursor position report: CSI row ; col R (probe-routable).
+                var row = IntParamAt(parameters, 0);
+                var col = IntParamAt(parameters, 1);
+                if (row > 0 && col > 0)
+                {
+                    EnqueueCapability(CapabilityEvent.CursorPosition(row, col));
+                    return;
+                }
+                IgnoredSequenceCount++;
+                return;
             default:
                 IgnoredSequenceCount++;
                 return;
         }
     }
+
+    /// <summary>
+    /// Kitty keyboard protocol key decoding (design §2.3):
+    /// CSI unicode-key-code : shifted : base-layout ; modifiers : event-type ; text-codepoints u
+    /// Modifier bits follow the ConsoleEx design contract: shift=1, ctrl=2,
+    /// alt=4 (super/hyper/meta collapse to the Meta bit); modifier value is 1-based.
+    /// </summary>
+    private void DecodeKittyKey(ReadOnlySpan<byte> parameters)
+    {
+        var primary = IntSubParamAt(parameters, 0, 0);
+        if (primary < 0)
+        {
+            IgnoredSequenceCount++;
+            return;
+        }
+
+        var shifted = IntSubParamAt(parameters, 0, 1);
+        var text = IntSubParamAt(parameters, 2, 0);
+        var modValue = Math.Max(1, IntParamAt(parameters, 1));
+        var eventTypeValue = IntSubParamAt(parameters, 1, 1);
+
+        var bits = modValue - 1;
+        var mods = KeyModifiers.None;
+        if ((bits & 0x01) != 0)
+        {
+            mods |= KeyModifiers.Shift;
+        }
+        if ((bits & 0x02) != 0)
+        {
+            mods |= KeyModifiers.Ctrl;
+        }
+        if ((bits & 0x04) != 0)
+        {
+            mods |= KeyModifiers.Alt;
+        }
+        if ((bits & 0x08) != 0 || (bits & 0x10) != 0 || (bits & 0x20) != 0)
+        {
+            mods |= KeyModifiers.Meta; // super/hyper/meta collapse (design §2.3, sprint bits 1–4)
+        }
+
+        var eventType = eventTypeValue switch
+        {
+            2 => KeyEventType.Repeat,
+            3 => KeyEventType.Release,
+            _ => KeyEventType.Press,
+        };
+
+        KeyCode key;
+        var character = default(Rune);
+        uint codepoint = 0;
+        switch (primary)
+        {
+            case 13:
+                key = KeyCode.Enter;
+                break;
+            case 9:
+                key = KeyCode.Tab;
+                break;
+            case 27:
+                key = KeyCode.Escape;
+                break;
+            case 127:
+                key = KeyCode.Backspace;
+                break;
+            case >= 32 and not 127 when primary is < 57344 or > 63743:
+                // Printable (excluding the Unicode private-use area where
+                // kitty parks its functional keys).
+                var scalar = text > 0 ? text : shifted > 0 ? shifted : primary;
+                if (IsValidScalar(scalar))
+                {
+                    key = KeyCode.Char;
+                    character = new Rune(scalar);
+                }
+                else
+                {
+                    key = KeyCode.Unknown;
+                    codepoint = (uint)primary;
+                }
+                break;
+            default:
+                // Functional/unmapped codepoints stay lossless.
+                key = KeyCode.Unknown;
+                codepoint = (uint)primary;
+                break;
+        }
+
+        Enqueue(InputEvent.FromKey(new KeyEvent(key, character, mods, eventType, isKittyEncoded: true, codepoint)));
+    }
+
+    private static bool IsValidScalar(int scalar) =>
+        scalar <= 0xD7FF || scalar is >= 0xE000 and <= 0x10FFFF;
 
     private void EnqueueArrow(KeyCode key, ReadOnlySpan<byte> parameters)
     {
@@ -703,6 +825,57 @@ public sealed class EscapeSequenceParser
 
     private static int FirstIntParam(ReadOnlySpan<byte> parameters) => IntParamAt(parameters, 0);
 
+    /// <summary>Returns the sub-parameter at (group, sub) of the ';'/':'
+    /// parameter matrix — e.g. kitty CSI unicode:shifted ; mods:event u —
+    /// or −1 when absent.</summary>
+    private static int IntSubParamAt(ReadOnlySpan<byte> parameters, int groupIndex, int subIndex)
+    {
+        var group = 0;
+        var sub = 0;
+        var value = 0;
+        var digits = 0;
+        foreach (var b in parameters)
+        {
+            if (b == (byte)';')
+            {
+                if (group == groupIndex && sub == subIndex)
+                {
+                    return digits > 0 ? value : -1;
+                }
+                group++;
+                sub = 0;
+                value = 0;
+                digits = 0;
+                continue;
+            }
+            if (b == (byte)':')
+            {
+                if (group == groupIndex && sub == subIndex)
+                {
+                    return digits > 0 ? value : -1;
+                }
+                if (group > groupIndex)
+                {
+                    break;
+                }
+                sub++;
+                value = 0;
+                digits = 0;
+                continue;
+            }
+            if (b is >= (byte)'0' and <= (byte)'9')
+            {
+                checked
+                {
+                    value = value * 10 + (b - (byte)'0');
+                }
+                digits++;
+            }
+        }
+
+        return group == groupIndex && sub == subIndex && digits > 0 ? value : -1;
+    }
+
     /// <summary>Returns the <paramref name="index"/>-th ';'-separated parameter
     /// (sub-parameters ':' are ignored), or −1 when absent.</summary>
     private static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
@@ -725,8 +898,16 @@ public sealed class EscapeSequenceParser
             }
             if (b == (byte)':')
             {
-                // Sub-parameter boundary — stop within this group.
-                break;
+                if (group == index)
+                {
+                    // Target group's first sub-parameter ends here.
+                    return digits > 0 ? value : -1;
+                }
+
+                // Sub-parameters of an EARLIER group are skipped transparently.
+                value = 0;
+                digits = 0;
+                continue;
             }
             if (b is >= (byte)'0' and <= (byte)'9')
             {
@@ -796,6 +977,9 @@ public sealed class EscapeSequenceParser
 
     private void EnqueueChar(Rune rune, KeyModifiers mods) =>
         Enqueue(InputEvent.FromKey(KeyEvent.Char(rune, mods)));
+
+    private void EnqueueCapability(CapabilityEvent evt) =>
+        Enqueue(InputEvent.FromCapability(evt));
 
     private void Enqueue(in InputEvent evt)
     {

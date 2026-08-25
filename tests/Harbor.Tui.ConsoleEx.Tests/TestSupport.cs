@@ -58,12 +58,18 @@ internal static class A
         await Assert.That(evt.Key.IsKittyEncoded).IsEqualTo(kitty);
     }
 
-    public static async Task IsChar(InputEvent evt, Rune character, KeyModifiers mods = KeyModifiers.None, bool kitty = false)
+    public static async Task IsChar(
+        InputEvent evt,
+        Rune character,
+        KeyModifiers mods = KeyModifiers.None,
+        bool kitty = false,
+        KeyEventType eventType = KeyEventType.Press)
     {
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
         await Assert.That(evt.Key.Key).IsEqualTo(KeyCode.Char);
         await Assert.That(evt.Key.Character).IsEqualTo(character);
         await Assert.That(evt.Key.Modifiers).IsEqualTo(mods);
         await Assert.That(evt.Key.IsKittyEncoded).IsEqualTo(kitty);
+        await Assert.That(evt.Key.EventType).IsEqualTo(eventType);
     }
 }
