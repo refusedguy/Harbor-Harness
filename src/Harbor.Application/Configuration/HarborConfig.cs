@@ -203,28 +203,31 @@ public sealed class HarborConfig
     ///     message so the config store can surface them instead of silently
     ///     falling back to defaults.
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.14: the manual errors[] + join aggregation is exactly
+    ///     <see cref="Result.Combine(IEnumerable{Result})" /> — every failure
+    ///     joined with "; " by the standard combinator, so adding a section
+    ///     cannot let the join format drift.
+    /// </remarks>
     public Result<HarborConfig> Validate()
     {
-        var results = new Result[]
-            {
-                Identity.EffectiveModel(),
-                Tooling.Validate(),
-                Cost.Validate(),
-                Compaction.Validate(),
-                Ui.Validate(),
-                Run.Validate()
-            }
-            .AsValueEnumerable()
-            .Concat(Providers.Values.AsValueEnumerable().Select(static e => (Result)e.Validate()));
+        var sections = new List<Result>(capacity: 6 + Providers.Count)
+        {
+            Identity.EffectiveModel(),
+            Tooling.Validate(),
+            Cost.Validate(),
+            Compaction.Validate(),
+            Ui.Validate(),
+            Run.Validate()
+        };
 
-        string[] errors = results
-            .Where(static r => r.IsFailure)
-            .Select(static r => r.Error)
-            .ToArray();
+        // Cold path (config load) — plain enumeration is fine here.
+        foreach (var entry in Providers.Values)
+        {
+            sections.Add(entry.Validate());
+        }
 
-        return errors.Length == 0
-            ? Result.Success(this)
-            : Result.Failure<HarborConfig>(string.Join("; ", errors));
+        return Result.Combine(sections).Map(() => this);
     }
 }
 
@@ -267,67 +270,124 @@ public sealed class RawConfigDto
 /// </summary>
 public static class ConfigNormalizer
 {
+    /// <summary>
+    ///     Normalize a raw config into a canonical <see cref="HarborConfig" />.
+    /// </summary>
+    /// <remarks>
+    ///     ROP-B П.13: nullable default ladders (canonical field → legacy alias)
+    ///     are expressed as Maybe chains (<c>From → Where → Or → AsNullable</c>);
+    ///     mandatory parses are fail-fast preconditions over
+    ///     <see cref="Result.FirstFailureOrSuccess" />, so an invalid section
+    ///     reports its own error without a ladder of manual
+    ///     <c>if (IsFailure) return Failure</c> passthroughs.
+    /// </remarks>
     public static Result<HarborConfig> Normalize(RawConfigDto raw)
     {
         var config = new HarborConfig();
 
         // ── Identity: canonical "provider"/"model"/"agent" win; legacy
         // "defaultProvider"/"defaultModel" are only used as fallback. ──
-        string? providerStr = !string.IsNullOrEmpty(raw.Provider)
-            ? raw.Provider
-            : raw.DefaultProvider;
-        if (!string.IsNullOrEmpty(providerStr))
+        string? providerStr = FirstNonEmpty(raw.Provider, raw.DefaultProvider);
+        string? modelStr = FirstNonEmpty(raw.Model, raw.DefaultModel);
+
+        return Result.FirstFailureOrSuccess(
+                SetProvider(config, providerStr),
+                SetModel(config, modelStr),
+                SetAgent(config, raw.Agent),
+                SetSecondary(config, raw.SecondaryModel))
+            .Map(() =>
+            {
+                ApplyPresentation(config, raw);
+                ApplyTooling(config, raw);
+                ApplyLimits(config, raw);
+                return config;
+            });
+    }
+
+    /// <summary>
+    ///     The "first non-empty wins" nullable ladder as a Maybe chain
+    ///     (ROP-B П.13 reference pattern): <c>From → Where → Or(lazy)</c>,
+    ///     unfolded back into the nullable world at the boundary.
+    /// </summary>
+    private static string? FirstNonEmpty(string? primary, string? fallback)
+    {
+        var candidate = Maybe.From(primary)
+            .Where(static s => !string.IsNullOrEmpty(s))
+            .Or(() => Maybe.From(fallback).Where(static s => !string.IsNullOrEmpty(s)));
+
+        return candidate.TryGetValue(out var value) ? value : null;
+    }
+
+    private static Result SetProvider(HarborConfig config, string? providerStr)
+    {
+        if (providerStr is null)
         {
-            var pr = ProviderId.TryCreate(providerStr);
-            if (pr.IsFailure) return Result.Failure<HarborConfig>(pr.Error);
-            config.Identity = config.Identity with { Provider = pr.Value };
+            return Result.Success();
         }
 
-        string? modelStr = !string.IsNullOrEmpty(raw.Model)
-            ? raw.Model
-            : raw.DefaultModel;
-        if (!string.IsNullOrEmpty(modelStr))
+        return ProviderId.TryCreate(providerStr)
+            .Tap(id => config.Identity = config.Identity with { Provider = id });
+    }
+
+    private static Result SetModel(HarborConfig config, string? modelStr)
+    {
+        if (modelStr is null)
         {
-            var mr = ModelRef.TryParse(modelStr);
-            if (mr.IsFailure) return Result.Failure<HarborConfig>(mr.Error);
-            config.Identity = config.Identity with { Model = mr.Value };
+            return Result.Success();
         }
 
-        if (!string.IsNullOrEmpty(raw.Agent))
+        return ModelRef.TryParse(modelStr)
+            .Tap(model => config.Identity = config.Identity with { Model = model });
+    }
+
+    private static Result SetAgent(HarborConfig config, string? agentStr)
+    {
+        if (string.IsNullOrEmpty(agentStr))
         {
-            var ar = AgentName.TryCreate(raw.Agent);
-            if (ar.IsFailure) return Result.Failure<HarborConfig>(ar.Error);
-            config.Identity = config.Identity with { Agent = ar.Value };
+            return Result.Success();
         }
 
+        return AgentName.TryCreate(agentStr)
+            .Tap(agent => config.Identity = config.Identity with { Agent = agent });
+    }
+
+    private static Result SetSecondary(HarborConfig config, string? secondaryStr)
+    {
+        if (string.IsNullOrEmpty(secondaryStr))
+        {
+            return Result.Success();
+        }
+
+        return ModelRef.TryParse(secondaryStr)
+            .Tap(_ => config.SecondaryModel = secondaryStr);
+    }
+
+    private static void ApplyPresentation(HarborConfig config, RawConfigDto raw)
+    {
         // ── Presentation ──
         config.Ui = new PresentationConfig(
             raw.Tui ?? PresentationConfig.Default.Tui,
             raw.Storage ?? raw.StorageBackend ?? PresentationConfig.Default.Storage,
             raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded);
+    }
 
+    private static void ApplyTooling(HarborConfig config, RawConfigDto raw)
+    {
         // ── Tooling ──
         config.Tooling = new ToolingConfig(
             (raw.EnabledPlugins ?? new List<string>()).AsReadOnly(),
             (raw.DisabledTools ?? new List<string>()).AsReadOnly());
+    }
 
+    private static void ApplyLimits(HarborConfig config, RawConfigDto raw)
+    {
         // ── Run / Cost / Compaction ──
         config.Run = new RunLimitsConfig(raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps);
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
         if (raw.Compaction is not null) config.Compaction = raw.Compaction;
 
-        // ── Secondary (cheap) summarization model ──
-        if (!string.IsNullOrEmpty(raw.SecondaryModel))
-        {
-            var smr = ModelRef.TryParse(raw.SecondaryModel);
-            if (smr.IsFailure) return Result.Failure<HarborConfig>(smr.Error);
-            config.SecondaryModel = raw.SecondaryModel;
-        }
-
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;
         if (raw.Providers is not null) config.Providers = raw.Providers;
-
-        return Result.Success(config);
     }
 }
