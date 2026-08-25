@@ -130,7 +130,7 @@ public sealed class TreeTool : ITool
         if (string.IsNullOrEmpty(rootName)) rootName = path;
         b.Append(rootName).Append('/').Append('\n');
 
-        Walk(path, "", 0, maxDepth, includeHidden, tracked, b, state, ct);
+        Walk(_logger, path, "", 0, maxDepth, includeHidden, tracked, b, state, ct);
 
         if (state.Truncated)
             b.Append("\n… truncated at ").Append(maxEntries).Append(" entries");
@@ -153,6 +153,7 @@ public sealed class TreeTool : ITool
     }
 
     private static void Walk(
+        ILogger logger,
         string dir,
         string prefix,
         int depth,
@@ -170,9 +171,12 @@ public sealed class TreeTool : ITool
         {
             entries = new DirectoryInfo(dir).GetFileSystemInfos();
         }
-        catch (UnauthorizedAccessException) { return; }
-        catch (DirectoryNotFoundException) { return; }
-        catch (IOException) { return; }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
+        {
+            // ROP-A Z1 п.15: silent skip keeps the tree contract; trace explains.
+            logger.LogTrace(ex, "tree: skipping unreadable directory {Dir}", dir);
+            return;
+        }
 
         // Sort: dirs first, then files; ignore-case ordinal.
         Array.Sort(entries, static (a, b) =>
@@ -224,7 +228,7 @@ public sealed class TreeTool : ITool
                 state.DirAdded();
                 // If prune list hit (git tracked but dir empty) we still show it.
                 sb.Append('/').Append('\n');
-                Walk(entry.FullName, childPrefix, depth + 1, maxDepth,
+                Walk(logger, entry.FullName, childPrefix, depth + 1, maxDepth,
                     includeHidden, tracked, sb, state, ct);
             }
             else
@@ -235,51 +239,53 @@ public sealed class TreeTool : ITool
         }
     }
 
-    private static HashSet<string>? TryGetGitTrackedFiles(string root)
+    /// <summary>
+    ///     ROP-A Z1 п.16: the 45-line try/catch skeleton collapses to a Result.Try
+    ///     folded to nullable at the call site. "No git" and "git failed" stay
+    ///     indistinguishable in the public contract (both → no pruning) but are
+    ///     now visible in trace logs.
+    /// </summary>
+    private HashSet<string>? TryGetGitTrackedFiles(string root) =>
+        Result.Try(() => CollectGitTrackedFiles(root), ex => ex.Message)
+            .TapError(reason => _logger.LogTrace("tree: gitignore pruning disabled: {Reason}", reason))
+            .AsMaybe()
+            .GetValueOrDefault();
+
+    private static HashSet<string> CollectGitTrackedFiles(string root)
     {
-        // Returns a set of relative paths (forward slashes) tracked by git.
-        // Returns null if git is unavailable or root is not a git repo.
-        try
+        var psi = new ProcessStartInfo
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = OperatingSystem.IsWindows() ? "git.exe" : "git",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = root
-            };
-            psi.ArgumentList.Add("ls-files");
-            psi.ArgumentList.Add("--cached");
-            psi.ArgumentList.Add("--others");
-            psi.ArgumentList.Add("--exclude-standard");
+            FileName = OperatingSystem.IsWindows() ? "git.exe" : "git",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = root
+        };
+        psi.ArgumentList.Add("ls-files");
+        psi.ArgumentList.Add("--cached");
+        psi.ArgumentList.Add("--others");
+        psi.ArgumentList.Add("--exclude-standard");
 
-            using var p = new Process { StartInfo = psi };
-            p.Start();
-            // Don't begin async read — read synchronously with a hard timeout.
-            if (!p.WaitForExit(GitTimeoutMs))
-            {
-                try { p.Kill(entireProcessTree: true); }
-                catch
-                { /* ignore */
-                }
-                return null;
-            }
-            if (p.ExitCode != 0) return null;
-
-            var set = new HashSet<string>(StringComparer.Ordinal);
-            string? line;
-            while ((line = p.StandardOutput.ReadLine()) is not null)
-            {
-                if (line.Length > 0) set.Add(line.Replace('\\', '/'));
-            }
-            return set;
-        }
-        catch
+        using var p = new Process { StartInfo = psi };
+        p.Start();
+        // Don't begin async read — read synchronously with a hard timeout.
+        if (!p.WaitForExit(GitTimeoutMs))
         {
-            return null;
+            ToolErrors.KillQuietly(p);
+            throw new TimeoutException($"git ls-files did not finish within {GitTimeoutMs}ms.");
         }
+
+        if (p.ExitCode != 0)
+            throw new InvalidOperationException($"git ls-files exited with code {p.ExitCode}.");
+
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        string? line;
+        while ((line = p.StandardOutput.ReadLine()) is not null)
+        {
+            if (line.Length > 0) set.Add(line.Replace('\\', '/'));
+        }
+        return set;
     }
 
     private sealed class WalkState(int maxEntries)

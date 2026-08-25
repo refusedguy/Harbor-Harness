@@ -104,7 +104,7 @@ public sealed class LsTool : ITool
         var state = new WalkState(maxEntries);
         try
         {
-            ListDirectory(
+            ListDirectory(_logger,
                 path,
                 "",
                 all,
@@ -146,6 +146,7 @@ public sealed class LsTool : ITool
     }
 
     private static void ListDirectory(
+        ILogger logger,
         string path,
         string relativePrefix,
         bool all,
@@ -165,16 +166,11 @@ public sealed class LsTool : ITool
             // One pass: dirs + files with metadata, no extra FileInfo per path.
             entries = new DirectoryInfo(path).GetFileSystemInfos();
         }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or DirectoryNotFoundException or IOException)
         {
-            return;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return;
-        }
-        catch (IOException)
-        {
+            // ROP-A Z1 п.15: silent skip keeps the listing contract; trace
+            // explains why the subtree is missing.
+            logger.LogTrace(ex, "ls: skipping unreadable directory {Dir}", path);
             return;
         }
 
@@ -232,7 +228,7 @@ public sealed class LsTool : ITool
                     continue;
                 }
 
-                ListDirectory(
+                ListDirectory(logger,
                     dir.FullName,
                     $"{relativePrefix}{name}/",
                     all,

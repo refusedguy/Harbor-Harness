@@ -121,19 +121,16 @@ public sealed class McpToolTool : ITool
 
         _logger.LogDebug("MCP call: server={Server} method={Method}", server, method);
 
-        var result = await registry.InvokeAsync(server, method, methodArgs, cancellationToken)
+        // ROP-A Z1 п.17: boundary Match — the layer-edge deployment of a
+        // Result into the tool's ToolResult contract.
+        return await registry.InvokeAsync(server, method, methodArgs, cancellationToken)
+            .Match(
+                payload => ToolResult.Success(
+                    $"MCP {server}.{method} →\n{payload}",
+                    new { server, method, chars = payload.Length }),
+                error => ToolResult.Error(
+                    $"MCP call failed (server='{server}', method='{method}'): {error}",
+                    new { server, method }))
             .ConfigureAwait(false);
-
-        if (result.IsFailure)
-        {
-            return ToolResult.Error(
-                $"MCP call failed (server='{server}', method='{method}'): {result.Error}",
-                new { server, method });
-        }
-
-        string? payload = result.Value;
-        return ToolResult.Success(
-            $"MCP {server}.{method} →\n{payload}",
-            new { server, method, chars = payload.Length });
     }
 }

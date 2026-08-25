@@ -46,12 +46,11 @@ public sealed class McpToolAdapter : ITool
             : default;
 
         using var argsDoc = JsonDocument.Parse($"{{\"name\":\"{_toolName}\",\"arguments\":{methodArgs.GetRawText()}}}");
-        var result = await _registry.InvokeAsync(_server, "tools/call", argsDoc.RootElement.Clone(), cancellationToken)
+        // ROP-A Z1 п.17: boundary Match.
+        return await _registry.InvokeAsync(_server, "tools/call", argsDoc.RootElement.Clone(), cancellationToken)
+            .Match(
+                static value => ToolResult.Success(value),
+                static error => ToolResult.Error($"MCP tool call failed: {error}"))
             .ConfigureAwait(false);
-
-        if (result.IsFailure)
-            return ToolResult.Error($"MCP tool call failed: {result.Error}");
-
-        return ToolResult.Success(result.Value);
     }
 }
