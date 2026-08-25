@@ -1,6 +1,7 @@
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Ui.Framework.Configuration;
 using Microsoft.Extensions.DependencyInjection;

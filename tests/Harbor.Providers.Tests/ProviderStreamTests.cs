@@ -54,7 +54,7 @@ public class ProviderStreamTests
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig(),
-            StubOpenAIAuthResolver.Instance,
+            StubAuthResolver.Instance,
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -80,7 +80,7 @@ public class ProviderStreamTests
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig(),
-            StubOpenAIAuthResolver.Instance,
+            StubAuthResolver.Instance,
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -133,7 +133,7 @@ public class ProviderStreamTests
         var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
             new HttpClient(handler),
             config,
-            StubGenericAuthResolver.Instance,
+            StubAuthResolver.Instance,
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 

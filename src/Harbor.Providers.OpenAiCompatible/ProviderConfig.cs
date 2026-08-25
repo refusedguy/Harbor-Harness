@@ -76,15 +76,16 @@ public sealed class ModelMapping
 }
 
 /// <summary>
-///     Auth resolver — fetches API key from env, file, or OS keychain.
+///     Default auth resolver — CLI override → conventional env var
+///     (<c>PROVIDER_ID</c> upper-cased with dashes replaced) → failure hint.
+///     The env twin of the single <see cref = "Harbor.Abstractions.Providers.IAuthResolver" />
+///     abstraction (ROP-A ПР.6): the former IOpenAIAuthResolver /
+///     IAnthropicAuthResolver interfaces and their per-provider resolvers
+///     collapsed into this pair.
 /// </summary>
-public interface IAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default);
-}
-
 /// <summary>
-///     Default auth resolver — env var → config file.
+///     Default auth resolver — CLI override → conventional env var
+///     (<c>PROVIDER_ID</c> upper-cased with dashes replaced) → failure hint.
 /// </summary>
 public sealed class EnvVarAuthResolver : IAuthResolver
 {
@@ -103,13 +104,14 @@ public sealed class EnvVarAuthResolver : IAuthResolver
         if (_overrides.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             return Task.FromResult(Result.Success(key));
 
-        // 2. Env var (conventional name)
+        // 2. Conventional env var
         string envName = providerId.ToUpperInvariant().Replace("-", "_") + "_API_KEY";
         string? envValue = Environment.GetEnvironmentVariable(envName);
-        if (!string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Success(envValue));
 
-        return Task.FromResult(Result.Failure<string>($"API key not found. Set ${envName} or pass --{providerId}-api-key."));
+        return Task.FromResult(
+            Result.SuccessIf(!string.IsNullOrEmpty(envValue),
+                    $"API key not found. Set ${envName} or pass --{providerId}-api-key.")
+                .Map(() => envValue!));
     }
 }
 

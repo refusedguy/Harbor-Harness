@@ -33,7 +33,7 @@ public sealed class AnthropicLlmClient : ILlmClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly IAnthropicAuthResolver _auth;
+    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation and conditional logic on the hot path.
@@ -46,7 +46,7 @@ public sealed class AnthropicLlmClient : ILlmClient
     public AnthropicLlmClient(
         HttpClient http,
         AnthropicConfig config,
-        IAnthropicAuthResolver auth,
+        IAuthResolver auth,
         ILogger<AnthropicLlmClient> logger)
     {
         _http = http;
@@ -74,7 +74,7 @@ public sealed class AnthropicLlmClient : ILlmClient
         {
             try
             {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
                 if (apiKeyResult.IsFailure)
                 {
                     await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
@@ -429,40 +429,6 @@ public sealed class AnthropicConfig
     public string? BaseUrl { get; set; }
     public string? ApiVersion { get; set; }
     public string? BetaFeatures { get; set; }
-}
-
-/// <summary>
-///     Auth resolver specifically for Anthropic.
-/// </summary>
-public interface IAnthropicAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
-}
-
-/// <summary>
-///     Default env-var based auth resolver for Anthropic.
-/// </summary>
-public sealed class EnvVarAnthropicAuthResolver : IAnthropicAuthResolver
-{
-    private const string EnvVarName = "ANTHROPIC_API_KEY";
-    private readonly string? _override;
-
-    public EnvVarAnthropicAuthResolver(string? overrideKey = null)
-    {
-        _override = overrideKey;
-    }
-
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
-    {
-        if (!string.IsNullOrEmpty(_override))
-            return Task.FromResult(Result.Success(_override));
-
-        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
-        if (string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --anthropic-api-key."));
-
-        return Task.FromResult(Result.Success(envValue));
-    }
 }
 
 /// <summary>

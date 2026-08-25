@@ -69,7 +69,7 @@ internal static class JsonProviderDiscovery
     /// </summary>
     public static void RegisterDesktopProviders(
         IProviderRegistryBuilder pb,
-        Harbor.Providers.OpenAiCompatible.IAuthResolver authResolver,
+        Harbor.Abstractions.Providers.IAuthResolver authResolver,
         Harbor.Providers.OpenAiCompatible.IModelCatalog modelCatalog,
         ILoggerFactory loggerFactory)
     {

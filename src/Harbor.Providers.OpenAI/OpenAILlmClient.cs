@@ -29,7 +29,7 @@ public sealed class OpenAILlmClient : ILlmClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly IOpenAIAuthResolver _auth;
+    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation on the hot path.
@@ -42,7 +42,7 @@ public sealed class OpenAILlmClient : ILlmClient
     public OpenAILlmClient(
         HttpClient http,
         OpenAIConfig config,
-        IOpenAIAuthResolver auth,
+        IAuthResolver auth,
         ILogger<OpenAILlmClient> logger)
     {
         _http = http;
@@ -70,7 +70,7 @@ public sealed class OpenAILlmClient : ILlmClient
         {
             try
             {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
                 if (apiKeyResult.IsFailure)
                 {
                     await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
@@ -429,34 +429,6 @@ public sealed class OpenAIConfig
 {
     public string? BaseUrl { get; set; }
     public bool ForceResponsesApi { get; set; }
-}
-
-public interface IOpenAIAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
-}
-
-public sealed class EnvVarOpenAIAuthResolver : IOpenAIAuthResolver
-{
-    private const string EnvVarName = "OPENAI_API_KEY";
-    private readonly string? _override;
-
-    public EnvVarOpenAIAuthResolver(string? overrideKey = null)
-    {
-        _override = overrideKey;
-    }
-
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
-    {
-        if (!string.IsNullOrEmpty(_override))
-            return Task.FromResult(Result.Success(_override));
-
-        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
-        if (string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --openai-api-key."));
-
-        return Task.FromResult(Result.Success(envValue));
-    }
 }
 
 public static class OpenAIModels

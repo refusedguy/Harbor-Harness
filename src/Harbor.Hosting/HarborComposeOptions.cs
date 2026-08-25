@@ -96,7 +96,7 @@ public sealed class HarborComposeOptions
     public HarborProviderFlavor Providers { get; init; } = HarborProviderFlavor.CliFull;
 
     /// <summary>Desktop flavor only: auth resolver handed to OpenAI-compatible clients.</summary>
-    public Harbor.Providers.OpenAiCompatible.IAuthResolver? DesktopAuthResolver { get; init; }
+    public Harbor.Abstractions.Providers.IAuthResolver? DesktopAuthResolver { get; init; }
 
     /// <summary>Desktop flavor only: model catalog handed to OpenAI-compatible clients.</summary>
     public Harbor.Providers.OpenAiCompatible.IModelCatalog? DesktopModelCatalog { get; init; }
