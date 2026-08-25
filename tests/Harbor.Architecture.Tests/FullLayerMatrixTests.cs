@@ -75,6 +75,7 @@ public class FullLayerMatrixTests
         "Harbor.Tui.Notifications",
         "Harbor.Tui.Plain",
         "Harbor.Tui.Ansi",
+        "Harbor.Tui.ConsoleEx",
         // Application
         "Harbor.Application",
         "Harbor.Registries",
@@ -189,6 +190,10 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         ["Harbor.Tui.Ansi"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
+        // ConsoleEx owns its own input+render stack; reuses Presentation-state
+        // streaming buffers (StreamingSync/ChunkedBuffer) — no Terminal.Abstractions yet.
+        ["Harbor.Tui.ConsoleEx"] = new(Layer.Presentation,
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State"]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,

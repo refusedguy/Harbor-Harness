@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Tui.ConsoleEx.Tests"/>
   </ItemGroup>
 
