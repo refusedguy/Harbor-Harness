@@ -50,25 +50,7 @@ public class ReconnectReplayTests
         {
             // Generation 1: subscribe, consume one event, remember its sequence,
             // then drop the connection without unsubscribing (network cut).
-            ulong lastSeen;
-            {
-                var lf = sp.GetRequiredService<ILoggerFactory>();
-                var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
-                var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
-                await client.ConnectAsync();
-
-                var subscribeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), subscribeCts.Token));
-                await server.SubscriptionReady;
-
-                await bus.PublishAsync(new TurnStartEvent(1));
-                var frames = await CollectFramesAsync(client, 1, subscribeCts);
-                lastSeen = frames[0].Sequence;
-
-                // Abrupt disconnect: dispose the transport underneath the RPC
-                // client, exactly like an OS-level connection reset.
-                await transport.DisposeAsync();
-            }
+            (ulong lastSeen, _) = await SubscribeConsumeAndCutAsync(server, bus, sp, pipe);
 
             // While "offline": more events fire on the bus.
             for (int turn = 2; turn <= 6; turn++)
@@ -77,32 +59,7 @@ public class ReconnectReplayTests
             }
 
             // Generation 2: fresh connection presenting its last position.
-            {
-                var lf = sp.GetRequiredService<ILoggerFactory>();
-                var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
-                var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
-                await client.ConnectAsync();
-
-                var ackTcs = new TaskCompletionSource<HarborResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var replayCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                _ = Task.Run(async () =>
-                    ackTcs.TrySetResult(await client.SendAsync(
-                        new SubscribeToEventsRequest(lastSeen), replayCts.Token)));
-
-                var ack = (OkResponse)await ackTcs.Task;
-                var ackData = WireCodec.DeserializeDomain<SubscriptionAck>(ack.Payload)!;
-                await Assert.That(ackData.ResyncRequired).IsFalse();
-
-                // Exactly the five missed turns arrive, in order.
-                var replayed = await CollectFramesAsync(client, 5, replayCts);
-                for (int i = 0; i < 5; i++)
-                {
-                    await Assert.That(replayed[i].Sequence).IsEqualTo(lastSeen + (ulong)(i + 1));
-                    var turnStart = replayed[i].Event as HarborEvent.TurnStart;
-                    await Assert.That(turnStart).IsNotNull();
-                    await Assert.That(turnStart!.Turn).IsEqualTo(i + 2);
-                }
-            }
+            await ReconnectAndVerifyReplayAsync(sp, pipe, lastSeen);
         }
         finally
         {
@@ -137,25 +94,83 @@ public class ReconnectReplayTests
             var ackData = WireCodec.DeserializeDomain<SubscriptionAck>(ack.Payload)!;
 
             await Assert.That(ackData.ResyncRequired).IsTrue();
-            // No replay storm follows: nothing is delivered within the window.
-            bool anyFrame = false;
-            try
-            {
-                var timeout = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
-                timeout.CancelAfter(TimeSpan.FromMilliseconds(500));
-                await foreach (var _ in client.EventFrames.ReadAllAsync(timeout.Token))
-                {
-                    anyFrame = true;
-                    break;
-                }
-            }
-            catch (OperationCanceledException) { }
 
+            // No replay storm follows: nothing is delivered within the window.
+            bool anyFrame = await TryReadAnyFrameAsync(client, TimeSpan.FromMilliseconds(500));
             await Assert.That(anyFrame).IsFalse();
         }
         finally
         {
             await server.StopAsync();
+        }
+    }
+
+    private static async Task<bool> TryReadAnyFrameAsync(MessagePackRpcClient client, TimeSpan window)
+    {
+        using var timeout = new CancellationTokenSource(window);
+        try
+        {
+            await foreach (var _ in client.EventFrames.ReadAllAsync(timeout.Token))
+            {
+                return true;
+            }
+
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            return false; // window elapsed with zero frames — the expected shape
+        }
+    }
+
+    /// <summary>Generation 1: subscribe, consume one event, cut the wire.</summary>
+    private static async Task<(ulong LastSeen, MessagePackRpcClient Client)> SubscribeConsumeAndCutAsync(
+        HarborIpcServer server, IEventBus bus, IServiceProvider sp, string pipe)
+    {
+        var lf = sp.GetRequiredService<ILoggerFactory>();
+        var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
+        var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
+        await client.ConnectAsync();
+
+        var subscribeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), subscribeCts.Token));
+        await server.SubscriptionReady;
+
+        await bus.PublishAsync(new TurnStartEvent(1));
+        List<EventFrame> frames = await CollectFramesAsync(client, 1, subscribeCts);
+
+        // Abrupt disconnect: dispose the transport underneath the RPC
+        // client, exactly like an OS-level connection reset.
+        await transport.DisposeAsync();
+        return (frames[0].Sequence, client);
+    }
+
+    /// <summary>Generation 2: reconnect with LastSequence and verify ordered replay.</summary>
+    private static async Task ReconnectAndVerifyReplayAsync(IServiceProvider sp, string pipe, ulong lastSeen)
+    {
+        var lf = sp.GetRequiredService<ILoggerFactory>();
+        var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
+        var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
+        await client.ConnectAsync();
+
+        var ackTcs = new TaskCompletionSource<HarborResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var replayCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        _ = Task.Run(async () =>
+            ackTcs.TrySetResult(await client.SendAsync(
+                new SubscribeToEventsRequest(lastSeen), replayCts.Token)));
+
+        var ack = (OkResponse)await ackTcs.Task;
+        var ackData = WireCodec.DeserializeDomain<SubscriptionAck>(ack.Payload)!;
+        await Assert.That(ackData.ResyncRequired).IsFalse();
+
+        // Exactly the five missed turns arrive, in order.
+        List<EventFrame> replayed = await CollectFramesAsync(client, 5, replayCts);
+        for (int i = 0; i < 5; i++)
+        {
+            await Assert.That(replayed[i].Sequence).IsEqualTo(lastSeen + (ulong)(i + 1));
+            var turnStart = replayed[i].Event as HarborEvent.TurnStart;
+            await Assert.That(turnStart).IsNotNull();
+            await Assert.That(turnStart!.Turn).IsEqualTo(i + 2);
         }
     }
 }
