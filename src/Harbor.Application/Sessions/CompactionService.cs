@@ -449,7 +449,6 @@ public sealed class CompactionService(
         ModelInfo model,
         CancellationToken ct = default)
     {
-        var stopwatch = Stopwatch.StartNew();
         try
         {
             // 1. Find cut point (index-based; no List allocations)
@@ -460,23 +459,37 @@ public sealed class CompactionService(
                 return Result.Failure<CompactionResult>("No messages to compact.");
             }
 
-            // 2. Build summarization request
-            var providerIdResult = ProviderId.TryCreate(model.ProviderId);
-            if (providerIdResult.IsFailure)
-            {
-                return Result.Failure<CompactionResult>(providerIdResult.Error);
-            }
+            // 2. Build summarization request — name parse → registry lookup ride
+            // one Bind chain (ROP-B П.12 pattern); a passthrough ladder here would
+            // just re-raise each Error verbatim.
+            return await ProviderId.TryCreate(model.ProviderId)
+                .Bind(providers.GetClient)
+                .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Compaction failed for session {SessionId}", sessionId);
+            return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
+        }
+    }
 
-            var clientResult = providers.GetClient(providerIdResult.Value);
-            if (clientResult.IsFailure)
+    /// <summary>Secondary-model selection + summarization call + tail splice.</summary>
+    private async Task<Result<CompactionResult>> CompactCoreAsync(
+        string sessionId,
+        IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
+        ILlmClient client,
+        int tailStart,
+        CancellationToken ct)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
             {
-                return Result.Failure<CompactionResult>(clientResult.Error);
-            }
-
             // Ф8/A3: prefer the configured cheap secondary model for the
             // summarization call; fall back to the primary client/model when
             // no secondary is configured or it cannot be resolved.
-            ILlmClient summaryClient = clientResult.Value;
+            ILlmClient summaryClient = client;
             ModelInfo summaryModel = model;
             var secondary = await TryResolveSecondaryAsync(model, ct).ConfigureAwait(false);
             if (secondary is not null)
