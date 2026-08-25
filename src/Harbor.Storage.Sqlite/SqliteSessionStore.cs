@@ -99,7 +99,20 @@ public sealed class SqliteSessionStore : ISessionStore
 
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return (await ReadRowAsync(sessionId, ct).ConfigureAwait(false))
+            .Bind(row => row.ToResult($"Session '{sessionId}' not found."));
+    }
+
+    /// <summary>
+    ///     Read one session row. Query failures travel the Result channel
+    ///     (cancellation rethrown via <see cref="ResultErrors.Message" />);
+    ///     a missing row is absence (<see cref="Maybe{T}.None" />), not an
+    ///     error — "not found" stays distinguishable from a storage failure
+    ///     instead of sharing the same Error channel (ROP-B П.24).
+    /// </summary>
+    private Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
+    {
+        return Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -108,14 +121,10 @@ public sealed class SqliteSessionStore : ISessionStore
 
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             if (!await reader.ReadAsync(ct).ConfigureAwait(false))
-                return Result.Failure<Session>($"Session '{sessionId}' not found.");
+                return Maybe<Session>.None;
 
-            return Result.Success(ReadSession(reader));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<Session>(ex.Message);
-        }
+            return Maybe.From(ReadSession(reader));
+        }, ResultErrors.Message);
     }
 
     public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)

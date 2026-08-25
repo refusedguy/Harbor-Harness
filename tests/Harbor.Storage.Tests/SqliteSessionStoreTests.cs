@@ -79,6 +79,28 @@ public class SqliteSessionStoreTests
         {
             var result = await store.GetAsync("nonexistent-id");
             await Assert.That(result.IsFailure).IsTrue();
+            // П.24: absence reads as a clean "not found" outcome, not a raw provider error.
+            await Assert.That(result.Error).IsEqualTo("Session 'nonexistent-id' not found.");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath)) File.Delete(dbPath);
+        }
+    }
+
+    [Test]
+    public async Task GetAsync_CancelledToken_PropagatesCancellationInsteadOfFailure()
+    {
+        var store = Create(out string dbPath);
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            // П.24: cancellation is NOT a storage failure — it propagates (Esc semantics).
+            await Assert.That(async () => await store.GetAsync("any", cts.Token))
+                .Throws<OperationCanceledException>();
         }
         finally
         {
