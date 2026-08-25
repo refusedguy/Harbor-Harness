@@ -151,7 +151,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         writer.WriteStartObject();
 
         writer.WriteString("model", request.Model);
-        WriteMessages(writer, request);
+        WriteMessages(writer, request, _logger, ProviderId.Value);
         writer.WriteBoolean("stream", true);
 
         writer.WriteStartObject("stream_options");
@@ -264,7 +264,7 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         return false;
     }
 
-    private static void WriteMessages(Utf8JsonWriter writer, LlmRequest request)
+    private static void WriteMessages(Utf8JsonWriter writer, LlmRequest request, ILogger logger, string providerId)
     {
         writer.WritePropertyName("messages");
         writer.WriteStartArray();
@@ -279,20 +279,21 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
 
         foreach (var msg in request.Messages)
         {
-            WriteMessage(writer, msg);
+            WriteMessage(writer, msg, logger, providerId);
         }
 
         writer.WriteEndArray();
     }
 
-    private static void WriteMessage(Utf8JsonWriter writer, LlmMessage msg)
+    private static void WriteMessage(Utf8JsonWriter writer, LlmMessage msg, ILogger logger, string providerId)
     {
         switch (msg)
         {
             case LlmUserMessage u:
                 writer.WriteStartObject();
                 writer.WriteString("role", "user");
-                writer.WriteString("content", u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? "");
+                // ROP-A ПР.12: non-text blocks dropped loudly.
+                writer.WriteString("content", ProviderPayload.FirstTextOrEmpty(u.Content, logger, providerId));
                 writer.WriteEndObject();
                 break;
 

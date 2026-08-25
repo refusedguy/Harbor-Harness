@@ -4,12 +4,48 @@
 // travels as a linked file instead of a shared assembly. One source of truth,
 // four identical internal copies — no cross-provider coupling.
 
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Channels;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Providers.Internal;
+
+/// <summary>
+///     Shared payload-building helpers for the OpenAI-format clients
+///     (ROP-A ПР.12).
+/// </summary>
+internal static class ProviderPayload
+{
+    /// <summary>
+    ///     First text block of a user message, or empty. Non-text blocks
+    ///     (images) are dropped — loudly: until <c>image_url</c> support lands,
+    ///     silently sending an empty prompt is worse than a warning.
+    /// </summary>
+    public static string FirstTextOrEmpty(IReadOnlyList<LlmContentBlock> content, ILogger logger, string providerId)
+    {
+        for (int i = 0; i < content.Count; i++)
+        {
+            if (content[i] is not LlmTextBlock)
+            {
+                logger.LogWarning(
+                    "Dropping non-text content block(s): {Provider} does not support vision yet",
+                    providerId);
+                break;
+            }
+        }
+
+        foreach (var block in content)
+        {
+            if (block is LlmTextBlock { Text: { Length: > 0 } text })
+                return text;
+        }
+        return "";
+    }
+}
 
 /// <summary>
 ///     Per-stream chunk-parsing state: the tool-call index→id map (ROP-A ПР.3)

@@ -164,7 +164,7 @@ public sealed class OllamaLlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
-            ["messages"] = BuildMessages(request),
+            ["messages"] = BuildMessages(request, _logger),
             ["stream"] = true,
             ["options"] = BuildOptions(request)
         };
@@ -201,7 +201,7 @@ public sealed class OllamaLlmClient : ILlmClient
         return options;
     }
 
-    private static List<object> BuildMessages(LlmRequest request)
+    private static List<object> BuildMessages(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -217,7 +217,8 @@ public sealed class OllamaLlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "ollama")
                 },
                 LlmAssistantMessage a => new
                 {

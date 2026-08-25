@@ -150,7 +150,7 @@ public sealed class OpenAILlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(8)
         {
             ["model"] = request.Model,
-            ["messages"] = BuildChatMessages(request),
+            ["messages"] = BuildChatMessages(request, _logger),
             ["stream"] = true,
             ["stream_options"] = new { include_usage = true }
         };
@@ -207,7 +207,7 @@ public sealed class OpenAILlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
-            ["input"] = BuildResponsesInput(request),
+            ["input"] = BuildResponsesInput(request, _logger),
             ["stream"] = true
         };
 
@@ -245,7 +245,7 @@ public sealed class OpenAILlmClient : ILlmClient
         return msg;
     }
 
-    private static List<object> BuildChatMessages(LlmRequest request)
+    private static List<object> BuildChatMessages(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -261,7 +261,8 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
                 },
                 LlmAssistantMessage a => new
                 {
@@ -287,7 +288,7 @@ public sealed class OpenAILlmClient : ILlmClient
         return result;
     }
 
-    private static List<object> BuildResponsesInput(LlmRequest request)
+    private static List<object> BuildResponsesInput(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -303,7 +304,8 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
                 },
                 LlmAssistantMessage a => new
                 {
