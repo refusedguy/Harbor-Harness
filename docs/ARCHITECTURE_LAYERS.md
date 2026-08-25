@@ -420,7 +420,29 @@ If a test fails, the assertion message lists every forbidden assembly that the p
 actually references. Fix the `<ProjectReference>` in the offending `.csproj`, then
 re-run.
 
-### 5.4 Skipping a test for a known violation
+### 5.4 Full-project matrix — `FullLayerMatrixTests.cs` (ROP-D)
+
+Before ROP-D only assemblies with a hand-written `typeof()` probe had layer rules
+(~18 of ~45 src projects). `FullLayerMatrixTests.cs` closes the gap with one data
+table covering **every main-solution src assembly** (45 rows):
+
+1. *Reference check* — actual `Assembly.GetReferencedAssemblies()` ⊆ the row's
+   Allowed set (+ documented exceptions). IL-level: transitive ProjectReferences
+   that leak types into a consumer's AssemblyRef are caught too.
+2. *Table guard* — Allowed sets themselves must respect the layer classes
+   (Presentation ↛ Infrastructure/Application, Infrastructure ↛ Presentation,
+   Domain ↛ Domain-only), so a violation cannot be pre-declared as "allowed";
+   real exceptions live in `DocumentedExceptions`, each with a reason.
+3. *Exception liveness* — every documented exception must correspond to a real
+   current reference (no rotting into blanket permissions).
+4. *Coverage* — adding a src project without a matrix row (and a ProjectReference
+   in the test csproj) fails loudly instead of silently skipping.
+
+Out of scope by design: `Harbor.CodeGen` (build tool, outside Harbor.slnx),
+`Harbor.Plugins.Host` (OutputType=Exe out-of-process MCP server — an app), and
+`apps/*` composition roots.
+
+### 5.5 Skipping a test for a known violation
 
 When a real violation is found and cannot be fixed in the current sprint, mark the
 test with a `// TODO(arch): violation, see ARCHITECTURE_LAYERS.md §known-violations`

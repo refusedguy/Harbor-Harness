@@ -437,35 +437,12 @@ public class LayerDependencyTests
         _ = typeof(Tools.Builtin.FacadeMarker).Assembly.GetName().Name;
 
         var loaded = ArchitectureTestHelpers.LoadHarborAssemblies();
-        // Update this list when adding a new Harbor project. The test exists to
-        // catch a regression where a ProjectReference is accidentally removed
-        // from this test project (which would silently make the per-assembly
-        // tests skip rather than fail).
-        string[] expected =
-        [
-            // Harbor.Domain deleted in the F1 decoupling — its content lives in
-            // Harbor.Abstractions.Contracts now (see AbstractionsSplitLayerRules).
-            "Harbor.Abstractions.Contracts",
-            "Harbor.Extensions",
-            "Harbor.Abstractions",
-            "Harbor.Terminal.Abstractions",
-            "Harbor.Application",
-            "Harbor.Registries",
-            "Harbor.Core",
-            "Harbor.Plugins.Runtime",
-            // Harbor.Scripting moved to contrib/scripting (sprint 2) — outside
-            // the main solution's layer enforcement scope.
-            "Harbor.Providers.OpenAiCompatible",
-            "Harbor.Providers.Anthropic",
-            "Harbor.Providers.OpenAI",
-            "Harbor.Providers.Ollama",
-            "Harbor.Storage.Jsonl",
-            "Harbor.Storage.Memory",
-            "Harbor.Storage.Sqlite",
-            "Harbor.Tools.Builtin",
-            "Harbor.Tui.Ansi",
-            "Harbor.Tui.Plain"
-        ];
+        // ROP-D Z2: the expected inventory now lives in FullLayerMatrixTests
+        // (single source of truth covering every main-solution src assembly).
+        // Update THAT list when adding a new Harbor project — this test then
+        // fails if a ProjectReference is accidentally removed from this test
+        // project (which would silently make the per-assembly tests skip).
+        string[] expected = FullLayerMatrixTests.AllSrcAssemblies;
         var missing = expected.Where(n => !loaded.ContainsKey(n)).ToList();
         await Assert.That(missing).IsEmpty();
     }
