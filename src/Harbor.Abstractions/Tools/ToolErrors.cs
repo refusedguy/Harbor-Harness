@@ -18,14 +18,16 @@ public static class ToolErrors
     ///     Build the canonical handler for <paramref name="tool" />:
     ///     "&lt;tool&gt; cancelled" when the caller's token fired,
     ///     "&lt;tool&gt; timed out after Ns." for a timeout-shaped OCE,
-    ///     otherwise the exception message.
+    ///     otherwise <paramref name="failurePrefix" /> + exception message.
     /// </summary>
-    public static Func<Exception, string> Handler(string tool, CancellationToken ct, TimeSpan? timeout = null) =>
+    public static Func<Exception, string> Handler(
+        string tool, CancellationToken ct, TimeSpan? timeout = null, string? failurePrefix = null) =>
         ex => ex switch
         {
             OperationCanceledException when ct.IsCancellationRequested => $"{tool} cancelled",
             OperationCanceledException when timeout.HasValue => $"{tool} timed out after {timeout.Value.TotalSeconds:N0}s.",
             OperationCanceledException => $"{tool} cancelled",
+            _ when failurePrefix is not null => $"{failurePrefix}{ex.Message}",
             _ => ex.Message
         };
 

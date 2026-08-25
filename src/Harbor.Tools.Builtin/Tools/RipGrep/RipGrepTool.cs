@@ -168,7 +168,13 @@ public sealed class RipGrepTool : ITool
 
         _logger.LogDebug("rg {Args}", string.Join(' ', psi.ArgumentList));
 
-        if (!process.Start())
+        // ROP-A Z1 п.14: Start() guarded like BashTool — a missing binary
+        // surfaces as a tool error instead of a raw Win32Exception.
+        var startResult = Result.Try(process.Start,
+            ex => $"Failed to start `rg`: {ex.Message}");
+        if (startResult.IsFailure)
+            return ToolResult.Error(startResult.Error);
+        if (!startResult.Value)
             return ToolResult.Error("Failed to start `rg` process.");
 
         process.BeginOutputReadLine();
@@ -178,21 +184,13 @@ public sealed class RipGrepTool : ITool
         {
             await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException oce)
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch
-            { /* ignore */
-            }
-            return ToolResult.Error("ripgrep cancelled");
-        }
-        catch (OperationCanceledException)
-        {
-            try { process.Kill(entireProcessTree: true); }
-            catch
-            { /* ignore */
-            }
-            return ToolResult.Error($"`rg` timed out after {TimeoutSeconds}s.");
+            // ROP-A П.13: one catch + classifier instead of two duplicated
+            // kill-and-message branches; kill semantics live in KillQuietly.
+            ToolErrors.KillQuietly(process);
+            return ToolResult.Error(ToolErrors.Handler("ripgrep", cancellationToken,
+                timeout: TimeSpan.FromSeconds(TimeoutSeconds))(oce));
         }
 
         // rg exit codes: 0 = matches, 1 = no matches, 2 = error.

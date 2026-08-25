@@ -203,13 +203,10 @@ public sealed class EditTool : ITool
             await File.WriteAllTextAsync(path, content, utf8, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return ToolResult.Error("edit cancelled");
-        }
         catch (Exception ex)
         {
-            return ToolResult.Error($"Failed to write: {ex.Message}");
+            // ROP-A П.13: boundary message policy lives in one handler.
+            return ToolResult.Error(ToolErrors.Handler("edit", cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
         string diff = GenerateContextDiff(original, content, MaxDiffLines);

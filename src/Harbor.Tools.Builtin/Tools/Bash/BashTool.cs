@@ -176,10 +176,8 @@ public sealed class BashTool : ITool
         {
             if (!process.HasExited)
             {
-                try { process.Kill(entireProcessTree: true); }
-                catch
-                { /* ignore */
-                }
+                // ROP-A Z1 п.14: kill semantics live in one shared helper.
+                ToolErrors.KillQuietly(process);
                 bool timedOut = !cancellationToken.IsCancellationRequested;
                 await DrainAsync().ConfigureAwait(false);
                 if (timedOut)

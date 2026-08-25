@@ -118,9 +118,10 @@ public sealed class GlobTool : ITool
                 if (truncated) break;
             }
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException oce)
         {
-            return ToolResult.Error("glob cancelled");
+            // ROP-A П.13: single boundary classifier.
+            return ToolResult.Error(ToolErrors.Handler("glob", ct)(oce));
         }
 
         // Dedupe + stable sort

@@ -176,15 +176,11 @@ public sealed class PatchTool : ITool
             // it's atomic too as of .NET 5+ when overwriting on the same drive.
             File.Move(tempPath, path, true);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            TryDelete(tempPath);
-            return ToolResult.Error("patch cancelled");
-        }
         catch (Exception ex)
         {
             TryDelete(tempPath);
-            return ToolResult.Error($"Failed to write: {ex.Message}");
+            // ROP-A П.13: boundary message policy lives in one handler.
+            return ToolResult.Error(ToolErrors.Handler("patch", cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
         _logger.LogInformation("Patched {Path} ({Hunks} hunks)", path, hunks.Count);

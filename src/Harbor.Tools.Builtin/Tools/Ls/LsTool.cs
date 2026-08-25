@@ -115,9 +115,10 @@ public sealed class LsTool : ITool
                 state,
                 ct);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException oce)
         {
-            return ToolResult.Error("ls cancelled");
+            // ROP-A П.13: single boundary classifier.
+            return ToolResult.Error(ToolErrors.Handler("ls", ct)(oce));
         }
 
         if (state.Count == 0)

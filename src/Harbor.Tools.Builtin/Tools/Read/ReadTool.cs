@@ -207,13 +207,10 @@ public sealed class ReadTool : ITool
                 taken++;
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            return ToolResult.Error("read cancelled");
-        }
         catch (Exception ex)
         {
-            return ToolResult.Error($"Failed to read: {ex.Message}");
+            // ROP-A П.13: boundary message policy lives in one handler.
+            return ToolResult.Error(ToolErrors.Handler("read", cancellationToken, failurePrefix: "Failed to read: ")(ex));
         }
 
         if (taken == 0 && skip > 0)

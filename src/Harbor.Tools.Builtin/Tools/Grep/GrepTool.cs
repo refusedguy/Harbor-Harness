@@ -66,21 +66,23 @@ public sealed class GrepTool : ITool
                                                                       }
                                                                       """);
 
+    /// <summary>
+    ///     Single regex compilation point (ROP-A Z1 п.5): validation and
+    ///     execution share one compiled instance instead of compiling twice
+    ///     with duplicated catch blocks.
+    /// </summary>
+    private static Result<Regex> CompileRegex(string pattern, RegexOptions options) =>
+        Result.Try(
+            () => new Regex(pattern, options, TimeSpan.FromSeconds(2)),
+            ex => $"Invalid regex: {ex.Message}");
+
     public Result ValidateArguments(JsonElement args)
     {
         if (!args.TryGetProperty("pattern", out var p) || p.ValueKind != JsonValueKind.String
                                                        || string.IsNullOrEmpty(p.GetString()))
             return Result.Failure("Missing required argument 'pattern'.");
 
-        try
-        {
-            _ = new Regex(p.GetString()!, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"Invalid regex: {ex.Message}");
-        }
+        return CompileRegex(p.GetString()!, RegexOptions.CultureInvariant);
     }
 
     public Task<ToolResult> ExecuteAsync(
@@ -106,15 +108,10 @@ public sealed class GrepTool : ITool
         // One-shot search: Compiled is often slower (JIT of regex). MatchTimeout = safety.
         var options = RegexOptions.CultureInvariant
                       | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None);
-        Regex regex;
-        try
-        {
-            regex = new Regex(pattern, options, TimeSpan.FromSeconds(2));
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Invalid regex: {ex.Message}");
-        }
+        var compiled = CompileRegex(pattern, options);
+        if (compiled.IsFailure)
+            return ToolResult.Error(compiled.Error);
+        Regex regex = compiled.Value;
 
         Regex? includeRx = null;
         if (!string.IsNullOrWhiteSpace(include))
