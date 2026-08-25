@@ -144,7 +144,7 @@ public sealed class LogsPanel : IPanelProvider
     {
         if (string.IsNullOrEmpty(category))
             return "-";
-        // Show last segment of "Harbor.Core.Sessions.AgentLoop" → "AgentLoop".
+        // Show last segment of "Harbor.Application.Sessions.AgentLoop" → "AgentLoop".
         int lastDot = category.LastIndexOf('.');
         return lastDot >= 0 && lastDot < category.Length - 1
             ? category[(lastDot + 1)..]

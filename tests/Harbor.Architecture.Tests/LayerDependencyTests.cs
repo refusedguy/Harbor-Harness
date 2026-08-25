@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Application.Agents;
-using Harbor.Core.Tools;
+using Harbor.Registries.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Runtime;
 using Harbor.Providers.Anthropic;
@@ -16,7 +16,7 @@ using Harbor.Tui.Plain;
 using Harbor.Ui.Framework.State;
 using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
-// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
+// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
 // Alternative TUI renderers (Spectre/Fullscreen/SpectreTui/TerminalGui/Termina/RazorConsole)
 // moved to contrib/tui in sprint 2 — outside the main solution's layer scope.
 

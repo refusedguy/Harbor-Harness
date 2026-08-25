@@ -9,7 +9,7 @@ using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
-using Harbor.Core.Tools;
+using Harbor.Registries.Tools;
 using Harbor.Ipc.Client;
 using Harbor.Ipc.InProcess;
 using Harbor.Ui.Framework.Navigation;

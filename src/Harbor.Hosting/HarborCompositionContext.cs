@@ -3,7 +3,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Configuration;
 using Harbor.Abstractions.Events;
-using Harbor.Core.Events;
+using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;

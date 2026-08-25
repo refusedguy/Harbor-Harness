@@ -1,5 +1,5 @@
 using Harbor.Application.Configuration;
-using Harbor.Core.Events;
+using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 
 using Harbor.Abstractions.Events;

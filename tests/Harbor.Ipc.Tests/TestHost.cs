@@ -3,7 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Tools;
+using Harbor.Registries.Tools;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

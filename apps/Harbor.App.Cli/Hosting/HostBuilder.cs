@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Cli.Configuration;
-using Harbor.Core.Events;
+using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
 using Microsoft.Extensions.DependencyInjection;
