@@ -63,38 +63,31 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// <inheritdoc />
     public Result<ILlmClient> GetClient(ProviderId providerId)
     {
-        // Try frozen snapshot first (fast path, lock-free, no dictionary lookup overhead)
+        // ROP-B П.23: both lookup branches share one Instantiate seam — the
+        // duplicated catch blocks (and the error text they format) live in
+        // exactly one place now.
         var frozen = _frozenClients;
         if (frozen is not null && frozen.TryGetValue(providerId, out var lazy))
         {
-            try
-            {
-                return Result.Success(lazy.Value);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
-                return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
-            }
+            return Instantiate(lazy, providerId);
         }
 
-        // Fallback to concurrent dictionary
         if (_clients.TryGetValue(providerId, out var lazyClient))
         {
-            try
-            {
-                return Result.Success(lazyClient.Value);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
-                return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
-            }
+            return Instantiate(lazyClient, providerId);
         }
 
         _logger.LogDebug("Provider not registered: {ProviderId}", providerId);
         return Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
     }
+
+    /// <summary>Force the lazy factory and classify any instantiation failure.</summary>
+    private Result<ILlmClient> Instantiate(Lazy<ILlmClient> lazy, ProviderId providerId) =>
+        Result.Success(lazy)
+            .MapTry(static l => l.Value,
+                ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
+            .TapError(e => _logger.LogWarning(
+                "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
