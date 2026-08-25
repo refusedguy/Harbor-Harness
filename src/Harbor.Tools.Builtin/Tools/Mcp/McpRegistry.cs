@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
@@ -29,12 +30,10 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure("Server name cannot be empty.");
 
-        var parsed = McpArgvParser.ParseCommand(stdioCommand);
-        if (parsed.IsFailure)
-            return Result.Failure(parsed.Error);
-
-        var tokens = parsed.Value;
-        return RegisterInternal(name, new McpServerStartInfo { Command = tokens[0], Args = tokens[1..] });
+        // ROP-A Z1 п.7: passthrough failure → Bind; no intermediate .Value read.
+        return McpArgvParser.ParseCommand(stdioCommand)
+            .Map(tokens => new McpServerStartInfo { Command = tokens[0], Args = tokens[1..] })
+            .Bind(startInfo => RegisterInternal(name, startInfo));
     }
 
     /// <summary>
@@ -107,11 +106,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 // Legacy flat form: "name": "command line" — kept for backward compatibility.
                 if (value.ValueKind == JsonValueKind.String)
                 {
-                    var legacyResult = Register(name, value.GetString() ?? string.Empty);
-                    if (legacyResult.IsSuccess)
-                        loaded++;
-                    else
-                        _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, legacyResult.Error);
+                    // ROP-A Z1 п.18: the log is glued to the result and the
+                    // counter falls out of one Match expression.
+                    var registered = Register(name, value.GetString() ?? string.Empty)
+                        .TapError(e => _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, e));
+                    loaded += registered.IsSuccess ? 1 : 0;
                     continue;
                 }
 
@@ -221,6 +220,10 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            // ROP-A Z1 п.8: cancellation rethrows (Esc ≠ fake server failure,
+            // §4.5 via ResultErrors policy); the rest keeps the MCP message.
+            if (ex is OperationCanceledException) throw;
+
             return Result.Failure<string>($"MCP call to '{server}.{method}' failed: {ex.Message}");
         }
     }
