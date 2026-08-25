@@ -20,6 +20,9 @@
 //   - Harbor.CodeGen — build tool, not part of Harbor.slnx.
 //   - Harbor.Plugins.Host — OutputType=Exe out-of-process MCP stdio server
 //     (assembly 'harbor-plugins-host'): an app/composition-root like apps/*.
+//   - Harbor.Providers.Shared — shared-source folder (no .csproj): SsePump.cs /
+//     OpenAiWire.cs are <Compile Include> linked into the four provider
+//     assemblies, so there is no separate assembly to put on the matrix.
 //   - apps/* entry points (Harbor.App.Cli, Harbor.App.Avalonia) — composition
 //     roots are allowed to reference anything; there is nothing to forbid.
 
