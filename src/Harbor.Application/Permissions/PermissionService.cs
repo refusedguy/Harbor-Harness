@@ -150,35 +150,34 @@ public sealed class PermissionService : IPermissionService
     /// <inheritdoc />
     public PermissionRuleset GetRuleset(string agentName)
     {
-        // §ROP-002 (RESOLVED): pattern-match Result<AgentName> instead of
-        // calling .Value (which throws on invalid input). On failure we return
-        // the empty ruleset — GetRuleset's contract is "best-effort lookup",
-        // so callers (e.g. /permissions command) get a safe default rather than
-        // an exception bubbling up to the UI.
-        var agentNameResult = AgentName.TryCreate(agentName);
-        if (agentNameResult.IsFailure)
-            return PermissionRuleset.Empty;
+        // ROP-B П.12 (residual): same railway as CheckAsync — name parsing and
+        // registry lookup ride one Bind chain with no .Value read compiling in.
+        // GetRuleset's contract is "best-effort lookup", so any failure (bad
+        // name, unknown agent) collapses to the empty ruleset at the Match
+        // boundary — callers (e.g. /permissions) get a safe default rather
+        // than an exception bubbling up to the UI.
+        return AgentName.TryCreate(agentName)
+            .Bind(_agents.GetAgent)
+            .Match(
+                agent => MergePersisted(agent.Name.Value, agent.Permission),
+                _ => PermissionRuleset.Empty);
+    }
 
-        var agentResult = _agents.GetAgent(agentNameResult.Value);
-        if (agentResult.IsFailure)
-            return PermissionRuleset.Empty;
-
+    private PermissionRuleset MergePersisted(string agentKey, PermissionRuleset ruleset)
+    {
         // A2: merge persisted user decisions on top of the agent's static ruleset so
         // callers (e.g. /permissions) see the effective ruleset.
-        var ruleset = agentResult.Value.Permission;
-        if (_persisted.TryGetValue(agentNameResult.Value.Value, out var byRule)
-            && !byRule.IsEmpty)
+        if (!_persisted.TryGetValue(agentKey, out var byRule) || byRule.IsEmpty)
+            return ruleset;
+
+        var persistedRules = new PermissionRule[byRule.Count];
+        int index = 0;
+        foreach (var kvp in byRule)
         {
-            var persistedRules = new PermissionRule[byRule.Count];
-            int index = 0;
-            foreach (var kvp in byRule)
-            {
-                persistedRules[index++] = kvp.Value;
-            }
-            ruleset = ruleset.Merge(new PermissionRuleset(persistedRules));
+            persistedRules[index++] = kvp.Value;
         }
 
-        return ruleset;
+        return ruleset.Merge(new PermissionRuleset(persistedRules));
     }
 
     /// <summary>Raw argument extraction (legacy, un-normalized). Kept for compatibility.</summary>
