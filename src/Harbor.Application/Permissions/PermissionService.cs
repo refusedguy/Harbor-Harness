@@ -45,27 +45,30 @@ public sealed class PermissionService : IPermissionService
     }
 
     /// <inheritdoc />
-    public async Task<Result<PermissionResponse>> CheckAsync(
+    public Task<Result<PermissionResponse>> CheckAsync(
         string agentName,
         string toolName,
         JsonElement args,
         CancellationToken ct = default)
     {
-        // §ROP-002 (RESOLVED): pattern-match the Result<AgentName> instead of
-        // calling .Value (which throws InvalidOperationException on invalid input).
-        // An invalid agent name is an expected failure (e.g. provider routed a
-        // request with a malformed header), so it must surface as
-        // Result.Failure rather than throwing through the call stack.
-        var agentNameResult = AgentName.TryCreate(agentName);
-        if (agentNameResult.IsFailure)
-            return Result.Failure<PermissionResponse>(agentNameResult.Error);
+        // ROP-B П.12: name parsing → registry lookup → verdict ride one Bind
+        // chain. An invalid agent name is an expected failure (e.g. provider
+        // routed a request with a malformed header), so it surfaces as
+        // Result.Failure without any .Value read ever compiling in.
+        return AgentName.TryCreate(agentName)
+            .Bind(_agents.GetAgent)
+            .Bind(agent => EvaluateActionAsync(agent, agentName, toolName, args, ct));
+    }
 
-        var agentResult = _agents.GetAgent(agentNameResult.Value);
-        if (agentResult.IsFailure)
-            return Result.Failure<PermissionResponse>(agentResult.Error);
-
+    private async Task<Result<PermissionResponse>> EvaluateActionAsync(
+        AgentDefinition agent,
+        string agentName,
+        string toolName,
+        JsonElement args,
+        CancellationToken ct)
+    {
         var extraction = NormalizePathExtraction(toolName, args, _workspaceRoot ?? Environment.CurrentDirectory);
-        var action = agentResult.Value.Permission.Evaluate(toolName, extraction.ArgPath);
+        var action = agent.Permission.Evaluate(toolName, extraction.ArgPath);
 
         // Workspace confinement (A1/A2): a path that resolves outside the workspace root —
         // or the process working directory when no explicit root is configured — must never
@@ -90,7 +93,7 @@ public sealed class PermissionService : IPermissionService
         // Ask: a previously persisted user decision for this exact tool + argument (A2)
         // short-circuits without prompting again.
         string ruleKey = toolName + ":" + extraction.ArgPath;
-        string persistedAgentKey = agentNameResult.Value.Value;
+        string persistedAgentKey = agent.Name.Value;
         if (_persisted.TryGetValue(persistedAgentKey, out var byRule)
             && byRule.TryGetValue(ruleKey, out var persistedRule))
         {
