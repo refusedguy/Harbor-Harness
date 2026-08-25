@@ -230,16 +230,23 @@ public sealed class OpenAiCompatibleLlmClient : ILlmClient
         writer.WriteEndObject();
         writer.Flush();
 
-        string json = Encoding.UTF8.GetString(bufferWriter.WrittenSpan);
+        // ROP-A ПР.11: one copy of the payload bytes, no intermediate string.
+        // The old code GetString'd the whole body (tens of KB on hot path) and
+        // then re-encoded it to UTF-8 inside StringContent.
+        byte[] body = bufferWriter.WrittenSpan.ToArray();
 
-        _logger.LogDebug("BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}",
-            request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
-        _logger.LogDebug("BuildRequest payload:\n{Payload}", json);
+        if (_logger.IsEnabled(LogLevel.Debug))
+        {
+            _logger.LogDebug("BuildRequest: model={Model} tools={ToolCount} toolChoice={ToolChoice} messages={MsgCount}",
+                request.Model, request.Tools.Count, request.ToolChoice?.ToString() ?? "null", request.Messages.Count);
+            _logger.LogDebug("BuildRequest payload:\n{Payload}", Encoding.UTF8.GetString(body));
+        }
 
         var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
+            Content = new ByteArrayContent(body)
         };
+        msg.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
         foreach ((string k, string v) in _config.Headers ?? new Dictionary<string, string>())
             msg.Headers.TryAddWithoutValidation(k, v);
