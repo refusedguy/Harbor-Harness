@@ -1,6 +1,6 @@
 using System.IO;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Repl;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Repl;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -69,7 +69,7 @@ public class CommandDispatchTests
             Console.SetOut(swOut);
             Console.SetError(swErr);
 
-            int exitCode = await global::Harbor.Cli.Program.Main(new[] { "logs" });
+            int exitCode = await global::Harbor.App.Cli.Program.Main(new[] { "logs" });
             await Assert.That(exitCode).IsEqualTo(0);
         }
         finally

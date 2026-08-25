@@ -1,4 +1,4 @@
-using Harbor.Cli.Configuration;
+using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 // SynchronizationContext, safe to block (same pattern as before the move).
 #pragma warning disable RS0030
 
-namespace Harbor.Cli.Hosting;
+namespace Harbor.App.Cli.Hosting;
 
 internal static partial class HostBuilder
 {

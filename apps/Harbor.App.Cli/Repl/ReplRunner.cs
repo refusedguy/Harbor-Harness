@@ -8,7 +8,7 @@ using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Repl;
+namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     REPL and interactive session runner — single responsibility: run the user interaction loop.
 ///     Extracted from Program.cs.

@@ -12,7 +12,7 @@ namespace Harbor.Plugins.Abstractions;
 /// <summary>
 ///     Sink that the Roslyn-based CS plugin loader calls into when a plugin contributes
 ///     tools, providers, agents, or TUI extensions. Implementations live in the host
-///     composition root (e.g. <c>Harbor.Cli</c>); the loader only depends on this
+///     composition root (e.g. <c>Harbor.App.Cli</c>); the loader only depends on this
 ///     abstraction so it can stay free of <c>Harbor.Core</c>.
 /// </summary>
 /// <remarks>

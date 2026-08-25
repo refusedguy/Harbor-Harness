@@ -13,7 +13,7 @@
 
 using System.Collections.Immutable;
 using Harbor.Desktop.Abstractions.Configuration;
-namespace Harbor.Cli.Configuration;
+namespace Harbor.App.Cli.Configuration;
 /// <summary>
 ///     Per-app configuration for the Harbor CLI. Stored at
 ///     <c>~/.harbor/cli.json</c>. Non-overlapping with desktop app configs

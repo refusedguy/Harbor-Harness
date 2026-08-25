@@ -4,7 +4,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Cli.Configuration;
+using Harbor.App.Cli.Configuration;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Application.Sessions;
@@ -13,10 +13,10 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-// Alias avoids CS0104 ambiguity between Harbor.Cli.Hosting.HostBuilder (the
+// Alias avoids CS0104 ambiguity between Harbor.App.Cli.Hosting.HostBuilder (the
 // one we want to call) and Microsoft.Extensions.Hosting.HostBuilder (the
 // generic host builder class pulled in by the Microsoft.Extensions.Hosting using).
-using HostBuilder = Harbor.Cli.Hosting.HostBuilder;
+using HostBuilder = Harbor.App.Cli.Hosting.HostBuilder;
 
 // DI006 (do not cache IServiceProvider in static fields) is intentionally
 // violated by this test fixture: the whole point of the file is to build the

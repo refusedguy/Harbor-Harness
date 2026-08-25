@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Hosting;
 /// <summary>
 ///     Core + app-local service registration. Mirrors
-///     <c>Harbor.Cli.Hosting.HostBuilder.RegisterCore</c> for the core Harbor
+///     <c>Harbor.App.Cli.Hosting.HostBuilder.RegisterCore</c> for the core Harbor
 ///     services, plus the Avalonia-specific shell services (ThemeService,
 ///     SessionManager, ChatStreamingPresenter, etc.) and the IHarborClient
 ///     in-process / ipc-client wiring.

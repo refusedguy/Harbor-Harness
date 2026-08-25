@@ -50,7 +50,7 @@
     <PackageTags>harbor;cli;ai;agent;app</PackageTags>
     <EmbedProviders>true</EmbedProviders>
     <!-- The .NET namespace stays Harbor.Cli for backward compat. -->
-    <RootNamespace>Harbor.Cli</RootNamespace>
+    <RootNamespace>Harbor.App.Cli</RootNamespace>
     <AssemblyName>Harbor.App.Cli</AssemblyName>
 
     <!--

@@ -75,7 +75,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     // The set of Harbor assemblies that Harbor.Extensions must NOT reference.
@@ -113,7 +113,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     // The set of Harbor assemblies that Harbor.Abstractions (the thin facade)
@@ -150,7 +150,7 @@ public class AbstractionsSplitLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     /// <summary>

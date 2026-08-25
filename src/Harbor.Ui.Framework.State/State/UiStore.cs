@@ -27,7 +27,7 @@ public abstract record TuiEffect
 
 /// <summary>
 ///     Executes <see cref="TuiEffect" /> values. Implemented by the composition
-///     root (e.g. <c>Harbor.Cli</c>) with access to <c>IAgent</c> and the slash handler.
+///     root (e.g. <c>Harbor.App.Cli</c>) with access to <c>IAgent</c> and the slash handler.
 /// </summary>
 public interface ITuiEffectRunner
 {

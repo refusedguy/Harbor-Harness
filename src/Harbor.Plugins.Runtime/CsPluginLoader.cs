@@ -23,7 +23,7 @@ namespace Harbor.Plugins.Runtime;
 ///         and compose them via <see cref="PluginHostBuilder" />.
 ///     </para>
 ///     <para>
-///         This facade exists solely to keep the existing <c>Harbor.Cli</c> HostBuilder
+///         This facade exists solely to keep the existing <c>Harbor.App.Cli</c> HostBuilder
 ///         and the existing test suite running without changes. It will be removed in
 ///         v0.5.
 ///     </para>

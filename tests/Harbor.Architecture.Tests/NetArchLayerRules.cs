@@ -78,7 +78,7 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     // The full list of Harbor assemblies that are NOT in the Infrastructure
@@ -92,7 +92,7 @@ public sealed class NetArchLayerRules
         "Harbor.Plugins.Runtime",
         "Harbor.Scripting",
         "Harbor.Terminal.Abstractions",
-        "Harbor.Cli",
+        "Harbor.App.Cli",
         // Sibling Infrastructure assemblies (no cross-Infrastructure edges):
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
@@ -123,7 +123,7 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     /// <summary>
@@ -147,7 +147,7 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Scripting")
-            .And().NotHaveDependencyOn("Harbor.Cli")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
@@ -177,7 +177,7 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Storage.Memory")
             .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
             .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .And().NotHaveDependencyOn("Harbor.Cli")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
@@ -203,7 +203,7 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Storage.Memory")
             .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
             .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .And().NotHaveDependencyOn("Harbor.Cli")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }

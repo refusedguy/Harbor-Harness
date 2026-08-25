@@ -1,4 +1,4 @@
-namespace Harbor.Cli.Repl;
+namespace Harbor.App.Cli.Repl;
 
 /// <summary>
 ///     Outcome of dispatching one slash command. Regular commands continue the

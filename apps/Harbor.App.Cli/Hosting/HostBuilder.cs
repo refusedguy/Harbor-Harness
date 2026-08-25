@@ -1,5 +1,5 @@
 using Harbor.Abstractions.Events;
-using Harbor.Cli.Configuration;
+using Harbor.App.Cli.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 // CliConfig eager load must route warnings through the configured providers.
 #pragma warning disable DI014, DI016
 
-namespace Harbor.Cli.Hosting;
+namespace Harbor.App.Cli.Hosting;
 
 /// <summary>
 ///     Фасад совместимости: все существующие точки вызова Build не меняются.

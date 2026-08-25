@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Logging;
+namespace Harbor.App.Cli.Logging;
 /// <summary>
 ///     Process-wide owner of the shared <see cref="FileLoggerProvider" />.
 ///     Both <c>Program.Main</c> (which builds a tiny logger factory for

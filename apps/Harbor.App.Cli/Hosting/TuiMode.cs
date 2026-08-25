@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Harbor.Ui.Framework.Diagnostics;
-namespace Harbor.Cli.Hosting;
+namespace Harbor.App.Cli.Hosting;
 /// <summary>
 ///     Resolves the active TUI renderer id from <c>HARBOR_TUI</c> /
 ///     <c>CliConfig.DefaultTuiRenderer</c>, and classifies it as interactive

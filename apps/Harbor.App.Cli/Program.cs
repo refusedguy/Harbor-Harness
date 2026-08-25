@@ -4,10 +4,10 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Hosting;
-using Harbor.Cli.Logging;
-using Harbor.Cli.Repl;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Hosting;
+using Harbor.App.Cli.Logging;
+using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Ipc;
@@ -21,7 +21,7 @@ using Microsoft.Extensions.Logging.Console;
 using System.Runtime.InteropServices;
 #if HARBOR_WITH_PLUGINS
 #endif
-namespace Harbor.Cli;
+namespace Harbor.App.Cli;
 /// <summary>
 ///     Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
 /// </summary>
@@ -551,7 +551,7 @@ public static class Program
 
                           See docs/ALTERNATIVE_UIS.md for the full comparison.
                           Note: wpf/avalonia/maui/blazor/sixel/notifications require adding the
-                          corresponding Harbor.Tui.* project reference to Harbor.Cli.csproj
+                          corresponding Harbor.Tui.* project reference to Harbor.App.Cli.csproj
                           (and the matching workload — e.g. `dotnet workload install maui`).
                           """);
         return 0;

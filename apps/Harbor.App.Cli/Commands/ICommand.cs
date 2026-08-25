@@ -1,4 +1,4 @@
-namespace Harbor.Cli.Commands;
+namespace Harbor.App.Cli.Commands;
 
 public interface ICommand
 {

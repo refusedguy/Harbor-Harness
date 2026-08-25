@@ -65,7 +65,7 @@ public class LayerDependencyTests
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     // The set of Harbor assemblies that Infrastructure projects must NOT reference.
@@ -78,7 +78,7 @@ public class LayerDependencyTests
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Scripting",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     /// <summary>
@@ -169,7 +169,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli"
+            "Harbor.App.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -214,7 +214,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli"
+            "Harbor.App.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -263,7 +263,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli"
+            "Harbor.App.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -294,7 +294,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli"
+            "Harbor.App.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();
@@ -406,7 +406,7 @@ public class LayerDependencyTests
             "Harbor.Storage.Memory",
             "Harbor.Storage.Sqlite",
             "Harbor.Tools.Builtin",
-            "Harbor.Cli"
+            "Harbor.App.Cli"
         ];
         var violations = ArchitectureTestHelpers.FindForbiddenReferences(asm, forbidden);
         await Assert.That(violations).IsEmpty();

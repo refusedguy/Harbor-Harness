@@ -5,7 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tui;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
-namespace Harbor.Cli.Commands;
+namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     /setup — run onboarding wizard.
 /// </summary>

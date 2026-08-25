@@ -1,6 +1,6 @@
-using Harbor.Cli.Logging;
+using Harbor.App.Cli.Logging;
 using System.Threading.Tasks;
-namespace Harbor.Cli.Commands;
+namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     <c>harbor logs</c> — inspect per-run log files written by
 ///     <see cref="FileLoggerProvider" /> to <c>~/.harbor/logs/</c>.

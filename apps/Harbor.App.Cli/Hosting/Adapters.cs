@@ -12,7 +12,7 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 #endif
-namespace Harbor.Cli.Hosting;
+namespace Harbor.App.Cli.Hosting;
 
 /// <summary>Simple ICommandContext for REPL.</summary>
 internal sealed class SimpleCommandContext : ICommandContext

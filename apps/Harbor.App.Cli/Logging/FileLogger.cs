@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Logging;
+namespace Harbor.App.Cli.Logging;
 /// <summary>
 ///     File logger provider that writes every log entry (from <see cref="LogLevel.Trace" />
 ///     upward by default) to a per-run, timestamped file under

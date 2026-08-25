@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 using Harbor.Abstractions.Models;
-using Harbor.Cli.Hosting;
+using Harbor.App.Cli.Hosting;
 
 namespace Harbor.App.Cli.Tests;
 

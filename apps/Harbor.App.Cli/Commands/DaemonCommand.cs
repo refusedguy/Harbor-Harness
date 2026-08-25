@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
-namespace Harbor.Cli.Commands;
+namespace Harbor.App.Cli.Commands;
 
 public sealed class DaemonCommand : ICommand
 {

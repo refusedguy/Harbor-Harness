@@ -5,7 +5,7 @@ using Harbor.Ipc.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Harbor.Cli.Commands;
+namespace Harbor.App.Cli.Commands;
 
 /// <summary>
 ///     <c>harbor status [--all]</c> — discovery lite (sprint 6 zone T).

@@ -4,7 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Cli.Repl;
+using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;

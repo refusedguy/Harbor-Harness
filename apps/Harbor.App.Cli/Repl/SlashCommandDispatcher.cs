@@ -4,14 +4,14 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Hosting;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Hosting;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Repl;
+namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     Slash command dispatcher — single responsibility: route /commands to handlers.
 ///     Extracted from Program.cs.
