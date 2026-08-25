@@ -32,66 +32,67 @@ public sealed class OnboardingWizard
     /// <summary>
     ///     Run the wizard. Returns success when config is saved.
     /// </summary>
+    /// <remarks>
+    ///     <b>ROP-B П.15:</b> the wizard scenario is a single Bind chain —
+    ///     each step runs only when the previous one succeeded, so a failed
+    ///     step short-circuits without a ladder of
+    ///     <c>if (…IsFailure) return …;</c> passthroughs.
+    /// </remarks>
     public async Task<Result> RunAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct = default)
+    {
+        WriteBanner(writer);
+
+        return await PickProviderAsync(reader, writer, ct)
+            .Tap(p =>
+            {
+                writer("");
+                writer($"✓ Selected provider: {p.DisplayName}");
+            })
+            .Bind(p => SaveApiKeyIfNeededAsync(p, reader, writer, ct))
+            .Bind(async p => Result.Success((
+                Provider: p,
+                Model: await PickModelAsync(reader, writer, p, ct).ConfigureAwait(false))))
+            .Bind(async x => Result.Success((
+                x.Provider,
+                x.Model,
+                Agent: await PickAgentAsync(reader, writer, ct).ConfigureAwait(false))))
+            .Bind(x => _configStore.UpdateAsync(c =>
+            {
+                c.Provider = x.Provider.Id;
+                c.Model = x.Model;
+                c.Agent = x.Agent;
+                c.Onboarded = true;
+                return c;
+            }, ct).Map(() => x))
+            .Tap(x => WriteCompletionBox(writer, x.Provider.Id, x.Model, x.Agent))
+            .Map(static _ => Result.Success())
+            .ConfigureAwait(false);
+    }
+
+    private static void WriteBanner(Action<string> writer)
     {
         writer("╔══════════════════════════════════════════════════════════════╗");
         writer("║                 Welcome to Harbor!                            ║");
         writer("║     Let's set up your AI coding agent in 30 seconds.          ║");
         writer("╚══════════════════════════════════════════════════════════════╝");
         writer("");
+    }
 
-        // 1. Pick provider
-        var provider = await PickProviderAsync(reader, writer, ct).ConfigureAwait(false);
-        if (provider is null) return Result.Failure("No provider selected.");
-
-        writer("");
-        writer($"✓ Selected provider: {provider.DisplayName}");
-
-        // 2. API key (if needed)
-        if (provider.RequiresApiKey)
-        {
-            string? key = await PromptApiKeyAsync(reader, writer, provider, ct).ConfigureAwait(false);
-            if (key is null) return Result.Failure("No API key provided.");
-
-            var setResult = await _authStore.SetApiKeyAsync(provider.Id, key, ct).ConfigureAwait(false);
-            if (setResult.IsFailure) return setResult;
-
-            writer($"✓ API key saved for {provider.Id}");
-        }
-
-        // 3. Pick model
-        string model = await PickModelAsync(reader, writer, provider, ct).ConfigureAwait(false);
-
-        // 4. Pick agent
-        string agent = await PickAgentAsync(reader, writer, ct).ConfigureAwait(false);
-
-        // 5. Save config
-        var saveResult = await _configStore.UpdateAsync(c =>
-        {
-            c.Provider = provider.Id;
-            c.Model = model;
-            c.Agent = agent;
-            c.Onboarded = true;
-            return c;
-        }, ct).ConfigureAwait(false);
-
-        if (saveResult.IsFailure) return saveResult;
-
+    private static void WriteCompletionBox(Action<string> writer, string providerId, string model, string agent)
+    {
         writer("");
         writer("╔══════════════════════════════════════════════════════════════╗");
         writer("║                 Setup complete!                               ║");
-        writer($"║  Provider: {provider.Id,-50}║");
+        writer($"║  Provider: {providerId,-50}║");
         writer($"║  Model:    {model,-50}║");
         writer($"║  Agent:    {agent,-50}║");
         writer("║                                                               ║");
         writer("║  Type your prompt and press Enter to start.                   ║");
         writer("║  Type /help for commands, /exit to quit.                      ║");
         writer("╚══════════════════════════════════════════════════════════════╝");
-
-        return Result.Success();
     }
 
-    private async Task<ProviderPresets.Preset?> PickProviderAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)
+    private async Task<Result<ProviderPresets.Preset>> PickProviderAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)
     {
         var presets = ProviderPresets.All;
         while (true)
@@ -120,14 +121,34 @@ public sealed class OnboardingWizard
             }
 
             if (int.TryParse(input, out int idx) && idx >= 1 && idx <= presets.Count)
-                return presets[idx - 1];
+                return Result.Success(presets[idx - 1]);
 
             // Try as provider ID
             var byId = ProviderPresets.Find(input);
-            if (byId is not null) return byId;
+            if (byId is not null) return Result.Success(byId);
 
             writer($"Invalid selection: {input}");
         }
+    }
+
+    /// <summary>Prompt + persist the API key when the preset needs one; pass the provider through otherwise.</summary>
+    private async Task<Result<ProviderPresets.Preset>> SaveApiKeyIfNeededAsync(
+        ProviderPresets.Preset provider,
+        Func<string, Task<string>> reader,
+        Action<string> writer,
+        CancellationToken ct)
+    {
+        if (!provider.RequiresApiKey)
+            return Result.Success(provider);
+
+        string? key = await PromptApiKeyAsync(reader, writer, provider, ct).ConfigureAwait(false);
+        if (key is null)
+            return Result.Failure<ProviderPresets.Preset>("No API key provided.");
+
+        return await _authStore.SetApiKeyAsync(provider.Id, key, ct)
+            .Map(() => provider)
+            .Tap(_ => writer($"✓ API key saved for {provider.Id}"))
+            .ConfigureAwait(false);
     }
 
     private async Task<string?> PromptApiKeyAsync(
