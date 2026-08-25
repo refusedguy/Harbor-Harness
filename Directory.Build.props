@@ -103,6 +103,36 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <!--
+    Banned API analyzer input (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030).
+    The analyzer package is referenced above, but the rules in /BannedSymbols.txt
+    were dead until ROP-D Z2: (a) the file was never listed in AdditionalFiles,
+    and (b) the analyzer only reads files named `BannedSymbols.txt` — the old
+    `BannedApi.txt` name was invisible to it. Every new use of a banned API now
+    fails the build. Accepted legacy exemptions carry a documented reason at the
+    call site (#pragma warning disable RS0030 // reason) and are catalogued by
+    class in BannedSymbols.txt itself.
+  -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!--
+    RS0030 policy: production code (src/, apps/, contrib/tui, contrib/apps,
+    samples/plugins) enforces banned-API violations as errors via the global
+    TreatWarningsAsErrors above; accepted legacy exemptions live as pragmas at
+    their call sites and are catalogued in BannedSymbols.txt itself.
+
+    Test, benchmark and E2E-driver projects are exempted centrally below:
+    benchmark GlobalSetup/IterationSetup, Avalonia-headless marshaling helpers
+    and IPC test fixtures block on async setup by design (their lifecycles are
+    synchronous), and failing CI on those would train people to ignore the
+    analyzer. The rules stay visible there as diagnostics for new code review.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('tests')) or $(MSBuildProjectDirectory.Contains('samples'))">
+    <NoWarn>$(NoWarn);RS0030</NoWarn>
+  </PropertyGroup>
+
   <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
   <ItemGroup>
     <!-- Code style + quality -->
@@ -129,7 +159,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- Banned API analyzer (configure in .bannedapi.txt) -->
+    <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>

@@ -89,8 +89,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Load synchronously — the constructor runs once on app start and
         // the stores complete IO in <10ms on a local disk. Blocking here
         // keeps the rest of the VM simple (no async init dance).
+#pragma warning disable RS0030 // One-shot ctor load of local-disk config (<10ms); async-init dance not worth it. Catalogued in BannedSymbols.txt.
         _common = _commonStore.LoadAsync().GetAwaiter().GetResult().Value;
         _app = _appStore.LoadAsync().GetAwaiter().GetResult().Value;
+#pragma warning restore RS0030
 
         ThemeSettings = new ThemeSettingsViewModel(theme)
         {
@@ -152,7 +154,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             bool authenticated = false;
             try
             {
+#pragma warning disable RS0030 // Sync settings build from ctor path; auth probe is a fast local check and failure is caught below. Catalogued in BannedSymbols.txt.
                 authenticated = _authResolver.ResolveApiKeyAsync(id).GetAwaiter().GetResult().IsSuccess;
+#pragma warning restore RS0030
             }
             catch (Exception ex)
             {

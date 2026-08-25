@@ -253,7 +253,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
                 : "[grey]Type a message, or /help.  ↑↓ = history  Tab = autocomplete  Ctrl+L = clear  Esc = quit[/]";
             _layout.Footer = _footer;
 
-            string? input = ReadInput(ct);
+            string? input = await ReadInputAsync(ct).ConfigureAwait(false);
             if (input is null)
             {
                 _stop = true;
@@ -294,7 +294,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             }
             if (!Console.KeyAvailable)
             {
-                Thread.Sleep(30);
+                await Task.Delay(30, ct).ConfigureAwait(false);
                 continue;
             }
 
@@ -340,7 +340,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
         }
     }
 
-    private string? ReadInput(CancellationToken ct)
+    private async Task<string?> ReadInputAsync(CancellationToken ct)
     {
         _input.Clear();
 
@@ -357,7 +357,7 @@ public sealed class FullscreenTuiRenderer : BaseTuiRenderer, IInteractiveTuiRend
             }
             if (!Console.KeyAvailable)
             {
-                Thread.Sleep(15);
+                await Task.Delay(15, ct).ConfigureAwait(false);
                 continue;
             }
 

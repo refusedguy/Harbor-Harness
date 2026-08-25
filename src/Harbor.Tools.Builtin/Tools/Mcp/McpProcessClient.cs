@@ -92,4 +92,30 @@ internal sealed class McpProcessClient : IAsyncDisposable
 
         _process.Dispose();
     }
+
+    /// <summary>
+    ///     Synchronous teardown for sync contracts (e.g. <c>IMcpRegistry.Unregister</c>).
+    ///     Unlike blocking on <see cref="DisposeAsync" />, this performs no
+    ///     sync-over-async bridging: the stderr pump is abandoned (it observes the
+    ///     cancellation on its own and swallows every exception internally), and the
+    ///     bounded wait is the process-exit wait itself, not a blocked task.
+    /// </summary>
+    public void DisposeSync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _stderrCts.Cancel();
+        _stderrCts.Dispose();
+
+        if (!_process.HasExited)
+        {
+            try { ProcessTree.KillTree(_process, _job); } catch { /* ignore */ }
+            try { _process.WaitForExit(MillisecondsToWaitForExit); } catch { /* timeout — proceed with dispose */ }
+        }
+
+        _process.Dispose();
+    }
+
+    private const int MillisecondsToWaitForExit = 5000;
 }

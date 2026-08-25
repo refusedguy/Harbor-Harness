@@ -83,13 +83,13 @@ public sealed class SessionFactory
     /// <param name="providerId">Optional provider id override.</param>
     /// <param name="modelId">Optional model id override.</param>
     /// <returns>The resolved <see cref="AgentDefinition" />.</returns>
-    public AgentDefinition ResolveAgentDefinition(string? agentName, string? providerId, string? modelId)
+    public async Task<AgentDefinition> ResolveAgentDefinitionAsync(string? agentName, string? providerId, string? modelId)
     {
         var agents = _services.GetRequiredService<IAgentRegistry>();
         var agentDef = agents.GetAllAgents().FirstOrDefault(a => a.Name.Value == (agentName ?? "code"))
                        ?? agents.GetAllAgents().First();
 
-        (string? configProvider, string? configModel) = ResolveProviderModelFromConfigAsync().GetAwaiter().GetResult();
+        (string? configProvider, string? configModel) = await ResolveProviderModelFromConfigAsync().ConfigureAwait(false);
         string provider = providerId ?? configProvider ?? agentDef.ProviderId;
         string model = modelId ?? configModel ?? agentDef.Model;
         return agentDef.WithModel(model, provider);
@@ -148,7 +148,7 @@ public sealed class SessionFactory
         string? modelId = null,
         string? workingDirectory = null)
     {
-        var agentDef = ResolveAgentDefinition(agentName, providerId, modelId);
+        var agentDef = await ResolveAgentDefinitionAsync(agentName, providerId, modelId).ConfigureAwait(false);
         string provider = agentDef.ProviderId;
         string model = agentDef.Model;
         string directory = workingDirectory ?? Environment.CurrentDirectory;

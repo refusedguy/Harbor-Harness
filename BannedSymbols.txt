@@ -1,0 +1,68 @@
+# Banned APIs — Harbor project
+# https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-banned-api-analyzer
+
+# Ban Newtonsoft.Json — use System.Text.Json only
+T:System.Web.Script.Serialization.JavaScriptSerializer
+T:System.Runtime.Serialization.Json.DataContractJsonSerializer
+T:Newtonsoft.Json.JsonConvert
+T:Newtonsoft.Json.JsonSerializer
+T:Newtonsoft.Json.JsonSerializerSettings
+N:Newtonsoft.Json
+
+# Ban reflection-based serializers in AOT scenarios
+T:System.Xml.Serialization.XmlSerializer;Use System.Text.Json or source-gen instead.
+
+# Ban Microsoft.Win32.Registry on non-Windows (avoid platform issues)
+T:Microsoft.Win32.Registry;Use cross-platform alternatives.
+
+# Ban BlockingCollection<T>.Add (use TryAdd)
+M:System.Collections.Concurrent.BlockingCollection`1.Add(`0)
+
+# Ban legacy async patterns
+T:System.ComponentModel.BackgroundWorker;Use Task.Run instead.
+M:System.Threading.Thread.Start;Use Task.Run instead.
+M:System.Threading.ThreadPool.QueueUserWorkItem(System.Threading.WaitCallback);Use Task.Run instead.
+
+# Ban Thread.Sleep in async contexts (use Task.Delay)
+M:System.Threading.Thread.Sleep(System.Int32);Use Task.Delay in async methods.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Use Task.Delay in async methods.
+
+# Ban sync-over-async: *Awaiter.GetResult() — use 'await' instead.
+# Non-generic awaiters (Task / ValueTask without result):
+M:System.Runtime.CompilerServices.TaskAwaiter.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+M:System.Runtime.CompilerServices.ValueTaskAwaiter.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+# Generic awaiters (Task<T> / ValueTask<T> / ConfigureAwait results):
+M:System.Runtime.CompilerServices.TaskAwaiter`1.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+M:System.Runtime.CompilerServices.ValueTaskAwaiter`1.GetResult;Use 'await' instead of '.GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable.ConfigurableTaskAwaiter.GetResult;Use 'await' instead of '.ConfigureAwait(false).GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAwaiter.GetResult;Use 'await' instead of '.ConfigureAwait(false).GetAwaiter().GetResult()'. Sync-over-async deadlocks in UI frameworks and single-threaded event loops.
+
+# Ban Console.Write in libraries (only in CLI/TUI projects)
+# (Libraries should use ILogger<T>)
+
+# ============================================================================
+# ACCEPTED LEGACY EXEMPTIONS (ROP-D Z2 catalogue)
+# ---
+# Every exemption below carries a matching `#pragma warning disable RS0030`
+# with a reason at its call site. New call sites of banned APIs must either
+# use the non-banned alternative or justify + pragma + extend this catalogue.
+# --- <48>
+# Class 1 — composition-root startup loads (host is built synchronously):
+#   apps/Harbor.App.Avalonia/Program.cs:41                BuildAsync().GetAwaiter().GetResult()
+#   apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs  CliConfig eager load
+#   src/Harbor.Hosting/Modules/ConfigurationModule.cs     Common+Harbor config eager load
+#   src/Harbor.Hosting/Modules/RegistriesModule.cs        CS-plugin LoadAllAsync
+#   Reason: Main/module Configure are sync; no SynchronizationContext exists
+#   yet, so the blocking wait cannot deadlock. Making them async would push
+#   async through the whole host-builder chain for zero benefit at t=0.
+# --- <57>
+# Class 2 — UI-thread marshaling contract:
+#   apps/Harbor.App.Avalonia/Services/AvaloniaDispatcherAdapter.cs Invoke<T>()
+#   Reason: blocking invoke IS the adapter's public contract (WPF
+#   Dispatcher.Invoke semantics); caller is always a non-UI thread.
+# --- <62>
+# Class 3 — ViewModel constructor one-shot local-disk IO (<10ms):
+#   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs ctor loads + auth probe
+#   Reason: async-ctor dance (IAsyncInitializable / async factory) would ripple
+#   through every consumer for a sub-10ms read; failure paths already handled.
+# ============================================================================ <67>

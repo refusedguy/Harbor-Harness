@@ -180,7 +180,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     {
         if (_servers.TryRemove(name, out var entry))
         {
-            entry.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            entry.DisposeSync();
             _logger?.LogInformation("Unregistered MCP server: {Name}", name);
             return Result.Success();
         }
@@ -250,7 +250,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         public McpProcessClient? GetProcess()
         {
             if (_process is { HasExited: false }) return _process;
-            _process?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _process?.DisposeSync();
 
             var psi = new ProcessStartInfo
             {
@@ -290,5 +290,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 return _process.DisposeAsync();
             return ValueTask.CompletedTask;
         }
+
+        public void DisposeSync() => _process?.DisposeSync();
     }
 }
