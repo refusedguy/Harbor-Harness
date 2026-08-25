@@ -41,6 +41,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private readonly Lock _clientsLock = new();
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventBroadcaster> _logger;
+    private ulong _sequence;
     private int _currentTurn;
     private int _disposed;
     private IDisposable? _eventBusSubscription;
@@ -155,9 +156,18 @@ public sealed class EventBroadcaster : IAsyncDisposable
         if (projected is null) return;
 
         // Serialize the envelope exactly once, before the fan-out loop.
+        // Sequence is assigned per published event (A1): clients dedup and
+        // bookkeep reconnect replay by it. Target stays null until A3 wires
+        // session-lease addressing.
         var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
-        var envelope = new EventEnvelope { EventBytes = eventBytes };
+        ulong sequence = Interlocked.Increment(ref _sequence);
+        var envelope = new EventEnvelope
+        {
+            EventBytes = eventBytes,
+            Sequence = sequence,
+            TargetClientId = null
+        };
 
         ClientRegistration[] snapshot = SnapshotClients();
         if (snapshot.Length == 0) return;

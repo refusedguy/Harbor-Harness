@@ -32,6 +32,7 @@ namespace Harbor.Ipc.Tests;
     [Arguments(typeof(SubscribeToEventsRequest))]
     [Arguments(typeof(ConnectRequest))]
     [Arguments(typeof(DisconnectRequest))]
+    [Arguments(typeof(PskAuthRequest))]
     public async Task Request_Subtype_RoundTrips_Through_MessagePack(Type requestType)
     {
         // Construct via parameterless or default-arg constructor.
@@ -44,6 +45,42 @@ namespace Harbor.Ipc.Tests;
         await Assert.That(deserialized).IsNotNull();
         await Assert.That(deserialized.GetType()).IsEqualTo(requestType);
         await Assert.That(deserialized.RequestId).IsEqualTo(request.RequestId);
+    }
+
+    /// <summary>
+    ///     Sprint 6 A1/A3: envelope sequence + target addressing survive the
+    ///     wire; SubscribeToEventsRequest carries the replay bookkeeping.
+    /// </summary>
+    [Test]
+    public async Task EventEnvelope_Sequence_And_TargetClientId_RoundTrip()
+    {
+        var envelope = new EventEnvelope
+        {
+            EventBytes = [1, 2, 3],
+            Sequence = 987654321UL,
+            TargetClientId = "client-42"
+        };
+
+        byte[] bytes = MessagePackSerializer.Serialize((HarborResponse)envelope);
+        var back = (EventEnvelope)MessagePackSerializer.Deserialize<HarborResponse>(bytes);
+
+        await Assert.That(back.Sequence).IsEqualTo(987654321UL);
+        await Assert.That(back.TargetClientId).IsEqualTo("client-42");
+        await Assert.That(back.EventBytes).IsEquivalentTo(new byte[] { 1, 2, 3 });
+    }
+
+    [Test]
+    public async Task SubscribeToEvents_LastSequence_RoundTrips()
+    {
+        HarborRequest request = new SubscribeToEventsRequest(12345UL);
+        byte[] bytes = MessagePackSerializer.Serialize(request);
+        var back = (SubscribeToEventsRequest)MessagePackSerializer.Deserialize<HarborRequest>(bytes);
+
+        await Assert.That(back.LastSequence).IsEqualTo(12345UL);
+
+        byte[] legacyBytes = MessagePackSerializer.Serialize((HarborRequest)new SubscribeToEventsRequest());
+        var legacy = (SubscribeToEventsRequest)MessagePackSerializer.Deserialize<HarborRequest>(legacyBytes);
+        await Assert.That(legacy.LastSequence).IsNull();
     }
 
     /// <summary>

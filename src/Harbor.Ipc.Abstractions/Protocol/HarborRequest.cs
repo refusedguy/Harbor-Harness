@@ -164,7 +164,23 @@ public sealed record ListToolsRequest : HarborRequest;
 ///     frames (out-of-band, not as a normal response).
 /// </summary>
 [MessagePackObject]
-public sealed record SubscribeToEventsRequest : HarborRequest;
+public sealed record SubscribeToEventsRequest : HarborRequest
+{
+    /// <summary>
+    ///     Last envelope sequence the client already processed (sprint 6 A1).
+    ///     Null = first subscription (no replay expected). The server replays
+    ///     buffered envelopes with sequence &gt; this value when the gap fits
+    ///     its replay buffer, or signals a resync otherwise.
+    /// </summary>
+    [Key(1)]
+    public ulong? LastSequence { get; init; }
+
+    /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
+    public SubscribeToEventsRequest() { }
+
+    /// <summary>Full ctor.</summary>
+    public SubscribeToEventsRequest(ulong? lastSequence) => LastSequence = lastSequence;
+}
 
 /// <summary>Connect handshake.</summary>
 [MessagePackObject]
