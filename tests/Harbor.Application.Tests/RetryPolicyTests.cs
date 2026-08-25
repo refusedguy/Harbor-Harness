@@ -302,3 +302,72 @@ public class RetryPolicyTests
         await Assert.That(calls).IsEqualTo(1);
     }
 }
+
+/// <summary>
+///     ROP-B П.21: ExecuteSafeAsync is the seam between the exception-based
+///     retry policy and railway code — exceptions become Failure, retries
+///     still fire for transient errors, cancellation propagates.
+/// </summary>
+public class RetryPolicySafeAdapterTests
+{
+    private static RetryOptions Opts(int max, int delayMs = 1) =>
+        new(max, TimeSpan.FromMilliseconds(delayMs), UseJitter: false);
+
+    [Test]
+    public async Task ExecuteSafeAsync_Success_ReturnsValue()
+    {
+        var result = await new RetryPolicy().ExecuteSafeAsync(
+            _ => Task.FromResult(42), Opts(3), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task ExecuteSafeAsync_TransientThenSuccess_RetriesAndSucceeds()
+    {
+        int calls = 0;
+
+        var result = await new RetryPolicy().ExecuteSafeAsync<object?>(
+            _ =>
+            {
+                calls++;
+                return calls < 3
+                    ? throw new HttpRequestException("503", inner: null, HttpStatusCode.ServiceUnavailable)
+                    : Task.FromResult<object?>(new object());
+            },
+            Opts(max: 5), CancellationToken.None);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(calls).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task ExecuteSafeAsync_FatalError_BecomesFailureWithoutRetry()
+    {
+        int calls = 0;
+
+        var result = await new RetryPolicy().ExecuteSafeAsync<string>(
+            _ =>
+            {
+                calls++;
+                throw new HttpRequestException("401", inner: null, HttpStatusCode.Unauthorized);
+            },
+            Opts(max: 5), CancellationToken.None);
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error).IsEqualTo("401");
+        await Assert.That(calls).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ExecuteSafeAsync_CallerCancellation_Propagates()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.That(async () => await new RetryPolicy().ExecuteSafeAsync<string>(
+            _ => Task.FromResult("unused"), Opts(3), cts.Token)
+        ).Throws<OperationCanceledException>();
+    }
+}
