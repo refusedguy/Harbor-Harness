@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -65,7 +66,7 @@ public sealed class SqliteSessionStore : ISessionStore
         string directory, string agentName, string providerId, string modelId,
         CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             var session = Session.Create(directory, agentName, providerId, modelId);
 
@@ -91,14 +92,9 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.ExecuteNonQuery();
             }
 
-            return Task.FromResult(Result.Success(session));
-        }
-        catch (Exception ex)
-        {
-            // Nothing to correlate yet — the session id is generated inside the try.
-            _logger.LogError(ex, "Failed to create session");
-            return Task.FromResult(Result.Failure<Session>(ex.Message));
-        }
+            return session;
+        }, ResultErrors.Message))
+        .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
     }
 
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
@@ -124,7 +120,7 @@ public sealed class SqliteSessionStore : ISessionStore
 
     public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
     {
-        try
+        return await Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -145,17 +141,14 @@ public sealed class SqliteSessionStore : ISessionStore
             {
                 result.Add(ReadSession(reader));
             }
-            return Result.Success<IReadOnlyList<Session>>(result);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<Session>>(ex.Message);
-        }
+
+            return (IReadOnlyList<Session>)result;
+        }, ResultErrors.Message).ConfigureAwait(false);
     }
 
-    public async Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -187,20 +180,14 @@ public sealed class SqliteSessionStore : ISessionStore
 
                 tx.Commit();
             }
-
-            return await Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to append message to session {SessionId}", sessionId);
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message))
+        .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         // For SQLite we replace by id
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -217,17 +204,12 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
                 cmd.ExecuteNonQuery();
             }
-            return Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
+        }, ResultErrors.Message));
     }
 
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return await Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -245,17 +227,14 @@ public sealed class SqliteSessionStore : ISessionStore
                 var msg = DeserializeMessage(role, payload);
                 if (msg is not null) result.Add(msg);
             }
-            return Result.Success<IReadOnlyList<AgentMessage>>(result);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
-        }
+
+            return (IReadOnlyList<AgentMessage>)result;
+        }, ResultErrors.Message).ConfigureAwait(false);
     }
 
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -265,38 +244,31 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@id", sessionId);
                 cmd.ExecuteNonQuery();
             }
-            return Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
+        }, ResultErrors.Message));
     }
 
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
-        try
-        {
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
-            cmd.Parameters.AddWithValue("@id", sessionId);
+        return await Result.Try(async () =>
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
+                cmd.Parameters.AddWithValue("@id", sessionId);
 
-            object? meta = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-            if (meta is null or DBNull)
-                return Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.");
-
-            return Result.Success(JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions) ?? SessionMetadata.Empty);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<SessionMetadata>(ex.Message);
-        }
+                return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            }, ResultErrors.Message)
+            .Bind(meta => meta is null or DBNull
+                ? Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.")
+                : Result.Success(
+                    JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions)
+                    ?? SessionMetadata.Empty))
+            .ConfigureAwait(false);
     }
 
-    public async Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
+    public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -307,44 +279,33 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, JsonOptions));
                 cmd.ExecuteNonQuery();
             }
-            await Task.CompletedTask.ConfigureAwait(false);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message));
     }
 
-    public async Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
     {
-        try
-        {
-            lock (_lock)
+        return Task.FromResult(Result.Try(() =>
             {
-                using var conn = OpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                                  UPDATE sessions SET 
-                                      title = @title, 
-                                      updated_at = @updated 
-                                  WHERE id = @id
-                                  """;
-                cmd.Parameters.AddWithValue("@id", session.Id);
-                cmd.Parameters.AddWithValue("@title", session.Title);
-                cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
-                int rows = cmd.ExecuteNonQuery();
-                if (rows == 0)
-                    return Result.Failure($"Session '{session.Id}' not found.");
-            }
-            await Task.CompletedTask.ConfigureAwait(false);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
-            return Result.Failure(ex.Message);
-        }
+                lock (_lock)
+                {
+                    using var conn = OpenConnection();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = """
+                                      UPDATE sessions SET 
+                                          title = @title, 
+                                          updated_at = @updated 
+                                      WHERE id = @id
+                                      """;
+                    cmd.Parameters.AddWithValue("@id", session.Id);
+                    cmd.Parameters.AddWithValue("@title", session.Title);
+                    cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
+                    return cmd.ExecuteNonQuery();
+                }
+            }, ResultErrors.Message))
+            .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e))
+            .Bind(rows => rows == 0
+                ? Result.Failure($"Session '{session.Id}' not found.")
+                : Result.Success());
     }
 
     private void Initialize()
