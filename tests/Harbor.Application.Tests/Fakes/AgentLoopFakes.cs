@@ -59,6 +59,9 @@ public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
         => client.GetModelsAsync(cancellationToken);
 
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+        => client.GetModelsAsync(cancellationToken);
+
     public void Register(ProviderId providerId, Func<ILlmClient> factory)
     {
     }

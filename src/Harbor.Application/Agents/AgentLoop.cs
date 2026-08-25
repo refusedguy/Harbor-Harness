@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using Harbor.Diagnostics;
 using Harbor.Abstractions.Sessions;
@@ -39,16 +38,8 @@ public sealed class AgentLoop : IAgentLoop
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
 
-    // C6: model-catalog cache. GetModelsAsync is a real HTTP round-trip on some
-    // providers (Ollama), yet the catalog rarely changes within minutes — serve
-    // it from a short-TTL cache keyed by provider id instead of fetching on
-    // every RunAsync turn-0 lookup.
-    private readonly ConcurrentDictionary<string, (ModelInfo[] Models, DateTimeOffset ExpiresAt)> _modelCatalogCache = new();
-
     // C7: bounded retry budget for the LLM streaming call site only.
     private static readonly RetryOptions StreamRetryOptions = new(MaxAttempts: 3, BaseDelay: TimeSpan.FromSeconds(1), UseJitter: true);
-
-    private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
@@ -107,39 +98,14 @@ public sealed class AgentLoop : IAgentLoop
 
             // Resolve the model once up front so the context window can be carried
             // on AgentStartEvent (renderers need it to show context usage).
-            var providerIdResult = ProviderId.TryCreate(agent.ProviderId);
-            if (providerIdResult.IsFailure)
-                return Result.Failure(providerIdResult.Error);
+            // ROP-C П.1-П.3/П.7: the TryCreate → GetClient → catalog chain rides
+            // one Bind railway with a single failure exit; the TTL-cached catalog
+            // lives in the shared provider registry, not per-loop.
+            var resolved = await ResolveModelAsync(agent, ct).ConfigureAwait(false);
+            if (resolved.IsFailure)
+                return Result.Failure(resolved.Error);
 
-            var clientResult = _providers.GetClient(providerIdResult.Value);
-            if (clientResult.IsFailure)
-                return Result.Failure(clientResult.Error);
-
-            var client = clientResult.Value;
-
-            // C6: serve the catalog from the TTL cache; a fresh HTTP round-trip
-            // happens only when the entry is missing or expired. Failures are
-            // never cached — a transient provider outage must not pin an empty
-            // catalog for the TTL window.
-            var providerId = providerIdResult.Value;
-            ModelInfo[] models;
-            if (_modelCatalogCache.TryGetValue(providerId.Value, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
-            {
-                models = cached.Models;
-            }
-            else
-            {
-                var modelsResult = await client.GetModelsAsync(ct).ConfigureAwait(false);
-                if (modelsResult.IsFailure)
-                    return Result.Failure(modelsResult.Error);
-
-                models = [.. modelsResult.Value];
-                _modelCatalogCache[providerId.Value] = (models, DateTimeOffset.UtcNow.Add(ModelCatalogTtl));
-            }
-
-            var model = FindModel(models, agent.Model);
-            if (model is null)
-                return Result.Failure($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.");
+            var (client, model) = resolved.Value;
 
             await _eventBus.PublishAsync(new AgentStartEvent(session.Session.Id, SnapshotMessages(session.Messages), model), ct).ConfigureAwait(false);
 
@@ -396,6 +362,43 @@ public sealed class AgentLoop : IAgentLoop
             await _eventBus.PublishAsync(new AgentErrorEvent(ex.Message, ex.ToString()), CancellationToken.None).ConfigureAwait(false);
             return Result.Failure(ex.Message);
         }
+    }
+
+    /// <summary>
+    ///     Resolve the provider id, LLM client and concrete model for this run.
+    ///     Errors are routed structurally by the Bind chain: any step failing
+    ///     short-circuits to the single <c>IsFailure</c> exit. The "model may be
+    ///     absent" case is expressed as <see cref="Maybe{T}"/> → ToResult rather
+    ///     than a null-check convention.
+    /// </summary>
+    private async Task<Result<(ILlmClient Client, ModelInfo Model)>> ResolveModelAsync(
+        AgentDefinition agent,
+        CancellationToken ct)
+    {
+        Result<(ILlmClient Client, IReadOnlyList<ModelInfo> Catalog)> provider =
+            await ProviderId.TryCreate(agent.ProviderId)
+                .Bind(async id =>
+                {
+                    var clientResult = _providers.GetClient(id);
+                    if (clientResult.IsFailure)
+                        return Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(clientResult.Error);
+
+                    var models = await _providers.GetModelsCachedAsync(id, ct).ConfigureAwait(false);
+                    return models.IsSuccess
+                        ? Result.Success((clientResult.Value, models.Value))
+                        : Result.Failure<(ILlmClient, IReadOnlyList<ModelInfo>)>(models.Error);
+                })
+                .ConfigureAwait(false);
+
+        if (provider.IsFailure)
+        {
+            return Result.Failure<(ILlmClient, ModelInfo)>(provider.Error);
+        }
+
+        var (client, models) = provider.Value;
+        return Maybe.From(FindModel(models, agent.Model))
+            .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
+            .Map(m => (client, m));
     }
 
     /// <summary>

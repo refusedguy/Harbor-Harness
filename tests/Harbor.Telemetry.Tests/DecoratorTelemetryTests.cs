@@ -306,6 +306,9 @@ public class DecoratorTelemetryTests : IDisposable
         public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
 
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
+
         public void Register(ProviderId providerId, Func<ILlmClient> factory)
         {
         }

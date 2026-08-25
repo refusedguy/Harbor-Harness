@@ -30,6 +30,11 @@ public sealed class InstrumentedProviderRegistry(IProviderRegistry inner, IMetri
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
         => inner.GetAllModelsAsync(cancellationToken);
 
+    // ROP-C П.7: catalog caching is the inner registry's job; the decorator
+    // only instruments clients resolved through GetClient.
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+        => inner.GetModelsCachedAsync(providerId, cancellationToken);
+
     // ROP-A ПР.10: instrumentation is exclusively GetClient's job. Wrapping
     // here TOO would double-instrument any client registered through this
     // registry (TTFB histogram ×2, token counters ×2) — the invariant "exactly

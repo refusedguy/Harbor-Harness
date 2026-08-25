@@ -211,6 +211,9 @@ internal sealed class BenchProviderRegistry : IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
         => _client.GetModelsAsync(cancellationToken);
 
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+        => _client.GetModelsAsync(cancellationToken);
+
     public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
 
     public Result Unregister(ProviderId providerId) => Result.Success();

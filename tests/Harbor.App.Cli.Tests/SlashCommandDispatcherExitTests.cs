@@ -160,6 +160,9 @@ public class SlashCommandDispatcherExitTests
         public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests."));
 
+        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests."));
+
         public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
 
         public Result Unregister(ProviderId providerId) => Result.Failure("Unregistration is not supported in tests.");

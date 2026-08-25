@@ -24,6 +24,18 @@ public sealed class ProviderRegistry : IProviderRegistry
     private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly ILogger<ProviderRegistry> _logger;
     private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
+
+    // ROP-C П.7: shared short-TTL catalog cache keyed by provider id.
+    // GetModelsAsync is a real HTTP round-trip on some providers (Ollama),
+    // yet the catalog rarely changes within minutes. The registry owns the
+    // entry so every consumer shares one round-trip budget instead of each
+    // AgentLoop instance keeping its own map. Failures are never cached.
+    private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
+
+    private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>TTL-cached model catalog entry (ROP-C П.7).</summary>
+    private sealed record CatalogEntry(IReadOnlyList<ModelInfo> Models, DateTimeOffset ExpiresAt);
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called. Marked <c>volatile</c> so reads have
@@ -88,6 +100,24 @@ public sealed class ProviderRegistry : IProviderRegistry
                 ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
             .TapError(e => _logger.LogWarning(
                 "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
+
+    /// <inheritdoc />
+    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+    {
+        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
+        {
+            return Result.Success(cached.Models);
+        }
+
+        var client = GetClient(providerId);
+        if (client.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<ModelInfo>>(client.Error);
+        }
+
+        var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);
+        return models.Tap(v => _catalogCache[providerId] = new CatalogEntry(v, DateTimeOffset.UtcNow.Add(ModelCatalogTtl)));
+    }
 
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
@@ -206,6 +236,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         var lazy = new Lazy<ILlmClient>(() => factory(), LazyThreadSafetyMode.ExecutionAndPublication);
         _clients[providerId] = lazy;
         _modelCache.TryRemove(providerId, out _);
+        _catalogCache.TryRemove(providerId, out _);
         InvalidateFrozenSnapshot();
     }
 
@@ -215,6 +246,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         if (_clients.TryRemove(providerId, out _))
         {
             _modelCache.TryRemove(providerId, out _);
+            _catalogCache.TryRemove(providerId, out _);
             InvalidateFrozenSnapshot();
             return Result.Success();
         }
@@ -227,7 +259,11 @@ public sealed class ProviderRegistry : IProviderRegistry
     ///     <see cref="GetAllModelsAsync" /> will re-fetch the model list from the provider.
     /// </summary>
     /// <param name="providerId">The provider whose model cache to invalidate.</param>
-    public void InvalidateModelCache(ProviderId providerId) => _modelCache.TryRemove(providerId, out _);
+    public void InvalidateModelCache(ProviderId providerId)
+    {
+        _modelCache.TryRemove(providerId, out _);
+        _catalogCache.TryRemove(providerId, out _);
+    }
 
     /// <summary>
     ///     Freeze the current provider set for fast lock-free lookups.

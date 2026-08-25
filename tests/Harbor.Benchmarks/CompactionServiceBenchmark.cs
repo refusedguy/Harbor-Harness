@@ -177,6 +177,9 @@ internal sealed class StubProviderRegistry : IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(Array.Empty<ModelInfo>()));
 
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+        => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(Array.Empty<ModelInfo>()));
+
     public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
 
     public Result Unregister(ProviderId providerId) => Result.Success();
