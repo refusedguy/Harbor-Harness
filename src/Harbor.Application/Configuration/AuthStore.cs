@@ -29,46 +29,62 @@ public sealed class AuthStore
     ///     preset env var (e.g. <c>KILO_API_KEY</c>), conventional env var
     ///     (<c>&lt;PROVIDER&gt;_API_KEY</c>).
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.20: the three sources form a <see cref="CSharpFunctionalExtensions.ResultExtensions.Compensate" />
+    ///     chain — each fallback runs ONLY when the previous source missed, so the
+    ///     priority reads top-to-bottom and the final helpful error is built once
+    ///     at the boundary instead of being assembled with flags mid-flight.
+    /// </remarks>
     /// <param name="providerId">The provider id (e.g. <c>anthropic</c>).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success with the key, or failure listing all the env var names that were tried.</returns>
-    public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default)
+    public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default) =>
+        await FromConfigStoreAsync(providerId, ct)
+            .Compensate(_ => FromPresetEnv(providerId))
+            .Compensate(_ => FromConventionalEnv(providerId))
+            .MapError(_ => MissingKeyHelp(providerId))
+            .ConfigureAwait(false);
+
+    private async Task<Result<string>> FromConfigStoreAsync(string providerId, CancellationToken ct) =>
+        await _configStore.GetApiKeyAsync(providerId, ct).ConfigureAwait(false);
+
+    private Result<string> FromPresetEnv(string providerId)
     {
-        // 1. Check config file (single key lookup, no full-config materialization).
-        var keyResult = await _configStore.GetApiKeyAsync(providerId, ct).ConfigureAwait(false);
-        if (keyResult.IsSuccess)
-            return keyResult;
+        string? name = ProviderPresets.Find(providerId)?.EnvVarName;
+        if (name is null)
+            return Result.Failure<string>($"no preset env var for '{providerId}'");
 
-        // 2. Check preset env var name (e.g. KILO_API_KEY for kilocode)
-        var preset = ProviderPresets.Find(providerId);
-        if (preset?.EnvVarName is not null)
-        {
-            string? presetEnv = Environment.GetEnvironmentVariable(preset.EnvVarName);
-            if (!string.IsNullOrEmpty(presetEnv))
-            {
-                _logger?.LogDebug("Using API key from preset env var {Name}", preset.EnvVarName);
-                return Result.Success(presetEnv);
-            }
-        }
+        string? value = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrEmpty(value))
+            return Result.Failure<string>($"{name} not set");
 
-        // 3. Fall back to conventional env var: PROVIDERID_API_KEY
-        string envName = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
-        string? envValue = Environment.GetEnvironmentVariable(envName);
-        if (!string.IsNullOrEmpty(envValue))
-        {
-            _logger?.LogDebug("Using API key from env var {Name}", envName);
-            return Result.Success(envValue);
-        }
+        _logger?.LogDebug("Using API key from preset env var {Name}", name);
+        return Result.Success(value);
+    }
 
-        // 4. Build helpful error mentioning all possible env var names
-        var envVars = new List<string> { envName };
-        if (preset?.EnvVarName is not null && preset.EnvVarName != envName)
-            envVars.Add(preset.EnvVarName);
+    private Result<string> FromConventionalEnv(string providerId)
+    {
+        string name = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        string? value = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrEmpty(value))
+            return Result.Failure<string>($"{name} not set");
 
-        return Result.Failure<string>(
-            $"No API key for '{providerId}'. " +
-            $"Run `harbor auth set {providerId} <key>` or set one of: " +
-            envVars.Select(v => $"${v}").JoinToString(", ") + " env var.");
+        _logger?.LogDebug("Using API key from env var {Name}", name);
+        return Result.Success(value);
+    }
+
+    /// <summary>Build the aggregated help message naming every env var that would work.</summary>
+    private string MissingKeyHelp(string providerId)
+    {
+        string conventional = providerId.ToUpperInvariant().Replace('-', '_') + "_API_KEY";
+        var envVars = new List<string> { conventional };
+        string? presetName = ProviderPresets.Find(providerId)?.EnvVarName;
+        if (presetName is not null && presetName != conventional)
+            envVars.Add(presetName);
+
+        return $"No API key for '{providerId}'. " +
+               $"Run `harbor auth set {providerId} <key>` or set one of: " +
+               envVars.Select(static v => $"${v}").JoinToString(", ") + " env var.";
     }
 
     /// <summary>Persist the API key for a provider into the config file.</summary>
