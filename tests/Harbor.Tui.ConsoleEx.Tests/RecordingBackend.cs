@@ -25,6 +25,13 @@ internal sealed class RecordingBackend : ITerminalBackend
         }
     }
 
+    /// <summary>Control characters rendered visible (\e, \r, \n) so TUnit
+    /// comparisons never see raw CR/LF.</summary>
+    public string Escaped => Text
+        .Replace("\u001B", "\\e")
+        .Replace("\r", "\\r")
+        .Replace("\n", "\\n");
+
     public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
     {
         _writes.Add(bytes.ToArray());
