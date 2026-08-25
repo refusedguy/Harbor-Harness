@@ -87,17 +87,10 @@ public sealed class PatchTool : ITool
         string rawPath = args.GetProperty("path").GetString()!;
         string patch = args.GetProperty("patch").GetString()!;
 
-        string path;
-        try
-        {
-            path = Path.IsPathRooted(rawPath)
-                ? Path.GetFullPath(rawPath)
-                : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, rawPath));
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Invalid path: {ex.Message}");
-        }
+        var resolvedPath = ToolPaths.Resolve(rawPath);
+        if (resolvedPath.IsFailure)
+            return ToolResult.Error(resolvedPath.Error);
+        string path = resolvedPath.Value;
 
         if (Directory.Exists(path))
             return ToolResult.Error($"Path is a directory: {path}");

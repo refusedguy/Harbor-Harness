@@ -79,10 +79,10 @@ public sealed class ReadTool : ITool
 
         _logger.LogDebug("Reading: {Path} (offset={Offset}, limit={Limit})", path, offset, limit);
 
-        if (!Path.IsPathRooted(path))
-            path = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, path));
-        else
-            path = Path.GetFullPath(path);
+        var resolvedPath = ToolPaths.Resolve(path);
+        if (resolvedPath.IsFailure)
+            return ToolResult.Error(resolvedPath.Error);
+        path = resolvedPath.Value;
 
         if (!File.Exists(path))
             return ToolResult.Error($"File not found: {path}");

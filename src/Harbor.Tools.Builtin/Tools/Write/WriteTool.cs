@@ -77,17 +77,10 @@ public sealed class WriteTool : ITool
             return ToolResult.Error(
                 $"content too large ({content.Length} chars; max {MaxContentChars}).");
 
-        string path;
-        try
-        {
-            path = Path.IsPathRooted(rawPath)
-                ? Path.GetFullPath(rawPath)
-                : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, rawPath));
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Invalid path: {ex.Message}");
-        }
+        var resolvedPath = ToolPaths.Resolve(rawPath);
+        if (resolvedPath.IsFailure)
+            return ToolResult.Error(resolvedPath.Error);
+        string path = resolvedPath.Value;
 
         _logger.LogInformation("Writing: {Path} ({Chars} chars)", path, content.Length);
 

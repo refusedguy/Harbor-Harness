@@ -109,14 +109,10 @@ public sealed class RipGrepTool : ITool
             ? Math.Clamp(m.GetInt32(), 1, HardMaxResults)
             : DefaultMaxResults;
 
-        try
-        {
-            path = Path.GetFullPath(path);
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Invalid path: {ex.Message}");
-        }
+        var resolvedPath = ToolPaths.Resolve(path);
+        if (resolvedPath.IsFailure)
+            return ToolResult.Error(resolvedPath.Error);
+        path = resolvedPath.Value;
 
         if (!File.Exists(path) && !Directory.Exists(path))
             return ToolResult.Error($"Path not found: {path}");

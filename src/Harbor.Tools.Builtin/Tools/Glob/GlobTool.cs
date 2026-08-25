@@ -86,14 +86,10 @@ public sealed class GlobTool : ITool
                                                           && mr.TryGetInt32(out int m))
             maxResults = Math.Clamp(m, 1, HardMaxResults);
 
-        try
-        {
-            basePath = Path.GetFullPath(basePath);
-        }
-        catch (Exception ex)
-        {
-            return ToolResult.Error($"Invalid path: {ex.Message}");
-        }
+        var resolvedBase = ToolPaths.Resolve(basePath);
+        if (resolvedBase.IsFailure)
+            return ToolResult.Error(resolvedBase.Error);
+        basePath = resolvedBase.Value;
 
         if (!Directory.Exists(basePath))
             return ToolResult.Error($"Directory not found: {basePath}");

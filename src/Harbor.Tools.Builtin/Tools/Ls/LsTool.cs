@@ -88,7 +88,10 @@ public sealed class LsTool : ITool
             : 1;
         int maxEntries = Math.Clamp(maxEntriesArg ?? DefaultMaxEntries, 1, HardMaxEntries);
 
-        path = Path.GetFullPath(path);
+        var resolvedPath = ToolPaths.Resolve(path);
+        if (resolvedPath.IsFailure)
+            return ToolResult.Error(resolvedPath.Error);
+        path = resolvedPath.Value;
 
         if (!Directory.Exists(path))
             return ToolResult.Error($"Directory not found: {path}");
