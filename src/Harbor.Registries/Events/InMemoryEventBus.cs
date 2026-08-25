@@ -57,6 +57,16 @@ namespace Harbor.Abstractions.Events;
 /// </remarks>
 public sealed class InMemoryEventBus : IEventBus
 {
+    /// <summary>Default per-handler budget (A4): one slow subscriber may hold
+    /// the fan-out for at most this long before it is left behind.</summary>
+    public static readonly TimeSpan DefaultHandlerBudget = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>Consecutive over-budget dispatches before a subscriber is evicted.</summary>
+    private const int MaxSlowStrikes = 3;
+
+    /// <summary>Per-dispatch budget; TimeSpan.Zero disables the budget entirely.</summary>
+    private readonly TimeSpan _handlerBudget;
+
     private readonly ILogger<InMemoryEventBus> _logger;
 
     /// <summary>
@@ -109,10 +119,8 @@ public sealed class InMemoryEventBus : IEventBus
     /// <param name="logger">Logger instance.</param>
     /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers. Zero or negative disables scrollback.</param>
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback = 1000)
+        : this(logger, maxScrollback, handlerBudget: DefaultHandlerBudget)
     {
-        _logger = logger;
-        _maxScrollback = maxScrollback > 0 ? maxScrollback : 0;
-        _scrollbackRing = _maxScrollback > 0 ? new AgentEvent[_maxScrollback] : Array.Empty<AgentEvent>();
     }
 
     /// <summary>
@@ -123,9 +131,37 @@ public sealed class InMemoryEventBus : IEventBus
     /// <param name="maxScrollback">Maximum number of events retained for late-attaching subscribers. Zero or negative disables scrollback.</param>
     /// <param name="middlewares">Middleware pipeline evaluated before scrollback + fan-out.</param>
     public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback, IEnumerable<IEventBusMiddleware> middlewares)
+        : this(logger, maxScrollback, DefaultHandlerBudget, middlewares)
+    {
+    }
+
+    /// <summary>
+    ///     Full constructor (A4 backpressure): per-subscriber dispatch budget.
+    /// </summary>
+    /// <param name="logger">Logger instance.</param>
+    /// <param name="maxScrollback">Scrollback capacity; zero or negative disables scrollback.</param>
+    /// <param name="handlerBudget">
+    ///     Per-subscriber dispatch budget. A handler exceeding it is no longer
+    ///     awaited by the publisher (its task stays observed), the strike
+    ///     counter increments, and after <c>MaxSlowStrikes</c> consecutive
+    ///     strikes the subscriber is evicted. <see cref="Timeout.InfiniteTimeSpan"/>-like
+    ///     semantics via <see cref="TimeSpan.Zero"/> (budget disabled).
+    /// </param>
+    public InMemoryEventBus(ILogger<InMemoryEventBus> logger, int maxScrollback, TimeSpan handlerBudget)
+        : this(logger, maxScrollback, handlerBudget, middlewares: null)
+    {
+    }
+
+    /// <summary>Full constructor with middleware (A4 backpressure).</summary>
+    public InMemoryEventBus(
+        ILogger<InMemoryEventBus> logger,
+        int maxScrollback,
+        TimeSpan handlerBudget,
+        IEnumerable<IEventBusMiddleware>? middlewares)
     {
         _logger = logger;
         _maxScrollback = maxScrollback > 0 ? maxScrollback : 0;
+        _handlerBudget = handlerBudget < TimeSpan.Zero ? TimeSpan.Zero : handlerBudget;
         _scrollbackRing = _maxScrollback > 0 ? new AgentEvent[_maxScrollback] : Array.Empty<AgentEvent>();
         _middlewares = middlewares?.ToArray() ?? Array.Empty<IEventBusMiddleware>();
     }
@@ -180,28 +216,104 @@ public sealed class InMemoryEventBus : IEventBus
 
         _logger.LogTrace("Publishing to {SubscriberCount} subscribers", snapshot.Length);
 
-        // 3. Fan-out to subscribers; collect failures in a pooled array to avoid
-        //    allocating a List in the common case where nothing throws.
+        // 3. Fan-out to subscribers under the A4 per-handler budget: a handler
+        //    that exceeds its slice is no longer awaited by THIS publisher
+        //    (the orphaned task stays observed via a fault-logging
+        //    continuation), its slow-strike counter increments, and after
+        //    MaxSlowStrikes consecutive strikes the subscriber is evicted.
+        //    Fast handlers — the overwhelmingly common case — complete
+        //    synchronously and keep the exact publish-then-observe contract.
         Subscription[]? dead = null;
         int deadCount = 0;
         try
         {
             int snapshotLength = snapshot.Length;
+            bool budgetEnabled = _handlerBudget > TimeSpan.Zero;
+            using CancellationTokenSource? budgetCts = budgetEnabled
+                ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+                : null;
+
+            void MarkDead(Subscription sub)
+            {
+                if (dead is null)
+                {
+                    dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
+                }
+
+                dead[deadCount++] = sub;
+            }
+
+            async ValueTask RecordSlowStrikeAsync(Subscription sub, Task handlerTask)
+            {
+                int strikes = sub.Strike();
+                _logger.LogWarning(
+                    "Subscriber exceeded its {Budget}ms dispatch budget ({Strikes}/{Max} strikes) — continuing without it",
+                    _handlerBudget.TotalMilliseconds, strikes, MaxSlowStrikes);
+                if (strikes >= MaxSlowStrikes)
+                {
+                    MarkDead(sub);
+                }
+
+                // Keep the orphaned handler observed so late faults are never
+                // lost (it may still be running against a stale event).
+                try { await handlerTask.ConfigureAwait(false); }
+                catch (OperationCanceledException oce)
+                {
+                    _logger.LogDebug(oce, "Orphaned slow-subscriber handler cancelled with its slice");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Orphaned slow-subscriber handler faulted");
+                }
+            }
+
             for (int i = 0; i < snapshotLength; i++)
             {
                 var sub = snapshot[i];
                 try
                 {
-                    await sub.Handler(@event, ct).ConfigureAwait(false);
+                    if (!budgetEnabled)
+                    {
+                        await sub.Handler(@event, ct).ConfigureAwait(false);
+                        sub.ResetSlowStrikes();
+                        continue;
+                    }
+
+                    budgetCts!.CancelAfter(_handlerBudget);
+                    ValueTask dispatch = sub.Handler(@event, budgetCts.Token);
+                    if (dispatch.IsCompletedSuccessfully)
+                    {
+                        sub.ResetSlowStrikes();
+                        continue;
+                    }
+
+                    Task handlerTask = dispatch.AsTask();
+                    Task winner = await Task.WhenAny(handlerTask, Task.Delay(Timeout.InfiniteTimeSpan, ct))
+                        .ConfigureAwait(false);
+                    if (winner != handlerTask)
+                    {
+                        // Publisher slice elapsed while the handler still runs:
+                        // leave it behind (observed), count the strike.
+                        await RecordSlowStrikeAsync(sub, handlerTask).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    try
+                    {
+                        await handlerTask.ConfigureAwait(false);
+                        sub.ResetSlowStrikes();
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        // The handler hit the budget cancellation from INSIDE
+                        // its own body — an over-budget strike, not a death.
+                        await RecordSlowStrikeAsync(sub, Task.CompletedTask).ConfigureAwait(false);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Subscriber threw exception — removing dead subscriber");
-                    if (dead is null)
-                    {
-                        dead = ArrayPool<Subscription>.Shared.Rent(snapshotLength);
-                    }
-                    dead[deadCount++] = sub;
+                    MarkDead(sub);
                 }
             }
 
@@ -336,10 +448,16 @@ public sealed class InMemoryEventBus : IEventBus
     {
         public Func<AgentEvent, CancellationToken, ValueTask> Handler { get; }
 
+        private int _slowStrikes;
+
         public Subscription(Func<AgentEvent, CancellationToken, ValueTask> handler)
         {
             Handler = handler;
         }
+
+        public int Strike() => Interlocked.Increment(ref _slowStrikes);
+
+        public void ResetSlowStrikes() => Interlocked.Exchange(ref _slowStrikes, 0);
     }
 
     private sealed class Unsubscriber : IDisposable
