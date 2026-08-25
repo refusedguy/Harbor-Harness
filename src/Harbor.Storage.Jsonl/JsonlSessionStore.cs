@@ -247,11 +247,88 @@ public sealed class JsonlSessionStore : ISessionStore
             .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
     }
 
+    /// <summary>
+    ///     Update a message in place. <b>ROP-C Z3 (DDD-audit 25.08):</b> this
+    ///     used to be a plain re-append — every edit grew the file with a
+    ///     duplicate entry (the "latest wins" read made it invisible until the
+    ///     file ballooned). Now stale entries with the same message id are
+    ///     dropped and the fresh entry is appended once, mirroring
+    ///     <see cref="UpdateAsync" />'s rewrite-in-place semantics.
+    /// </summary>
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        // JSONL is append-only; updates are recorded as new entries with same id
-        // For simplicity, we just append again (the latest entry wins on read)
-        return AppendMessageAsync(sessionId, message, ct);
+        // §3.4: observe cancellation BEFORE the existence policy — an Esc must
+        // never surface as "session not found".
+        ct.ThrowIfCancellationRequested();
+        string sessionFile = GetSessionFilePath(sessionId);
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
+        }
+
+        return Result.Try(async () =>
+        {
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+
+                string[] lines = File.ReadAllLines(sessionFile);
+                var kept = new List<string>(lines.Length + 1);
+
+                foreach (var line in lines)
+                {
+                    if (!IsMessageEntryWithId(line, message.Id))
+                    {
+                        kept.Add(line);
+                    }
+                }
+
+                var entry = new MessageEntry(
+                    "message",
+                    message.Id,
+                    message.ParentId,
+                    message.Role,
+                    message.CreatedAt,
+                    JsonlMessageCodec.SerializeMessagePayload(message));
+
+                kept.Add(JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry));
+                File.WriteAllLines(sessionFile, kept);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+
+            _messageCache.TryRemove(sessionId, out _);
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to update message in session {SessionId}: {Error}", sessionId, e));
+    }
+
+    /// <summary>
+    ///     True when the line is a <c>"message"</c> entry carrying the given id.
+    ///     Header lines and unparseable lines are never matched, so a rewrite
+    ///     cannot accidentally drop them. Malformed lines are left untouched on
+    ///     disk — the read path already reports them as parse warnings.
+    /// </summary>
+    private static bool IsMessageEntryWithId(string line, string messageId)
+    {
+        if (string.IsNullOrWhiteSpace(line) || !line.Contains($"\"id\":\"{messageId}\"", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var entry = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);
+            return entry is { Type: "message", Id: var id } && id == messageId;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

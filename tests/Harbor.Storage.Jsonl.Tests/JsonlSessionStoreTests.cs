@@ -419,4 +419,43 @@ public class JsonlSessionStoreCancellationTests
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
+
+    [Test]
+    public async Task UpdateMessageAsync_RewritesInPlace_NoDuplicateEntries()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            var created = (await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4")).Value;
+            string sessionId = created.Id;
+
+            // DDD-audit 25.08 (ROP-C Z3): UpdateMessageAsync used to re-append,
+            // so every edit grew the file with a duplicate id entry.
+            var original = new UserMessage("msg-1", sessionId, DateTimeOffset.UtcNow, "before", "user", "claude-opus-4");
+            var appendResult = await store.AppendMessageAsync(sessionId, original);
+            await Assert.That(appendResult.IsSuccess).IsTrue();
+
+            var editResult = await store.UpdateMessageAsync(sessionId, new UserMessage(
+                "msg-1", sessionId, original.CreatedAt, "after", "user", "claude-opus-4"));
+            await Assert.That(editResult.IsSuccess).IsTrue();
+
+            string[] lines = await File.ReadAllLinesAsync(Path.Combine(tempDir, $"{sessionId}.jsonl"));
+            int occurrences = lines.Count(l => l.Contains("\"msg-1\"", StringComparison.Ordinal));
+            await Assert.That(occurrences).IsEqualTo(1);
+
+            var messages = (await store.GetMessagesAsync(sessionId)).Value;
+            await Assert.That(messages.Count).IsEqualTo(1);
+            var user = (UserMessage)messages[0];
+            await Assert.That(user.Content).IsEqualTo("after");
+
+            // Header survived the rewrite.
+            await Assert.That(lines[0].Contains("\"type\":\"session\"", StringComparison.Ordinal)).IsTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
 }
