@@ -41,7 +41,7 @@ public class EventBroadcasterThroughputBenchmark
             var pipe = new Pipe();
             var stream = new PipeStream(pipe);
             var writeLock = new SemaphoreSlim(1, 1);
-            _broadcaster.RegisterAsync(stream, writeLock, lastSequence: null)
+            _broadcaster.RegisterAsync(stream, writeLock, lastSequence: null, clientId: $"bench-{i}")
                 .GetAwaiter().GetResult();
             _clientStreams.Add(stream);
             _writeLocks.Add(writeLock);

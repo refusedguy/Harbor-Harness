@@ -57,6 +57,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     private readonly ILogger<MessagePackRpcServer> _logger;
     private readonly string? _expectedPsk;
     private readonly IIpcServerTransport _transport;
+    private int _connectionSequence;
     private Task? _acceptTask;
     private int _disposed;
 
@@ -139,6 +140,10 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
 
     private async Task HandleClientAsync(Stream stream, CancellationToken ct)
     {
+        // Per-connection identity for addressed delivery + session leases (A3).
+        int connectionNumber = Interlocked.Increment(ref _connectionSequence);
+        var clientId = $"c-{connectionNumber:x8}";
+
         // Per-stream write lock so dispatcher responses and broadcaster
         // events never interleave half-frames on the wire.
         var writeLock = new SemaphoreSlim(1, 1);
@@ -238,7 +243,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 // during an in-flight run.
                 if (request is SendPromptRequest promptRequest)
                 {
-                    StartPromptRun(promptRequest, stream, writeLock, runs, runsLock, connectionCts, connectionCt);
+                    StartPromptRun(promptRequest, stream, writeLock, runs, runsLock, connectionCts, connectionCt, clientId);
                     continue;
                 }
 
@@ -254,7 +259,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                         CancelRegisteredRuns(runs, runsLock);
 
                         var abortResponse = await _dispatcher
-                            .DispatchAsync(abortRequest, null, null, connectionCt)
+                            .DispatchAsync(abortRequest, null, null, connectionCt, clientId)
                             .ConfigureAwait(false);
                         await WriteResponseAsync(stream, writeLock, abortResponse, connectionCt).ConfigureAwait(false);
                         continue;
@@ -270,7 +275,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                     var replyWriteLock = request is SubscribeToEventsRequest ? writeLock : null;
 
                     var response = await _dispatcher
-                        .DispatchAsync(request, replyStream, replyWriteLock, connectionCt)
+                        .DispatchAsync(request, replyStream, replyWriteLock, connectionCt, clientId)
                         .ConfigureAwait(false);
 
                     await WriteResponseAsync(stream, writeLock, response, connectionCt).ConfigureAwait(false);
@@ -320,6 +325,9 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 }
             }
 
+            // A3 teardown: this connection's session leases die with it, so a
+            // disconnected owner cannot wedge a session busy forever.
+            _dispatcher.ReleaseClientLeases(clientId);
             await _broadcaster.UnregisterAsync(stream).ConfigureAwait(false);
             try { await stream.DisposeAsync().ConfigureAwait(false); }
             catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress stream dispose error"); }
@@ -337,7 +345,8 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
         Dictionary<Guid, PromptRun> runs,
         Lock runsLock,
         CancellationTokenSource connectionCts,
-        CancellationToken connectionCt)
+        CancellationToken connectionCt,
+        string clientId)
     {
         var requestId = request.RequestId;
         var runCts = CancellationTokenSource.CreateLinkedTokenSource(connectionCt);
@@ -355,7 +364,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 try
                 {
                     var response = await _dispatcher
-                        .DispatchAsync(request, null, null, runCts.Token)
+                        .DispatchAsync(request, null, null, runCts.Token, clientId)
                         .ConfigureAwait(false);
 
                     await WriteResponseAsync(stream, writeLock, response, runCts.Token).ConfigureAwait(false);

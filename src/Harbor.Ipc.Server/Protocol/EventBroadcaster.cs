@@ -52,6 +52,14 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private readonly List<ClientRegistration> _clients = new();
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventBroadcaster> _logger;
+    private readonly SessionLeaseRegistry? _leases;
+
+    // Session whose run is currently streaming (A3): events without their
+    // own SessionId resolve against ITS lease owner dynamically — so a lease
+    // release immediately falls back to broadcast. The singleton agent is
+    // single-flight, so between an AgentStarted and the next one all streamed
+    // events belong to that session.
+    private string? _activeSessionId;
 
     // Replay ring: fixed-capacity, overwrite-in-place (same shape as the
     // event bus scrollback). Envelopes are immutable; readers copy under lock.
@@ -73,10 +81,17 @@ public sealed class EventBroadcaster : IAsyncDisposable
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
     ///     listening to <paramref name="eventBus" />.
     /// </summary>
-    public EventBroadcaster(IEventBus eventBus, ILogger<EventBroadcaster> logger)
+    /// <param name="eventBus">Host event bus.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="leases">
+    ///     Optional session-lease registry enabling addressed delivery (A3);
+    ///     null keeps legacy broadcast-to-all behavior.
+    /// </param>
+    public EventBroadcaster(IEventBus eventBus, ILogger<EventBroadcaster> logger, SessionLeaseRegistry? leases = null)
     {
         _eventBus = eventBus;
         _logger = logger;
+        _leases = leases;
     }
 
     /// <inheritdoc />
@@ -127,13 +142,15 @@ public sealed class EventBroadcaster : IAsyncDisposable
     /// <param name="lastSequence">
     ///     Null = first subscription (no replay). Non-null = replay request.
     /// </param>
+    /// <param name="clientId">The connection id used for addressed delivery.</param>
     /// <returns>The ack data delivered to the subscriber.</returns>
     public async Task<SubscriptionAckData> RegisterAsync(
         Stream clientStream,
         SemaphoreSlim writeLock,
-        ulong? lastSequence)
+        ulong? lastSequence,
+        string clientId)
     {
-        var registration = new ClientRegistration(clientStream, writeLock);
+        var registration = new ClientRegistration(clientStream, writeLock, clientId);
 
         bool resyncRequired = false;
         lock (_clientsLock)
@@ -218,13 +235,15 @@ public sealed class EventBroadcaster : IAsyncDisposable
         var projected = ProjectEvent(evt);
         if (projected is null) return;
 
+        string target = ResolveTargetUnsafe(evt);
+
         var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
         var envelope = new EventEnvelope
         {
             EventBytes = eventBytes,
             Sequence = Interlocked.Increment(ref _sequence),
-            TargetClientId = null
+            TargetClientId = string.IsNullOrEmpty(target) ? null : target
         };
 
         AppendRing(envelope);
@@ -241,12 +260,20 @@ public sealed class EventBroadcaster : IAsyncDisposable
 
         if (snapshot.Length == 0) return;
 
-        // Fan-out = non-blocking enqueue into per-client queues. A client
-        // whose queue is full is evicted below (it stopped reading — the
-        // wire budget cannot save it anyway).
+        // Fan-out = non-blocking enqueue into per-client queues, SKIPPING
+        // clients the event is not addressed to (A3: null target = broadcast).
+        // A client whose queue is full is evicted below (it stopped reading —
+        // the wire budget cannot save it anyway).
         bool[] alive = new bool[snapshot.Length];
         for (int i = 0; i < snapshot.Length; i++)
         {
+            if (!snapshot[i].IsTargetOf(envelope))
+            {
+                // Not addressed here — perfectly healthy, never evict.
+                alive[i] = true;
+                continue;
+            }
+
             alive[i] = snapshot[i].TryDeliver(envelope);
         }
 
@@ -258,6 +285,36 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 await EvictAsync(snapshot[i]).ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    ///     Addressing rules (A3): session-carrying events target their
+    ///     session's lease owner; everything else inherits the active run's
+    ///     owner; unleased periods broadcast to everyone.
+    /// </summary>
+    private string ResolveTargetUnsafe(AgentEvent evt)
+    {
+        if (_leases is null) return string.Empty;
+
+        switch (evt)
+        {
+            case AgentStartEvent started:
+                _activeSessionId = started.SessionId;
+                return _leases.GetOwner(started.SessionId) ?? string.Empty;
+            case CompactionStartedEvent compaction:
+                return _leases.GetOwner(compaction.SessionId) ?? ActiveOwner();
+            case CompactionCompletedEvent completed:
+                return _leases.GetOwner(completed.SessionId) ?? ActiveOwner();
+        }
+
+        return ActiveOwner();
+    }
+
+    /// <summary>Live lookup of the active run's owner — empty when unleased.</summary>
+    private string ActiveOwner()
+    {
+        if (_activeSessionId is null || _leases is null) return string.Empty;
+        return _leases.GetOwner(_activeSessionId) ?? string.Empty;
     }
 
     private async Task EvictAsync(ClientRegistration dead)
@@ -316,6 +373,7 @@ public sealed class EventBroadcaster : IAsyncDisposable
         {
             var envelope = _ring[(_ringHead + i) % MaxReplayEnvelopes];
             if (envelope.Sequence <= lastSeen) continue;
+            if (envelope.TargetClientId is not null && envelope.TargetClientId != registration.ClientId) continue;
             registration.TryDeliver(envelope);
         }
     }
@@ -396,8 +454,9 @@ public sealed class EventBroadcaster : IAsyncDisposable
     }
 
     /// <summary>
-    ///     A registered client: its reply stream, the shared write lock, and
-    ///     a bounded outbound queue drained by a dedicated writer task.
+    ///     A registered client: its reply stream, connection id, the shared
+    ///     write lock, and a bounded outbound queue drained by a dedicated
+    ///     writer task.
     /// </summary>
     private sealed class ClientRegistration
     {
@@ -411,17 +470,25 @@ public sealed class EventBroadcaster : IAsyncDisposable
                 FullMode = BoundedChannelFullMode.Wait
             });
 
-        public ClientRegistration(Stream stream, SemaphoreSlim writeLock)
+        public ClientRegistration(Stream stream, SemaphoreSlim writeLock, string clientId)
         {
             Stream = stream;
             WriteLock = writeLock;
+            ClientId = clientId;
         }
 
         /// <summary>The client's reply stream.</summary>
         public Stream Stream { get; }
 
+        /// <summary>The connection id used for addressed delivery.</summary>
+        public string ClientId { get; }
+
         /// <summary>Per-client write lock shared with the RPC server's per-client loop.</summary>
         public SemaphoreSlim WriteLock { get; }
+
+        /// <summary>True when the envelope is broadcast or addressed to THIS client.</summary>
+        public bool IsTargetOf(EventEnvelope envelope)
+            => envelope.TargetClientId is null || envelope.TargetClientId == ClientId;
 
         private CancellationTokenSource? _writerCts;
         private Task? _writerTask;

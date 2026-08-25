@@ -25,6 +25,7 @@ public sealed class HarborIpcServer : IHarborServer
     private readonly MessagePackRpcServer _rpc;
     private readonly IServiceProvider _serviceProvider;
     private readonly IIpcServerTransport _transport;
+    private readonly SessionLeaseRegistry _leases;
     private int _disposed;
     private int _running;
 
@@ -64,10 +65,12 @@ public sealed class HarborIpcServer : IHarborServer
         _serviceProvider = serviceProvider;
         _loggerFactory = loggerFactory ?? LoggerFactory.Create(b => b.AddSimpleConsole());
         _transport = transport;
+        _leases = new SessionLeaseRegistry();
         _broadcaster = new EventBroadcaster(
             serviceProvider.GetRequiredService<IEventBus>(),
-            _loggerFactory.CreateLogger<EventBroadcaster>());
-        var dispatcher = new RequestDispatcher(serviceProvider, _broadcaster);
+            _loggerFactory.CreateLogger<EventBroadcaster>(),
+            _leases);
+        var dispatcher = new RequestDispatcher(serviceProvider, _broadcaster, _leases);
         _rpc = new MessagePackRpcServer(
             _transport, dispatcher, _broadcaster,
             _loggerFactory.CreateLogger<MessagePackRpcServer>(), psk);
