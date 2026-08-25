@@ -1,5 +1,7 @@
 using System.Net;
 using System.Threading;
+using Harbor.Abstractions.Events;
+using Harbor.Core.Agents;
 
 namespace Harbor.Core.Resilience;
 
@@ -96,10 +98,25 @@ public sealed class RetryPolicy : IRetryPolicy
             case HttpRequestException hre:
                 return IsTransientStatus(hre.StatusCode, ref retryAfter);
 
+            case AgentLoop.LlmStreamErrorException streamError:
+                // ROP-A ПР.5: provider streams surface transport failures as
+                // typed error events, not exceptions. The classification made
+                // at the wire (429 / 5xx / timeout / network) rides on the
+                // exception so retries promised by this policy actually fire.
+                return IsTransient(streamError.Kind);
+
             default:
                 return false;
         }
     }
+
+    /// <summary>
+    ///     Retry verdict for a transport error kind classified at the provider
+    ///     boundary (ROP-A ПР.5): rate limits, timeouts, network failures and
+    ///     server overloads are transient; auth failures and malformed streams
+    ///     are fatal.
+    /// </summary>
+    public static bool IsTransient(ProviderErrorKind kind) => ProviderErrors.IsTransient(kind);
 
     private static bool IsTransientStatus(HttpStatusCode? status, ref TimeSpan? retryAfter)
     {

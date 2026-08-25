@@ -216,6 +216,12 @@ public sealed record StepFinishEvent(
 public sealed record FinishEvent : LlmEvent;
 
 /// <summary>
-///     Emitted on a streaming error.
+///     Emitted on a streaming error. <see cref="Kind" /> classifies the
+///     transport failure (ROP-A ПР.5) so the retry policy can distinguish
+///     transient conditions from fatal ones without parsing the message.
 /// </summary>
-public sealed record ErrorEvent(string Message, string? Exception = null) : LlmEvent;
+public sealed record ErrorEvent(
+    string Message,
+    string? Exception = null,
+    ProviderErrorKind Kind = ProviderErrorKind.Unknown,
+    int? StatusCode = null) : LlmEvent;

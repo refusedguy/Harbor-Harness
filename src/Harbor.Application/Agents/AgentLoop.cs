@@ -526,7 +526,7 @@ public sealed class AgentLoop : IAgentLoop
                         // inline early-return out of RunAsync).
                         coalescer.DiscardPendingToolCalls();
                         await _eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
-                        throw new LlmStreamErrorException(err.Message);
+                        throw new LlmStreamErrorException(err);
                 }
             }
         }
@@ -585,11 +585,27 @@ public sealed class AgentLoop : IAgentLoop
 
     /// <summary>
     ///     Internal signal that the provider stream reported a terminal error
-    ///     event. Carries the user-facing message so the run can fail exactly
-    ///     as it did before the retry-policy extraction.
+    ///     event. Carries the user-facing message plus the transport error
+    ///     classification (ROP-A ПР.5) so <c>RetryPolicy.IsTransient</c> can
+    ///     retry rate limits / server errors / timeouts / network blips.
     /// </summary>
     public sealed class LlmStreamErrorException : Exception
     {
+        /// <summary>Transport classification of the failure (Unknown for legacy call sites).</summary>
+        public ProviderErrorKind Kind { get; }
+
+        /// <summary>HTTP status code when the failure came from a non-success response.</summary>
+        public int? StatusCode { get; }
+
+        /// <summary>Creates the error from the terminal stream event.</summary>
+        /// <param name="err">The error event reported by the provider stream.</param>
+        public LlmStreamErrorException(ErrorEvent err)
+            : base(err.Message)
+        {
+            Kind = err.Kind;
+            StatusCode = err.StatusCode;
+        }
+
         /// <summary>Creates the error with the user-facing failure message.</summary>
         /// <param name="message">The message reported by the provider stream.</param>
         public LlmStreamErrorException(string message) : base(message)

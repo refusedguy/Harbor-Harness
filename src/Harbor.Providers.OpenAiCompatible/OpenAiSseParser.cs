@@ -17,7 +17,7 @@ internal static class OpenAiSseParser
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to parse chunk: {Data}", data.ToString());
-            return new[] { new ErrorEvent($"Parse failed: {ex.Message}") };
+            return new[] { new ErrorEvent($"Parse failed: {ex.Message}", Kind: ProviderErrorKind.Malformed) };
         }
     }
 

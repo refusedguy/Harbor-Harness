@@ -75,7 +75,8 @@ public sealed class OllamaLlmClient : ILlmClient
                 {
                     await writer.WriteAsync(new ErrorEvent(
                         $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
-                        $"Is `ollama serve` running? Error: {ex.Message}"), cancellationToken).ConfigureAwait(false);
+                        $"Is `ollama serve` running? Error: {ex.Message}",
+                        Kind: ProviderErrorKind.Network), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
@@ -84,7 +85,10 @@ public sealed class OllamaLlmClient : ILlmClient
                     if (!response.IsSuccessStatusCode)
                     {
                         string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent($"Ollama error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
+                        await writer.WriteAsync(new ErrorEvent(
+                            $"Ollama error {(int)response.StatusCode}: {errorBody}",
+                            Kind: ProviderErrors.FromStatus(response.StatusCode),
+                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
                         return;
                     }
 
@@ -112,7 +116,9 @@ public sealed class OllamaLlmClient : ILlmClient
             }
             catch (Exception ex)
             {
-                await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(new ErrorEvent(
+                    $"Stream failed: {ex.Message}", ex.ToString(),
+                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {

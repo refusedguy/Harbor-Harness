@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using Harbor.Abstractions.Events;
+using Harbor.Core.Agents;
 using Harbor.Core.Resilience;
 using TUnit.Assertions;
 
@@ -63,6 +65,73 @@ public class RetryPolicyTests
     {
         await Assert.That(RetryPolicy.IsTransient(new InvalidOperationException(), out _)).IsFalse();
         await Assert.That(RetryPolicy.IsTransient(new JsonException(), out _)).IsFalse();
+    }
+
+    // ── ROP-A ПР.5: typed provider error kinds ──
+
+    [Test]
+    public async Task IsTransient_Kind_TransientKindsRetry()
+    {
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.RateLimit)).IsTrue();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Timeout)).IsTrue();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Network)).IsTrue();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.ServerError)).IsTrue();
+    }
+
+    [Test]
+    public async Task IsTransient_Kind_FatalKindsDoNotRetry()
+    {
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Auth)).IsFalse();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Malformed)).IsFalse();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Cancelled)).IsFalse();
+        await Assert.That(RetryPolicy.IsTransient(ProviderErrorKind.Unknown)).IsFalse();
+    }
+
+    [Test]
+    public async Task LlmStreamErrorException_CarriesKindAndStatus()
+    {
+        var err = new ErrorEvent("OpenAI API error 429: slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429);
+        var ex = new AgentLoop.LlmStreamErrorException(err);
+
+        await Assert.That(ex.Kind).IsEqualTo(ProviderErrorKind.RateLimit);
+        await Assert.That(ex.StatusCode).IsEqualTo(429);
+        await Assert.That(ex.Message).IsEqualTo("OpenAI API error 429: slow down");
+    }
+
+    [Test]
+    public async Task IsTypedStreamErrorException_RateLimit_IsTransient()
+    {
+        var ex = new AgentLoop.LlmStreamErrorException(
+            new ErrorEvent("API error 503", Kind: ProviderErrorKind.ServerError, StatusCode: 503));
+
+        await Assert.That(RetryPolicy.IsTransient(ex, out _)).IsTrue();
+    }
+
+    [Test]
+    public async Task IsTypedStreamErrorException_Auth_IsFatal()
+    {
+        var ex = new AgentLoop.LlmStreamErrorException(
+            new ErrorEvent("Auth failed: set $OPENAI_API_KEY", Kind: ProviderErrorKind.Auth));
+
+        await Assert.That(RetryPolicy.IsTransient(ex, out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task ExecuteAsync_RateLimitedStreamError_IsRetried()
+    {
+        var policy = new RetryPolicy();
+        int calls = 0;
+
+        await Assert.ThrowsAsync<AgentLoop.LlmStreamErrorException>(async () => await policy.ExecuteAsync<int>(
+            _ =>
+            {
+                calls++;
+                throw new AgentLoop.LlmStreamErrorException(
+                    new ErrorEvent("429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429));
+            },
+            Opts(max: 3, delayMs: 1), CancellationToken.None));
+
+        await Assert.That(calls).IsEqualTo(3);
     }
 
     // ── attempt behaviour ──

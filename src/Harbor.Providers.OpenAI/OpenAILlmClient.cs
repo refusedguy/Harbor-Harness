@@ -72,7 +72,7 @@ public sealed class OpenAILlmClient : ILlmClient
                 var apiKeyResult = await _auth.ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
                 if (apiKeyResult.IsFailure)
                 {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}"), cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
@@ -91,7 +91,9 @@ public sealed class OpenAILlmClient : ILlmClient
                 }
                 catch (Exception ex)
                 {
-                    await writer.WriteAsync(new ErrorEvent($"HTTP request failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(new ErrorEvent(
+                        $"HTTP request failed: {ex.Message}", ex.ToString(),
+                        ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
@@ -100,7 +102,10 @@ public sealed class OpenAILlmClient : ILlmClient
                     if (!response.IsSuccessStatusCode)
                     {
                         string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent($"OpenAI API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
+                        await writer.WriteAsync(new ErrorEvent(
+                            $"OpenAI API error {(int)response.StatusCode}: {errorBody}",
+                            Kind: ProviderErrors.FromStatus(response.StatusCode),
+                            StatusCode: (int)response.StatusCode), cancellationToken).ConfigureAwait(false);
                         return;
                     }
 
@@ -143,7 +148,9 @@ public sealed class OpenAILlmClient : ILlmClient
             }
             catch (Exception ex)
             {
-                await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(new ErrorEvent(
+                    $"Stream failed: {ex.Message}", ex.ToString(),
+                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {
