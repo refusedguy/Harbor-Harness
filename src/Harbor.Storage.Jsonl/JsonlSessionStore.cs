@@ -243,11 +243,7 @@ public sealed class JsonlSessionStore : ISessionStore
             _messageCache.TryRemove(sessionId, out _);
             return Result.Success();
         }
-        catch (OperationCanceledException)
-        {
-            return Result.Failure("Operation was cancelled.");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Failed to append message to session {SessionId}", sessionId);
             return Result.Failure(ex.Message);
@@ -311,11 +307,7 @@ public sealed class JsonlSessionStore : ISessionStore
             }
             return parseResult;
         }
-        catch (OperationCanceledException)
-        {
-            return Result.Failure<IReadOnlyList<AgentMessage>>("Operation was cancelled.");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
         }
@@ -355,11 +347,7 @@ public sealed class JsonlSessionStore : ISessionStore
                 semaphore.Release();
             }
         }
-        catch (OperationCanceledException)
-        {
-            return Result.Failure("Operation was cancelled.");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Failed to delete session {SessionId}", sessionId);
             return Result.Failure(ex.Message);
@@ -460,11 +448,7 @@ public sealed class JsonlSessionStore : ISessionStore
             _messageCache.TryRemove(session.Id, out _);
             return Result.Success();
         }
-        catch (OperationCanceledException)
-        {
-            return Result.Failure("Operation was cancelled.");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Failed to update session {SessionId}", session.Id);
             return Result.Failure(ex.Message);

@@ -189,4 +189,97 @@ public class JsonlSessionStoreCancellationTests
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
+
+    [Test]
+    public async Task AppendMessageAsync_PreCancelledToken_PropagatesCancellation()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var message = new UserMessage("m1", "s1", DateTimeOffset.UtcNow, "hi", "code", "claude-opus-4");
+
+            await Assert.That(async () =>
+                await store.AppendMessageAsync("s1", message, cts.Token)
+            ).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task DeleteAsync_PreCancelledToken_PropagatesCancellation()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.That(async () =>
+                await store.DeleteAsync("s1", cts.Token)
+            ).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task UpdateAsync_PreCancelledToken_PropagatesCancellation()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
+            await Assert.That(created.IsSuccess).IsTrue();
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.That(async () =>
+                await store.UpdateAsync(created.Value, cts.Token)
+            ).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task GetMessagesAsync_PreCancelledToken_ExistingFile_PropagatesCancellation()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
+            await Assert.That(created.IsSuccess).IsTrue();
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            // Cache miss + existing file → ReadLineAsync(ct) observes cancellation.
+            await Assert.That(async () =>
+                await store.GetMessagesAsync(created.Value.Id, cts.Token)
+            ).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
 }
