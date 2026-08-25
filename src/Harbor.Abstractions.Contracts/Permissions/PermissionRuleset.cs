@@ -328,11 +328,15 @@ public sealed record PermissionRule(
 
     /// <summary>
     ///     Returns <see langword="true" /> if this rule applies to the given permission name
-    ///     (case-insensitive) or if <see cref="Permission" /> is <c>"*"</c>.
+    ///     (case-insensitive), if <see cref="Permission" /> is <c>"*"</c>, or — since sprint 6 C2 —
+    ///     if <see cref="Permission"/> names a <see cref="ToolCategory"/> that contains the tool
+    ///     (e.g. permission <c>"exec"</c> matches the <c>bash</c> tool).
     /// </summary>
     /// <param name="permission">The permission name to test.</param>
     public bool MatchesPermission(string permission) =>
-        Permission == "*" || Permission.Equals(permission, StringComparison.OrdinalIgnoreCase);
+        Permission == "*"
+        || Permission.Equals(permission, StringComparison.OrdinalIgnoreCase)
+        || ToolCategories.CategoryMatches(Permission, permission);
 
     /// <summary>
     ///     Returns <see langword="true" /> if <see cref="Pattern" /> matches the given argument path.
