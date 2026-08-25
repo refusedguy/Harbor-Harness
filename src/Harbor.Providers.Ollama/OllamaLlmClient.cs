@@ -111,48 +111,50 @@ public sealed class OllamaLlmClient : ILlmClient
         }
     }
 
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        // ROP-A ПР.9: network and parsing are separate failure modes with
+        // separate hints — "is the daemon up?" vs "response was not JSON".
+        Result.Try(
+                () => _http.GetStringAsync(string.Concat(_baseUrl, "/api/tags"), cancellationToken),
+                ex => $"Cannot connect to Ollama at {_baseUrl}. Is `ollama serve` running? {ex.Message}")
+            .Bind(json => Result.Try(
+                () => ParseModels(json),
+                ex => $"Ollama /api/tags returned invalid JSON: {ex.Message}"));
+
+    /// <summary>Pure projection of an /api/tags payload onto ModelInfo (throws on malformed JSON).</summary>
+    private static IReadOnlyList<ModelInfo> ParseModels(string json)
     {
-        try
+        using var doc = JsonDocument.Parse(json);
+        // Pre-size the models list only when the models array is present and has a known count.
+        List<ModelInfo>? models = null;
+        if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
         {
-            string response = await _http.GetStringAsync(string.Concat(_baseUrl, "/api/tags"), cancellationToken).ConfigureAwait(false);
-
-            using var doc = JsonDocument.Parse(response);
-            // Pre-size the models list only when the models array is present and has a known count.
-            List<ModelInfo>? models = null;
-            if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
+            models = new List<ModelInfo>(modelsArray.GetArrayLength());
+            foreach (var m in modelsArray.EnumerateArray())
             {
-                models = new List<ModelInfo>(modelsArray.GetArrayLength());
-                foreach (var m in modelsArray.EnumerateArray())
-                {
-                    string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                    if (string.IsNullOrEmpty(id)) continue;
+                string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+                if (string.IsNullOrEmpty(id)) continue;
 
-                    int ctx = m.TryGetProperty("model_info", out var info) &&
-                              info.TryGetProperty("context_length", out var ctxEl) &&
-                              ctxEl.ValueKind == JsonValueKind.Number
-                        ? ctxEl.GetInt32()
-                        : 4096;
+                int ctx = m.TryGetProperty("model_info", out var info) &&
+                          info.TryGetProperty("context_length", out var ctxEl) &&
+                          ctxEl.ValueKind == JsonValueKind.Number
+                    ? ctxEl.GetInt32()
+                    : 4096;
 
-                    models.Add(new ModelInfo(
-                        id,
-                        "ollama",
-                        id,
-                        ctx,
-                        ctx,
-                        false,
-                        false,
-                        true,
-                        Pricing.Unknown,
-                        "openai"));
-                }
+                models.Add(new ModelInfo(
+                    id,
+                    "ollama",
+                    id,
+                    ctx,
+                    ctx,
+                    false,
+                    false,
+                    true,
+                    Pricing.Unknown,
+                    "openai"));
             }
-            return Result.Success<IReadOnlyList<ModelInfo>>((IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>());
         }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<ModelInfo>>($"Failed to fetch Ollama models: {ex.Message}");
-        }
+        return (IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>();
     }
 
     private HttpRequestMessage BuildRequest(LlmRequest request)
