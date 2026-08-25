@@ -119,29 +119,36 @@ public sealed class AuthStore
     ///     config file OR available via env var). The boolean is <see langword="true" />
     ///     when the key is set.
     /// </summary>
+    /// <remarks>
+    ///     <b>ROP-C Z1:</b> the load-failure passthrough ladder rides a
+    ///     <c>Bind</c> chain — the env-var scan only runs on a successfully
+    ///     loaded config, and the failure propagates without a hand-rolled
+    ///     if-return.
+    /// </remarks>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A map of provider id → present?</returns>
-    public async Task<Result<IReadOnlyDictionary<string, bool>>> ListApiKeysAsync(CancellationToken ct = default)
+    public Task<Result<IReadOnlyDictionary<string, bool>>> ListApiKeysAsync(CancellationToken ct = default)
     {
-        var configResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
-        if (configResult.IsFailure) return Result.Failure<IReadOnlyDictionary<string, bool>>(configResult.Error);
+        return _configStore.LoadAsync(ct).Bind(config =>
+        {
+            Dictionary<string, bool> result = config.ApiKeys.ToDictionary(
+                static kv => kv.Key,
+                static kv => !string.IsNullOrEmpty(kv.Value),
+                StringComparer.OrdinalIgnoreCase);
 
-        var result = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kv in configResult.Value.ApiKeys)
-        {
-            result[kv.Key] = !string.IsNullOrEmpty(kv.Value);
-        }
-        // Also check env vars
-        foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
-        {
-            string? key = env.Key?.ToString();
-            if (key is null) continue;
-            if (key.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase))
+            // Also check env vars
+            foreach (var env in Environment.GetEnvironmentVariables().Cast<DictionaryEntry>())
             {
-                string pid = key[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
-                if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
+                string? key = env.Key?.ToString();
+                if (key is null) continue;
+                if (key.EndsWith("_API_KEY", StringComparison.OrdinalIgnoreCase))
+                {
+                    string pid = key[..^"_API_KEY".Length].ToLowerInvariant().Replace('_', '-');
+                    if (!result.ContainsKey(pid)) result[pid] = env.Value is string s && !string.IsNullOrEmpty(s);
+                }
             }
-        }
-        return Result.Success<IReadOnlyDictionary<string, bool>>(result);
+
+            return Result.Success<IReadOnlyDictionary<string, bool>>(result);
+        });
     }
 }
