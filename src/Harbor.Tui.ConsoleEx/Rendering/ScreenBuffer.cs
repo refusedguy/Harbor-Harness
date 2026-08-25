@@ -247,6 +247,14 @@ public sealed class ScreenBuffer
         return RowHash[y];
     }
 
+    /// <summary>Copies an authoritative row hash from another buffer (the
+    /// diff uses this to keep FRONT's cache in lockstep with BACK).</summary>
+    internal void AdoptRowHash(ScreenBuffer source, int y)
+    {
+        RowHash[y] = source.RowHash[y];
+        _rowHashValid[y] = true;
+    }
+
     private void ComputeRowHash(int y)
     {
         int baseIndex = y * Cols;

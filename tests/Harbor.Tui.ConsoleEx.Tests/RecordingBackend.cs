@@ -25,6 +25,22 @@ internal sealed class RecordingBackend : ITerminalBackend
         }
     }
 
+    public long TotalBytes
+    {
+        get
+        {
+            long total = 0;
+            foreach (var w in _writes)
+            {
+                total += w.Length;
+            }
+
+            return total;
+        }
+    }
+
+    public void ResetForTests() => _writes.Clear();
+
     /// <summary>Control characters rendered visible (\e, \r, \n) so TUnit
     /// comparisons never see raw CR/LF.</summary>
     public string Escaped => Text
