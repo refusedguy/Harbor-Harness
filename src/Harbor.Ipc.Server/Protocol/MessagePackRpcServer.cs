@@ -320,7 +320,7 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
                 }
             }
 
-            _broadcaster.Unregister(stream);
+            await _broadcaster.UnregisterAsync(stream).ConfigureAwait(false);
             try { await stream.DisposeAsync().ConfigureAwait(false); }
             catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "Suppress stream dispose error"); }
             writeLock.Dispose();

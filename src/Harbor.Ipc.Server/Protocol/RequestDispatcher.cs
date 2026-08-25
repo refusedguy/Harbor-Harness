@@ -74,7 +74,7 @@ public sealed class RequestDispatcher
                 ListProvidersRequest r => await HandleListProvidersAsync(r, ct).ConfigureAwait(false),
                 ListModelsRequest r => await HandleListModelsAsync(r, ct).ConfigureAwait(false),
                 ListToolsRequest r => await HandleListToolsAsync(r, ct).ConfigureAwait(false),
-                SubscribeToEventsRequest r => HandleSubscribeToEvents(r, replyStream, replyWriteLock),
+                SubscribeToEventsRequest r => await HandleSubscribeToEventsAsync(r, replyStream, replyWriteLock).ConfigureAwait(false),
                 ConnectRequest r => new OkResponse { RequestId = r.RequestId },
                 DisconnectRequest r => new OkResponse { RequestId = r.RequestId },
                 _ => new ErrorResponse { RequestId = request.RequestId, Message = $"Unknown request type: {request.GetType().Name}" }
@@ -221,7 +221,7 @@ public sealed class RequestDispatcher
 
     // ── Streaming events ───────────────────────────────────────────────────
 
-    private HarborResponse HandleSubscribeToEvents(
+    private async Task<HarborResponse> HandleSubscribeToEventsAsync(
         SubscribeToEventsRequest r,
         Stream? replyStream,
         SemaphoreSlim? replyWriteLock)
@@ -231,7 +231,29 @@ public sealed class RequestDispatcher
             return new ErrorResponse { RequestId = r.RequestId, Message = "Cannot subscribe: no reply stream / write lock" };
         }
 
-        _broadcaster.Register(replyStream, replyWriteLock);
-        return new OkResponse { RequestId = r.RequestId };
+        EventBroadcaster.SubscriptionAckData ack = await _broadcaster
+            .RegisterAsync(replyStream, replyWriteLock, r.LastSequence)
+            .ConfigureAwait(false);
+
+        return new OkResponse
+        {
+            RequestId = r.RequestId,
+            Payload = WireCodec.SerializeDomain(
+                new SubscriptionAck { ServerSequence = ack.ServerSequence, ResyncRequired = ack.ResyncRequired })
+        };
     }
+}
+
+/// <summary>
+///     Payload of the SubscribeToEvents ack: the server's current envelope
+///     sequence and whether the client must rebuild from a fresh snapshot.
+///     Serialized into the subscribe OkResponse payload via WireCodec.
+/// </summary>
+[MessagePackObject]
+public sealed record SubscriptionAck(
+    [property: Key(0)] ulong ServerSequence,
+    [property: Key(1)] bool ResyncRequired)
+{
+    /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
+    public SubscriptionAck() : this(0, false) { }
 }

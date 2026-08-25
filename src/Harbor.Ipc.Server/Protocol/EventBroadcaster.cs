@@ -8,57 +8,66 @@ namespace Harbor.Ipc.Protocol;
 ///         once and projects each <see cref="AgentEvent" /> down to a
 ///         <see cref="HarborEvent" /> (using a projection identical to
 ///         <c>InProcessHarborClient.ProjectEvent</c>). Each projected event
-///         is then serialized into an <see cref="EventEnvelope" /> and
-///         pushed to every registered client stream concurrently.
+///         is serialized once into an <see cref="EventEnvelope" />, stamped
+///         with a monotonic <see cref="EventEnvelope.Sequence"/>, appended to
+///         the replay ring, and fanned out into each registered client's
+///         outbound queue.
 ///     </para>
-    ///     <para>
-    ///         <b>Failure isolation:</b> if writing to one client throws
-    ///         (broken pipe, client gone), the broadcaster removes that client
-    ///         from its registration list and continues broadcasting to the
-    ///         remaining clients. One dead client never blocks the others.
-    ///     </para>
-    ///     <para>
-    ///         <b>Fan-out budget (B4):</b> the envelope is serialized once and
-    ///         delivered to all clients concurrently via fully-observed tasks,
-    ///         each bounded by a ~250 ms per-client write budget (lock acquire +
-    ///         frame write). A slow or stuck client is unregistered when its
-    ///         budget lapses instead of delaying every other client or the
-    ///         publishing agent loop.
-    ///     </para>
 ///     <para>
-///         <b>Frame integrity:</b> each registered client carries its own
+///         <b>Per-client writer tasks (B4/A4):</b> fan-out never touches the
+///         wire directly — each client owns a bounded outbound channel and a
+///         dedicated writer task that serializes frames through the shared
+///         per-client write lock under a ~250 ms budget. One slow or stuck
+///         client fills its own queue and gets evicted; nobody else stalls,
+///         and the publishing agent loop never blocks on I/O.
+///     </para>
+///     <para>
+///         <b>Failure isolation:</b> a writer that times out or throws closes
+///         the client's stream (never silently drops it) — the client's read
+///         loop sees EOF and can reconnect, rather than waiting forever on a
+///         subscription that stopped delivering.
+///     </para>
+///     <para>
+///         <b>Replay (A1):</b> the ring retains the last
+///         <see cref="MaxReplayEnvelopes"/> envelopes. A reconnecting client
+///         sends its <see cref="SubscribeToEventsRequest.LastSequence"/>; gaps
+///         that fit the ring are replayed into its outbound queue BEFORE live
+///         delivery starts (single queue ⇒ order preserved); larger gaps get
+///         <c>ResyncRequired</c> so the client rebuilds from a fresh snapshot.
+///     </para>
+///     <para>
+///         <b>Frame integrity:</b> each client carries its own
 ///         <see cref="SemaphoreSlim" /> write lock — the same lock the
-///         per-client RPC loop uses to serialize its direct responses.
-///         Without this, broadcaster-pushed <see cref="EventEnvelope" />
-///         frames could interleave with dispatcher-written
-///         <see cref="OkResponse" /> / <see cref="ErrorResponse" /> frames
-///         on the same stream and corrupt the wire.
+///         per-client RPC loop uses for direct responses, so
+///         broadcaster-pushed <see cref="EventEnvelope" /> frames never
+///         interleave with dispatcher-written responses on the wire.
 ///     </para>
 /// </remarks>
 public sealed class EventBroadcaster : IAsyncDisposable
 {
-    private readonly List<ClientRegistration> _clients = new();
+    /// <summary>Reconnect replay window (A1 MAX_GAP): envelopes retained server-side.</summary>
+    public const int MaxReplayEnvelopes = 1000;
+
     private readonly Lock _clientsLock = new();
+    private readonly List<ClientRegistration> _clients = new();
     private readonly IEventBus _eventBus;
     private readonly ILogger<EventBroadcaster> _logger;
+
+    // Replay ring: fixed-capacity, overwrite-in-place (same shape as the
+    // event bus scrollback). Envelopes are immutable; readers copy under lock.
+    private readonly EventEnvelope[] _ring = new EventEnvelope[MaxReplayEnvelopes];
+    private int _ringHead;
+    private int _ringCount;
+
+    // B4: per-client write budget — one slow/stuck client must never hold a
+    // wire slot longer than this.
+    private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
+
     private ulong _sequence;
     private int _currentTurn;
     private int _disposed;
     private IDisposable? _eventBusSubscription;
     private TaskCompletionSource<bool>? _subscriptionReady;
-
-    // B4: per-client write budget — one slow/stuck client must never delay
-    // delivery to the others (nor block the publishing agent loop) longer
-    // than this.
-    private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
-
-    // B4: cheap snapshot cache. Membership mutations bump
-    // <see cref="_membershipVersion" />; broadcasts rebuild the array only
-    // when the version changed, so the steady state costs one integer
-    // compare per event.
-    private int _membershipVersion;
-    private ClientRegistration[] _cachedSnapshot = Array.Empty<ClientRegistration>();
-    private int _snapshotVersion = -1;
 
     /// <summary>
     ///     Construct a broadcaster. Call <see cref="Start" /> to begin
@@ -75,13 +84,17 @@ public sealed class EventBroadcaster : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _eventBusSubscription?.Dispose();
-        // Note: we don't dispose the client streams here — the per-client
-        // RPC loop in MessagePackRpcServer owns them and disposes them on
-        // disconnect. We only drop our references.
+
+        List<ClientRegistration> members;
         lock (_clientsLock)
         {
+            members = new List<ClientRegistration>(_clients);
             _clients.Clear();
-            _membershipVersion++;
+        }
+
+        foreach (var client in members)
+        {
+            await client.StopWriterAsync().ConfigureAwait(false);
         }
     }
 
@@ -103,50 +116,100 @@ public sealed class EventBroadcaster : IAsyncDisposable
     }
 
     /// <summary>
-    ///     Register a client stream to receive future events. The
-    ///     <paramref name="writeLock" /> is the same lock the per-client
-    ///     RPC loop uses to serialize its direct responses — sharing it
-    ///     ensures broadcaster-pushed events and dispatcher responses
-    ///     never interleave half-frames on the wire.
+    ///     Register a client stream for event delivery, optionally replaying
+    ///     everything after <paramref name="lastSequence" /> (the client's
+    ///     last processed <see cref="EventEnvelope.Sequence"/>).
     /// </summary>
-    public void Register(Stream clientStream, SemaphoreSlim writeLock)
+    /// <param name="clientStream">The client's reply stream.</param>
+    /// <param name="writeLock">
+    ///     Per-client write lock shared with the RPC server's response path.
+    /// </param>
+    /// <param name="lastSequence">
+    ///     Null = first subscription (no replay). Non-null = replay request.
+    /// </param>
+    /// <returns>The ack data delivered to the subscriber.</returns>
+    public async Task<SubscriptionAckData> RegisterAsync(
+        Stream clientStream,
+        SemaphoreSlim writeLock,
+        ulong? lastSequence)
     {
+        var registration = new ClientRegistration(clientStream, writeLock);
+
+        bool resyncRequired = false;
         lock (_clientsLock)
         {
             // Replace any existing registration for the same stream.
+            bool replaced = false;
             for (int i = 0; i < _clients.Count; i++)
             {
                 if (ReferenceEquals(_clients[i].Stream, clientStream))
                 {
-                    _clients[i] = new ClientRegistration(clientStream, writeLock);
-                    _membershipVersion++;
-                    return;
+                    _clients[i] = registration;
+                    replaced = true;
+                    break;
                 }
             }
-            _clients.Add(new ClientRegistration(clientStream, writeLock));
-            _membershipVersion++;
-            _subscriptionReady?.TrySetResult(true);
+
+            if (!replaced)
+            {
+                // Gap/replay bookkeeping only matters for a fresh connection.
+                ulong oldest = OldestSequenceUnsafe();
+                if (lastSequence.HasValue)
+                {
+                    if (lastSequence.Value + 1 >= oldest || _ringCount == 0)
+                    {
+                        // Gap fits the replay window: enqueue every buffered
+                        // envelope newer than the client's position, in order.
+                        // Membership is added AFTER these are queued, so the
+                        // single outbound channel guarantees replay-before-live.
+                        ReplayIntoUnsafe(registration, lastSequence.Value);
+                    }
+                    else
+                    {
+                        // The client missed more than we retain — it must
+                        // rebuild from a fresh snapshot.
+                        resyncRequired = true;
+                    }
+                }
+
+                _clients.Add(registration);
+            }
         }
+
+        registration.StartWriter(_logger);
+        _subscriptionReady?.TrySetResult(true);
+
+        return new SubscriptionAckData
+        {
+            ServerSequence = Volatile.Read(ref _sequence),
+            ResyncRequired = resyncRequired
+        };
     }
 
     /// <summary>
-    ///     Remove a client stream from the broadcast list. Does NOT dispose
-    ///     the stream or the lock — the per-client RPC loop owns those and
-    ///     will clean them up when the connection closes.
+    ///     Remove a client stream from the broadcast list and stop its writer.
+    ///     Does NOT dispose the stream or the lock — the per-client RPC loop
+    ///     owns those and cleans up when the connection closes.
     /// </summary>
-    public void Unregister(Stream clientStream)
+    public async Task UnregisterAsync(Stream clientStream)
     {
+        ClientRegistration? removed = null;
         lock (_clientsLock)
         {
             for (int i = 0; i < _clients.Count; i++)
             {
                 if (ReferenceEquals(_clients[i].Stream, clientStream))
                 {
+                    removed = _clients[i];
                     _clients.RemoveAt(i);
-                    _membershipVersion++;
-                    return;
+                    break;
                 }
             }
+        }
+
+        if (removed is not null)
+        {
+            await removed.StopWriterAsync().ConfigureAwait(false);
         }
     }
 
@@ -155,127 +218,105 @@ public sealed class EventBroadcaster : IAsyncDisposable
         var projected = ProjectEvent(evt);
         if (projected is null) return;
 
-        // Serialize the envelope exactly once, before the fan-out loop.
-        // Sequence is assigned per published event (A1): clients dedup and
-        // bookkeep reconnect replay by it. Target stays null until A3 wires
-        // session-lease addressing.
         var data = HarborEventMapping.ToData(projected);
         byte[] eventBytes = MessagePackSerializer.Serialize(data, cancellationToken: ct);
-        ulong sequence = Interlocked.Increment(ref _sequence);
         var envelope = new EventEnvelope
         {
             EventBytes = eventBytes,
-            Sequence = sequence,
+            Sequence = Interlocked.Increment(ref _sequence),
             TargetClientId = null
         };
 
-        ClientRegistration[] snapshot = SnapshotClients();
+        AppendRing(envelope);
+
+        ClientRegistration[] snapshot;
+        lock (_clientsLock)
+        {
+            snapshot = new ClientRegistration[_clients.Count];
+            for (int i = 0; i < _clients.Count; i++)
+            {
+                snapshot[i] = _clients[i];
+            }
+        }
+
         if (snapshot.Length == 0) return;
 
-        // B4: deliver concurrently with a per-client write budget. Every send is
-        // a bounded, fully-observed task — no unobserved fire-and-forget. A
-        // client that times out or throws is marked dead and unregistered after
-        // the fan-out completes; it can never stall the others or the agent loop.
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(ClientWriteTimeout);
-
-        var sends = new Task[snapshot.Length];
-        var alive = new bool[snapshot.Length];
+        // Fan-out = non-blocking enqueue into per-client queues. A client
+        // whose queue is full is evicted below (it stopped reading — the
+        // wire budget cannot save it anyway).
+        bool[] alive = new bool[snapshot.Length];
         for (int i = 0; i < snapshot.Length; i++)
         {
-            sends[i] = SendToClientAsync(snapshot[i], envelope, timeoutCts.Token, alive, i);
+            alive[i] = snapshot[i].TryDeliver(envelope);
         }
 
-        await Task.WhenAll(sends).ConfigureAwait(false);
-
-        RemoveDeadClients(snapshot, alive);
+        for (int i = 0; i < snapshot.Length; i++)
+        {
+            if (!alive[i])
+            {
+                _logger.LogDebug("Evicting client whose outbound queue is full");
+                await EvictAsync(snapshot[i]).ConfigureAwait(false);
+            }
+        }
     }
 
-    /// <summary>
-    ///     One bounded send to one client: take the per-client write lock within
-    ///     the budget, push the pre-serialized envelope, release the lock. Any
-    ///     failure — timeout, broken pipe, shutdown cancellation — marks the
-    ///     client dead instead of throwing to the fan-out loop.
-    /// </summary>
-    private async Task SendToClientAsync(
-        ClientRegistration client,
-        EventEnvelope envelope,
-        CancellationToken writeCt,
-        bool[] alive,
-        int index)
+    private async Task EvictAsync(ClientRegistration dead)
     {
-        try
+        bool removed = false;
+        lock (_clientsLock)
         {
-            // Take the per-client write lock so broadcaster-pushed frames never
-            // interleave with dispatcher response frames on the same stream.
-            if (!await client.WriteLock.WaitAsync(ClientWriteTimeout, writeCt).ConfigureAwait(false))
+            for (int i = 0; i < _clients.Count; i++)
             {
-                return; // could not acquire the lock within budget → treat as dead
-            }
-            try
-            {
-                await WireCodec.WriteResponseAsync(client.Stream, envelope, writeCt).ConfigureAwait(false);
-                alive[index] = true;
-            }
-            finally
-            {
-                client.WriteLock.Release();
+                if (ReferenceEquals(_clients[i].Stream, dead.Stream))
+                {
+                    _clients.RemoveAt(i);
+                    removed = true;
+                    break;
+                }
             }
         }
-        catch (Exception ex)
+
+        if (removed)
         {
-            _logger.LogDebug(ex, "Client stream write failed or timed out; unregistering");
+            await dead.StopWriterAsync().ConfigureAwait(false);
+            // Close the stream so the CLIENT notices immediately (EOF on its
+            // read loop) instead of silently losing the subscription — this
+            // is what makes reconnect possible at all.
+            try { await dead.Stream.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Suppress evicted-stream dispose error"); }
         }
     }
 
-    private void RemoveDeadClients(ClientRegistration[] snapshot, bool[] alive)
+    // ── Replay ring ────────────────────────────────────────────────────────
+
+    private void AppendRing(EventEnvelope envelope)
     {
         lock (_clientsLock)
         {
-            bool removedAny = false;
-            for (int i = 0; i < snapshot.Length; i++)
+            if (_ringCount < MaxReplayEnvelopes)
             {
-                if (alive[i]) continue;
-
-                for (int j = 0; j < _clients.Count; j++)
-                {
-                    if (ReferenceEquals(_clients[j].Stream, snapshot[i].Stream))
-                    {
-                        _clients.RemoveAt(j);
-                        removedAny = true;
-                        break;
-                    }
-                }
+                _ring[(_ringHead + _ringCount) % MaxReplayEnvelopes] = envelope;
+                _ringCount++;
             }
-
-            if (removedAny)
+            else
             {
-                _membershipVersion++;
+                _ring[_ringHead] = envelope;
+                _ringHead = (_ringHead + 1) % MaxReplayEnvelopes;
             }
         }
-        // Don't dispose the streams here — the per-client RPC loop owns them.
     }
 
-    /// <summary>
-    ///     Snapshot of the registered clients, cached across broadcasts and
-    ///     rebuilt only when membership actually changed (B4).
-    /// </summary>
-    private ClientRegistration[] SnapshotClients()
-    {
-        lock (_clientsLock)
-        {
-            if (_snapshotVersion != _membershipVersion)
-            {
-                var clients = new ClientRegistration[_clients.Count];
-                for (int i = 0; i < _clients.Count; i++)
-                {
-                    clients[i] = _clients[i];
-                }
-                _cachedSnapshot = clients;
-                _snapshotVersion = _membershipVersion;
-            }
+    /// <summary>Sequence of the OLDEST retained envelope (next sequence when empty).</summary>
+    private ulong OldestSequenceUnsafe()
+        => _ringCount == 0 ? _sequence + 1 : _ring[_ringHead].Sequence;
 
-            return _cachedSnapshot;
+    private void ReplayIntoUnsafe(ClientRegistration registration, ulong lastSeen)
+    {
+        for (int i = 0; i < _ringCount; i++)
+        {
+            var envelope = _ring[(_ringHead + i) % MaxReplayEnvelopes];
+            if (envelope.Sequence <= lastSeen) continue;
+            registration.TryDeliver(envelope);
         }
     }
 
@@ -341,21 +382,138 @@ public sealed class EventBroadcaster : IAsyncDisposable
     }
 
     /// <summary>
-    ///     A registered client connection: its reply stream plus the
-    ///     per-client write lock that serializes all writes to that stream.
+    ///     Data returned to a subscribing client: the server's current
+    ///     sequence plus whether it must rebuild from a snapshot.
+    ///     Serialized into the subscribe OkResponse payload.
+    /// </summary>
+    public sealed class SubscriptionAckData
+    {
+        /// <summary>Server's most recently assigned envelope sequence.</summary>
+        public ulong ServerSequence { get; init; }
+
+        /// <summary>True when the client's gap exceeds the replay window.</summary>
+        public bool ResyncRequired { get; init; }
+    }
+
+    /// <summary>
+    ///     A registered client: its reply stream, the shared write lock, and
+    ///     a bounded outbound queue drained by a dedicated writer task.
     /// </summary>
     private sealed class ClientRegistration
     {
+        // Bounded honestly: TryWrite failing means the client stopped
+        // consuming at wire speed — eviction, not silent growth.
+        private readonly Channel<EventEnvelope> _outbound =
+            Channel.CreateBounded<EventEnvelope>(new BoundedChannelOptions(4096)
+            {
+                SingleReader = true,
+                SingleWriter = false,
+                FullMode = BoundedChannelFullMode.Wait
+            });
 
         public ClientRegistration(Stream stream, SemaphoreSlim writeLock)
         {
             Stream = stream;
             WriteLock = writeLock;
         }
+
         /// <summary>The client's reply stream.</summary>
         public Stream Stream { get; }
 
         /// <summary>Per-client write lock shared with the RPC server's per-client loop.</summary>
         public SemaphoreSlim WriteLock { get; }
+
+        private CancellationTokenSource? _writerCts;
+        private Task? _writerTask;
+
+        /// <summary>Queue one envelope; false when the client must be evicted.</summary>
+        public bool TryDeliver(EventEnvelope envelope) => _outbound.Writer.TryWrite(envelope);
+
+        /// <summary>Spawn the background writer draining the queue to the wire.</summary>
+        public void StartWriter(ILogger logger)
+        {
+            _writerCts = new CancellationTokenSource();
+            _writerTask = WriteLoopAsync(_writerCts.Token, logger);
+        }
+
+        /// <summary>Complete the queue and await the writer's exit.</summary>
+        public async Task StopWriterAsync()
+        {
+            _outbound.Writer.TryComplete();
+            if (_writerCts is not null)
+            {
+                try { await _writerCts.CancelAsync().ConfigureAwait(false); }
+                catch (ObjectDisposedException ex)
+                {
+                    // Already torn down by a concurrent stop — nothing to do.
+                    _ = ex;
+                }
+            }
+
+            if (_writerTask is not null)
+            {
+                try { await _writerTask.ConfigureAwait(false); }
+                catch (OperationCanceledException)
+                {
+                    // Expected on stop.
+                }
+                catch (Exception ex)
+                {
+                    // The stream was already broken; the eviction path owns
+                    // the teardown, so a fault here carries no new signal.
+                    _ = ex.Message;
+                }
+            }
+
+            if (_writerCts is not null)
+            {
+                _writerCts.Dispose();
+                _writerCts = null;
+            }
+        }
+
+        private async Task WriteLoopAsync(CancellationToken ct, ILogger logger)
+        {
+            try
+            {
+                await foreach (var envelope in _outbound.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                {
+                    if (!await WriteLock.WaitAsync(ClientWriteTimeout, ct).ConfigureAwait(false))
+                    {
+                        // Could not take the wire within budget → client too slow.
+                        await EvictSelfAsync(logger).ConfigureAwait(false);
+                        return;
+                    }
+
+                    using var frameCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    frameCts.CancelAfter(ClientWriteTimeout);
+                    try
+                    {
+                        await WireCodec.WriteResponseAsync(Stream, envelope, frameCts.Token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        WriteLock.Release();
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown path.
+            }
+            catch (Exception ex)
+            {
+                // Broken pipe / timeout: tear THIS client down loudly — the
+                // stream close gives the client a clean reconnect signal.
+                logger.LogDebug(ex, "Client writer failed; closing stream");
+                await EvictSelfAsync(logger).ConfigureAwait(false);
+            }
+        }
+
+        private async Task EvictSelfAsync(ILogger logger)
+        {
+            try { await Stream.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { logger.LogDebug(ex, "Supress stream dispose during eviction"); }
+        }
     }
 }
