@@ -45,6 +45,15 @@ public sealed class EscapeSequenceParser
     private MouseButton _mousePressedButton;
     private bool _mouseMovedSincePress;
 
+    // Bracketed-paste payload assembly (§4). The payload buffer is reused
+    // across pastes; only the final UTF-8 decode allocates one string.
+    private byte[]? _pasteBuffer;
+    private int _pasteLength;
+    private bool _pasteTruncated;
+    private int _pasteMarkerProgress;
+
+    private static readonly byte[] PasteClose = [(byte)0x1B, (byte)'[', (byte)'2', (byte)'0', (byte)'1', (byte)'~'];
+
     public EscapeSequenceParser(ParserOptions? options = null)
     {
         _options = options ?? new ParserOptions();
@@ -59,6 +68,10 @@ public sealed class EscapeSequenceParser
 
     /// <summary>True while a bracketed paste block has not been closed yet.</summary>
     public bool IsAwaitingPasteClose { get; private set; }
+
+    /// <summary>Nested open markers (200~ without close) seen inside paste
+    /// blocks — treated as literal content per §4.2 #5.</summary>
+    public int NestedPasteMarkerCount { get; private set; }
 
     /// <summary>Feeds a chunk of raw stdin bytes. Chunks may split escape
     /// sequences or UTF-8 characters at any byte boundary.</summary>
@@ -88,19 +101,6 @@ public sealed class EscapeSequenceParser
             IgnoredSequenceCount++;
             _state = ParserState.Ground;
         }
-    }
-
-    /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
-    /// emitting whatever was accumulated as a truncated paste.</summary>
-    public void AbortPendingPaste()
-    {
-        if (!IsAwaitingPasteClose)
-        {
-            return;
-        }
-
-        EmitPaste(wasTruncated: true);
-        _state = ParserState.Ground;
     }
 
     /// <summary>Returns every queued event to a reusable list. Allocates only
@@ -136,6 +136,9 @@ public sealed class EscapeSequenceParser
         ResetSequenceBuffers();
         _utf8.Reset();
         IsAwaitingPasteClose = false;
+        _pasteLength = 0;
+        _pasteTruncated = false;
+        _pasteMarkerProgress = 0;
         _mousePressedButton = MouseButton.None;
         _mouseMovedSincePress = false;
         _state = ParserState.Ground;
@@ -585,6 +588,13 @@ public sealed class EscapeSequenceParser
                 EnqueueArrow(KeyCode.End, parameters);
                 return;
             case (byte)'~':
+                if (FirstIntParam(parameters) == 200)
+                {
+                    // Bracketed-paste open marker: CSI 200 ~ (§4.1).
+                    StartPaste();
+                    return;
+                }
+
                 DecodeLegacyTilde(parameters);
                 return;
             case (byte)'u':
@@ -927,18 +937,103 @@ public sealed class EscapeSequenceParser
         _state = ParserState.Ground;
     }
 
-    // ── Bracketed paste (zone З.3 wires the marker matcher below) ─────────
+    // ── Bracketed paste (§4) ──────────────────────────────────────────────
+
+    /// <summary>Anti-injection invariant (§4.2): paste content is copied
+    /// verbatim into one atomic PasteEvent — escape bytes and control bytes
+    /// inside the block are NEVER decoded as key/mouse events.</summary>
+    private void StartPaste()
+    {
+        _pasteBuffer ??= new byte[_options.MaxPasteBytes];
+        _pasteLength = 0;
+        _pasteTruncated = false;
+        _pasteMarkerProgress = 0;
+        IsAwaitingPasteClose = true;
+        _state = ParserState.PastePayload;
+    }
 
     private void PastePayloadByte(byte b)
     {
-        _ = b; // zone З.3 replaces this stub: paste state is unreachable until then
-        IgnoredSequenceCount++;
+        if (_pasteMarkerProgress > 0 && b == PasteClose[_pasteMarkerProgress])
+        {
+            // Continue matching the closing marker ESC [ 2 0 1 ~.
+            if (_pasteMarkerProgress == PasteClose.Length - 1)
+            {
+                EmitPaste(_pasteTruncated);
+                return;
+            }
+
+            _pasteMarkerProgress++;
+            return;
+        }
+
+        // Mismatch: the partial marker match was literal content after all.
+        if (_pasteMarkerProgress > 0)
+        {
+            // A nested OPEN marker (…200~) shares its prefix with the closer —
+            // count it for diagnostics, content stays literal (§4.2 #5).
+            if (_pasteMarkerProgress == 4 && b == (byte)'0')
+            {
+                NestedPasteMarkerCount++;
+            }
+
+            for (var i = 0; i < _pasteMarkerProgress; i++)
+            {
+                AppendPasteByte(PasteClose[i]);
+            }
+
+            _pasteMarkerProgress = 0;
+        }
+
+        if (b == PasteClose[0])
+        {
+            _pasteMarkerProgress = 1;
+            return;
+        }
+
+        AppendPasteByte(b);
+    }
+
+    private void AppendPasteByte(byte b)
+    {
+        if (_pasteBuffer is null || _pasteLength >= _pasteBuffer.Length)
+        {
+            // Paste-flood guard (§8.3): drop beyond cap but keep scanning so
+            // the closing marker still terminates the block cleanly.
+            _pasteTruncated = true;
+            return;
+        }
+
+        _pasteBuffer[_pasteLength++] = b;
+    }
+
+    /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
+    /// emitting whatever was accumulated as a truncated paste.</summary>
+    public void AbortPendingPaste()
+    {
+        if (!IsAwaitingPasteClose)
+        {
+            return;
+        }
+
+        _pasteMarkerProgress = 0;
+        EmitPaste(wasTruncated: true);
         _state = ParserState.Ground;
     }
 
     private void EmitPaste(bool wasTruncated)
     {
-        _ = wasTruncated; // zone З.3 replaces this stub with payload assembly
+        var text = _pasteBuffer is null || _pasteLength == 0
+            ? string.Empty
+            : Encoding.UTF8.GetString(_pasteBuffer, 0, _pasteLength);
+
+        _pasteLength = 0;
+        _pasteTruncated = false;
+        _pasteMarkerProgress = 0;
+        IsAwaitingPasteClose = false;
+        _state = ParserState.Ground;
+
+        Enqueue(InputEvent.FromPaste(new PasteEvent(text, wasTruncated)));
     }
 
     // ── Param scanning helpers (scalar, zero-alloc) ───────────────────────
