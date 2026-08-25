@@ -11,8 +11,6 @@
     <ProjectReference Include="../../src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="TUnit"/>
-  </ItemGroup>
+  <!-- TUnit comes from the global IsTestProject injection in /Directory.Build.targets -->
 
 </Project>
