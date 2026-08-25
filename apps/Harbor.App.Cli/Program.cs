@@ -11,6 +11,8 @@ using Harbor.Cli.Repl;
 using Harbor.Core.Configuration;
 using Harbor.Core.Onboarding;
 using Harbor.Ipc;
+using Harbor.Ipc.Protocol;
+using Harbor.Tui.Ansi;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -117,6 +119,7 @@ public static class Program
         {
             new LogsCommand(Console.Out, Console.Error),
             new DaemonCommand(Console.Out, Console.Error),
+            new StatusCommand(Console.Out, Console.Error),
         };
         if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
@@ -195,6 +198,7 @@ public static class Program
 
         await StartIpcAsync(host.Services).ConfigureAwait(false);
         Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'");
+        PrintPairingBlock(host.Services);
         _logger.LogInformation("Daemon ready on {Endpoint} — waiting for clients or shutdown signal", server.Endpoint);
 
         using var shutdownCts = new CancellationTokenSource();
@@ -265,6 +269,32 @@ public static class Program
     }
 
     /// <summary>
+    ///     When a networked listener is configured, print the pairing block:
+    ///     the canonical harbor:// pairing code plus its QR (address follows
+    ///     tailscale &gt; lan &gt; loopback priority, so peers outside the
+    ///     LAN get the tailnet address — never eth0). Best-effort: a QR
+    ///     failure never blocks daemon startup.
+    /// </summary>
+    private static void PrintPairingBlock(IServiceProvider services)
+    {
+        var pairing = services.GetService<DaemonPairingInfo>();
+        if (pairing is null) return;
+
+        Console.WriteLine();
+        Console.WriteLine("Remote pairing:");
+        Console.WriteLine($"  {pairing.Code}");
+        Console.WriteLine($"  PSK file: {PskStore.DefaultPath}");
+        try
+        {
+            Console.WriteLine(TerminalQrRenderer.Render(new Uri(pairing.Code)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "QR rendering failed; the text pairing code above remains authoritative");
+        }
+    }
+
+    /// <summary>
     ///     Start the IPC layer based on the active HARBOR_MODE:
     ///     <list type="bullet">
     ///         <item><c>inprocess</c> — no-op (InProcessHarborClient has no transport).</item>
@@ -279,8 +309,9 @@ public static class Program
         string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
-            var server = services.GetService<IHarborServer>();
-            if (server is not null)
+            // Every registered server starts: the local pipe/UDS listener and
+            // — when HARBOR_LISTEN is configured — the networked TCP one.
+            foreach (var server in services.GetServices<IHarborServer>())
             {
                 _logger.LogInformation("Starting IPC server at {Endpoint}", server.Endpoint);
                 await server.StartAsync().ConfigureAwait(false);

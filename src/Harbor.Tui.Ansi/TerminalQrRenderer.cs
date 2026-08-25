@@ -7,51 +7,68 @@ using System.Runtime.CompilerServices;
 ///     Renders a <see cref="Uri"/> as a QR code using Unicode half-blocks
 ///     (█ ▀ ▄) — no GDI, no System.Drawing, no external packages.
 /// </summary>
+/// <remarks>
+///     Version auto-selection: v2-L (~30 byte payloads) or v4-L (~62 byte
+///     payloads, e.g. a full pairing URI with PSK). Reed-Solomon over
+///     GF(2^8) primitive 0x11d; fixed mask pattern 000.
+/// </remarks>
 public static class TerminalQrRenderer
 {
-    private const int Version = 2;
-    private const int ModuleCount = 25;
-    private const int ErrorCorrectionLevel = 0; // L
+    private readonly record struct QrSpec(int ModuleCount, int DataCodewords, int EccLen, int[] AlignmentCenters);
+
+    // v2-L: 44 total codewords = 34 data + 26 ecc, one block, alignment {6,18}.
+    private static readonly QrSpec SpecV2 = new(25, 34, 26, [6, 18]);
+    // v4-L: 80 total codewords = 64 data + 16 ecc, one block, alignment {6,26}.
+    private static readonly QrSpec SpecV4 = new(33, 64, 16, [6, 26]);
 
     public static string Render(Uri uri)
     {
         if (uri is null) throw new ArgumentNullException(nameof(uri));
-        string text = uri.ToString();
+        return Render(uri.ToString());
+    }
+
+    private static string Render(string text)
+    {
         if (text.Length == 0) return string.Empty;
 
-        var matrix = Encode(text);
+        int bytes = System.Text.Encoding.UTF8.GetByteCount(text);
+        // Header costs one codeword (mode + 8-bit count).
+        QrSpec spec = bytes <= SpecV2.DataCodewords - 1 ? SpecV2 : SpecV4;
+
+        var matrix = Encode(text, spec);
         return RenderMatrix(matrix);
     }
 
-    private static bool[,] Encode(string text)
+    private static bool[,] Encode(string text, QrSpec spec)
     {
         byte[] data = System.Text.Encoding.UTF8.GetBytes(text);
-        if (data.Length > 34) data = data[..34];
+        int capacity = spec.DataCodewords - 1;
+        if (data.Length > capacity) data = data[..capacity];
 
-        int ecCount = 26;
-        byte[] codewords = new byte[34 + ecCount];
+        byte[] codewords = new byte[spec.DataCodewords + spec.EccLen];
 
         // Mode indicator + character count + data
         codewords[0] = 0x40; // byte mode
         codewords[1] = (byte)data.Length;
-        Array.Copy(data, 0, codewords, 2, Math.Min(data.Length, 32));
+        Array.Copy(data, 0, codewords, 2, Math.Min(data.Length, capacity - 1));
 
-        // Pad to 34 data codewords
+        // Pad to data capacity
         int padIndex = 2 + data.Length;
         byte[] padBytes = [0xEC, 0x11];
-        for (int i = 0; padIndex < 34; i++, padIndex++)
+        for (int i = 0; padIndex < spec.DataCodewords; i++, padIndex++)
             codewords[padIndex] = padBytes[i % 2];
 
         // Reed-Solomon ECC
-        byte[] ecc = new byte[ecCount];
-        RsEncode(codewords, 34, ecc, ecCount);
+        byte[] ecc = new byte[spec.EccLen];
+        RsEncode(codewords, spec.DataCodewords, ecc, spec.EccLen);
 
-        var result = new bool[ModuleCount, ModuleCount];
+        int m = spec.ModuleCount;
+        var result = new bool[m, m];
 
         // Finder patterns
         AddFinderPattern(result, 0, 0);
-        AddFinderPattern(result, ModuleCount - 7, 0);
-        AddFinderPattern(result, 0, ModuleCount - 7);
+        AddFinderPattern(result, m - 7, 0);
+        AddFinderPattern(result, 0, m - 7);
 
         // Separators
         for (int i = 0; i < 8; i++)
@@ -60,18 +77,31 @@ public static class TerminalQrRenderer
             {
                 result[7, i] = false;
                 result[i, 7] = false;
-                result[ModuleCount - 8, i] = false;
-                result[ModuleCount - 1 - i, 7] = false;
-                result[7, ModuleCount - 1 - i] = false;
-                result[i, ModuleCount - 8] = false;
+                result[m - 8, i] = false;
+                result[m - 1 - i, 7] = false;
+                result[7, m - 1 - i] = false;
+                result[i, m - 8] = false;
             }
         }
 
-        // Alignment pattern (Version 2: center at 6,18)
-        AddAlignmentPattern(result, 6, 18);
+        // Alignment patterns: every non-finder-overlapping center pair.
+        foreach (int cy in spec.AlignmentCenters)
+        {
+            foreach (int cx in spec.AlignmentCenters)
+            {
+                bool overlapsFinder =
+                    (cx < 9 && cy < 9) ||
+                    (cx >= m - 8 && cy < 9) ||
+                    (cx < 9 && cy >= m - 8);
+                if (!overlapsFinder)
+                {
+                    AddAlignmentPattern(result, cx, cy);
+                }
+            }
+        }
 
         // Timing patterns
-        for (int i = 8; i < ModuleCount - 8; i++)
+        for (int i = 8; i < m - 8; i++)
         {
             result[6, i] = i % 2 == 0;
             result[i, 6] = i % 2 == 0;
@@ -84,14 +114,14 @@ public static class TerminalQrRenderer
             {
                 result[8, i] = true;
                 result[i, 8] = true;
-                result[8, ModuleCount - 1 - i] = true;
-                result[ModuleCount - 1 - i, 8] = true;
+                result[8, m - 1 - i] = true;
+                result[m - 1 - i, 8] = true;
             }
         }
         result[8, 7] = true;
         result[7, 8] = true;
-        result[8, ModuleCount - 8] = true;
-        result[ModuleCount - 8, 8] = true;
+        result[8, m - 8] = true;
+        result[m - 8, 8] = true;
 
         // Reserve format bits
         result[8, 0] = true;
@@ -101,21 +131,21 @@ public static class TerminalQrRenderer
         result[8, 4] = false;
         result[8, 5] = false;
 
-        result[ModuleCount - 1, 8] = true;
-        result[ModuleCount - 2, 8] = false;
-        result[ModuleCount - 3, 8] = true;
-        result[ModuleCount - 4, 8] = false;
-        result[ModuleCount - 5, 8] = false;
-        result[ModuleCount - 6, 8] = true;
-        result[ModuleCount - 7, 8] = true;
-        result[ModuleCount - 8, 8] = false;
+        result[m - 1, 8] = true;
+        result[m - 2, 8] = false;
+        result[m - 3, 8] = true;
+        result[m - 4, 8] = false;
+        result[m - 5, 8] = false;
+        result[m - 6, 8] = true;
+        result[m - 7, 8] = true;
+        result[m - 8, 8] = false;
 
         // Data bits
         bool up = true;
         int bitIndex = 0;
         int byteIndex = 0;
 
-        int col = ModuleCount - 1;
+        int col = m - 1;
         while (col > 0)
         {
             if (col == 6)
@@ -124,14 +154,14 @@ public static class TerminalQrRenderer
                 continue;
             }
 
-            for (int row = 0; row < ModuleCount; row++)
+            for (int row = 0; row < m; row++)
             {
-                int r = up ? row : ModuleCount - 1 - row;
+                int r = up ? row : m - 1 - row;
 
                 for (int c = 0; c < 2; c++)
                 {
                     int x = col - c;
-                    if (IsReserved(result, x, r)) continue;
+                    if (IsReserved(m, x, r, spec.AlignmentCenters)) continue;
 
                     bool bit = false;
                     if (byteIndex < codewords.Length)
@@ -153,29 +183,34 @@ public static class TerminalQrRenderer
         }
 
         // Apply mask (pattern 000)
-        for (int y = 0; y < ModuleCount; y++)
-            for (int x = 0; x < ModuleCount; x++)
-                if (!IsReserved(result, x, y) && (x + y) % 2 == 0)
+        for (int y = 0; y < m; y++)
+            for (int x = 0; x < m; x++)
+                if (!IsReserved(m, x, y, spec.AlignmentCenters) && (x + y) % 2 == 0)
                     result[x, y] = !result[x, y];
 
         return result;
     }
 
-    private static bool IsReserved(bool[,] m, int x, int y)
+    private static bool IsReserved(int m, int x, int y, int[] alignmentCenters)
     {
-        // Finder patterns
-        if ((x < 9 && y < 9) || (x >= ModuleCount - 8 && y < 9) || (x < 9 && y >= ModuleCount - 8))
+        // Finder patterns (+ separators + format areas hugging the corners)
+        if ((x < 9 && y < 9) || (x >= m - 8 && y < 9) || (x < 9 && y >= m - 8))
             return true;
         // Timing
         if (x == 6 || y == 6)
             return true;
-        // Alignment
-        if (x >= 4 && x <= 8 && y >= 14 && y <= 18)
-            return true;
-        if (x >= 14 && x <= 18 && y >= 4 && y <= 8)
-            return true;
-        if (x >= 14 && x <= 18 && y >= 14 && y <= 18)
-            return true;
+        // Alignment patterns: any module within ±2 of an active center.
+        foreach (int cy in alignmentCenters)
+        {
+            foreach (int cx in alignmentCenters)
+            {
+                if (cx < 9 && cy < 9) continue;
+                if (cx >= m - 8 && cy < 9) continue;
+                if (cx < 9 && cy >= m - 8) continue;
+                if (Math.Abs(x - cx) <= 2 && Math.Abs(y - cy) <= 2) return true;
+            }
+        }
+
         return false;
     }
 
@@ -195,15 +230,16 @@ public static class TerminalQrRenderer
 
     private static string RenderMatrix(bool[,] m)
     {
+        int count = m.GetLength(0);
         var sb = new System.Text.StringBuilder();
-        int height = (ModuleCount + 1) / 2;
+        int height = (count + 1) / 2;
 
         for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < ModuleCount; x++)
+            for (int x = 0; x < count; x++)
             {
                 bool top = m[x, y * 2];
-                bool bottom = y * 2 + 1 < ModuleCount && m[x, y * 2 + 1];
+                bool bottom = y * 2 + 1 < count && m[x, y * 2 + 1];
 
                 sb.Append(top && bottom ? '█' : top ? '▀' : bottom ? '▄' : ' ');
             }

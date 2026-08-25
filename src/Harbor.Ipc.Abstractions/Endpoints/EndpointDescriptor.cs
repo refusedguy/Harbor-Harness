@@ -29,7 +29,14 @@ public abstract record EndpointDescriptor
     public sealed record Uds(string Path) : EndpointDescriptor;
 
     /// <summary>TCP endpoint on a LAN host, IP, or any resolvable DNS name.</summary>
-    public sealed record Tcp(string Host, int Port) : EndpointDescriptor;
+    /// <remarks><see cref="Psk"/> carries the optional pre-shared key copied
+    /// from hosts.json so tools like <c>harbor status --all</c> can
+    /// authenticate probes without extra plumbing.</remarks>
+    public sealed record Tcp(string Host, int Port) : EndpointDescriptor
+    {
+        /// <summary>Optional pre-shared key for PSK-gated listeners.</summary>
+        public string? Psk { get; init; }
+    }
 
     /// <summary>
     ///     Tailscale peer. <paramref name="Name"/> is the MagicDNS name (or
@@ -40,5 +47,8 @@ public abstract record EndpointDescriptor
     {
         /// <summary>The host actually dialed: explicit override or the MagicDNS name.</summary>
         public string ConnectHost => string.IsNullOrWhiteSpace(Host) ? Name : Host!;
+
+        /// <summary>Optional pre-shared key for PSK-gated listeners.</summary>
+        public string? Psk { get; init; }
     }
 }

@@ -122,6 +122,7 @@ public static class HostsCatalog
         string kind = "uds";
         string? host = null;
         string? path = null;
+        string? psk = null;
         int? port = null;
 
         foreach (var prop in value.EnumerateObject())
@@ -137,6 +138,9 @@ public static class HostsCatalog
                 case "path" when prop.Value.ValueKind == JsonValueKind.String:
                     path = prop.Value.GetString();
                     break;
+                case "psk" when prop.Value.ValueKind == JsonValueKind.String:
+                    psk = prop.Value.GetString();
+                    break;
                 case "port" when prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetInt32(out int p):
                     port = p;
                     break;
@@ -149,10 +153,10 @@ public static class HostsCatalog
                 ? Result.Success<EndpointDescriptor>(new EndpointDescriptor.Uds(path))
                 : Result.Failure<EndpointDescriptor>($"Host '{name}': uds entries require \"path\"."),
             "tcp" => host is not null
-                ? Result.Success<EndpointDescriptor>(new EndpointDescriptor.Tcp(host, port ?? DefaultPort))
+                ? Result.Success<EndpointDescriptor>(new EndpointDescriptor.Tcp(host, port ?? DefaultPort) { Psk = psk })
                 : Result.Failure<EndpointDescriptor>($"Host '{name}': tcp entries require \"host\"."),
             "tailscale" => Result.Success<EndpointDescriptor>(
-                new EndpointDescriptor.Tailscale(name, host, port ?? DefaultPort)),
+                new EndpointDescriptor.Tailscale(name, host, port ?? DefaultPort) { Psk = psk }),
             _ => Result.Failure<EndpointDescriptor>(
                 $"Host '{name}': unknown kind \"{kind}\" (expected uds | tcp | tailscale).")
         };

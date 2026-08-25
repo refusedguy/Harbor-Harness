@@ -95,6 +95,26 @@ public static class DaemonBindPolicy
         return result;
     }
 
+    /// <summary>
+    ///     The address a daemon should ADVERTISE to peers (pairing QR,
+    ///     hosts.json hints): tailscale (reachable from anywhere in the
+    ///     tailnet, never from the internet) beats LAN beats loopback.
+    ///     Null when the machine has no non-loopback IPv4 address.
+    /// </summary>
+    public static IPAddress? SelectAdvertiseAddress()
+    {
+        // 1. Tailscale first: 100.64/10 wins even when eth0/wlan0 also exist.
+        var ts = FindTailscaleAddress();
+        if (ts is not null) return ts;
+
+        // 2. First RFC1918 LAN address.
+        var lan = LanAddresses();
+        if (lan.Count > 0) return lan[0];
+
+        // 3. Loopback — same-machine clients only.
+        return NetworkInterface.GetAllNetworkInterfaces().Length > 0 ? IPAddress.Loopback : null;
+    }
+
     private static IEnumerable<(string Name, IReadOnlyList<IPAddress> Addresses)> UpIpv4Interfaces()
     {
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
@@ -179,6 +199,21 @@ public static class PskStore
         {
             return Result.Failure($"Cannot write PSK file ({path}): {ex.Message}");
         }
+    }
+
+    /// <summary>
+    ///     Load the PSK; on first daemon run generate one and persist it so
+    ///     pairing stays stable across restarts.
+    /// </summary>
+    public static Result<string> LoadOrBootstrap(string path)
+    {
+        var loaded = Load(path);
+        if (loaded.IsSuccess) return loaded;
+
+        string generated = Generate();
+        return Save(path, generated).IsSuccess
+            ? Result.Success(generated)
+            : Result.Failure<string>($"Cannot bootstrap PSK file at {path}.");
     }
 
     /// <summary>

@@ -43,4 +43,29 @@ public class TerminalQrRendererTests
         string result = TerminalQrRenderer.Render(new Uri("https://example.com"));
         await Assert.That(result).Contains("\n");
     }
+
+    [Test]
+    public async Task Render_ShortPayload_UsesV2Matrix()
+    {
+        string result = TerminalQrRenderer.Render(new Uri("harbor://127.0.0.1:48710#abc"));
+        string[] lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        // v2 → 25 modules wide, (25+1)/2 = 13 rows.
+        await Assert.That(lines.All(l => l.Length == 25)).IsTrue();
+        await Assert.That(lines.Length).IsEqualTo(13);
+    }
+
+    [Test]
+    public async Task Render_LongPairingUri_UsesV4Matrix()
+    {
+        // A realistic pairing code (~60 chars) must not truncate: it upgrades
+        // to the v4 matrix (33 modules, 17 rows).
+        string psk = new('x', 22);
+        string code = $"harbor://dell.tail1234.ts.net:48710#{psk}";
+        await Assert.That(code.Length).IsGreaterThan(40);
+
+        string result = TerminalQrRenderer.Render(new Uri(code));
+        string[] lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        await Assert.That(lines.All(l => l.Length == 33)).IsTrue();
+        await Assert.That(lines.Length).IsEqualTo(17);
+    }
 }
