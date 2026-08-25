@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Results;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -246,7 +247,7 @@ public sealed class TreeTool : ITool
     ///     now visible in trace logs.
     /// </summary>
     private HashSet<string>? TryGetGitTrackedFiles(string root) =>
-        Result.Try(() => CollectGitTrackedFiles(root), ex => ex.Message)
+        Result.Try(() => CollectGitTrackedFiles(root), ResultErrors.Message)
             .TapError(reason => _logger.LogTrace("tree: gitignore pruning disabled: {Reason}", reason))
             .AsMaybe()
             .GetValueOrDefault();

@@ -96,10 +96,11 @@ public sealed class JsonConfigStore : IConfigStore
             return Result.Success(HarborConfig.Default);
         }
 
-        // ResultGuard.Try collapses errors to strings, so the JsonException vs
-        // generic discrimination happens HERE at the boundary while the
-        // exception is still typed; downstream the railway is string-typed.
-        return ResultGuard.Try(() =>
+        // Result.Try + ResultErrors.Message collapse errors to strings (bible §4.5:
+        // the single canon — no ResultGuard), so the JsonException vs generic
+        // discrimination happens HERE at the boundary while the exception is
+        // still typed; downstream the railway is string-typed.
+        return Result.Try(() =>
             {
                 try
                 {
@@ -111,7 +112,7 @@ public sealed class JsonConfigStore : IConfigStore
                 {
                     throw new InvalidDataException($"config.json is corrupt: {je.Message}");
                 }
-            })
+            }, ResultErrors.Message)
             .Bind(raw => ConfigNormalizer.Normalize(raw))
             .Bind(config => config.Validate());
     }
@@ -122,7 +123,9 @@ public sealed class JsonConfigStore : IConfigStore
         lock (_lock)
         {
             // rop-final-mile B3 / §4.6: one guard around the sync IO core.
-            return Task.FromResult(Result.Try(() => SaveCore(config), ex => ex.Message)
+            // Canonical selector (§4.5): OCE propagates instead of masking
+            // cancellation as a save failure — same contract as LoadAsync.
+            return Task.FromResult(Result.Try(() => SaveCore(config), ResultErrors.Message)
                 .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
         }
     }
