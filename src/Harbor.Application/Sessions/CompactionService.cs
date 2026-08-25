@@ -57,6 +57,11 @@ public sealed class CompactionService(
     ///     Resolve the secondary summarization client+model asynchronously, or
     ///     null when no secondary is configured / it cannot be resolved right now.
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.22: cache hit short-circuits up front; the miss path is one
+    ///     railway (client → catalog → matching model) with memoization as a
+    ///     <c>Tap</c> and every failure funneling into a single logged fallback.
+    /// </remarks>
     private async Task<ResolvedSecondary?> TryResolveSecondaryAsync(ModelInfo primaryModel, CancellationToken ct)
     {
         if (_secondaryRef is null)
@@ -70,30 +75,29 @@ public sealed class CompactionService(
             return cached;
         }
 
-        var clientResult = providers.GetClient(_secondaryRef.ProviderId);
-        if (clientResult.IsFailure)
-        {
-            return LogSecondaryFallback(primaryModel);
-        }
+        ModelRef secondaryRef = _secondaryRef;
+        Result<ResolvedSecondary> outcome = await providers.GetClient(secondaryRef.ProviderId)
+            .Bind(client => client.GetModelsAsync(ct).Bind(models =>
+                MatchById(models, secondaryRef.ModelId)
+                    .ToResult($"model '{secondaryRef.ModelId}' is not in provider '{secondaryRef.ProviderId}' catalog")
+                    .Map(model => new ResolvedSecondary(client, model))))
+            .ConfigureAwait(false);
 
-        var modelsResult = await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
-        if (modelsResult.IsFailure)
-        {
-            return LogSecondaryFallback(primaryModel);
-        }
+        ResolvedSecondary? resolved = outcome
+            .Tap(r => _resolvedSecondary = r)
+            .Match(static r => (ResolvedSecondary?)r, _ => LogSecondaryFallback(primaryModel));
+        return resolved;
+    }
 
-        IReadOnlyList<ModelInfo> models = modelsResult.Value;
+    private Maybe<ModelInfo> MatchById(IReadOnlyList<ModelInfo> models, string modelId)
+    {
         for (int i = 0; i < models.Count; i++)
         {
-            if (string.Equals(models[i].Id, _secondaryRef.ModelId, StringComparison.Ordinal))
-            {
-                var resolved = new ResolvedSecondary(clientResult.Value, models[i]);
-                _resolvedSecondary = resolved;
-                return resolved;
-            }
+            if (string.Equals(models[i].Id, modelId, StringComparison.Ordinal))
+                return models[i];
         }
 
-        return LogSecondaryFallback(primaryModel);
+        return Maybe<ModelInfo>.None;
     }
 
     /// <summary>Log the fallback once per unresolved attempt and return null.</summary>
