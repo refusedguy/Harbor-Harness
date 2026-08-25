@@ -192,7 +192,8 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### Architectural debt
 
-- [ ] `Harbor.Desktop.Abstractions` namespace drift: 4 files declare `namespace Harbor.App.Avalonia.ViewModels` while living in `Harbor.Desktop.Abstractions/ViewModels/`. Either move the files or fix the namespaces.
+- [x] `Harbor.Desktop.Abstractions` namespace drift: 4 files declared `namespace Harbor.App.Avalonia.ViewModels` while living in `Harbor.Desktop.Abstractions/ViewModels/`. **Verified fixed (ROP-D Z1, 25.08): every file in the project now declares `Harbor.Desktop.Abstractions.*`.**
+- [x] Namespace drift `Harbor.Core.*` in Harbor.Application.dll (42 declarations) and Harbor.Registries.dll (3) — migrated to assembly-matching namespaces (ROP-D Z1).
 - [ ] Circular project reference workaround: `ICommonConfigReader` in Ui.Framework because Ui.Framework can't reference Desktop.Abstractions (Desktop.Abstractions → Terminal.Abstractions → Ui.Framework). Consider merging Desktop.Abstractions into Ui.Framework, or splitting Terminal.Abstractions.
 - [ ] Pre-existing Avalonia 12 headless test failures: 3 tests (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text`) fail with "Stack empty" in `SetInheritanceParent`. Needs investigation — likely an Avalonia.Headless bug.
 - [ ] IPC tests: 8/35 failing — timing issues with named-pipe disposal on Linux.
