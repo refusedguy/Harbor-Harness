@@ -1,0 +1,831 @@
+using System.Text;
+using Harbor.Tui.ConsoleEx.Input;
+
+namespace Harbor.Tui.ConsoleEx.Parsing;
+
+/// <summary>
+/// Pure byte-level terminal input state machine (design §5).
+///
+/// Feeds raw stdin bytes in arbitrarily split chunks and produces typed
+/// <see cref="InputEvent"/>s. All cross-chunk state (half-received CSI,
+/// UTF-8 tails, paste payload) lives inside the parser instance.
+///
+/// Allocation budget (§5.4): key/mouse/resize/capability events are enqueued
+/// into a reused ring buffer — zero allocations steady-state. Heap strings
+/// appear only for <see cref="KeyCode.Char"/> runes are boxed? No — Char events
+/// are allocation-free too (<see cref="Rune"/> is a struct); the sole heap
+/// allocation is the payload string of a completed <see cref="PasteEvent"/>.
+/// </summary>
+public sealed class EscapeSequenceParser
+{
+    private const byte Esc = 0x1B;
+    private const byte Bel = 0x07;
+    private const byte Can = 0x18;
+    private const byte Sub = 0x1A;
+
+    private readonly ParserOptions _options;
+    private readonly byte[] _csiBuffer;
+
+    // Event queue — reused ring buffer, grows on demand only.
+    private InputEvent[] _queue = new InputEvent[64];
+    private int _head;
+    private int _count;
+
+    private ParserState _state;
+    private int _csiLength;
+    private int _csiIntermediateStart = -1;
+    private bool _csiPrivatePrefix;
+    private Utf8IncrementalDecoder _utf8 = new();
+
+    // OSC / DCS / APC / PM string consumption guard.
+    private int _stringLength;
+    private bool _stringEscSeen;
+
+    public EscapeSequenceParser(ParserOptions? options = null)
+    {
+        _options = options ?? new ParserOptions();
+        _csiBuffer = new byte[_options.MaxParamsBytes + _options.MaxIntermediatesBytes];
+    }
+
+    public ParserOptions Options => _options;
+    public ParserState State => _state;
+    public int AvailableEvents => _count;
+    public int MalformedSequenceCount { get; private set; }
+    public int IgnoredSequenceCount { get; private set; }
+
+    /// <summary>True while a bracketed paste block has not been closed yet.</summary>
+    public bool IsAwaitingPasteClose { get; private set; }
+
+    /// <summary>Feeds a chunk of raw stdin bytes. Chunks may split escape
+    /// sequences or UTF-8 characters at any byte boundary.</summary>
+    public void Parse(ReadOnlySpan<byte> bytes)
+    {
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            Step(bytes[i]);
+        }
+    }
+
+    /// <summary>
+    /// ESC-timeout policy (§2.4): a lone ESC at a chunk boundary is emitted as
+    /// the Escape key once no continuation arrived in time. Called by the
+    /// input source when its flush timer fires; never needed for in-chunk ESC.
+    /// </summary>
+    public void FlushPendingEscape()
+    {
+        if (_state == ParserState.Escape)
+        {
+            Enqueue(InputEvent.FromKey(KeyEvent.Simple(KeyCode.Escape)));
+            _state = ParserState.Ground;
+        }
+        else if (_state == ParserState.Ss3)
+        {
+            // Lone "ESC O" with nothing behind it — drop silently.
+            IgnoredSequenceCount++;
+            _state = ParserState.Ground;
+        }
+    }
+
+    /// <summary>Watchdog hook: force-closes a hung paste block (design §4.2),
+    /// emitting whatever was accumulated as a truncated paste.</summary>
+    public void AbortPendingPaste()
+    {
+        if (!IsAwaitingPasteClose)
+        {
+            return;
+        }
+
+        EmitPaste(wasTruncated: true);
+        _state = ParserState.Ground;
+    }
+
+    /// <summary>Returns every queued event to a reusable list. Allocates only
+    /// if the destination list must grow.</summary>
+    public void DrainEvents(List<InputEvent> destination)
+    {
+        for (var i = 0; i < _count; i++)
+        {
+            destination.Add(_queue[(_head + i) % _queue.Length]);
+        }
+
+        ClearEvents();
+    }
+
+    public bool TryTakeEvent(out InputEvent evt)
+    {
+        if (_count == 0)
+        {
+            evt = default;
+            return false;
+        }
+
+        evt = _queue[_head];
+        _queue[_head] = default;
+        _head = (_head + 1) % _queue.Length;
+        _count--;
+        return true;
+    }
+
+    /// <summary>Full teardown-safety reset: drops all pending state and events.</summary>
+    public void Reset()
+    {
+        ResetSequenceBuffers();
+        _utf8.Reset();
+        IsAwaitingPasteClose = false;
+        _state = ParserState.Ground;
+        ClearEvents();
+    }
+
+    public void ClearEvents()
+    {
+        for (var i = 0; i < _count; i++)
+        {
+            _queue[(_head + i) % _queue.Length] = default;
+        }
+
+        _head = 0;
+        _count = 0;
+    }
+
+    private void Step(byte b)
+    {
+        switch (_state)
+        {
+            case ParserState.Ground:
+                Ground(b);
+                break;
+            case ParserState.Escape:
+                EscapeReceived(b);
+                break;
+            case ParserState.Ss3:
+                Ss3Final(b);
+                break;
+            case ParserState.CsiEntry:
+            case ParserState.CsiParam:
+            case ParserState.CsiIntermediate:
+            case ParserState.CsiIgnore:
+                CsiByte(b);
+                break;
+            case ParserState.OscString:
+                StringBody(b, belTerminates: true);
+                break;
+            case ParserState.StringUntilSt:
+                StringBody(b, belTerminates: false);
+                break;
+            case ParserState.PastePayload:
+                PastePayloadByte(b);
+                break;
+        }
+    }
+
+    // ── Ground ────────────────────────────────────────────────────────────
+
+    private void Ground(byte b)
+    {
+        if (b == Esc)
+        {
+            FlushBrokenUtf8();
+            _state = ParserState.Escape;
+            return;
+        }
+
+        // A control byte (or DEL) in the middle of a multibyte sequence means
+        // the sequence is broken: emit U+FFFD once, then process the byte
+        // through its normal control path.
+        if (_utf8.HasPending && (b < 0x20 || b == 0x7F))
+        {
+            FlushBrokenUtf8();
+        }
+
+        // Printable bytes and all high bytes go through the incremental
+        // decoder — it passes ASCII through untouched when nothing is pending.
+        if (_utf8.HasPending || b >= 0x80)
+        {
+            FeedUtf8(b, KeyModifiers.None);
+            return;
+        }
+
+        if (b == 0x7F)
+        {
+            EnqueueKey(KeyCode.Backspace);
+            return;
+        }
+
+        if (b < 0x20)
+        {
+            EnqueueControlKey(b, KeyModifiers.None);
+            return;
+        }
+
+        EnqueueChar(new Rune(b), KeyModifiers.None);
+    }
+
+    private void FlushBrokenUtf8()
+    {
+        if (!_utf8.HasPending)
+        {
+            return;
+        }
+
+        _utf8.Reset();
+        EnqueueChar(Rune.ReplacementChar, KeyModifiers.None);
+    }
+
+    /// <summary>C0 control byte → logical key (raw-mode legacy encoding).</summary>
+    private void EnqueueControlKey(byte b, KeyModifiers extraMods)
+    {
+        switch (b)
+        {
+            case 0x0D: // CR — Enter
+            case 0x0A: // LF — treated as Enter (crossterm-compatible); paste-embedded LFs stay literal inside paste blocks
+                EnqueueSimple(KeyCode.Enter, extraMods);
+                return;
+            case 0x09:
+                EnqueueSimple(KeyCode.Tab, extraMods);
+                return;
+            case 0x08:
+            case 0x7F:
+                EnqueueSimple(KeyCode.Backspace, extraMods);
+                return;
+            case 0x00:
+                EnqueueChar(new Rune(' '), KeyModifiers.Ctrl | extraMods);
+                return;
+            default:
+                if (b <= 0x1A)
+                {
+                    EnqueueChar(new Rune((char)('a' + b - 1)), KeyModifiers.Ctrl | extraMods);
+                    return;
+                }
+                if (b >= 0x1C && b <= 0x1F)
+                {
+                    EnqueueChar(new Rune((char)(b | 0x40)), KeyModifiers.Ctrl | extraMods);
+                    return;
+                }
+                IgnoredSequenceCount++; // 0x1B handled by callers; anything else is noise
+                return;
+        }
+    }
+
+    private void FeedUtf8(byte b, KeyModifiers mods)
+    {
+        while (true)
+        {
+            var status = _utf8.DecodeStep(b, out var rune);
+            switch (status)
+            {
+                case Utf8DecodeStatus.NeedMoreData:
+                    return;
+                case Utf8DecodeStatus.Decoded:
+                    EnqueueChar(rune, mods);
+                    return;
+                case Utf8DecodeStatus.ReplacementEmitted:
+                    EnqueueChar(Rune.ReplacementChar, mods);
+                    return;
+                case Utf8DecodeStatus.ReplacementPendingRetry:
+                    EnqueueChar(Rune.ReplacementChar, mods);
+                    continue; // reprocess current byte from scratch
+            }
+        }
+    }
+
+    // ── ESC ───────────────────────────────────────────────────────────────
+
+    private void EscapeReceived(byte b)
+    {
+        switch (b)
+        {
+            case (byte)'[':
+                ResetSequenceBuffers();
+                _state = ParserState.CsiEntry;
+                return;
+            case (byte)'O':
+                _state = ParserState.Ss3;
+                return;
+            case (byte)']':
+            case (byte)'P':
+            case (byte)'X':
+            case (byte)'^':
+            case (byte)'_':
+                _stringLength = 0;
+                _stringEscSeen = false;
+                _state = b == (byte)']' ? ParserState.OscString : ParserState.StringUntilSt;
+                return;
+            case Esc:
+                // Double-ESC: first one stands alone as Escape, second restarts.
+                EnqueueSimple(KeyCode.Escape, KeyModifiers.None);
+                return;
+            case 0x7F:
+                return; // ALT-backspace variants ignored
+        }
+
+        _state = ParserState.Ground;
+        if (b < 0x20)
+        {
+            EnqueueControlKey(b, KeyModifiers.Alt);
+            return;
+        }
+
+        if (b < 0x80)
+        {
+            EnqueueChar(new Rune(b), KeyModifiers.Alt);
+            return;
+        }
+
+        FeedUtf8(b, KeyModifiers.Alt);
+    }
+
+    private void Ss3Final(byte b)
+    {
+        _state = ParserState.Ground;
+        KeyCode key = b switch
+        {
+            (byte)'A' => KeyCode.Up,
+            (byte)'B' => KeyCode.Down,
+            (byte)'C' => KeyCode.Right,
+            (byte)'D' => KeyCode.Left,
+            (byte)'H' => KeyCode.Home,
+            (byte)'F' => KeyCode.End,
+            (byte)'P' => KeyCode.F1,
+            (byte)'Q' => KeyCode.F2,
+            (byte)'R' => KeyCode.F3,
+            (byte)'S' => KeyCode.F4,
+            _ => KeyCode.None,
+        };
+
+        if (key == KeyCode.None)
+        {
+            IgnoredSequenceCount++;
+            return;
+        }
+
+        EnqueueSimple(key, KeyModifiers.None);
+    }
+
+    // ── CSI ───────────────────────────────────────────────────────────────
+
+    private void CsiByte(byte b)
+    {
+        switch (_state)
+        {
+            case ParserState.CsiEntry:
+                if (b is >= (byte)'0' and <= (byte)'9' or (byte)';' or (byte)':')
+                {
+                    AppendParamByte(b);
+                    _state = ParserState.CsiParam;
+                    return;
+                }
+                if (b is >= 0x3C and <= 0x3F)
+                {
+                    AppendParamByte(b);
+                    _csiPrivatePrefix = true;
+                    _state = ParserState.CsiParam;
+                    return;
+                }
+                if (b is >= 0x20 and <= 0x2F)
+                {
+                    AppendIntermediateByte(b);
+                    _state = ParserState.CsiIntermediate;
+                    return;
+                }
+                break;
+
+            case ParserState.CsiParam:
+                if (b is >= (byte)'0' and <= (byte)'9' or (byte)';' or (byte)':' or >= 0x3C and <= 0x3F)
+                {
+                    AppendParamByte(b);
+                    return;
+                }
+                if (b is >= 0x20 and <= 0x2F)
+                {
+                    AppendIntermediateByte(b);
+                    _state = ParserState.CsiIntermediate;
+                    return;
+                }
+                break;
+
+            case ParserState.CsiIntermediate:
+                if (b is >= 0x20 and <= 0x2F)
+                {
+                    AppendIntermediateByte(b);
+                    return;
+                }
+                if (b is >= 0x30 and <= 0x3F)
+                {
+                    EnterIgnore(); // parameter bytes after intermediates — malformed per ECMA-48
+                    return;
+                }
+                break;
+
+            case ParserState.CsiIgnore:
+                if (b is >= 0x40 and <= 0x7E)
+                {
+                    _state = ParserState.Ground;
+                    return;
+                }
+                ControlInsideCsi(b);
+                return;
+        }
+
+        // Common tail shared by entry/param/intermediate states.
+        if (b is >= 0x40 and <= 0x7E)
+        {
+            DispatchCsi(b);
+            return;
+        }
+
+        if (b < 0x20)
+        {
+            ControlInsideCsi(b);
+            return;
+        }
+
+        if (b == 0x7F)
+        {
+            return; // DEL inside CSI is skipped per ECMA-48
+        }
+
+        EnterIgnore(); // 0x80+ inside CSI — cannot be valid
+    }
+
+    private void ControlInsideCsi(byte b)
+    {
+        switch (b)
+        {
+            case Esc:
+                ResetSequenceBuffers();
+                _state = ParserState.Escape;
+                break;
+            case Can:
+            case Sub:
+                ResetSequenceBuffers();
+                _state = ParserState.Ground;
+                break;
+            default:
+                break; // other C0 execute-and-ignore inside CSI
+        }
+    }
+
+    private void AppendParamByte(byte b)
+    {
+        var limit = _csiIntermediateStart < 0 ? _csiBuffer.Length : Math.Min(_csiIntermediateStart, _options.MaxParamsBytes);
+        if (_csiLength >= limit)
+        {
+            EnterIgnore();
+            return;
+        }
+
+        _csiBuffer[_csiLength++] = b;
+    }
+
+    private void AppendIntermediateByte(byte b)
+    {
+        if (_csiIntermediateStart < 0)
+        {
+            _csiIntermediateStart = _csiLength;
+        }
+
+        if (_csiLength - _csiIntermediateStart >= _options.MaxIntermediatesBytes || _csiLength >= _csiBuffer.Length)
+        {
+            EnterIgnore();
+            return;
+        }
+
+        _csiBuffer[_csiLength++] = b;
+    }
+
+    private void EnterIgnore()
+    {
+        MalformedSequenceCount++;
+        Enqueue(InputEvent.Unknown());
+        _state = ParserState.CsiIgnore;
+    }
+
+    private void DispatchCsi(byte finalByte)
+    {
+        var paramSpan = _csiIntermediateStart < 0
+            ? _csiBuffer.AsSpan(0, _csiLength)
+            : _csiBuffer.AsSpan(0, _csiIntermediateStart);
+        var intermediateSpan = _csiIntermediateStart < 0
+            ? ReadOnlySpan<byte>.Empty
+            : _csiBuffer.AsSpan(_csiIntermediateStart, _csiLength - _csiIntermediateStart);
+
+        var wasPrivate = _csiPrivatePrefix;
+        ResetSequenceBuffers();
+        _state = ParserState.Ground;
+
+        DecodeCsiFinal(finalByte, wasPrivate, paramSpan, intermediateSpan);
+    }
+
+    /// <summary>Routes a complete CSI sequence to its decoder. Zones З.1–З.3
+    /// extend this switch (kitty 'u', mouse M/m, paste ~).</summary>
+    private void DecodeCsiFinal(byte finalByte, bool privatePrefix, ReadOnlySpan<byte> parameters, ReadOnlySpan<byte> intermediates)
+    {
+        if (privatePrefix)
+        {
+            // Private-mode reports we did not request (h/l) and probe answers
+            // (kitty u / DECRQM $y / DA c — wired up in zone З.1).
+            IgnoredSequenceCount++;
+            return;
+        }
+
+        switch (finalByte)
+        {
+            case (byte)'A':
+                EnqueueArrow(KeyCode.Up, parameters);
+                return;
+            case (byte)'B':
+                EnqueueArrow(KeyCode.Down, parameters);
+                return;
+            case (byte)'C':
+                EnqueueArrow(KeyCode.Right, parameters);
+                return;
+            case (byte)'D':
+                EnqueueArrow(KeyCode.Left, parameters);
+                return;
+            case (byte)'H':
+                EnqueueArrow(KeyCode.Home, parameters);
+                return;
+            case (byte)'F':
+                EnqueueArrow(KeyCode.End, parameters);
+                return;
+            case (byte)'~':
+                DecodeLegacyTilde(parameters);
+                return;
+            default:
+                IgnoredSequenceCount++;
+                return;
+        }
+    }
+
+    private void EnqueueArrow(KeyCode key, ReadOnlySpan<byte> parameters)
+    {
+        var mods = LegacyModifiers(parameters);
+        EnqueueSimple(key, mods);
+    }
+
+    private void DecodeLegacyTilde(ReadOnlySpan<byte> parameters)
+    {
+        var code = FirstIntParam(parameters);
+        var mods = LegacyModifiers(parameters);
+        KeyCode key = code switch
+        {
+            1 => KeyCode.Home,
+            2 => KeyCode.Insert,
+            3 => KeyCode.Delete,
+            4 => KeyCode.End,
+            5 => KeyCode.PageUp,
+            6 => KeyCode.PageDown,
+            7 => KeyCode.Home,
+            8 => KeyCode.End,
+            11 => KeyCode.F1,
+            12 => KeyCode.F2,
+            13 => KeyCode.F3,
+            14 => KeyCode.F4,
+            15 => KeyCode.F5,
+            17 => KeyCode.F6,
+            18 => KeyCode.F7,
+            19 => KeyCode.F8,
+            20 => KeyCode.F9,
+            21 => KeyCode.F10,
+            23 => KeyCode.F11,
+            24 => KeyCode.F12,
+            _ => KeyCode.None,
+        };
+
+        if (key == KeyCode.None)
+        {
+            IgnoredSequenceCount++;
+            return;
+        }
+
+        EnqueueSimple(key, mods);
+    }
+
+    /// <summary>
+    /// Legacy CSI/SS3 modifier parameter (xterm encoding): SECOND parameter,
+    /// value−1 with shift=bit0, alt=bit1, ctrl=bit2, meta=bit3. NOTE the
+    /// different bit order versus kitty CSI-u (kitty: shift=1, ctrl=2, alt=4).
+    /// </summary>
+    private static KeyModifiers LegacyModifiers(ReadOnlySpan<byte> parameters)
+    {
+        var bits = IntParamAt(parameters, 1) - 1;
+        if (bits <= 0)
+        {
+            return KeyModifiers.None;
+        }
+
+        var mods = KeyModifiers.None;
+        if ((bits & 0x01) != 0)
+        {
+            mods |= KeyModifiers.Shift;
+        }
+        if ((bits & 0x02) != 0)
+        {
+            mods |= KeyModifiers.Alt;
+        }
+        if ((bits & 0x04) != 0)
+        {
+            mods |= KeyModifiers.Ctrl;
+        }
+        if ((bits & 0x08) != 0)
+        {
+            mods |= KeyModifiers.Meta;
+        }
+
+        return mods;
+    }
+
+    // ── OSC / DCS strings ─────────────────────────────────────────────────
+
+    private void StringBody(byte b, bool belTerminates)
+    {
+        if (_stringEscSeen)
+        {
+            _stringEscSeen = false;
+            if (b == (byte)'\\')
+            {
+                _state = ParserState.Ground;
+                return;
+            }
+
+            // Embedded non-ST ESC — swallow both bytes, keep consuming.
+            _stringLength += 2;
+            if (_stringLength > _options.MaxStringBytes)
+            {
+                ForceStringAbort();
+            }
+            return;
+        }
+
+        if (belTerminates && b == Bel)
+        {
+            _state = ParserState.Ground;
+            return;
+        }
+
+        if (b == Esc)
+        {
+            _stringEscSeen = true;
+            return;
+        }
+
+        _stringLength++;
+        if (_stringLength > _options.MaxStringBytes)
+        {
+            ForceStringAbort();
+        }
+    }
+
+    private void ForceStringAbort()
+    {
+        MalformedSequenceCount++;
+        Enqueue(InputEvent.Unknown());
+        _stringEscSeen = false;
+        _stringLength = 0;
+        _state = ParserState.Ground;
+    }
+
+    // ── Bracketed paste (zone З.3 wires the marker matcher below) ─────────
+
+    private void PastePayloadByte(byte b)
+    {
+        _ = b; // zone З.3 replaces this stub: paste state is unreachable until then
+        IgnoredSequenceCount++;
+        _state = ParserState.Ground;
+    }
+
+    private void EmitPaste(bool wasTruncated)
+    {
+        _ = wasTruncated; // zone З.3 replaces this stub with payload assembly
+    }
+
+    // ── Param scanning helpers (scalar, zero-alloc) ───────────────────────
+
+    private static int FirstIntParam(ReadOnlySpan<byte> parameters) => IntParamAt(parameters, 0);
+
+    /// <summary>Returns the <paramref name="index"/>-th ';'-separated parameter
+    /// (sub-parameters ':' are ignored), or −1 when absent.</summary>
+    private static int IntParamAt(ReadOnlySpan<byte> parameters, int index)
+    {
+        var group = 0;
+        var value = 0;
+        var digits = 0;
+        foreach (var b in parameters)
+        {
+            if (b == (byte)';')
+            {
+                if (group == index && digits > 0)
+                {
+                    return value;
+                }
+                group++;
+                value = 0;
+                digits = 0;
+                continue;
+            }
+            if (b == (byte)':')
+            {
+                // Sub-parameter boundary — stop within this group.
+                break;
+            }
+            if (b is >= (byte)'0' and <= (byte)'9')
+            {
+                checked
+                {
+                    value = value * 10 + (b - (byte)'0');
+                }
+                digits++;
+            }
+        }
+
+        return group == index && digits > 0 ? value : -1;
+    }
+
+    private static int LastIntParam(ReadOnlySpan<byte> parameters)
+    {
+        var result = -1;
+        var value = 0;
+        var digits = 0;
+        foreach (var b in parameters)
+        {
+            if (b == (byte)';')
+            {
+                if (digits > 0)
+                {
+                    result = value;
+                }
+                value = 0;
+                digits = 0;
+                continue;
+            }
+            if (b == (byte)':')
+            {
+                if (digits > 0)
+                {
+                    result = value;
+                }
+                else if (result < 0)
+                {
+                    result = -1;
+                }
+                value = 0;
+                digits = 0;
+                continue;
+            }
+            if (b is >= (byte)'0' and <= (byte)'9')
+            {
+                value = value * 10 + (b - (byte)'0');
+                digits++;
+            }
+        }
+
+        if (digits > 0)
+        {
+            result = value;
+        }
+
+        return result;
+    }
+
+    // ── Event queue ───────────────────────────────────────────────────────
+
+    private void EnqueueSimple(KeyCode key, KeyModifiers mods) =>
+        Enqueue(InputEvent.FromKey(KeyEvent.Simple(key, mods)));
+
+    private void EnqueueKey(KeyCode key) => EnqueueSimple(key, KeyModifiers.None);
+
+    private void EnqueueChar(Rune rune, KeyModifiers mods) =>
+        Enqueue(InputEvent.FromKey(KeyEvent.Char(rune, mods)));
+
+    private void Enqueue(in InputEvent evt)
+    {
+        if (_count == _queue.Length)
+        {
+            GrowQueue();
+        }
+
+        _queue[(_head + _count) % _queue.Length] = evt;
+        _count++;
+    }
+
+    private void GrowQueue()
+    {
+        var grown = new InputEvent[_queue.Length * 2];
+        for (var i = 0; i < _count; i++)
+        {
+            grown[i] = _queue[(_head + i) % _queue.Length];
+        }
+
+        _queue = grown;
+        _head = 0;
+    }
+
+    private void ResetSequenceBuffers()
+    {
+        _csiLength = 0;
+        _csiIntermediateStart = -1;
+        _csiPrivatePrefix = false;
+        _stringEscSeen = false;
+        _stringLength = 0;
+    }
+}
