@@ -118,21 +118,26 @@ internal sealed class ToolDispatcher(
     ///     If so, the entire batch must run sequentially (otherwise sequential
     ///     tools would race on shared state like the file system or shell).
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.19: the 4-level nested IsSuccess ladder collapses to a single
+    ///     combinator predicate per call. Unresolvable entries fold to
+    ///     <see langword="false" /> here — their proper error entries are still
+    ///     produced per-call by <see cref="ExecuteSingleAsync" />.
+    /// </remarks>
     private bool HasSequentialTool(IReadOnlyList<ToolCallPart> toolCalls)
     {
         for (int i = 0; i < toolCalls.Count; i++)
         {
-            var tc = toolCalls[i];
-            var toolNameResult = ToolName.TryCreate(tc.ToolName);
-            if (toolNameResult.IsSuccess)
+            bool sequential = ToolName.TryCreate(toolCalls[i].ToolName)
+                .Bind(tools.GetTool)
+                .Map(static t => t.ExecutionMode == ExecutionMode.Sequential)
+                .Match(static v => v, static _ => false);
+            if (sequential)
             {
-                var toolResult = tools.GetTool(toolNameResult.Value);
-                if (toolResult.IsSuccess && toolResult.Value.ExecutionMode == ExecutionMode.Sequential)
-                {
-                    return true;
-                }
+                return true;
             }
         }
+
         return false;
     }
 
