@@ -213,12 +213,15 @@ public sealed class AgentLoop : IAgentLoop
 
                 // 3. Build system prompt
                 var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
+                // ROP-C Z3: the skills / context-files sections were rendered by
+                // the prompt builder but never fed. MCP instructions stay null —
+                // IMcpRegistry has no instruction-aggregation API yet.
                 var promptContext = new SystemPromptContext(
                     agent,
                     model,
                     tools,
-                    Array.Empty<ContextFile>(),
-                    Array.Empty<SkillDescriptor>(),
+                    WorkspaceContextSource.LoadContextFiles(session.Session.Directory),
+                    WorkspaceContextSource.LoadSkills(session.Session.Directory),
                     null,
                     session.Session.Directory);
                 string systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
