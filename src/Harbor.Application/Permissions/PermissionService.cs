@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
-using Harbor.Core.Resources;
+using Harbor.Application.Resources;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Permissions;
+namespace Harbor.Application.Permissions;
 /// <summary>
 ///     Default permission service. Implements Specification pattern (GOF).
 /// </summary>

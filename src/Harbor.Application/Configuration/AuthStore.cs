@@ -1,6 +1,6 @@
 using System.Collections;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Auth store — manages API keys per provider.
 ///     Stored in ~/.harbor/config.json (in ApiKeys dictionary).

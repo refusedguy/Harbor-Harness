@@ -1,7 +1,7 @@
-using Harbor.Core.Agents;
-using Harbor.Core.Onboarding;
-using Harbor.Core.Resilience;
-using Harbor.Core.Sessions;
+using Harbor.Application.Agents;
+using Harbor.Application.Onboarding;
+using Harbor.Application.Resilience;
+using Harbor.Application.Sessions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;

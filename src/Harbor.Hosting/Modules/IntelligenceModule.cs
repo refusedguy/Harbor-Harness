@@ -1,7 +1,7 @@
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Configuration;
-using Harbor.Core.Permissions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Configuration;
+using Harbor.Application.Permissions;
+using Harbor.Application.Sessions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

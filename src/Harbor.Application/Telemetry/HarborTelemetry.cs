@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Harbor.Core.Telemetry;
+namespace Harbor.Application.Telemetry;
 
 public static class HarborTelemetry
 {

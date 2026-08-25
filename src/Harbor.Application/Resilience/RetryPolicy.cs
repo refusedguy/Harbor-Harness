@@ -1,9 +1,9 @@
 using System.Net;
 using System.Threading;
 using Harbor.Abstractions.Events;
-using Harbor.Core.Agents;
+using Harbor.Application.Agents;
 
-namespace Harbor.Core.Resilience;
+namespace Harbor.Application.Resilience;
 
 /// <summary>
 ///     Default retry policy. Retries only <b>transient</b> failures; fatal

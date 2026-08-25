@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_ALL_PROVIDERS

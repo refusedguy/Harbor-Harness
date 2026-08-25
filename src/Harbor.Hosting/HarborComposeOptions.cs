@@ -1,4 +1,4 @@
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Core.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 

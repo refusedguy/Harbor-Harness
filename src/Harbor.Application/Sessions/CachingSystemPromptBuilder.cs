@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Harbor.Abstractions.Sessions;
-namespace Harbor.Core.Sessions;
+namespace Harbor.Application.Sessions;
 /// <summary>
 ///     Memoizing decorator over <see cref="ISystemPromptBuilder" /> (Ф6/A2).
 ///     The loop rebuilds the prompt context every turn even though the inputs

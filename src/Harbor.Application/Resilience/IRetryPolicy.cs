@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Harbor.Core.Resilience;
+namespace Harbor.Application.Resilience;
 
 public interface IRetryPolicy
 {

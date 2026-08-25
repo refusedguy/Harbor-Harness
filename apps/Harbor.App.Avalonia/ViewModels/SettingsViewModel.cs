@@ -6,7 +6,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Ui.Framework.Services;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;

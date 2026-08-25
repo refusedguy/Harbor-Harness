@@ -3,8 +3,8 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tui;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 namespace Harbor.Cli.Commands;
 /// <summary>
 ///     /setup — run onboarding wizard.

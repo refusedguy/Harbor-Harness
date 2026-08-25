@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Configuration store — reads/writes ~/.harbor/config.json.
 ///     Implements Repository pattern for config.

@@ -5,7 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="SystemPromptBuilder" /> — verifies that the assembled prompt

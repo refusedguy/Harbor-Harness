@@ -1,7 +1,7 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Abstractions.Events;
 using Harbor.Core.Events;
 using Harbor.Desktop.Abstractions.Configuration;

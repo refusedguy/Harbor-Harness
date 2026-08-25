@@ -1,12 +1,12 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Sessions;
+namespace Harbor.Application.Sessions;
 /// <summary>
 ///     Default compaction service using anchored-summary strategy.
 ///     Generates a structured Markdown summary of compacted messages.

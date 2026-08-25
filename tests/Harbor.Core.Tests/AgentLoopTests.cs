@@ -8,10 +8,10 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Agents;
-using Harbor.Core.Permissions;
-using Harbor.Core.Resilience;
-using Harbor.Core.Sessions;
+using Harbor.Application.Agents;
+using Harbor.Application.Permissions;
+using Harbor.Application.Resilience;
+using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
 /// <summary>

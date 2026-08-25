@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Harbor application configuration.
 ///     Stored at ~/.harbor/config.json. No env vars required.

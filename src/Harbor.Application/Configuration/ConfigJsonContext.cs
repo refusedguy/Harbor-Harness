@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models.Identifiers;
 
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 
 /// <summary>
 ///     AOT-safe JsonSerializerContext for the Harbor application configuration

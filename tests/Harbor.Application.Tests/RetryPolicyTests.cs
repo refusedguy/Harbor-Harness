@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
-using Harbor.Core.Agents;
-using Harbor.Core.Resilience;
+using Harbor.Application.Agents;
+using Harbor.Application.Resilience;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;

@@ -5,7 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="SystemPromptBuilder.BuildAsync" />. The builder

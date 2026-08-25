@@ -1,6 +1,6 @@
 using System.Text;
 using Harbor.Abstractions.Extensions;
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 /// <summary>
 ///     A tool call whose accumulated args JSON failed to parse. The call is
 ///     never materialized as an executable <see cref="ToolCallPart" />; the

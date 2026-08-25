@@ -1,7 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 
-namespace Harbor.Core.Sessions;
+namespace Harbor.Application.Sessions;
 
 public sealed class TokenTracker : ITokenTracker
 {

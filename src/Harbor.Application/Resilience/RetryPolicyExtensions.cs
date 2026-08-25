@@ -1,5 +1,5 @@
 using Harbor.Abstractions.Results;
-namespace Harbor.Core.Resilience;
+namespace Harbor.Application.Resilience;
 
 /// <summary>
 ///     ROP-B П.21 — the retry-vs-compensation boundary, as code:

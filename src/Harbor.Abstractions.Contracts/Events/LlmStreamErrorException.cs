@@ -10,7 +10,7 @@ namespace Harbor.Abstractions.Events;
 /// <remarks>
 ///     <para>
 ///         <b>ROP-C П.6:</b> this exception used to be nested inside
-///         <c>Harbor.Core.Agents.AgentLoop</c>, which forced the Resilience
+///         <c>Harbor.Application.Agents.AgentLoop</c>, which forced the Resilience
 ///         layer to reach back into the Agents namespace just to classify a
 ///         transport failure — an inverted dependency. It now lives beside
 ///         <see cref="ErrorEvent" /> and <see cref="ProviderErrorKind" />, the

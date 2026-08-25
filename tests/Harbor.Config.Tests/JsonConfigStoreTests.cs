@@ -1,4 +1,4 @@
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
 /// <summary>

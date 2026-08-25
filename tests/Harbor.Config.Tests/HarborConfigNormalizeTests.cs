@@ -1,5 +1,5 @@
 using CSharpFunctionalExtensions;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 namespace Harbor.Config.Tests;
 /// <summary>
 ///     ROP-B П.13/П.14: ConfigNormalizer resolves canonical → legacy aliases as

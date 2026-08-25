@@ -1,4 +1,4 @@
-namespace Harbor.Core.Sessions;
+namespace Harbor.Application.Sessions;
 
 /// <summary>
 ///     Discovers the workspace inputs of <see cref="SystemPromptContext" />:

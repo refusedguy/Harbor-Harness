@@ -13,7 +13,7 @@
 // enforce.
 
 using Harbor.Abstractions.Models;
-using Harbor.Core.Agents;
+using Harbor.Application.Agents;
 using Harbor.Core.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Providers.Anthropic;
@@ -28,7 +28,7 @@ using Harbor.Tui.Ansi;
 using Harbor.Tui.Plain;
 using Harbor.Ui.Framework.State;
 using NetArchTest.Rules;
-// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
+// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
 // InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
 // Alternative TUI renderers moved to contrib/tui in sprint 2 — outside main layer scope.
 using TestResult = NetArchTest.Rules.TestResult;

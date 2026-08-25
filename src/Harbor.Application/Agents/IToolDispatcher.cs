@@ -1,4 +1,4 @@
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 
 /// <summary>
 ///     Dispatches tool calls to registered <see cref="ITool" />s and aggregates

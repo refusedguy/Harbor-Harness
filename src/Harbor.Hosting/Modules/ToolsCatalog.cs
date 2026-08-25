@@ -1,4 +1,4 @@
-using Harbor.Core.Agents;
+using Harbor.Application.Agents;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;

@@ -1,12 +1,12 @@
 using System.Reflection;
-using Harbor.Core.Permissions;
+using Harbor.Application.Permissions;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
 
 public class CoreResourcesTests
 {
-    private static readonly Type CoreResourcesType = typeof(PermissionService).Assembly.GetType("Harbor.Core.Resources.CoreResources")!;
+    private static readonly Type CoreResourcesType = typeof(PermissionService).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
     private static readonly MethodInfo GetLogMethod = CoreResourcesType.GetMethod("GetLog", BindingFlags.Public | BindingFlags.Static)!;
     private static readonly MethodInfo GetErrorMethod = CoreResourcesType.GetMethod("GetError", BindingFlags.Public | BindingFlags.Static)!;
 

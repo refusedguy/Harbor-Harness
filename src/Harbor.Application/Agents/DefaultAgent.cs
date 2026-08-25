@@ -1,7 +1,7 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 /// <summary>
 ///     Default IAgent implementation. Stateful wrapper around <see cref="AgentLoop" />.
 ///     Implements Command pattern (GOF) — encapsulates prompt submission and execution.

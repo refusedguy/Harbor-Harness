@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="HeuristicTokenEstimator" /> on text payloads of

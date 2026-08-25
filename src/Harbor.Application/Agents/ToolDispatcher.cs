@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 /// <summary>
 ///     Dispatches tool calls to the registered <see cref="ITool" />s and
 ///     aggregates results into a <see cref="ToolResultMessage" />. Extracted

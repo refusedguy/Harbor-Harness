@@ -1,4 +1,4 @@
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 namespace Harbor.Config.Tests;
 /// <summary>
 ///     Tests for ProviderPresets — the built-in catalog of provider templates.

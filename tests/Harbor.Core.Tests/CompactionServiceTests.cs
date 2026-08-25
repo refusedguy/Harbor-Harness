@@ -6,7 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;

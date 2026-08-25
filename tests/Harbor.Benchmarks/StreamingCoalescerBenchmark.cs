@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-using Harbor.Core.Agents;
+using Harbor.Application.Agents;
 namespace Harbor.Benchmarks;
 
 /// <summary>

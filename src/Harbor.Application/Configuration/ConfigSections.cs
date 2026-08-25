@@ -1,4 +1,4 @@
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Provider / model / agent identity selection.
 ///     Replaces the flat <c>Provider</c>/<c>Model</c>/<c>Agent</c> string fields

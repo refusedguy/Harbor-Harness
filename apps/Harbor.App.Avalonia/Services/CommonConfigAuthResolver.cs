@@ -13,7 +13,7 @@
 //   3. Conventional env var                 ({PROVIDERID}_API_KEY)
 
 using CSharpFunctionalExtensions;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;

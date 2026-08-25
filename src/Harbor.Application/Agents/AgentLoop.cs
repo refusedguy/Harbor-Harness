@@ -1,13 +1,13 @@
 using System.Globalization;
 using Harbor.Diagnostics;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Resilience;
-using Harbor.Core.Resources;
-using Harbor.Core.Sessions;
-using Harbor.Core.Telemetry;
+using Harbor.Application.Resilience;
+using Harbor.Application.Resources;
+using Harbor.Application.Sessions;
+using Harbor.Application.Telemetry;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 /// <summary>
 ///     Default agent loop. Implements Chain of Responsibility pattern (GOF):
 ///     prompt → LLM stream → tool execution → next turn → (compaction if needed) → repeat.

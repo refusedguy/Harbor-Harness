@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Providers.Ollama;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;

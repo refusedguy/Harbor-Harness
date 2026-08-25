@@ -1,6 +1,6 @@
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Onboarding;
+namespace Harbor.Application.Onboarding;
 /// <summary>
 ///     First-run onboarding wizard. Walks user through:
 ///     1. Pick a provider (from presets)

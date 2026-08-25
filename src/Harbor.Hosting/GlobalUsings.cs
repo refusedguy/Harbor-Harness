@@ -26,13 +26,13 @@ global using Harbor.Abstractions.Tools;
 global using Harbor.Abstractions.Tui;
 
 // Core pipeline + config
-global using Harbor.Core.Agents;
-global using Harbor.Core.Configuration;
+global using Harbor.Application.Agents;
+global using Harbor.Application.Configuration;
 global using Harbor.Core.Events;
-global using Harbor.Core.Onboarding;
-global using Harbor.Core.Permissions;
-global using Harbor.Core.Resilience;
-global using Harbor.Core.Sessions;
+global using Harbor.Application.Onboarding;
+global using Harbor.Application.Permissions;
+global using Harbor.Application.Resilience;
+global using Harbor.Application.Sessions;
 global using Harbor.Core.Tools;
 
 // Desktop config types (CommonConfig / CompositeConfig / stores)

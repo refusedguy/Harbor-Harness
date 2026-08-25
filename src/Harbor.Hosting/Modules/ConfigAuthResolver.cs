@@ -1,5 +1,5 @@
 using CSharpFunctionalExtensions;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;

@@ -57,10 +57,10 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\LogMessages.resx">
-      <LogicalName>Harbor.Core.LogMessages.resources</LogicalName>
+      <LogicalName>Harbor.Application.LogMessages.resources</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\ErrorMessages.resx">
-      <LogicalName>Harbor.Core.ErrorMessages.resources</LogicalName>
+      <LogicalName>Harbor.Application.ErrorMessages.resources</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

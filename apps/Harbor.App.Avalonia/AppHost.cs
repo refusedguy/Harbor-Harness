@@ -8,7 +8,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
 using Harbor.Ipc;

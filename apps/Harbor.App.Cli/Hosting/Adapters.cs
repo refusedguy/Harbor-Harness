@@ -6,7 +6,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 #if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
