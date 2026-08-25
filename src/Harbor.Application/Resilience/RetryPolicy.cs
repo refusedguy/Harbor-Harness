@@ -98,7 +98,7 @@ public sealed class RetryPolicy : IRetryPolicy
             case HttpRequestException hre:
                 return IsTransientStatus(hre.StatusCode, ref retryAfter);
 
-            case AgentLoop.LlmStreamErrorException streamError:
+            case LlmStreamErrorException streamError:
                 // ROP-A ПР.5: provider streams surface transport failures as
                 // typed error events, not exceptions. The classification made
                 // at the wire (429 / 5xx / timeout / network) rides on the

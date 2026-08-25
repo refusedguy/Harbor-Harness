@@ -584,48 +584,6 @@ public sealed class AgentLoop : IAgentLoop
         StopReason StopReason);
 
     /// <summary>
-    ///     Internal signal that the provider stream reported a terminal error
-    ///     event. Carries the user-facing message plus the transport error
-    ///     classification (ROP-A ПР.5) so <c>RetryPolicy.IsTransient</c> can
-    ///     retry rate limits / server errors / timeouts / network blips.
-    /// </summary>
-    public sealed class LlmStreamErrorException : Exception
-    {
-        /// <summary>Transport classification of the failure (Unknown for legacy call sites).</summary>
-        public ProviderErrorKind Kind { get; }
-
-        /// <summary>HTTP status code when the failure came from a non-success response.</summary>
-        public int? StatusCode { get; }
-
-        /// <summary>Creates the error from the terminal stream event.</summary>
-        /// <param name="err">The error event reported by the provider stream.</param>
-        public LlmStreamErrorException(ErrorEvent err)
-            : base(err.Message)
-        {
-            Kind = err.Kind;
-            StatusCode = err.StatusCode;
-        }
-
-        /// <summary>Creates the error with the user-facing failure message.</summary>
-        /// <param name="message">The message reported by the provider stream.</param>
-        public LlmStreamErrorException(string message) : base(message)
-        {
-        }
-
-        /// <summary>Creates the error with a message and an inner cause.</summary>
-        /// <param name="message">The message reported by the provider stream.</param>
-        /// <param name="innerException">The underlying exception, if any.</param>
-        public LlmStreamErrorException(string message, Exception innerException) : base(message, innerException)
-        {
-        }
-
-        /// <summary>Creates the error for deserialization paths.</summary>
-        public LlmStreamErrorException()
-        {
-        }
-    }
-
-    /// <summary>
     ///     Drain the whole steering queue into the session history. Called
     ///     mid-turn (after tool results) and at the turn boundary (Ф2/B2).
     /// </summary>
