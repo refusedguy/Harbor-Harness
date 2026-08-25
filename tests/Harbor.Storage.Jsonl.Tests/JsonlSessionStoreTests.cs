@@ -358,4 +358,65 @@ public class JsonlSessionStoreCancellationTests
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
+
+    [Test]
+    public async Task GetAsync_LegacyHeaderWithoutUpdatedAt_ReturnsStableTimestampAcrossReads()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            // DDD-audit 25.08 (ROP-C Z3): legacy fixture written before the
+            // header carried "updatedAt". GetAsync used to fabricate UtcNow on
+            // every read, so two consecutive reads disagreed and ListAsync's
+            // recency sort was random.
+            string sessionId = "legacy01";
+            string sessionFile = Path.Combine(tempDir, $"{sessionId}.jsonl");
+            DateTimeOffset created = new(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+            await File.WriteAllTextAsync(sessionFile,
+                $$"""
+                {"type":"session","version":1,"id":"{{sessionId}}","projectId":"p","directory":"/tmp/x","title":"Legacy","agent":"code","model":"m","providerId":"anthropic","createdAt":"{{created:O}}"}
+                """);
+
+            var first = await store.GetAsync(sessionId);
+            var second = await store.GetAsync(sessionId);
+
+            await Assert.That(first.IsSuccess).IsTrue();
+            await Assert.That(second.IsSuccess).IsTrue();
+            await Assert.That(first.Value.CreatedAt).IsEqualTo(created);
+            // The fabricated-UtcNow defect made this assertion flaky by design:
+            // the timestamp must be identical across consecutive reads.
+            await Assert.That(second.Value.UpdatedAt).IsEqualTo(first.Value.UpdatedAt);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task UpdateAsync_RefreshesStoredUpdatedAt()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            var created = (await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4")).Value;
+            var renamed = created with { Title = "Renamed" };
+
+            var updated = await store.UpdateAsync(renamed);
+            var reread = await store.GetAsync(created.Id);
+
+            await Assert.That(updated.IsSuccess).IsTrue();
+            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread.Value.Title).IsEqualTo("Renamed");
+            await Assert.That(reread.Value.UpdatedAt).IsGreaterThanOrEqualTo(renamed.CreatedAt);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
 }

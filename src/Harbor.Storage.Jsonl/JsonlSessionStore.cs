@@ -120,6 +120,7 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.Agent,
                     session.Model,
                     session.ProviderId,
+                    session.CreatedAt,
                     session.CreatedAt);
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry) + "\n");
@@ -166,7 +167,7 @@ public sealed class JsonlSessionStore : ISessionStore
                 header.Model,
                 header.ProviderId,
                 header.CreatedAt,
-                DateTimeOffset.UtcNow,
+                ResolveUpdatedAt(header, sessionFile),
                 metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty);
         }, ResultErrors.Message).ConfigureAwait(false);
 
@@ -431,7 +432,8 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.Agent,
                     session.Model,
                     session.ProviderId,
-                    session.CreatedAt);
+                    session.CreatedAt,
+                    DateTimeOffset.UtcNow);
 
                 lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
                 File.WriteAllLines(sessionFile, lines);
@@ -829,6 +831,14 @@ public sealed class JsonlSessionStore : ISessionStore
     private string GetSessionFilePath(string sessionId) =>
         Path.Combine(_rootDirectory, $"{sessionId}.jsonl");
 
+    /// <summary>
+    ///     Real last-activity timestamp for a session. Legacy files written
+    ///     before the header carried <c>updatedAt</c> fall back to the file's
+    ///     last-write time so ordering stays stable across consecutive reads.
+    /// </summary>
+    private static DateTimeOffset ResolveUpdatedAt(SessionHeaderEntry header, string sessionFile) =>
+        header.UpdatedAt != default ? header.UpdatedAt : File.GetLastWriteTimeUtc(sessionFile);
+
     private async Task<SessionHeaderEntry?> ReadHeaderAsync(string path, CancellationToken ct)
     {
         using var reader = new StreamReader(path);
@@ -865,7 +875,15 @@ internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("agent")] string Agent,
     [property: JsonPropertyName("model")] string Model,
     [property: JsonPropertyName("providerId")] string ProviderId,
-    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt);
+    [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
+    [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt = default);
+
+/*
+ * DDD-audit 25.08 (ROP-C Z3): <see cref="JsonlSessionStore.GetAsync" /> used to
+ * fabricate Session.UpdatedAt = UtcNow on EVERY read, which made ListAsync's
+ * recency sort random — the same session reordered between calls. The stored
+ * header now carries the real last-activity timestamp; reads never invent one.
+ */
 
 internal sealed record MessageEntry(
     [property: JsonPropertyName("type")] string Type,
