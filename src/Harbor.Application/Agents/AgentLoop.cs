@@ -453,36 +453,22 @@ public sealed class AgentLoop : IAgentLoop
                 {
                     case TextDeltaEvent td:
                         // Flush any pending thinking before starting/continuing a text run.
-                        if (coalescer.HasPendingThinking)
-                        {
-                            partial = partial.AppendThinking(coalescer.FlushThinking());
-                        }
+                        partial = FlushThinking(coalescer, partial);
                         coalescer.AppendTextDelta(td.Delta);
-                        await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
+                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
                         break;
 
                     case ThinkingDeltaEvent thd:
                         // Flush any pending text before starting/continuing a thinking run.
-                        if (coalescer.HasPendingText)
-                        {
-                            partial = partial.AppendText(coalescer.FlushText());
-                        }
+                        partial = FlushText(coalescer, partial);
                         coalescer.AppendThinkingDelta(thd.Delta);
-                        await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
+                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
                         break;
 
                     case ToolCallStartEvent tcs:
-                        // Flush any pending text/thinking before tracking the tool call.
-                        if (coalescer.HasPendingText)
-                        {
-                            partial = partial.AppendText(coalescer.FlushText());
-                        }
-                        if (coalescer.HasPendingThinking)
-                        {
-                            partial = partial.AppendThinking(coalescer.FlushThinking());
-                        }
+                        partial = FlushAll(coalescer, partial);
                         coalescer.StartToolCall(tcs.Id, tcs.ToolName);
-                        await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
+                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
                         break;
 
                     case ToolCallDeltaEvent tcd:
@@ -491,37 +477,18 @@ public sealed class AgentLoop : IAgentLoop
                             _logger.LogTrace("ToolCallDelta id={Id} argsDelta={Args}", tcd.Id, tcd.ArgsDelta);
                         }
                         coalescer.AppendToolCallDelta(tcd.Id, tcd.ArgsDelta);
-                        await _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct).ConfigureAwait(false);
+                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
                         break;
 
                     case StepFinishEvent sf:
-                        // Flush any pending text/thinking before finalizing.
-                        if (coalescer.HasPendingText)
-                        {
-                            partial = partial.AppendText(coalescer.FlushText());
-                        }
-                        if (coalescer.HasPendingThinking)
-                        {
-                            partial = partial.AppendThinking(coalescer.FlushThinking());
-                        }
-
-                        // Materialize any tool calls accumulated from Start/Delta fragments.
-                        // Calls with un-parseable args JSON are reported via malformedCalls
-                        // and excluded from the executable list.
-                        var materializedCalls = coalescer.MaterializeToolCalls(malformedCalls);
-                        foreach (var tc in materializedCalls)
-                        {
-                            partial = partial.AppendToolCall(tc);
-                        }
-                        toolCalls.AddRange(materializedCalls);
-
-                        finalUsage = sf.Usage;
-                        stopReason = StopReasonJsonConverter.Parse(sf.FinishReason);
-                        partial = partial.WithFinish(stopReason, finalUsage ?? new Usage(0, 0));
-                        // Forward StepFinish to the bus so status bars / views can
-                        // tally token usage. The event is otherwise swallowed here.
-                        await _eventBus.PublishAsync(new MessageUpdateEvent(sf, partial), ct).ConfigureAwait(false);
+                    {
+                        StepOutcome outcome = await FinalizeStepAsync(sf, coalescer, partial, malformedCalls, ct).ConfigureAwait(false);
+                        partial = outcome.Partial;
+                        toolCalls.AddRange(outcome.MaterializedCalls);
+                        finalUsage = outcome.FinalUsage;
+                        stopReason = outcome.StopReason;
                         break;
+                    }
 
                     case ErrorEvent err:
                         // Discard any per-tool-call pooled StringBuilders before
@@ -535,17 +502,9 @@ public sealed class AgentLoop : IAgentLoop
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Flush any pending buffers before recording the aborted finish.
-            if (coalescer.HasPendingText)
-            {
-                partial = partial.AppendText(coalescer.FlushText());
-            }
-            if (coalescer.HasPendingThinking)
-            {
-                partial = partial.AppendThinking(coalescer.FlushThinking());
-            }
-            // Discard any per-tool-call pooled StringBuilders — otherwise
-            // cancellation mid-stream would leak them.
+            // Flush pending buffers so nothing is lost, then discard pooled
+            // StringBuilders — cancellation mid-stream would otherwise leak them.
+            partial = FlushAll(coalescer, partial);
             coalescer.DiscardPendingToolCalls();
             partial = partial.WithFinish(StopReason.Aborted, finalUsage ?? new Usage(0, 0));
             // Align the loop state with the aborted finish: previously the
@@ -556,10 +515,80 @@ public sealed class AgentLoop : IAgentLoop
             malformedCalls.Clear();
         }
 
-        // Surface malformed tool calls (C4): keep the assistant message's
-        // wire shape consistent by appending a placeholder part per call —
-        // every tool_call must be answered by a tool_result — while the
-        // error result below tells the model its args were un-parseable.
+        partial = AppendMalformedPlaceholders(partial, malformedCalls);
+
+        _logger.LogDebug("Message end: turn={Turn} stopReason={StopReason}", turn, stopReason);
+        await _eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
+
+        return new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason);
+    }
+
+    /// <summary>Flush a pending text run into the message (ROP-C flush choreography).</summary>
+    private static AssistantMessage FlushText(StreamingCoalescer coalescer, AssistantMessage partial) =>
+        coalescer.HasPendingText ? partial.AppendText(coalescer.FlushText()) : partial;
+
+    /// <summary>Flush a pending thinking run into the message.</summary>
+    private static AssistantMessage FlushThinking(StreamingCoalescer coalescer, AssistantMessage partial) =>
+        coalescer.HasPendingThinking ? partial.AppendThinking(coalescer.FlushThinking()) : partial;
+
+    /// <summary>
+    ///     Flush both buffer kinds in wire order (text first, then thinking) —
+    ///     the sequence every non-delta arm and the abort path must perform
+    ///     (ROP-C П.3: five copies of this dance collapse to one helper).
+    /// </summary>
+    private static AssistantMessage FlushAll(StreamingCoalescer coalescer, AssistantMessage partial)
+    {
+        AssistantMessage flushedText = FlushText(coalescer, partial);
+        return FlushThinking(coalescer, flushedText);
+    }
+
+    /// <summary>Publish one MessageUpdateEvent for a coalesced stream delta.</summary>
+    private Task PublishUpdateAsync(LlmEvent evt, AssistantMessage partial, CancellationToken ct) =>
+        _eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct);
+
+    /// <summary>
+    ///     Finalize one provider step: flush buffers, materialize accumulated
+    ///     tool-call fragments (un-parseable ones are reported via
+    ///     <paramref name="malformedCalls" />), stamp usage + stop reason, and
+    ///     forward the finish to the bus so status bars can tally tokens.
+    /// </summary>
+    private async Task<StepOutcome> FinalizeStepAsync(
+        StepFinishEvent sf,
+        StreamingCoalescer coalescer,
+        AssistantMessage partial,
+        List<MalformedToolCall> malformedCalls,
+        CancellationToken ct)
+    {
+        partial = FlushAll(coalescer, partial);
+
+        var materializedCalls = coalescer.MaterializeToolCalls(malformedCalls);
+        for (int i = 0; i < materializedCalls.Count; i++)
+        {
+            partial = partial.AppendToolCall(materializedCalls[i]);
+        }
+
+        var stopReason = StopReasonJsonConverter.Parse(sf.FinishReason);
+        partial = partial.WithFinish(stopReason, sf.Usage ?? new Usage(0, 0));
+        await PublishUpdateAsync(sf, partial, ct).ConfigureAwait(false);
+        return new StepOutcome(partial, materializedCalls, sf.Usage, stopReason);
+    }
+
+    /// <summary>Per-step finalize result handed back to the stream loop.</summary>
+    private sealed record StepOutcome(
+        AssistantMessage Partial,
+        List<ToolCallPart> MaterializedCalls,
+        Usage? FinalUsage,
+        StopReason StopReason);
+
+    /// <summary>
+    ///     Surface malformed tool calls (C4): keep the assistant message's
+    ///     wire shape consistent by appending a placeholder part per call —
+    ///     every tool_call must be answered by a tool_result — while the
+    ///     error result built by the turn tells the model its args were
+    ///     un-parseable.
+    /// </summary>
+    private AssistantMessage AppendMalformedPlaceholders(AssistantMessage partial, List<MalformedToolCall> malformedCalls)
+    {
         for (int i = 0; i < malformedCalls.Count; i++)
         {
             var malformed = malformedCalls[i];
@@ -569,10 +598,7 @@ public sealed class AgentLoop : IAgentLoop
             partial = partial.AppendToolCall(new ToolCallPart(malformed.Id, malformed.ToolName, EmptyJsonArgs()));
         }
 
-        _logger.LogDebug("Message end: turn={Turn} stopReason={StopReason}", turn, stopReason);
-        await _eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
-
-        return new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason);
+        return partial;
     }
 
     /// <summary>
