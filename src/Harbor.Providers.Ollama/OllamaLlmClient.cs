@@ -66,6 +66,9 @@ public sealed class OllamaLlmClient : ILlmClient
             {
                 var httpRequest = BuildRequest(request);
 
+                // ROP-A ПР.3: per-stream tool-call index→id map for stable ids.
+                var indexToId = new Dictionary<int, string>(capacity: 4);
+
                 // Shared pump (ROP-A ПР.1) in raw-line (NDJSON) mode: Ollama has
                 // no "data:" prefix and no [DONE] sentinel — every line is a
                 // JSON chunk, EOF is the end of stream.
@@ -73,7 +76,7 @@ public sealed class OllamaLlmClient : ILlmClient
                     writer, _http, httpRequest,
                     async (line, token) =>
                     {
-                        await WriteNdjsonEventsAsync(line, writer, token).ConfigureAwait(false);
+                        await WriteNdjsonEventsAsync(line, writer, indexToId, token).ConfigureAwait(false);
                         return true;
                     },
                     "Ollama", _logger, cancellationToken,
@@ -243,12 +246,12 @@ public sealed class OllamaLlmClient : ILlmClient
     ///     materialization that the previous MapNdjsonChunk helper required to keep JsonElement
     ///     values alive after dispose.
     /// </summary>
-    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, CancellationToken ct)
+    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, Dictionary<int, string> indexToId, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(line);
-            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement))
+            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement, indexToId))
             {
                 await writer.WriteAsync(evt, ct).ConfigureAwait(false);
             }
@@ -259,7 +262,7 @@ public sealed class OllamaLlmClient : ILlmClient
         }
     }
 
-    private IEnumerable<LlmEvent> MapNdjsonChunkFromDocument(JsonElement root)
+    private IEnumerable<LlmEvent> MapNdjsonChunkFromDocument(JsonElement root, Dictionary<int, string> indexToId)
     {
         var message = root.TryGetProperty("message", out var msgEl) ? msgEl : default;
 
@@ -280,7 +283,16 @@ public sealed class OllamaLlmClient : ILlmClient
         {
             foreach (var tc in tcs.EnumerateArray())
             {
-                string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                // Stable id (ROP-A ПР.3): wire id → remembered id → positional
+                // fallback. Never a fresh Guid per chunk — that broke coalescing.
+                int index = tc.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number
+                    ? idxEl.GetInt32()
+                    : 0;
+                string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
+                    ? idEl.GetString()!
+                    : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+                indexToId[index] = id;
+
                 var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                 if (fn.ValueKind == JsonValueKind.Object)

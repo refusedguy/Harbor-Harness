@@ -83,6 +83,9 @@ public sealed class OpenAILlmClient : ILlmClient
                     ? BuildResponsesRequest(request, apiKeyResult.Value)
                     : BuildChatCompletionsRequest(request, apiKeyResult.Value);
 
+                // ROP-A ПР.3: per-stream tool-call index→id map for stable ids.
+                var indexToId = new Dictionary<int, string>(capacity: 4);
+
                 // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
                 // live in SsePump; it emits exactly one FinishEvent on graceful
                 // end-of-stream ([DONE] or EOF) and none on error/cancel.
@@ -90,7 +93,7 @@ public sealed class OpenAILlmClient : ILlmClient
                     writer, _http, httpRequest,
                     (data, token) => useResponsesApi
                         ? WriteResponsesEventsAsync(data, writer, token)
-                        : WriteChatChunkEventsAsync(data, writer, token),
+                        : WriteChatChunkEventsAsync(data, writer, indexToId, token),
                     "OpenAI API", _logger, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -313,16 +316,16 @@ public sealed class OpenAILlmClient : ILlmClient
 
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the channel.
-    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
-    ///     materialization that the previous MapChatCompletionsChunk helper required to keep
-    ///     JsonElement values alive after dispose.
+    ///     Chunk parsing is delegated to the shared <see cref="OpenAiWire" /> parser
+    ///     (ROP-A ПР.2) — the same canonical code the compat adapter uses, so wire
+    ///     handling cannot drift between native and generic clients.
     /// </summary>
-    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, CancellationToken ct)
+    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, Dictionary<int, string> indexToId, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(data);
-            foreach (var evt in MapChatChunkFromDocument(doc.RootElement))
+            foreach (var evt in OpenAiWire.ParseChatChunk(doc.RootElement, indexToId))
             {
                 await writer.WriteAsync(evt, ct).ConfigureAwait(false);
             }
@@ -330,78 +333,6 @@ public sealed class OpenAILlmClient : ILlmClient
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to parse OpenAI chunk: {Data}", data);
-        }
-    }
-
-    private IEnumerable<LlmEvent> MapChatChunkFromDocument(JsonElement root)
-    {
-        // Enumerate choices lazily; only materialize the first choice we actually use.
-        if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.ValueKind != JsonValueKind.Array)
-        {
-            if (root.TryGetProperty("usage", out var usage))
-            {
-                yield return new StepFinishEvent(0, "stop", new Usage(
-                    usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
-                    usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0));
-            }
-            yield break;
-        }
-
-        // First choice only — OpenAI streams one choice at a time for non-parallel tool calls.
-        using var choicesIter = choicesEl.EnumerateArray();
-        if (!choicesIter.MoveNext()) yield break;
-        var choice = choicesIter.Current;
-        var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
-
-        if (delta.ValueKind == JsonValueKind.Object)
-        {
-            if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-            {
-                string? text = content.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new TextDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-            {
-                string? text = reasoning.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new ThinkingDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("tool_calls", out var tcs) && tcs.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var tc in tcs.EnumerateArray())
-                {
-                    string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
-                    var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
-
-                    if (fn.ValueKind == JsonValueKind.Object)
-                    {
-                        string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
-                        if (!string.IsNullOrEmpty(name))
-                            yield return new ToolCallStartEvent(id, name!);
-
-                        if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
-                        {
-                            string? argsStr = args.GetString();
-                            if (!string.IsNullOrEmpty(argsStr))
-                                yield return new ToolCallDeltaEvent(id, argsStr);
-                        }
-                    }
-                }
-            }
-        }
-
-        if (finishReason is not null)
-        {
-            var usage = root.TryGetProperty("usage", out var u) ? u : default;
-            yield return new StepFinishEvent(0, finishReason, usage.ValueKind == JsonValueKind.Object
-                ? new Usage(
-                    usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
-                    usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0)
-                : null);
         }
     }
 

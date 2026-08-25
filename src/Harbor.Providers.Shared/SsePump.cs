@@ -108,7 +108,9 @@ internal static class SsePump
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
 
-                    if (!await onLine(line, ct).ConfigureAwait(false)) return;
+                    // Graceful stop (sentinel seen) breaks out to the shared
+                    // single-FinishEvent tail below.
+                    if (!await onLine(line, ct).ConfigureAwait(false)) break;
                 }
             }
 
