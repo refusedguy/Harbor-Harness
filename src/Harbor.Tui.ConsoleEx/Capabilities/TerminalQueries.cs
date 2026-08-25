@@ -31,6 +31,13 @@ public static class TerminalQueries
     /// <summary>DECRQM response mode number for bracketed paste.</summary>
     public const int BracketedPasteMode = 2004;
 
+    /// <summary>DECRQM request for synchronized-output mode support:
+    /// CSI ? 2026 $ p (answer: CSI ? 2026 ; Pv $ y) — celldiff §3.4.</summary>
+    public const string DecRqmSyncUpdates = "\u001B[?2026$p";
+
+    /// <summary>DECRQM response mode number for synchronized output.</summary>
+    public const int SyncUpdatesMode = 2026;
+
     // ── SGR mouse ─────────────────────────────────────────────────────────
 
     /// <summary>Enable click tracking + SGR encoding: CSI ?1000h CSI ?1006h (§3.1).</summary>

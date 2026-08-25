@@ -18,5 +18,11 @@ public readonly struct TerminalCapabilities
     /// <summary>DECRQM confirmed bracketed-paste mode (value set/reset known).</summary>
     public bool BracketedPasteConfirmed { get; init; }
 
+    /// <summary>
+    /// DECRQM confirmed synchronized-output mode 2026 (celldiff §3.4) — frames
+    /// may be wrapped in CSI ?2026 h … l for atomic application.
+    /// </summary>
+    public bool SyncUpdates { get; init; }
+
     public static TerminalCapabilities Unprobed() => default;
 }

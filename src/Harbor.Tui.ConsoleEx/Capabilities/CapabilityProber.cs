@@ -59,6 +59,10 @@ public sealed class CapabilityProber
                     var confirmed = response.Value is 1 or 2;
                     caps = caps with { VtResponsive = true, BracketedPasteConfirmed = confirmed };
                     break;
+                case CapabilityEventKind.DecRqmReport when response.Mode == TerminalQueries.SyncUpdatesMode:
+                    var syncConfirmed = response.Value is 1 or 2;
+                    caps = caps with { VtResponsive = true, SyncUpdates = syncConfirmed };
+                    break;
                 case CapabilityEventKind.DecRqmReport:
                     caps = caps with { VtResponsive = true };
                     break;
