@@ -52,8 +52,8 @@ public sealed class BashTool : ITool
         CancellationToken cancellationToken = default)
     {
         string command = args.GetProperty("command").GetString()!;
-        string? cwd = args.TryGetProperty("cwd", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
-        int timeout = args.TryGetProperty("timeout", out var t) && t.ValueKind == JsonValueKind.Number ? t.GetInt32() : 30;
+        string? cwd = JsonArgs.GetString(args, "cwd");
+        int timeout = JsonArgs.GetInt(args, "timeout") ?? 30;
         var env = args.TryGetProperty("env", out var e) && e.ValueKind == JsonValueKind.Object
             ? e.EnumerateObject().ToDictionary(
                 p => p.Name,

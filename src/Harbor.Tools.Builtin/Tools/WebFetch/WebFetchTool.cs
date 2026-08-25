@@ -179,11 +179,9 @@ public sealed class WebFetchTool : ITool
         CancellationToken cancellationToken = default)
     {
         string url = args.GetProperty("url").GetString()!;
-        string? selector = args.TryGetProperty("selector", out var s) && s.ValueKind == JsonValueKind.String
-            ? s.GetString()
-            : null;
-        int maxChars = args.TryGetProperty("maxChars", out var m) && m.ValueKind == JsonValueKind.Number
-            ? Math.Clamp(m.GetInt32(), 1, HardMaxChars)
+        string? selector = JsonArgs.GetString(args, "selector");
+        int maxChars = JsonArgs.GetInt(args, "maxChars") is { } chars
+            ? Math.Clamp(chars, 1, HardMaxChars)
             : DefaultMaxChars;
 
         _logger.LogDebug("WebFetch: {Url} (selector={Selector}, maxChars={MaxChars})",

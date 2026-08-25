@@ -150,11 +150,5 @@ public sealed class WriteTool : ITool
     }
 
     private static bool GetBoolDefaultTrue(JsonElement args, string name)
-    {
-        if (!args.TryGetProperty(name, out var el))
-            return true;
-        if (el.ValueKind == JsonValueKind.False) return false;
-        if (el.ValueKind == JsonValueKind.True) return true;
-        return true; // weird types → default
-    }
+        => JsonArgs.GetBoolOrNull(args, name) ?? true;
 }

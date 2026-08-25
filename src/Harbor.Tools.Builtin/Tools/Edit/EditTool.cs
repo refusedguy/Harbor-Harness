@@ -352,7 +352,7 @@ public sealed class EditTool : ITool
     }
 
     private static bool GetBool(JsonElement args, string name)
-        => args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.True;
+        => JsonArgs.GetBool(args, name);
 
     private readonly record struct EditResult(bool Ok, string Text, int Count, string? Error)
     {

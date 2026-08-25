@@ -96,17 +96,11 @@ public sealed class GrepTool : ITool
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
         string pattern = args.GetProperty("pattern").GetString()!;
-        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
-            ? p.GetString()!
-            : Environment.CurrentDirectory;
-        string? include = args.TryGetProperty("include", out var i) && i.ValueKind == JsonValueKind.String
-            ? i.GetString()
-            : null;
-        bool ignoreCase = args.TryGetProperty("ignoreCase", out var ic)
-                          && ic.ValueKind == JsonValueKind.True;
-        int maxResults = args.TryGetProperty("maxResults", out var m)
-                         && m.ValueKind == JsonValueKind.Number
-            ? Math.Clamp(m.GetInt32(), 1, 10_000)
+        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        string? include = JsonArgs.GetString(args, "include");
+        bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
+        int maxResults = JsonArgs.GetInt(args, "maxResults") is { } max
+            ? Math.Clamp(max, 1, 10_000)
             : 100;
 
         // One-shot search: Compiled is often slower (JIT of regex). MatchTimeout = safety.

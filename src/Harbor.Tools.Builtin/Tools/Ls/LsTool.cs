@@ -77,11 +77,11 @@ public sealed class LsTool : ITool
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        string path = GetString(args, "path") ?? Environment.CurrentDirectory;
-        bool all = GetBool(args, "all");
-        bool recursive = GetBool(args, "recursive");
-        int? depthArg = GetInt(args, "depth");
-        int? maxEntriesArg = GetInt(args, "maxEntries");
+        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        bool all = JsonArgs.GetBool(args, "all");
+        bool recursive = JsonArgs.GetBool(args, "recursive");
+        int? depthArg = JsonArgs.GetInt(args, "depth");
+        int? maxEntriesArg = JsonArgs.GetInt(args, "maxEntries");
 
         int maxDepth = recursive
             ? Math.Clamp(depthArg ?? DefaultMaxDepth, 1, 8)
@@ -278,21 +278,6 @@ public sealed class LsTool : ITool
 
     private static void AppendTruncationNote(StringBuilder sb)
         => sb.AppendLine("…");
-
-    private static string? GetString(JsonElement args, string name)
-        => args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
-            ? el.GetString()
-            : null;
-
-    private static bool GetBool(JsonElement args, string name)
-        => args.TryGetProperty(name, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False
-                                                 && el.GetBoolean();
-
-    private static int? GetInt(JsonElement args, string name)
-        => args.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number
-                                                 && el.TryGetInt32(out int n)
-            ? n
-            : null;
 
     private static string FormatSize(long bytes) => bytes switch
     {

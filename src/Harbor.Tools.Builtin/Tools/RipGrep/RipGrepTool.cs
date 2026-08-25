@@ -94,19 +94,13 @@ public sealed class RipGrepTool : ITool
         }
 
         string pattern = args.GetProperty("pattern").GetString()!;
-        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
-            ? p.GetString()!
-            : Environment.CurrentDirectory;
-        string? glob = args.TryGetProperty("glob", out var g) && g.ValueKind == JsonValueKind.String
-            ? g.GetString()
-            : null;
-        bool ignoreCase = args.TryGetProperty("ignoreCase", out var ic) && ic.ValueKind == JsonValueKind.True;
-        // §ARCH-007: JsonValueKind has True/False (no Boolean). Treat either as "set".
-        bool regex = !args.TryGetProperty("regex", out var rx)
-                     || rx.ValueKind != JsonValueKind.True && rx.ValueKind != JsonValueKind.False
-                     || rx.GetBoolean();
-        int maxResults = args.TryGetProperty("maxResults", out var m) && m.ValueKind == JsonValueKind.Number
-            ? Math.Clamp(m.GetInt32(), 1, HardMaxResults)
+        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        string? glob = JsonArgs.GetString(args, "glob");
+        bool ignoreCase = JsonArgs.GetBool(args, "ignoreCase");
+        // §ARCH-007: absent or weird type → default true (regex mode on).
+        bool regex = JsonArgs.GetBoolOrNull(args, "regex") ?? true;
+        int maxResults = JsonArgs.GetInt(args, "maxResults") is { } results
+            ? Math.Clamp(results, 1, HardMaxResults)
             : DefaultMaxResults;
 
         var resolvedPath = ToolPaths.Resolve(path);

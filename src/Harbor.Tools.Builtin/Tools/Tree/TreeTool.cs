@@ -98,16 +98,14 @@ public sealed class TreeTool : ITool
 
     private ToolResult ExecuteCore(JsonElement args, CancellationToken ct)
     {
-        string path = args.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
-            ? p.GetString()!
-            : Environment.CurrentDirectory;
-        int maxDepth = args.TryGetProperty("maxDepth", out var d) && d.ValueKind == JsonValueKind.Number
-            ? Math.Clamp(d.GetInt32(), 1, HardMaxDepth)
+        string path = JsonArgs.GetString(args, "path") ?? Environment.CurrentDirectory;
+        int maxDepth = JsonArgs.GetInt(args, "maxDepth") is { } depth
+            ? Math.Clamp(depth, 1, HardMaxDepth)
             : DefaultMaxDepth;
-        bool includeHidden = args.TryGetProperty("includeHidden", out var ih) && ih.ValueKind == JsonValueKind.True;
-        bool useGitignore = !args.TryGetProperty("gitignore", out var gi) || gi.ValueKind != JsonValueKind.False;
-        int maxEntries = args.TryGetProperty("maxEntries", out var m) && m.ValueKind == JsonValueKind.Number
-            ? Math.Clamp(m.GetInt32(), 1, HardMaxEntries)
+        bool includeHidden = JsonArgs.GetBool(args, "includeHidden");
+        bool useGitignore = JsonArgs.GetBoolOrNull(args, "gitignore") ?? true;
+        int maxEntries = JsonArgs.GetInt(args, "maxEntries") is { } entries
+            ? Math.Clamp(entries, 1, HardMaxEntries)
             : DefaultMaxEntries;
 
         var resolvedPath = ToolPaths.Resolve(path);

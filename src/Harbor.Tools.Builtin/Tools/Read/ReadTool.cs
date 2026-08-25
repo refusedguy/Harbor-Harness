@@ -72,10 +72,8 @@ public sealed class ReadTool : ITool
         CancellationToken cancellationToken = default)
     {
         string path = args.GetProperty("path").GetString()!;
-        int? offset = args.TryGetProperty("offset", out var o) && o.ValueKind == JsonValueKind.Number
-            ? o.GetInt32() : null;
-        int? limit = args.TryGetProperty("limit", out var l) && l.ValueKind == JsonValueKind.Number
-            ? l.GetInt32() : null;
+        int? offset = JsonArgs.GetInt(args, "offset");
+        int? limit = JsonArgs.GetInt(args, "limit");
 
         _logger.LogDebug("Reading: {Path} (offset={Offset}, limit={Limit})", path, offset, limit);
 

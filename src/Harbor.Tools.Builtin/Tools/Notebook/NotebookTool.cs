@@ -132,12 +132,8 @@ public sealed class NotebookTool : ITool
         CancellationToken cancellationToken = default)
     {
         string action = args.GetProperty("action").GetString()!.ToLowerInvariant();
-        string? key = args.TryGetProperty("key", out var k) && k.ValueKind == JsonValueKind.String
-            ? k.GetString()
-            : null;
-        string? content = args.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
-            ? c.GetString()
-            : null;
+        string? key = JsonArgs.GetString(args, "key");
+        string? content = JsonArgs.GetString(args, "content");
 
         string sessionId = SanitizeSessionId(context.SessionId);
         string path = Path.Combine(_notesRoot, sessionId + ".json");
