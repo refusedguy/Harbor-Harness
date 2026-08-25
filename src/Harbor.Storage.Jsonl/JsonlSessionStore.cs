@@ -84,15 +84,20 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     before the directory-create and file-write.
     ///     <c>Directory.CreateDirectory</c> and <c>File.AppendAllText</c> are
     ///     synchronous I/O that do not accept a CT.
+    ///     <b>ROP-B П.11:</b> the whole body rides <see cref="Result.Try" />
+    ///     with <see cref="Harbor.Abstractions.Results.ResultErrors.Message" />,
+    ///     so cancellation propagates as <see cref="OperationCanceledException" />
+    ///     instead of being masked as a store failure ("Operation was cancelled."
+    ///     used to surface as a red session error for an Esc press).
     /// </remarks>
-    public async Task<Result<Session>> CreateAsync(
+    public Task<Result<Session>> CreateAsync(
         string directory,
         string agentName,
         string providerId,
         string modelId,
         CancellationToken ct = default)
     {
-        try
+        return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
             var session = Session.Create(directory, agentName, providerId, modelId);
@@ -125,17 +130,9 @@ public sealed class JsonlSessionStore : ISessionStore
             }
 
             _messageCache.TryRemove(session.Id, out _);
-            return Result.Success(session);
-        }
-        catch (OperationCanceledException)
-        {
-            return Result.Failure<Session>("Operation was cancelled.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create session");
-            return Result.Failure<Session>(ex.Message);
-        }
+            return session;
+        }, Harbor.Abstractions.Results.ResultErrors.Message)
+            .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
     }
 
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)

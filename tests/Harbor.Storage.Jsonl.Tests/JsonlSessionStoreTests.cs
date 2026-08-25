@@ -133,3 +133,60 @@ internal static class JsonlSessionStoreExtensions
         return (string)field!.GetValue(store)!;
     }
 }
+
+/// <summary>
+///     ROP-B П.11: cancellation is NOT a store failure — CreateAsync must let
+///     <see cref="OperationCanceledException" /> propagate instead of masking
+///     an Esc press as "Operation was cancelled." session error.
+/// </summary>
+public class JsonlSessionStoreCancellationTests
+{
+    [Test]
+    public async Task CreateAsync_PreCancelledToken_PropagatesCancellation()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.That(async () =>
+                await store.CreateAsync("/dir", "code", "anthropic", "claude-opus-4", cts.Token)
+            ).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Test]
+    public async Task CreateAsync_CancelledMidway_DoesNotReturnFailureResult()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var store = new JsonlSessionStore(tempDir, NullLogger<JsonlSessionStore>.Instance);
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+            // Either completes fast enough or propagates — never a Failure result.
+            try
+            {
+                var result = await store.CreateAsync("/dir", "code", "anthropic", "claude-opus-4", cts.Token);
+                await Assert.That(result.IsSuccess).IsTrue();
+            }
+            catch (OperationCanceledException)
+            {
+                // expected under throttled CI
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+}
