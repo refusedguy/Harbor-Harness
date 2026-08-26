@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Tui.ConsoleEx.PtyTests (CE-5): L2 end-to-end scenarios for the
+    ConsoleEx REPL running as a real process inside a real pseudo-terminal.
+
+    Layer under test: the FULL wire path — termios raw mode, raw stdin bytes,
+    ANSI stdout bytes, alt-screen diffing, resize — the layer that unit tests
+    and TestBackend-based suites structurally cannot see (the CE-4 live-ghostty
+    AccessViolation was exactly such a blind spot).
+
+    Discipline:
+      * All scenario classes carry [NotInParallel("pty")] — process spawn +
+        real PTYs are slow and must not contend.
+      * Every wait is bounded; per-test budget ~30 s.
+      * Linux-only by design (CI platform); off-Linux runs are Skipped, the
+        Windows ConPTY port is an explicit follow-up.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);TUnit0055</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>

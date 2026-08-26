@@ -124,5 +124,6 @@
         <Project Path="tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj"/>
         <Project Path="tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj"/>
         <Project Path="tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj"/>
+        <Project Path="tests/Harbor.Tui.ConsoleEx.PtyTests/Harbor.Tui.ConsoleEx.PtyTests.csproj"/>
     </Folder>
 </Solution>
