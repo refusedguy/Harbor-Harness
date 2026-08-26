@@ -153,6 +153,7 @@
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.ConsoleEx\Harbor.Tui.ConsoleEx.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
 

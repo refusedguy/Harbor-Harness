@@ -183,6 +183,9 @@ public sealed class HarborConfig
         Tui = Ui.Tui,
         Storage = Ui.Storage,
         Onboarded = Ui.Onboarded,
+        // Persist the ConsoleEx section only when it diverges from defaults —
+        // keeps config.json free of knob noise for users who never touched it.
+        ConsoleEx = Ui.ConsoleEx == ConsoleExUiConfig.Default ? null : Ui.ConsoleEx,
         DefaultProvider = Identity.Provider?.Value,
         DefaultModel = Identity.Model?.ToString(),
         OnboardingCompleted = Ui.Onboarded,
@@ -245,6 +248,7 @@ public sealed class RawConfigDto
     [JsonPropertyName("tui")] public string? Tui { get; set; }
     [JsonPropertyName("storage")] public string? Storage { get; set; }
     [JsonPropertyName("onboarded")] public bool? Onboarded { get; set; }
+    [JsonPropertyName("consoleEx")] public ConsoleExUiConfig? ConsoleEx { get; set; }
 
     [JsonPropertyName("defaultProvider")] public string? DefaultProvider { get; set; }
     [JsonPropertyName("defaultModel")] public string? DefaultModel { get; set; }
@@ -368,7 +372,10 @@ public static class ConfigNormalizer
         config.Ui = new PresentationConfig(
             raw.Tui ?? PresentationConfig.Default.Tui,
             raw.Storage ?? raw.StorageBackend ?? PresentationConfig.Default.Storage,
-            raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded);
+            raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded)
+        {
+            ConsoleEx = raw.ConsoleEx ?? ConsoleExUiConfig.Default,
+        };
     }
 
     private static void ApplyTooling(HarborConfig config, RawConfigDto raw)

@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.App.Cli.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Hosting;
@@ -40,7 +41,48 @@ internal static partial class HostBuilder
 
         builder.Services.AddCliCompositeConfig();
 
+        // CE-4: второй путь рендера. Регистрации ленивые — резолв только
+        // когда интерактивный REPL выбрал ConsoleEx; legacy-путь не меняется.
+        builder.Services.AddConsoleEx(TryReadConsoleExUi());
+
         return builder.Build();
+    }
+
+    /// <summary>
+    ///     Best-effort read of the <c>consoleEx</c> section from
+    ///     <c>~/.harbor/config.json</c> for DI registration. Runs before DI /
+    ///     <see cref="Harbor.Application.Configuration.IConfigStore" /> exists,
+    ///     so it mirrors <see cref="TuiMode" />'s pre-host readers: missing or
+    ///     unreadable file ⇒ defaults, never a throw. Manual field extraction —
+    ///     no JsonSerializer reflection on the AOT path.
+    /// </summary>
+    private static ConsoleExUiConfig TryReadConsoleExUi()
+    {
+        try
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string path = Path.Combine(home, ".harbor", "config.json");
+            if (!File.Exists(path))
+                return ConsoleExUiConfig.Default;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (!doc.RootElement.TryGetProperty("consoleEx", out var el)
+                || el.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return ConsoleExUiConfig.Default;
+            }
+
+            bool enabled = !el.TryGetProperty("enabled", out var enabledEl)
+                           || enabledEl.ValueKind != System.Text.Json.JsonValueKind.False;
+            bool syncUpdates = el.TryGetProperty("syncUpdates", out var syncEl)
+                ? syncEl.ValueKind != System.Text.Json.JsonValueKind.False
+                : ConsoleExUiConfig.Default.SyncUpdates;
+            return new ConsoleExUiConfig(enabled, syncUpdates);
+        }
+        catch
+        {
+            // Best-effort — defaults win over any config-read failure.
+            return ConsoleExUiConfig.Default;
+        }
     }
 
     /// <summary>CLI preset (di-design §3.3): jsonl storage, scrollback + TypeFilter middleware.</summary>

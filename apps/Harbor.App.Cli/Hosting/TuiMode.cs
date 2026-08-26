@@ -35,8 +35,12 @@ internal static class TuiMode
     /// </summary>
     private static readonly HashSet<string> InteractiveTuis = new(StringComparer.OrdinalIgnoreCase)
     {
-        "spectre-tui", "spectre", "fullscreen", "termina", "terminal-gui", "razor"
+        "spectre-tui", "spectre", "fullscreen", "termina", "terminal-gui", "razor",
+        "consoleex",
     };
+
+    /// <summary>The ConsoleEx renderer id (<c>HARBOR_TUI=consoleex</c>, <c>tui: "consoleex"</c>).</summary>
+    public const string ConsoleExId = "consoleex";
 
     /// <summary>
     ///     Returns <see langword="true" /> when the CLI is going to enter an
@@ -82,6 +86,14 @@ internal static class TuiMode
         string? configTui = TryReadDefaultTuiFromConfig();
         if (!string.IsNullOrWhiteSpace(configTui) && !string.Equals(configTui, "auto", StringComparison.OrdinalIgnoreCase))
             return configTui!;
+
+        // CE-4: HarborConfig (~/.harbor/config.json) may opt into ConsoleEx via
+        // `tui: "consoleex"`. Only the consoleex value is honored here — legacy
+        // values keep their historical "cli.json wins / config.tui ignored"
+        // semantics so nobody's existing setup changes behavior.
+        if (string.Equals(TryReadHarborConfigTui(), ConsoleExId, StringComparison.OrdinalIgnoreCase))
+            return ConsoleExId;
+
         return "spectre-tui";
 #else
         return "plain";
@@ -114,6 +126,58 @@ internal static class TuiMode
                 or "--headless" or "headless" => false,
             _ => true // unknown command falls back to interactive
         };
+    }
+
+    /// <summary>
+    ///     Best-effort read of <c>tui</c> directly from
+    ///     <c>~/.harbor/config.json</c>. Returns <see langword="null" /> if the
+    ///     file is missing or unreadable. Mirrors
+    ///     <see cref="TryReadDefaultTuiFromConfig" />: pre-DI, never throws.
+    /// </summary>
+    private static string? TryReadHarborConfigTui()
+    {
+        try
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string path = Path.Combine(home, ".harbor", "config.json");
+            if (!File.Exists(path))
+                return null;
+            string json = File.ReadAllText(path);
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty("tui", out var el)
+                   && el.ValueKind == JsonValueKind.String
+                ? el.GetString()
+                : null;
+        }
+        catch
+        {
+            // Best-effort — never block logging setup on a config-read failure.
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     Returns <see langword="true" /> when the ConsoleEx renderer should
+    ///     serve the interactive REPL. Selection sources (first match wins):
+    ///     <c>HARBOR_TUI=consoleex</c>, then <c>tui: "consoleex"</c> in
+    ///     <c>~/.harbor/config.json</c>. The caller additionally gates on
+    ///     <c>consoleEx.enabled</c>.
+    /// </summary>
+    public static bool IsConsoleExSelected()
+    {
+#if HARBOR_WITH_SPECTRE_TUI
+        string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        if (envTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!string.IsNullOrWhiteSpace(envTui))
+            return false; // an explicit non-consoleex renderer always wins
+
+        string configTui = ResolveTuiId();
+        return configTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase);
+#else
+        return false;
+#endif
     }
 
     /// <summary>

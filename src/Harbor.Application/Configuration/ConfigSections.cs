@@ -92,6 +92,29 @@ public sealed record CompactionConfig(
 }
 
 /// <summary>
+///     ConsoleEx renderer tuning (<c>ui.consoleEx</c> in config.json). The
+///     ConsoleEx path itself is selected by <c>tui: "consoleex"</c> or the
+///     <c>HARBOR_TUI=consoleex</c> env var; this section is its kill-switch
+///     and frame-wrapper knob.
+/// </summary>
+/// <param name="Enabled">
+///     Master switch for the ConsoleEx interactive renderer. When explicitly
+///     <c>false</c>, a <c>tui: "consoleex"</c> selection falls back to the
+///     legacy ANSI renderer with a log line instead of failing.
+/// </param>
+/// <param name="SyncUpdates">
+///     Wrap frames in the synchronized-update pair <c>CSI ?2026 h/l</c>
+///     (DECSYNC). Terminals without support simply ignore the sequence; the
+///     probe refines this later, the config is the safe default.
+/// </param>
+public sealed record ConsoleExUiConfig(
+    [property: JsonPropertyName("enabled")] bool Enabled = true,
+    [property: JsonPropertyName("syncUpdates")] bool SyncUpdates = true)
+{
+    public static readonly ConsoleExUiConfig Default = new();
+}
+
+/// <summary>
 ///     UI / storage presentation preferences.
 /// </summary>
 public sealed record PresentationConfig(
@@ -99,6 +122,10 @@ public sealed record PresentationConfig(
     string Storage,
     bool Onboarded)
 {
+    /// <summary>ConsoleEx renderer section — defaults apply when absent.</summary>
+    [JsonPropertyName("consoleEx")]
+    public ConsoleExUiConfig ConsoleEx { get; init; } = ConsoleExUiConfig.Default;
+
     public static readonly PresentationConfig Default = new("ansi", "jsonl", false);
 
     public Result<PresentationConfig> Validate()
