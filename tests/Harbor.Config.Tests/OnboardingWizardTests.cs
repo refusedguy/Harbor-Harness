@@ -299,7 +299,7 @@ public class OnboardingWizardTests
     {
         // Registry with NO clients → GetClient fails for any id.
         var registry = new FakeLiveRegistry([]);
-        ((FakeLiveRegistry)registry!).DisableClients();
+        registry.DisableClients();
         string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
         var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
         var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
