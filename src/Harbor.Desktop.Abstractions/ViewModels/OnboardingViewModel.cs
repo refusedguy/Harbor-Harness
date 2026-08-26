@@ -32,6 +32,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     private readonly ICommonConfigStore _configStore;
     private readonly ILogger<OnboardingViewModel> _logger;
     private readonly IMessenger _messenger;
+    private readonly Harbor.Abstractions.Providers.IProviderHealthCheck? _healthCheck;
     private readonly IThemeService _theme;
     private readonly IToastService _toasts;
     private readonly CancellationTokenSource _wizardCts = new();
@@ -68,23 +69,53 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _statusText = string.Empty;
 
+    /// <summary>
+    ///     Result of the last "test connection" probe for the selected
+    ///     provider (empty until run; never blocks advancing — the check is
+    ///     informational, a transient outage must not trap the user).
+    /// </summary>
+    [ObservableProperty]
+    private string _connectionStatus = string.Empty;
+
+    /// <summary>True while the connection probe is in flight.</summary>
+    [ObservableProperty]
+    private bool _isTestingConnection;
+
+    /// <summary>
+    ///     Whether the "Test connection" affordance is available — depends on
+    ///     the host supplying an <see cref="Harbor.Abstractions.Providers.IProviderHealthCheck" />.
+    ///     Fixed for the VM's lifetime, so a plain one-way binding is enough.
+    /// </summary>
+    public bool HasConnectionTest => _healthCheck is not null;
+
     /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
     [ObservableProperty]
     private string _themeChoice = "dark";
 
     /// <summary>Construct the onboarding wizard view-model.</summary>
+    /// <param name="configStore">Common config store the result is persisted to.</param>
+    /// <param name="theme">Theme service applied on finish.</param>
+    /// <param name="toasts">Toast notifications.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="messenger">Messenger for wizard-completion broadcast.</param>
+    /// <param name="healthCheck">
+    ///     Optional "test connection" probe (PROD-UI-0 З.2). When present, a
+    ///     Test connection button is live on step 3; when absent the UI hides it.
+    /// </param>
     public OnboardingViewModel(
         ICommonConfigStore configStore,
         IThemeService theme,
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
-        IMessenger messenger)
+        IMessenger messenger,
+        Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null)
     {
         _configStore = configStore;
         _theme = theme;
         _toasts = toasts;
         _logger = logger;
         _messenger = messenger;
+        _healthCheck = healthCheck;
 
         // PROD-UI-0 З.1: single source of truth — the wizard catalogue is
         // derived from <see cref="ProviderPresets" /> (the same presets the
@@ -256,6 +287,49 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         if (SelectedProvider is not null && string.IsNullOrEmpty(DefaultModel))
         {
             DefaultModel = SelectedProvider.DefaultModel;
+        }
+    }
+
+    /// <summary>
+    ///     PROD-UI-0 З.2: probe the selected provider with a cheap models-list
+    ///     request and surface a classified, human-readable verdict. Never
+    ///     blocks advancing — failures are informational (may be transient).
+    /// </summary>
+    [RelayCommand]
+    private async Task TestConnectionAsync(CancellationToken ct)
+    {
+        if (_healthCheck is null || IsTestingConnection) return;
+        string? providerId = SelectedProvider?.Id;
+        if (providerId is null) return;
+
+        var pid = Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
+        if (pid.IsFailure)
+        {
+            ConnectionStatus = "Invalid provider id.";
+            return;
+        }
+
+        IsTestingConnection = true;
+        ConnectionStatus = $"Testing connection to {providerId}…";
+        try
+        {
+            var result = await _healthCheck.CheckAsync(pid.Value, ct).ConfigureAwait(true);
+            ConnectionStatus = result.IsSuccess
+                ? $"✓ Connection OK — {result.Value.ModelsCount} model(s), {result.Value.LatencyMs} ms."
+                : $"⚠ {result.Error}";
+        }
+        catch (OperationCanceledException)
+        {
+            ConnectionStatus = "Connection test cancelled.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Connection test failed for {Provider}", providerId);
+            ConnectionStatus = $"⚠ Connection test failed: {ex.Message}";
+        }
+        finally
+        {
+            IsTestingConnection = false;
         }
     }
 

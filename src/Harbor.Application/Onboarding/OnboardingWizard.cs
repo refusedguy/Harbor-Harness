@@ -1,3 +1,5 @@
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Onboarding;
@@ -14,6 +16,7 @@ public sealed class OnboardingWizard
 {
     private readonly AuthStore _authStore;
     private readonly IConfigStore _configStore;
+    private readonly Abstractions.Providers.IProviderHealthCheck? _healthCheck;
     private readonly ILogger<OnboardingWizard>? _logger;
 
     /// <summary>
@@ -22,10 +25,20 @@ public sealed class OnboardingWizard
     /// <param name="configStore">The config store to persist the selected provider/model/agent.</param>
     /// <param name="authStore">The auth store to persist the entered API key.</param>
     /// <param name="logger">Optional logger.</param>
-    public OnboardingWizard(IConfigStore configStore, AuthStore authStore, ILogger<OnboardingWizard>? logger = null)
+    /// <param name="healthCheck">
+    ///     Optional "test connection" probe (PROD-UI-0 З.2). When present, the
+    ///     wizard verifies the key right after it is saved instead of failing
+    ///     on the first chat turn. When absent the step is skipped.
+    /// </param>
+    public OnboardingWizard(
+        IConfigStore configStore,
+        AuthStore authStore,
+        ILogger<OnboardingWizard>? logger = null,
+        Abstractions.Providers.IProviderHealthCheck? healthCheck = null)
     {
         _configStore = configStore;
         _authStore = authStore;
+        _healthCheck = healthCheck;
         _logger = logger;
     }
 
@@ -49,6 +62,7 @@ public sealed class OnboardingWizard
                 writer($"✓ Selected provider: {p.DisplayName}");
             })
             .Bind(p => SaveApiKeyIfNeededAsync(p, reader, writer, ct))
+            .Bind(p => TestConnectionAsync(p, writer, ct))
             .Bind(async p => Result.Success((
                 Provider: p,
                 Model: await PickModelAsync(reader, writer, p, ct).ConfigureAwait(false))))
@@ -90,6 +104,40 @@ public sealed class OnboardingWizard
         writer("║  Type your prompt and press Enter to start.                   ║");
         writer("║  Type /help for commands, /exit to quit.                      ║");
         writer("╚══════════════════════════════════════════════════════════════╝");
+    }
+
+    /// <summary>
+    ///     PROD-UI-0 З.2: probe the provider right after the key is saved so a
+    ///     bad key / wrong URL surfaces now, not on the first chat turn.
+    ///     Non-fatal: the wizard continues even when the check fails — the
+    ///     reason may be transient (offline machine) and the user can fix it
+    ///     later via /auth or Settings.
+    /// </summary>
+    private async Task<Result<ProviderPresets.Preset>> TestConnectionAsync(
+        ProviderPresets.Preset provider,
+        Action<string> writer,
+        CancellationToken ct)
+    {
+        if (_healthCheck is null)
+            return Result.Success(provider);
+
+        var pidResult = ProviderId.TryCreate(provider.Id);
+        if (pidResult.IsFailure)
+            return Result.Success(provider); // malformed preset id — not a connection problem
+
+        writer("");
+        writer($"  ⏳ Testing connection to {provider.Id}…");
+        var result = await _healthCheck.CheckAsync(pidResult.Value, ct).ConfigureAwait(false);
+
+        if (result.IsSuccess)
+        {
+            writer($"  ✓ Connection OK — {result.Value.ModelsCount} model(s), {result.Value.LatencyMs} ms.");
+            return Result.Success(provider);
+        }
+
+        writer($"  ⚠ Connection test failed: {result.Error}");
+        writer("    You can continue — fix the key later with `/auth set`.");
+        return Result.Success(provider);
     }
 
     private async Task<Result<ProviderPresets.Preset>> PickProviderAsync(Func<string, Task<string>> reader, Action<string> writer, CancellationToken ct)

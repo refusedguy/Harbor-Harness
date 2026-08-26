@@ -26,6 +26,13 @@ internal static class CoreModule
 
         services.AddSingleton<AuthStore>();
         services.AddSingleton<OnboardingWizard>();
+        // PROD-UI-0 З.2: cheap "test connection" probe shared by the CLI
+        // wizard, the desktop onboarding VM and future model pickers.
+        services.AddSingleton<Harbor.Abstractions.Providers.IProviderHealthCheck>(sp =>
+            new Harbor.Application.Providers.ProviderHealthCheck(
+                sp.GetRequiredService<Harbor.Abstractions.Providers.IProviderRegistry>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                    .CreateLogger<Harbor.Application.Providers.ProviderHealthCheck>()));
         services.AddSingleton<ITokenTracker, TokenTracker>();
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
         services.AddSingleton<MessageConverter>();

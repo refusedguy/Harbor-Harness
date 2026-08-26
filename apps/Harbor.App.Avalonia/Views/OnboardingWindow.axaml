@@ -216,6 +216,18 @@
                             <TextBlock Text="✓ This provider doesn't need an API key. Click Next to continue."
                                        TextWrapping="Wrap" Foreground="{DynamicResource StateSuccessBrush}" FontSize="13" />
                         </Border>
+                        <!-- PROD-UI-0 З.2: test connection probe -->
+                        <StackPanel IsVisible="{Binding HasConnectionTest}" Spacing="6">
+                            <Button Content="🔌 Test connection"
+                                    Command="{Binding TestConnectionCommand}"
+                                    IsEnabled="{Binding !IsTestingConnection}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="34" Padding="14,4" />
+                            <TextBlock Text="{Binding ConnectionStatus}"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextTertiaryBrush}"
+                                       FontFamily="{DynamicResource FontMono}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Step 4: Default model -->
