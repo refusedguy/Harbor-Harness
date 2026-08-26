@@ -116,8 +116,18 @@ public sealed class StreamingMarkdownRenderer
             _frozenSourceChars += frozenInThisTail;
         }
 
+        // A completed document freezes its trailing region wholesale — the
+        // source can never grow again, so the last (possibly unterminated)
+        // block becomes immutable too and steady-state renders are free.
+        if (_complete && frozenInThisTail < tail.Length)
+        {
+            _frozenLines.AddRange(RenderRange(tail, frozenInThisTail, tail.Length, _width));
+            _frozenSourceChars += tail.Length - frozenInThisTail;
+            frozenInThisTail = tail.Length;
+        }
+
         RenderFreshTail(tail, frozenInThisTail);
-        return rebuiltAll || frozeAny;
+        return rebuiltAll || frozeAny || _complete;
     }
 
     private void RenderFreshTail(string tail, int from)

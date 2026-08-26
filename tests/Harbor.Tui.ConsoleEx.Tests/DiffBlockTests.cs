@@ -23,7 +23,6 @@ public class DiffBlockTests
     {
         var lines = UnifiedDiffParser.Parse(Sample);
 
-        // diff/index/---/+++ are all file headers.
         await Assert.That(lines.Count(l => l.Kind == DiffLineKind.FileHeader)).IsEqualTo(4);
         await Assert.That(lines.Count(l => l.Kind == DiffLineKind.HunkHeader)).IsEqualTo(1);
         await Assert.That(lines.Count(l => l.Kind == DiffLineKind.Add)).IsEqualTo(1);

@@ -173,7 +173,7 @@ public class StatusSegmentBarTests
         await Assert.That(accent).IsEqualTo(StatusAccent.Warning);
 
         vm.Mode = StatusBarMode.Compacting;
-        n = vm.BuildSegments(ws);
+        _ = vm.BuildSegments(ws);
         await Assert.That(ws[1].Text).IsEqualTo("compacting…");
         await Assert.That(ws[1].Accent).IsEqualTo(StatusAccent.Dim);
     }

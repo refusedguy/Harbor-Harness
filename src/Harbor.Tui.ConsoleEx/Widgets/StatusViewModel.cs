@@ -95,11 +95,22 @@ public sealed class StatusViewModel
     private const char Filled = '▰';
     private const char Empty = '▱';
 
+    /// <summary>Precomputed bars — BuildSegments stays allocation-free.</summary>
+    private static readonly string[] BarCache =
+    [
+        new string(Empty, CtxCells),
+        new string(Filled, 1) + new string(Empty, CtxCells - 1),
+        new string(Filled, 2) + new string(Empty, CtxCells - 2),
+        new string(Filled, 3) + new string(Empty, CtxCells - 3),
+        new string(Filled, 4) + new string(Empty, CtxCells - 4),
+        new string(Filled, 5) + new string(Empty, CtxCells - 5),
+        new string(Filled, CtxCells),
+    ];
+
     internal static string ContextBar(double ratio)
     {
         int filled = (int)Math.Round(ratio * CtxCells, MidpointRounding.AwayFromZero);
-        filled = Math.Clamp(filled, 0, CtxCells);
-        return new string(Filled, filled) + new string(Empty, CtxCells - filled);
+        return BarCache[Math.Clamp(filled, 0, CtxCells)];
     }
 
     internal static string FormatCount(long v) => v switch
