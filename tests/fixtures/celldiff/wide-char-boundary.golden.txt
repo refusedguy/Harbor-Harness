@@ -1,0 +1,21 @@
+# golden: wide-char-boundary
+## grid art (10x3)
+X  ?   あ
+          
+  ok中!   
+## cells (x,y: rune fg/bg/attrs width)
+0,0: 'X' d/d/R w1
+3,0: U+1F44D d/d/- w2
+4,0: U+0000 d/d/- tail
+8,0: 'あ' d/d/- w2
+9,0: U+0000 d/d/- tail
+2,2: 'o' d/d/- w1
+3,2: 'k' d/d/- w1
+4,2: '中' d/d/- w2
+5,2: U+0000 d/d/- tail
+6,2: '!' d/d/- w1
+## frames
+## frame 1 (60 bytes)
+\e[?2026h\e[1;1H\e[0m中\e[1;4H👍\e[1;8Hあ\e[3;3Hok中!\e[?2026l
+## frame 2 (46 bytes)
+\e[?2026h\e[1;1H\e[0m\e[7mX\e[0m \e[1;8H あ\e[?2026l

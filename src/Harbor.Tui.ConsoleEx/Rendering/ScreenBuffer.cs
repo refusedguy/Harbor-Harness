@@ -122,16 +122,44 @@ public sealed class ScreenBuffer
 
     public void FillAll(in Cell cell) => Fill(new Rect(0, 0, Cols, Rows), in cell);
 
+    /// <summary>
+    /// Fills the clipped rectangle. Wide fill cells keep the §1.3 pair
+    /// structure: each lead gets a tail, a pair that would cross the rect's
+    /// right edge is skipped (ratatui policy), and clobbered neighbors have
+    /// their halves cleared so no ghost glyph survives.
+    /// </summary>
     public void Fill(Rect rect, in Cell cell)
     {
         var clipped = rect.Intersect(new Rect(0, 0, Cols, Rows));
+        bool wide = cell.Width == Cell.Wide;
         for (int y = clipped.Y; y < clipped.Bottom; y++)
         {
             int rowBase = y * Cols;
-            for (int x = clipped.X; x < clipped.Right; x++)
+            for (int x = clipped.X; x < clipped.Right; )
             {
                 ClearWidePairAt(x, y);
-                _cells[rowBase + x] = cell;
+                if (wide)
+                {
+                    if (x + 1 >= clipped.Right)
+                    {
+                        x += 1; // pair does not fit before the rect edge — skip
+                        continue;
+                    }
+
+                    if (_cells[rowBase + x + 1].Width == Cell.Wide && x + 2 < Cols)
+                    {
+                        ClearWidePairAt(x + 1, y); // don't orphan the next pair's tail
+                    }
+
+                    _cells[rowBase + x] = cell;
+                    _cells[rowBase + x + 1] = Cell.WideTail;
+                    x += 2;
+                }
+                else
+                {
+                    _cells[rowBase + x] = cell;
+                    x += 1;
+                }
             }
 
             _rowHashValid[y] = false;

@@ -1,0 +1,11 @@
+# golden: empty-screen
+## grid art (20x6)
+                    
+                    
+                    
+                    
+                    
+                    
+## cells (x,y: rune fg/bg/attrs width)
+## frames
+(no frames)

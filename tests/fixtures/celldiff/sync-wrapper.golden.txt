@@ -1,0 +1,7 @@
+# golden: sync-wrapper
+## sync off
+## frame 1 (20 bytes)
+\e[1;2H\e[0m\e[38;5;4mX
+## sync on
+## frame 1 (36 bytes)
+\e[?2026h\e[1;2H\e[0m\e[38;5;4mX\e[?2026l
