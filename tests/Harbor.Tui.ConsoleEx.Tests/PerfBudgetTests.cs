@@ -27,6 +27,15 @@ public class PerfBudgetTests
         _ = tl.PrepareFrame(80, 20);
         tl.Paint(buffer, new Rect(0, 0, 80, 20));
 
+        // Warm past JIT tier-up thresholds: tier transitions charge one-off
+        // runtime bookkeeping bytes to the measuring thread, masking the true
+        // steady-state number.
+        for (int w = 0; w < 100_000; w++)
+        {
+            _ = tl.PrepareFrame(80, 20);
+            tl.Paint(buffer, new Rect(0, 0, 80, 20));
+        }
+
         GC.WaitForPendingFinalizers();
         long before = GC.GetAllocatedBytesForCurrentThread();
 
@@ -50,6 +59,11 @@ public class PerfBudgetTests
         renderer.Push("# heading\n\nparagraph **with** inline `styles`.\n");
         renderer.Complete();
         _ = renderer.RenderTail(60);
+
+        for (int w = 0; w < 100_000; w++)
+        {
+            _ = renderer.RenderTail(60);
+        }
 
         GC.WaitForPendingFinalizers();
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -77,6 +91,15 @@ public class PerfBudgetTests
 
         _ = vm.BuildSegments(workspace);
         StatusBarWidget.Paint(buffer, panelRect, workspace.AsSpan()[..5]);
+
+        for (int w = 0; w < 100_000; w++)
+        {
+            int wn = vm.BuildSegments(workspace);
+            Span<StatusSeg> wspan = workspace;
+            int wkept = StatusBarLayout.Fit(wspan[..wn], 79);
+            StatusBarWidget.Paint(buffer, panelRect, wspan[..wkept]);
+            _ = SpinnerStrip.Frame(w, SpinnerRhythm.Working);
+        }
 
         GC.WaitForPendingFinalizers();
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -137,6 +160,7 @@ public class PerfBudgetTests
 
         sw.Stop();
         double avgMs = sw.Elapsed.TotalMilliseconds / frames;
+        Console.WriteLine($"ce3-frame-avg: {avgMs:F3} ms over {frames} frames (budget 16 ms)");
 
         // Report the actual measurement; guard against pathological regressions only.
         await Assert.That(avgMs).IsLessThan(16.0 * 4);
