@@ -12,12 +12,29 @@ namespace Harbor.Tui.ConsoleEx.Widgets;
 public sealed class StreamingMarkdownBlock : IChatBlock
 {
     private readonly StreamingMarkdownRenderer _renderer = new();
+    private int _lastRenderWidth;
 
     public StreamingMarkdownBlock() { }
 
     /// <summary>Test seam: start from pre-accumulated text.</summary>
     public StreamingMarkdownBlock(StreamingMarkdownRenderer renderer) =>
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+
+    private int EffectiveWidth(int requested)
+    {
+        if (requested > 0)
+        {
+            return requested;
+        }
+
+        return _lastRenderWidth > 0 ? _lastRenderWidth : 80;
+    }
+
+    private void EnsureRendered(int width)
+    {
+        _lastRenderWidth = EffectiveWidth(width);
+        _ = _renderer.RenderTail(_lastRenderWidth);
+    }
 
     public string Kind => "stream";
 
@@ -35,7 +52,7 @@ public sealed class StreamingMarkdownBlock : IChatBlock
 
     public BlockMeasure Measure(int width)
     {
-        _ = _renderer.RenderTail(Math.Max(1, width));
+        EnsureRendered(width);
         return BlockMeasure.Exact(_renderer.LineCount);
     }
 
@@ -43,7 +60,7 @@ public sealed class StreamingMarkdownBlock : IChatBlock
 
     public void Paint(in BlockPaintContext ctx)
     {
-        _ = _renderer.RenderTail(Math.Max(1, ctx.Rect.Width));
+        EnsureRendered(ctx.Rect.Width);
         int rows = ctx.Rect.Height;
         for (int i = 0; i < _renderer.LineCount && i < rows; i++)
         {
@@ -53,6 +70,7 @@ public sealed class StreamingMarkdownBlock : IChatBlock
 
     public string RawText()
     {
+        EnsureRendered(_lastRenderWidth);
         var sb = new System.Text.StringBuilder();
         for (int i = 0; i < _renderer.LineCount; i++)
         {

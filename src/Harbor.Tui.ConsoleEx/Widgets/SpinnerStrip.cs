@@ -49,6 +49,13 @@ public static class SpinnerStrip
         };
     }
 
+    /// <summary>Same frame as <see cref="Frame"/> but as the backing static string — zero allocations.</summary>
+    public static string FrameString(long monotonicTick, SpinnerRhythm rhythm = SpinnerRhythm.Working) => rhythm switch
+    {
+        SpinnerRhythm.Awaiting => AwaitingFrames[(int)((monotonicTick / PulsePeriod) % AwaitingFrames.Length)],
+        _ => WorkingFrames[(int)(monotonicTick % WorkingFrames.Length)],
+    };
+
     /// <summary>Narrow-terminal fallback set selection.</summary>
     public static ReadOnlySpan<char> AsciiFrame(long monotonicTick) =>
         AsciiWorkingFrames[(int)(monotonicTick % AsciiWorkingFrames.Length)];

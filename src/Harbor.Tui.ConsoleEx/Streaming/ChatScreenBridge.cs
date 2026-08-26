@@ -1,0 +1,335 @@
+using System.Text;
+using System.Text.Json;
+using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Tui.ConsoleEx.Widgets;
+using Harbor.Tui.ConsoleEx.Widgets.Markdown;
+
+namespace Harbor.Tui.ConsoleEx.Streaming;
+
+/// <summary>
+/// Alt-screen counterpart of <see cref="InlineAgentStreamBridge"/> (CE-3 W2.4):
+/// feeds agent events into the <see cref="ChatTimelinePanel"/> feed instead of
+/// the inline scrollback. Deltas pass through the CE-1
+/// <see cref="CommitTickPacer"/> — completed source lines queue up and reveal
+/// at typing rate in Smooth mode or burst in CatchUp (widgets §3.4), so token
+/// storms never outpace frames. The event bus remains the only seam: no
+/// direct AgentLoop coupling.
+///
+/// Event → block map:
+///   AgentStart            → history replay (UserBlock / AssistantMarkdownBlock)
+///   MessageStart          → live StreamingMarkdownBlock appended
+///   TextDelta             → pacer-gated pushes into the live block
+///   ToolCallStart         → ToolCallBlock(Running)
+///   ToolExecutionStart    → args summary + start timestamp
+///   ToolExecutionEnd      → Ok/Error + duration (+ unified-diff body when present)
+///   MessageEnd            → committed AssistantMarkdownBlock replaces the stream slot
+///   AgentError/AgentEnd   → SystemBlock notice, footer back to Idle
+/// </summary>
+public sealed class ChatScreenBridge : IDisposable
+{
+    private readonly IEventBus _bus;
+    private readonly ChatTimelinePanel _panel;
+    private readonly StatusViewModel _status;
+    private readonly CommitTickPacer _pacer = new();
+    private readonly Queue<PendingLine> _pending = new();
+    private readonly Dictionary<string, ToolCard> _cards = new(StringComparer.Ordinal);
+    private readonly StringBuilder _incoming = new();
+    private readonly StringBuilder _streamSource = new();
+    private StreamingMarkdownBlock? _stream;
+    private long _nowMs;
+
+    private readonly record struct PendingLine(string Text, long AtMs);
+
+    private sealed class ToolCard
+    {
+        public required ToolCallBlock Block { get; init; }
+        public long StartedMs { get; set; } = long.MinValue;
+    }
+
+    public ChatScreenBridge(IEventBus bus, ChatTimelinePanel panel, StatusViewModel status)
+    {
+        _bus = bus ?? throw new ArgumentNullException(nameof(bus));
+        _panel = panel ?? throw new ArgumentNullException(nameof(panel));
+        _status = status ?? throw new ArgumentNullException(nameof(status));
+        Subscription = bus.Subscribe(HandleEvent);
+    }
+
+    public IDisposable Subscription { get; }
+
+    /// <summary>Monotonic clock injection point (frame pipeline calls each tick).</summary>
+    public void Tick(long nowMs)
+    {
+        _nowMs = nowMs;
+        if (_stream is null || _pending.Count == 0)
+        {
+            return;
+        }
+
+        var oldestAge = TimeSpan.FromMilliseconds(nowMs - _pending.Peek().AtMs);
+        var plan = _pacer.Decide(new QueueSnapshot(_pending.Count, oldestAge), nowMs);
+        int take = plan == DrainPlanKind.BatchAll ? _pending.Count : Math.Min(1, _pending.Count);
+
+        while (take-- > 0)
+        {
+            PushToStream(_pending.Dequeue().Text);
+        }
+
+        _panel.Timeline.MarkLastDirty();
+    }
+
+    private void PushToStream(string text)
+    {
+        if (_stream is null)
+        {
+            return;
+        }
+
+        _stream.Push(text);
+        _streamSource.Append(text);
+    }
+
+    private ValueTask HandleEvent(AgentEvent evt, CancellationToken ct)
+    {
+        switch (evt)
+        {
+            case AgentStartEvent started:
+                ReplayHistory(started.Messages);
+                break;
+
+            case MessageStartEvent:
+                StartStream();
+                break;
+
+            case MessageUpdateEvent update:
+                switch (update.LlmEvent)
+                {
+                    case TextDeltaEvent delta:
+                        Incoming(delta.Delta);
+                        break;
+                    case ToolCallStartEvent callStart:
+                        EnsureCard(callStart.Id, callStart.ToolName, argsSummary: null);
+                        break;
+                }
+
+                break;
+
+            case ToolExecutionStartEvent execStart:
+                {
+                    var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
+                    card.StartedMs = _nowMs;
+                    _status.Mode = StatusBarMode.Running;
+                    break;
+                }
+
+            case ToolExecutionEndEvent execEnd:
+                CompleteCard(execEnd);
+                break;
+
+            case MessageEndEvent:
+                FinishStream();
+                break;
+
+            case CompactionStartedEvent:
+                AppendSystem("compacting history…");
+                _status.Mode = StatusBarMode.Compacting;
+                break;
+
+            case CompactionCompletedEvent:
+                AppendSystem("history compacted");
+                _status.Mode = StatusBarMode.Running;
+                break;
+
+            case AgentErrorEvent error:
+                FlushStreamNow();
+                AppendSystem("! " + error.Message);
+                _status.Mode = StatusBarMode.Idle;
+                break;
+
+            case AgentEndEvent:
+                FlushStreamNow();
+                _status.Mode = StatusBarMode.Idle;
+                break;
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    // ── Stream lifecycle ───────────────────────────────────────────────────
+
+    internal void ReplayHistory(IReadOnlyList<AgentMessage> messages)
+    {
+        foreach (var message in messages)
+        {
+            switch (message)
+            {
+                case UserMessage user:
+                    _panel.Timeline.Append(new UserBlock(user.Content));
+                    break;
+
+                case AssistantMessage assistant:
+                    var text = new StringBuilder();
+                    foreach (var part in assistant.Parts)
+                    {
+                        if (part is TextPart tp)
+                        {
+                            text.AppendLine(tp.Text);
+                        }
+                    }
+
+                    if (text.Length > 0)
+                    {
+                        _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private void StartStream()
+    {
+        _incoming.Clear();
+        _streamSource.Clear();
+        _pending.Clear();
+        _stream = new StreamingMarkdownBlock();
+        _panel.Timeline.Append(_stream);
+        _status.Mode = StatusBarMode.Running;
+    }
+
+    /// <summary>Deltas land in the incoming buffer; complete source lines join
+    /// the paced queue (codex MarkdownStreamCollector pattern).</summary>
+    internal void Incoming(string delta)
+    {
+        if (_stream is null)
+        {
+            StartStream();
+        }
+
+        _incoming.Append(delta);
+        var rest = _incoming.ToString();
+        _incoming.Clear();
+
+        int consumed = 0;
+        while (true)
+        {
+            int nl = rest.IndexOf('\n', consumed);
+            if (nl < 0)
+            {
+                break;
+            }
+
+            var segment = rest.Substring(consumed, nl - consumed + 1);
+            _pending.Enqueue(new PendingLine(segment, _nowMs));
+            consumed = nl + 1;
+        }
+
+        if (consumed < rest.Length)
+        {
+            _incoming.Append(rest.AsSpan(consumed));
+        }
+    }
+
+    /// <summary>Commits the finished assistant message over the stream slot.</summary>
+    private void FinishStream()
+    {
+        if (_stream is null)
+        {
+            return;
+        }
+
+        FlushStreamNow();
+        _stream.Complete();
+        if (_streamSource.Length > 0)
+        {
+            _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString()));
+        }
+
+        _stream = null;
+        _pending.Clear();
+    }
+
+    /// <summary>Bypasses pacing: everything buffered becomes visible at once.</summary>
+    internal void FlushStreamNow()
+    {
+        if (_incoming.Length > 0)
+        {
+            PushToStream(_incoming.ToString());
+            _incoming.Clear();
+        }
+
+        while (_pending.Count > 0)
+        {
+            PushToStream(_pending.Dequeue().Text);
+        }
+
+        if (_stream is not null)
+        {
+            _panel.Timeline.MarkLastDirty();
+        }
+    }
+
+    // ── Tool cards ─────────────────────────────────────────────────────────
+
+    private ToolCard EnsureCard(string id, string toolName, string? argsSummary)
+    {
+        if (_cards.TryGetValue(id, out var existing))
+        {
+            return existing;
+        }
+
+        var block = new ToolCallBlock(new ToolCallInfo(id, toolName, argsSummary ?? string.Empty));
+        _panel.Timeline.Append(block);
+        _panel.Timeline.MarkLastDirty();
+        var card = new ToolCard { Block = block, StartedMs = _nowMs };
+        _cards[id] = card;
+        return card;
+    }
+
+    private void CompleteCard(ToolExecutionEndEvent e)
+    {
+        if (!_cards.TryGetValue(e.ToolCallId, out var card))
+        {
+            return;
+        }
+
+        long startedAt = card.StartedMs > long.MinValue ? card.StartedMs : _nowMs;
+        long durationMs = Math.Max(0, _nowMs - startedAt);
+        card.Block.Complete(new ToolResultBody(
+            e.Result.Output,
+            e.Result.IsError,
+            TimeSpan.FromMilliseconds(durationMs),
+            TryExtractDiff(e.Result)));
+        _cards.Remove(e.ToolCallId);
+        _panel.Timeline.MarkLastDirty();
+    }
+
+    /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a
+    /// unified diff in Metadata win; otherwise a raw diff-shaped Output is
+    /// used verbatim. No heuristics beyond shape checks.</summary>
+    internal static string? TryExtractDiff(ToolResult result)
+    {
+        if (result.Metadata is string meta && UnifiedDiffParser.LooksLikeDiff(meta))
+        {
+            return meta;
+        }
+
+        return UnifiedDiffParser.LooksLikeDiff(result.Output) ? result.Output : null;
+    }
+
+    internal static string Summarize(JsonElement args)
+    {
+        if (args.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+        {
+            return string.Empty;
+        }
+
+        var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal);
+        return raw.Length <= 48 ? raw : raw[..47] + "…";
+    }
+
+    private void AppendSystem(string text) =>
+        _panel.Timeline.Append(new SystemBlock(text));
+
+    public void Dispose() => Subscription.Dispose();
+}

@@ -73,6 +73,26 @@ public sealed class VirtualizedChatTimeline
         MarkLastDirty();
     }
 
+    /// <summary>
+    /// Replaces a specific block instance in place (the stream slot may sit
+    /// below newer tool cards). No-op when the block is gone.
+    /// </summary>
+    public void Replace(IChatBlock existing, IChatBlock replacement)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+
+        for (int i = 0; i < _cache.Count; i++)
+        {
+            if (ReferenceEquals(_cache.BlockAt(i), existing))
+            {
+                _cache.Replace(i, replacement);
+                _dirtyGeometry = true;
+                _cache.MarkHeightsDirty(i);
+                return;
+            }
+        }
+    }
+
     /// <summary>Streaming tail grew — last block's cached height is stale.</summary>
     public void MarkLastDirty() => _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
 

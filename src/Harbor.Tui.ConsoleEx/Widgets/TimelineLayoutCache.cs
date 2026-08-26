@@ -112,13 +112,27 @@ public sealed class TimelineLayoutCache
         return true;
     }
 
-    /// <summary>Streaming tail grew or a mutable card mutated — heights from here are stale.</summary>
+    /// <summary>Streaming tail grew or a mutable card mutated — heights from
+    /// here are stale. Already-measured slots in the range are demoted back
+    /// to estimates so the next settle re-measures them.</summary>
     public void MarkHeightsDirty(int fromIndex)
     {
-        if ((uint)fromIndex <= (uint)_count)
+        if ((uint)fromIndex > (uint)_count)
         {
-            _dirtyFrom = Math.Min(_dirtyFrom, fromIndex);
+            return;
         }
+
+        for (int i = fromIndex; i < _count; i++)
+        {
+            ref var s = ref _slots[i];
+            if (s.Measured)
+            {
+                s = default;
+            }
+        }
+
+        _unmeasuredFrom = Math.Min(_unmeasuredFrom, Math.Max(fromIndex, 0));
+        _dirtyFrom = Math.Min(_dirtyFrom, fromIndex);
     }
 
     /// <summary>Swaps a live-stream placeholder for the committed block in place.</summary>
