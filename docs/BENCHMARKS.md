@@ -212,6 +212,20 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `TokenEstimator.Estimate` (1k chars) | 0.8 µs | 0.1 µs | 0 B |
 | `MessageConverter.ToLlmMessages` (10 msgs) | 2.5 µs | 0.3 µs | 1.5 KB |
 
+### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
+
+Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
+
+| Benchmark | Mean | Allocated | Target (celldiff §7) |
+|---|--:|--:|--:|
+| Idle frame, row-hash skip, 200×50 | **51.3 µs** | 0 B | ~0.05 ms ✅ |
+| Token frame (~300 changed cells), 200×50 | **52.8 µs** | 0 B | ≤ 1 ms ✅ |
+| Full repaint 200×50 | **137 µs** | 0 B | — |
+| Full repaint 400×120 | **665 µs** | 0–184 B¹ | ~6 ms ✅ |
+| Layout cold solve, 20 panels | **0.72 µs** | 184 B | < 0.01 ms ✅ |
+
+¹ Allocation comes solely from the layout solver's cache-replay snapshot; all diff/encode paths are zero-alloc steady-state.
+
 > All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` is the biggest allocation hot spot — the `Utf8JsonReader` rewrite (planned) will cut this by ~80%.
 
 ## 6. Test suite
