@@ -53,15 +53,33 @@ public sealed class ChatScreenBridge : IDisposable
         public long StartedMs { get; set; } = long.MinValue;
     }
 
-    public ChatScreenBridge(IEventBus bus, ChatTimelinePanel panel, StatusViewModel status)
+    public ChatScreenBridge(IEventBus bus, ChatTimelinePanel panel, StatusViewModel status, bool autoSubscribe = true)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _panel = panel ?? throw new ArgumentNullException(nameof(panel));
         _status = status ?? throw new ArgumentNullException(nameof(status));
-        Subscription = bus.Subscribe(HandleEvent);
+        // Auto-subscribe suits fire-and-forget hosts (CE-3 tests). A driven
+        // host (ConsoleEx REPL frame loop) passes false and pumps events via
+        // <see cref="AcceptAsync"/> so all timeline mutation stays on the
+        // render thread — zero cross-thread access to the block list.
+        Subscription = autoSubscribe ? bus.Subscribe(HandleEvent) : NoSubscription.Instance;
     }
 
     public IDisposable Subscription { get; }
+
+    /// <summary>
+    ///     Loop-driven entry point: process one real bus event on the caller's
+    ///     (render) thread. Pair with <c>autoSubscribe: false</c>.
+    /// </summary>
+    public ValueTask AcceptAsync(AgentEvent evt, CancellationToken ct = default) => HandleEvent(evt, ct);
+
+    private sealed class NoSubscription : IDisposable
+    {
+        public static readonly NoSubscription Instance = new();
+        public void Dispose()
+        {
+        }
+    }
 
     /// <summary>
     ///     The REPL echoed the submitted prompt as a <see cref="UserBlock"/>

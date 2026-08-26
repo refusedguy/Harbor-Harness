@@ -1,0 +1,24 @@
+Harbor — modular AI coding agent [consoleex]                                    
+model: kilocode/hy3:free | ввод — текст, /help — команды, Ctrl+C×2 — выход      
+› скажи привет                                                                  
+Готово: mock-ответ                                                              
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+mock/mock-model 12↑ 5↓ $0.0001                                                  

@@ -60,6 +60,11 @@ internal sealed class ConsoleExReplRunner(
     private readonly Channel<object?> _wake = Channel.CreateUnbounded<object?>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
+    /// <summary>Real bus events marshalled onto the frame-loop thread: the
+    /// bridge (and thus the whole timeline) is touched from THIS thread only.</summary>
+    private readonly Channel<AgentEvent> _events = Channel.CreateUnbounded<AgentEvent>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+
     private readonly StatusViewModel _status = screen.Status.Vm;
     private readonly ComposerController _composer = screen.Composer.Composer;
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
@@ -68,6 +73,10 @@ internal sealed class ConsoleExReplRunner(
     private long _lastIdleAbortMs = long.MinValue;
     private bool _quitRequested;
     private int? _slashExitCode;
+
+    /// <summary>Cross-thread «prompt submitted, completion event not yet seen» latch
+    /// so an stdin EOF cannot race the freshly spawned run into a premature exit.</summary>
+    private volatile bool _promptInFlight;
 
     /// <summary>
     ///     Runs the REPL until quit. Returns the exit code
@@ -94,9 +103,10 @@ internal sealed class ConsoleExReplRunner(
         await PrintWelcomeAsync().ConfigureAwait(false);
 
         var inputTask = inputSource.RunAsync(ct);
-        using var busWake = services.GetRequiredService<IEventBus>()
-            .Subscribe((_, _) =>
+        using var busPump = services.GetRequiredService<IEventBus>()
+            .Subscribe((evt, _) =>
             {
+                _events.Writer.TryWrite(evt);
                 _wake.Writer.TryWrite(null);
                 return ValueTask.CompletedTask;
             });
@@ -126,18 +136,22 @@ internal sealed class ConsoleExReplRunner(
     private async Task LoopAsync(Task inputTask, Timer spinnerTimer, CancellationToken ct)
     {
         var inputReader = inputSource.Events;
-        var wakeReader = _wake.Reader;
 
         await RenderFrameAsync(ct).ConfigureAwait(false);
         ArmSpinner(spinnerTimer);
 
+        // EOF (pipe closed / Ctrl+D) stops INPUT waiting but must not cut off
+        // an in-flight turn: the loop exits only when the queue is quiet.
+        bool inputClosed = false;
         while (!_quitRequested && !ct.IsCancellationRequested)
         {
-            Task<bool> inputWait = inputReader.WaitToReadAsync(ct).AsTask();
-            Task<bool> wakeWait = wakeReader.WaitToReadAsync(CancellationToken.None).AsTask();
+            Task<bool> inputWait = inputClosed
+                ? Task.FromResult(false)
+                : inputReader.WaitToReadAsync(ct).AsTask();
+            Task<bool> wakeWait = _wake.Reader.WaitToReadAsync(CancellationToken.None).AsTask();
             var completed = await Task.WhenAny(inputWait, wakeWait).ConfigureAwait(false);
 
-            if (completed == inputWait && inputWait.Result)
+            if (!inputClosed && completed == inputWait && inputWait.Result)
             {
                 while (inputReader.TryRead(out var evt))
                 {
@@ -148,15 +162,27 @@ internal sealed class ConsoleExReplRunner(
             {
                 DrainWake();
             }
-            else if (inputTask.IsCompleted)
+
+            if (!inputClosed && inputTask.IsCompleted)
             {
-                // stdin EOF — nothing more will ever arrive.
-                break;
+                inputClosed = true;
+            }
+
+            // Agent events replay onto the render thread in arrival order.
+            while (_events.Reader.TryRead(out var agentEvt))
+            {
+                await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
             }
 
             bridge.Tick(Environment.TickCount64);
             await RenderFrameAsync(ct).ConfigureAwait(false);
             ArmSpinner(spinnerTimer);
+
+            if (inputClosed && !_promptInFlight && !agent.State.IsRunning)
+            {
+                logger.LogInformation("stdin EOF and agent idle — ConsoleEx REPL exiting");
+                break;
+            }
         }
     }
 
@@ -325,6 +351,7 @@ internal sealed class ConsoleExReplRunner(
         _status.Mode = StatusBarMode.Running;
         _wake.Writer.TryWrite(null);
 
+        _promptInFlight = true;
         _ = RunPromptAsync(text, ct);
     }
 
@@ -351,6 +378,7 @@ internal sealed class ConsoleExReplRunner(
         }
         finally
         {
+            _promptInFlight = false;
             if (!agent.State.IsRunning)
             {
                 _status.Mode = StatusBarMode.Idle;

@@ -77,7 +77,11 @@ internal static class ConsoleExModule
                 ResizePollInterval = ResizePollInterval,
             }));
 
-        services.AddSingleton<ChatScreenBridge>();
+        services.AddSingleton(sp => new ChatScreenBridge(
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetRequiredService<ChatScreen>().Timeline,
+            sp.GetRequiredService<StatusViewModel>(),
+            autoSubscribe: false)); // events pumped through the frame loop thread
 
         return services;
     }
