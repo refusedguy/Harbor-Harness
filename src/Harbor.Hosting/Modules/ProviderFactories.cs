@@ -14,6 +14,14 @@ namespace Harbor.Hosting;
 // Provider factories shared by every app. Auth resolution goes through
 // ConfigAuthResolver (AuthStore-backed) — Avalonia swaps the resolver via its
 // own auth path before these factories are used.
+
+// DI014 (Excubo): the CLI flavor builds a bootstrap service provider on
+// purpose — registries are eager artifacts constructed before the app-level
+// provider exists (same justification as RegistriesModule). The scope is
+// NOT disposed: DefaultHttpClientFactory resolves its meter factory and
+// handler dependencies lazily on first request from this very provider.
+#pragma warning disable DI014
+
 internal static class ProviderFactories
 {
     internal static ProviderRegistry CreateProviderRegistry(HarborCompositionContext ctx, IServiceCollection services)
@@ -38,17 +46,23 @@ internal static class ProviderFactories
         else
         {
             // CLI flavor needs IHttpClientFactory named clients + AuthStore.
-            using var tempSp = services.BuildServiceProvider();
-            var httpFactory = tempSp.GetRequiredService<IHttpClientFactory>();
-            var authStore = tempSp.GetRequiredService<AuthStore>();
+            // Bootstrap scope is deliberately kept alive for the process —
+            // see the DI014 note above (CE-5 PTY-suite finding: disposing it
+            // killed every later provider HTTP call with ObjectDisposedException).
+            var bootstrapSp = services.BuildServiceProvider();
+            var httpFactory = bootstrapSp.GetRequiredService<IHttpClientFactory>();
+            var authStore = bootstrapSp.GetRequiredService<AuthStore>();
             string cacheDir = Path.Combine(ctx.Options.HarborDir, "cache", "providers");
 
             pb.AddProvider(new OllamaProviderFactory(httpFactory));
 
+            // JSON discovery runs in every CLI flavor (see JsonProviderDiscovery
+            // NOTE) — providers/*.json is the documented "no code" provider path.
+            JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory: ctx.LoggerFactory, cacheDir, authStore);
+
 #if HARBOR_WITH_ALL_PROVIDERS
             pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore));
             pb.AddProvider(new OpenAiProviderFactory(httpFactory, authStore));
-            JsonProviderDiscovery.RegisterJsonProviders(pb, httpFactory, loggerFactory: ctx.LoggerFactory, cacheDir, authStore);
 #endif
         }
 

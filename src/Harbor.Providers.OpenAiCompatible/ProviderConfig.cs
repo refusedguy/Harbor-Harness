@@ -45,10 +45,39 @@ public sealed class ProviderConfig
     public static Result<ProviderConfig> LoadFromFile(string path) =>
         Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(File.ReadAllText(path), JsonOptions))
             .MapError(ex => $"Failed to load provider config '{path}': {ex}")
-            .Ensure(c => c is not null, $"Provider config '{path}' deserialized to null.")
-            .Ensure(c => !string.IsNullOrEmpty(c!.Id), $"Provider config '{path}' is missing 'id'.")
-            .Ensure(c => !string.IsNullOrEmpty(c!.BaseUrl), $"Provider config '{path}' is missing 'baseUrl'.")
-            .Map(c => c!);
+            .Bind(Loaded);
+
+    /// <summary>
+    ///     Parse a config from an in-memory JSON payload (embedded resources,
+    ///     test harnesses). Same options and validation contract as
+    ///     <see cref="LoadFromFile" /> — keeps
+    ///     <see cref="OpenAiCompatibleJsonContext" /> internal while still
+    ///     AOT-safe (source-gen resolver only).
+    /// </summary>
+    public static Result<ProviderConfig> LoadFromJson(string json) =>
+        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions))
+            .MapError(ex => $"Failed to load provider config from JSON: {ex}")
+            .Bind(Loaded);
+
+    private static Result<ProviderConfig> Loaded(ProviderConfig? c)
+    {
+        if (c is null)
+        {
+            return Result.Failure<ProviderConfig>("Provider config deserialized to null.");
+        }
+
+        if (string.IsNullOrEmpty(c.Id))
+        {
+            return Result.Failure<ProviderConfig>("Provider config is missing 'id'.");
+        }
+
+        if (string.IsNullOrEmpty(c.BaseUrl))
+        {
+            return Result.Failure<ProviderConfig>("Provider config is missing 'baseUrl'.");
+        }
+
+        return Result.Success(c);
+    }
 }
 
 public sealed class ModelMapping

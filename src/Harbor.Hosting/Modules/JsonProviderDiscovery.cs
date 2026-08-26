@@ -1,13 +1,10 @@
 using System.Reflection;
-using System.Text.Json;
-using Harbor.Application.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-#if HARBOR_WITH_ALL_PROVIDERS
 using Harbor.Abstractions.Providers;
+using Harbor.Application.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Providers.OpenAiCompatible.Compat;
-#endif
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.Hosting;
 
@@ -118,8 +115,14 @@ internal static class JsonProviderDiscovery
         }
     }
 
-#if HARBOR_WITH_ALL_PROVIDERS
-    public static void RegisterJsonProviders(
+// NOTE: JSON-provider discovery is NOT gated behind HARBOR_WITH_ALL_PROVIDERS.
+// providers/*.json ("no code" provider path, docs/EXAMPLES §9) and the embedded
+// bundled configs must work in every CLI flavor, including HARBOR_MINIMAL —
+// OpenAiCompatible is a baseline ProjectReference of Harbor.Hosting. Only the
+// native Anthropic/OpenAI factories stay behind the flag. (CE-5 PTY-suite
+// finding: plain slnx builds produced an app that registered ollama only,
+// so every scenarios-2..8 test failed with "Provider 'mock' is not registered".)
+public static void RegisterJsonProviders(
         IProviderRegistryBuilder builder,
         IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory,
@@ -146,7 +149,14 @@ internal static class JsonProviderDiscovery
         {
             try
             {
-                var config = JsonSerializer.Deserialize<ProviderConfig>(content, OpenAiCompatibleJsonContext.Default.Options);
+                var loaded = ProviderConfig.LoadFromJson(content);
+                if (loaded.IsFailure)
+                {
+                    Console.Error.WriteLine($"Failed to load embedded provider '{name}': {loaded.Error}");
+                    continue;
+                }
+
+                var config = loaded.Value;
                 if (config is null || string.IsNullOrEmpty(config.Id)) continue;
                 if (config.Id is "anthropic" or "openai" or "ollama") continue;
                 if (!seenIds.Add(config.Id)) continue;
@@ -197,5 +207,4 @@ internal static class JsonProviderDiscovery
             Console.Error.WriteLine($"Failed to register provider: {ex.Message}");
         }
     }
-#endif
 }

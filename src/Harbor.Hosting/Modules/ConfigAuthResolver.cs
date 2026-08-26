@@ -1,21 +1,18 @@
 using CSharpFunctionalExtensions;
 using Harbor.Application.Configuration;
-#if HARBOR_WITH_ALL_PROVIDERS
-using Harbor.Providers.Anthropic;
-using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
 
 namespace Harbor.Hosting;
 
 /// <summary>Adapter that resolves API key via AuthStore.</summary>
 /// <remarks>
-///     Excluded when <c>HARBOR_WITH_ALL_PROVIDERS</c> is undefined — the
-///     interface it implements (IAuthResolver, the single auth abstraction
-///     since ROP-A ПР.6) lives in Harbor.Providers.OpenAiCompatible,
-///     which is removed from the project reference graph when
-///     HarborWithAllProviders=false. Ollama (always included) has no auth
-///     resolver because OllamaLlmClient doesn't take an auth resolver — it
-///     talks to a local daemon that doesn't require an API key.
+///     Compiles in every flavor: <c>IAuthResolver</c> lives in
+///     Harbor.Providers.OpenAiCompatible, which is a baseline (unconditional)
+///     ProjectReference of Harbor.Hosting. JSON-provider discovery
+///     (RegisterJsonProviders) needs it for every discovered provider,
+///     including minimal builds; native Anthropic/OpenAI factories stay
+///     behind HARBOR_WITH_ALL_PROVIDERS. Ollama has no auth resolver because
+///     OllamaLlmClient talks to a local daemon that doesn't require a key.
 /// </remarks>
 internal sealed class ConfigAuthResolver : IAuthResolver
 {
@@ -31,4 +28,3 @@ internal sealed class ConfigAuthResolver : IAuthResolver
     public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default)
         => _authStore.GetApiKeyAsync(string.IsNullOrEmpty(providerId) ? _providerId : providerId, ct);
 }
-#endif

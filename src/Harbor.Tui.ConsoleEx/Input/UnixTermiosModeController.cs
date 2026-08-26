@@ -69,7 +69,12 @@ public sealed class UnixTermiosModeController : ITerminalModeController
         current.CLflag &= ~(Echo | Echonl | Icanon | Isig | Iexten);
         current.CCflag &= ~(Csize | Parenb);
         current.CCflag |= Cs8;
-        current.ControlCharacters[6] = 0; // VMIN  = 0 → non-blocking reads
+        // VMIN=1 / VTIME=0 — classic blocking cbreak read: the input reader
+        // thread is long-lived and dedicated, so a read must WAIT for bytes.
+        // (CE-5 PTY-suite finding: VMIN=0 makes read(2) return 0 whenever no
+        // bytes are pending, which any plain-stream reader interprets as EOF
+        // and tears the whole REPL down on a real terminal.)
+        current.ControlCharacters[6] = 1; // VMIN  = 1 → blocking read
         current.ControlCharacters[5] = 0; // VTIME = 0
 
         if (tcsetattr(StdinFd, Tcsanow, ref current) != 0)

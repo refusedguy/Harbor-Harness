@@ -70,7 +70,11 @@ internal sealed class ConsoleExReplRunner(
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
 
     private int _timelineViewportH;
-    private long _lastIdleAbortMs = long.MinValue;
+    // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
+    // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
+    // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
+    // finding: paste scenario exited on the FIRST press with no hint).
+    private long _lastIdleAbortMs = -1;
     private bool _quitRequested;
     private int? _slashExitCode;
 
@@ -364,7 +368,12 @@ internal sealed class ConsoleExReplRunner(
             var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
-                bridge.AppendSystemLine("! " + result.Error);
+                // AgentLoop converts an aborted run into Result.Failure (the
+                // AgentEndEvent must stay Cancelled=true for renderers), so
+                // cancelled turns land HERE, not in the OCE handler below.
+                bridge.AppendSystemLine(IsCancellation(result.Error)
+                    ? "ход прерван"
+                    : "! " + result.Error);
             }
         }
         catch (OperationCanceledException)
@@ -387,6 +396,12 @@ internal sealed class ConsoleExReplRunner(
             _wake.Writer.TryWrite(null);
         }
     }
+
+    /// <summary>True when the failure text represents a cancelled/aborted run
+    /// (AgentLoop's "…cancelled." family) — rendered as the friendly abort line.</summary>
+    private static bool IsCancellation(string error) =>
+        error.Contains("cancel", StringComparison.OrdinalIgnoreCase) ||
+        error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     private async Task PrintWelcomeAsync()
     {

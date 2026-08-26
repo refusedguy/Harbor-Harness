@@ -70,7 +70,7 @@ internal static class ConsoleExModule
             sp.GetRequiredService<StatusViewModel>()));
 
         services.AddSingleton(_ => new TerminalInputSource(
-            Console.OpenStandardInput(),
+            TerminalInputStream.Open(),
             new TerminalInputSourceOptions
             {
                 SizeProvider = ReadTerminalSizeForInput,
