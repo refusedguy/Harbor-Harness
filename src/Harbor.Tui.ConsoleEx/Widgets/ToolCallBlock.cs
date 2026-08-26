@@ -107,6 +107,21 @@ public sealed class ToolCallBlock : IChatBlock
         return BlockMeasure.Exact(lines);
     }
 
+    public int CheapEstimate(int width)
+    {
+        int lines = 1;
+        if (_body is not null)
+        {
+            lines += BodyLineCount();
+            if (_body.DiffText is not null)
+            {
+                lines += DiffLineCount();
+            }
+        }
+
+        return Math.Max(1, lines);
+    }
+
     public void Paint(in BlockPaintContext ctx)
     {
         var buffer = ctx.Buffer;

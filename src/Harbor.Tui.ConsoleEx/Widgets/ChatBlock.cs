@@ -60,6 +60,13 @@ public interface IChatBlock
     /// <summary>Height in rows for <paramref name="width"/> columns. Pure and cacheable.</summary>
     BlockMeasure Measure(int width);
 
+    /// <summary>
+    /// O(length) arithmetic guess used for off-screen layout (grok cheap
+    /// estimate): never wraps, never renders, never allocates. Only
+    /// <see cref="Measure"/> may produce authoritative heights.
+    /// </summary>
+    int CheapEstimate(int width);
+
     /// <summary>Paints into the clip rect. Must stay within previously measured bounds.</summary>
     void Paint(in BlockPaintContext ctx);
 

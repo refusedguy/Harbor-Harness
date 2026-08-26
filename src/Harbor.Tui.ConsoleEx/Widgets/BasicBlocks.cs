@@ -37,6 +37,31 @@ public sealed class WrappedText
     }
 }
 
+/// <summary>Shared arithmetic helpers for text blocks.</summary>
+internal static class BlockMath
+{
+    /// <summary>Sum of per-logical-line ceil(length/width) — allocation-free estimate.</summary>
+    public static int EstimateLines(string source, int width)
+    {
+        int total = 0;
+        int run = 0;
+        foreach (char c in source)
+        {
+            if (c == '\n')
+            {
+                total += Math.Max(1, (run + width - 1) / width);
+                run = 0;
+                continue;
+            }
+
+            run++;
+        }
+
+        total += Math.Max(1, (run + width - 1) / width);
+        return Math.Max(1, total);
+    }
+}
+
 /// <summary>User prompt block: bold accent prefix «› » + bold body (widgets §3.1).</summary>
 public sealed class UserBlock : IChatBlock
 {
@@ -53,6 +78,8 @@ public sealed class UserBlock : IChatBlock
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _text.GetLines(BodyWidth(width)).Length));
+
+    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.Source, Math.Max(1, BodyWidth(width)));
 
     public void Paint(in BlockPaintContext ctx)
     {
@@ -97,6 +124,8 @@ public sealed class SystemBlock : IChatBlock
 
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _text.GetLines(Math.Max(1, width)).Length));
+
+    public int CheapEstimate(int width) => BlockMath.EstimateLines(_text.Source, Math.Max(1, width));
 
     public void Paint(in BlockPaintContext ctx)
     {

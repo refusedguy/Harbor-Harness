@@ -24,6 +24,8 @@ public sealed class AssistantMarkdownBlock : IChatBlock
     public BlockMeasure Measure(int width) =>
         BlockMeasure.Exact(Math.Max(1, _source.GetLines(Math.Max(1, width)).Length));
 
+    public int CheapEstimate(int width) => BlockMath.EstimateLines(_source.Source, Math.Max(1, width));
+
     public void Paint(in BlockPaintContext ctx)
     {
         var buffer = ctx.Buffer;
