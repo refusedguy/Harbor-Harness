@@ -35,6 +35,15 @@
 - **Desktop**: WPF, Avalonia, MAUI
 - **Web**: Blazor Server
 
+### ✅ Completed — ConsoleEx MVP (CE-0…CE-4)
+
+Second render path for the interactive REPL (`src/Harbor.Tui.ConsoleEx/`, opt-in only):
+
+- **Input** (CE-0): kitty keyboard protocol, SGR mouse, bracketed paste with anti-injection; raw-mode via termios P/Invoke
+- **Rendering** (CE-1): `ScreenBuffer` → `DiffEngine` cell-diff frames through `AnsiWriter` (SGR automaton, cursor elision, DECSYNC wrapper); resize policy à la ratatui
+- **Widgets** (CE-2/3): virtualized chat timeline with byte-budget ring, streaming markdown with pacer-gated reveal, tool-call cards with unified-diff bodies, status segment bar + tick-driven spinner, multi-line composer
+- **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=consoleex` or `tui: "consoleex"` (+ kill-switch `ui.consoleEx.enabled`), `ConsoleExModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.ConsoleEx/README.md).
+
 ### ✅ Completed — Tools (14 builtin)
 
 `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `web_fetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`
