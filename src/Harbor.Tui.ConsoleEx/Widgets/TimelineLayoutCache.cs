@@ -145,7 +145,7 @@ public sealed class TimelineLayoutCache
         long maxTop = Math.Max(0, TotalHeight - 1);
         int idx = EntryAtY(Math.Clamp(scrollTopY, 0, maxTop));
         _anchorBlock = _blocks[idx];
-        _anchorRow = (int)Math.Clamp(scrollTopY - _virtual[idx], 0, EffectiveHeight(idx) - 1);
+        _anchorRow = (int)Math.Clamp(scrollTopY - _virtual[idx], 0, Math.Max(0, EffectiveHeight(idx) - 1));
         _anchorY = scrollTopY;
     }
 
