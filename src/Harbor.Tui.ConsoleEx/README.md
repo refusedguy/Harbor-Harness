@@ -25,12 +25,18 @@ Kill-switch в `~/.harbor/config.json` (приоритет выше выбора
 ```jsonc
 {
   "tui": "consoleex",
-  "consoleEx": {
-    "enabled": true,      // false ⇒ откат на legacy ANSI с предупреждением в логе
-    "syncUpdates": true   // DECSYNC CSI ?2026 h/l вокруг кадра
+  "ui": {
+    "consoleEx": {
+      "enabled": true,      // false ⇒ откат на legacy ANSI с предупреждением в логе
+      "syncUpdates": true   // DECSYNC CSI ?2026 h/l вокруг кадра
+    }
   }
 }
 ```
+
+Секция пишется в config.json только при отклонении от дефолтов. Устаревшая
+корневая форма `{ "consoleEx": { … } }` (CE-4 промежуточные сборки) всё ещё
+читается, но больше не записывается.
 
 Ограничения MVP:
 

@@ -121,6 +121,164 @@ public class JsonConfigStoreTests
     }
 
     [Test]
+    public async Task LoadAsync_ConsoleExSection_ParsesKillSwitchAndSyncUpdates()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true,
+                        "tui": "consoleex",
+                        "ui": {
+                          "consoleEx": { "enabled": false, "syncUpdates": false }
+                        }
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Tui).IsEqualTo("consoleex");
+            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task LoadAsync_LegacyRootConsoleEx_StillHonored()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true,
+                        "consoleEx": { "enabled": false, "syncUpdates": false }
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task LoadAsync_MissingConsoleExSection_AppliesDefaults()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsTrue();
+            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsTrue();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SaveAsync_LoadAsync_Roundtrip_ConsoleExSectionSurvives()
+    {
+        string path = NewTempConfigPath();
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var config = new HarborConfig
+            {
+                Provider = "mock",
+                Model = "mock/test-model",
+                Tui = "consoleex",
+                Onboarded = true
+            };
+            config.Ui = config.Ui with { ConsoleEx = new ConsoleExUiConfig(Enabled: false, SyncUpdates: false) };
+
+            var saveResult = await store.SaveAsync(config);
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded.Value.Tui).IsEqualTo("consoleex");
+            await Assert.That(loaded.Value.Ui.ConsoleEx.Enabled).IsFalse();
+            await Assert.That(loaded.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+
+            // Defaults are omitted from the persisted JSON (no config drift for legacy users),
+            // and the non-default section is written in the canonical nested `ui` shape
+            // (no root-level alias, no explicit nulls).
+            string persisted = File.ReadAllText(path);
+            await Assert.That(persisted).Contains("\"ui\":{\"consoleEx\":{\"enabled\":false,\"syncUpdates\":false}}");
+            await Assert.That(persisted).DoesNotContain("\"consoleEx\":null");
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
     public async Task UpdateAsync_ChangesValue()
     {
         string path = NewTempConfigPath();
@@ -145,9 +303,16 @@ public class JsonConfigStoreTests
         }
         finally
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
             string? dir = Path.GetDirectoryName(path);
-            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 
@@ -173,9 +338,16 @@ public class JsonConfigStoreTests
         }
         finally
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
             string? dir = Path.GetDirectoryName(path);
-            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 
