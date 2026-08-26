@@ -31,9 +31,44 @@ internal sealed class SlashCommandDispatcher
         IConfigStore configStore, AuthStore authStore,
         IProviderRegistry providers, Session session)
     {
-        string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return SlashCommandOutcome.Continue;
+        // The legacy renderer path funnels its output through ITuiRenderer;
+        // the delegates below keep that contract in one place.
+        return await HandleCoreAsync(input, sp,
+            writer: msg => _ = renderer.WriteLineAsync(msg),
+            reader: async prompt =>
+            {
+                var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
+                return r.IsSuccess ? r.Value : string.Empty;
+            },
+            agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    ///     CE-4: renderer-free overload for the ConsoleEx REPL — output goes to
+    ///     the chat timeline and input comes from the composer instead of an
+    ///     <see cref="ITuiRenderer" />.
+    /// </summary>
+    public Task<SlashCommandOutcome> HandleCoreAsync(
+        string input, IServiceProvider sp,
+        Action<string> writer, Func<string, Task<string>> reader,
+        IAgent agent, IAgentRegistry agentRegistry,
+        IConfigStore configStore, AuthStore authStore,
+        IProviderRegistry providers, Session session)
+    {
+        string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return Task.FromResult(SlashCommandOutcome.Continue);
+
+        return HandleKnownCommandAsync(parts, sp, writer, reader,
+            agent, agentRegistry, configStore, authStore, providers, session);
+    }
+
+    private async Task<SlashCommandOutcome> HandleKnownCommandAsync(
+        string[] parts, IServiceProvider sp,
+        Action<string> writer, Func<string, Task<string>> reader,
+        IAgent agent, IAgentRegistry agentRegistry,
+        IConfigStore configStore, AuthStore authStore,
+        IProviderRegistry providers, Session session)
+    {
         string cmd = parts[0].ToLowerInvariant();
         string[] args = parts.Skip(1).ToArray();
         _logger.LogInformation("Slash command: /{Command} args={ArgCount}", cmd, args.Length);
@@ -47,13 +82,6 @@ internal sealed class SlashCommandDispatcher
             _logger.LogInformation("Quit requested via /{Command}", cmd);
             return SlashCommandOutcome.Quit(0);
         }
-
-        var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
-        var reader = (Func<string, Task<string>>)(async prompt =>
-        {
-            var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-            return r.IsSuccess ? r.Value : string.Empty;
-        });
 
         try
         {

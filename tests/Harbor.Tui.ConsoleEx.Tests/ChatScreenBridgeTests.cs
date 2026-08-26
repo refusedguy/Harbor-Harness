@@ -131,6 +131,79 @@ public class ChatScreenBridgeTests
         await Assert.That(card.Body!.Duration).IsEqualTo(TimeSpan.FromMilliseconds(50));
     }
 
+    // ── CE-4 З.2: живой REPL ──────────────────────────────────────────────
+
+    [Test]
+    public async Task LocallyEchoedPrompt_IsNotDuplicated_ByNextReplay()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        // REPL echoed the submitted prompt before PromptAsync ran.
+        panel.Timeline.Append(new UserBlock("hi"));
+        bridge.NotifyLocalUserMessage();
+
+        // The run republishes the full snapshot INCLUDING the echoed message.
+        await bus.PublishAsync(new AgentStartEvent("s1", [
+            UserMsg("s1", "hi"),
+            AssistantMsg("s1", "hello!"),
+        ]));
+
+        var tl = panel.Timeline;
+        await Assert.That(tl.Count).IsEqualTo(2); // echoed user + assistant — no duplicate "hi"
+        await Assert.That(tl.BlockAt(0).RawText()).Contains("hi");
+        await Assert.That(tl.BlockAt(1).Kind).IsEqualTo("assistant");
+    }
+
+    [Test]
+    public async Task RepeatedAgentStart_RepublishingSameHistory_DoesNotDuplicate()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var history = new AgentMessage[] { UserMsg("s1", "q1"), AssistantMsg("s1", "a1") };
+        await bus.PublishAsync(new AgentStartEvent("s1", history));
+        await bus.PublishAsync(new AgentStartEvent("s1", history));
+        await bus.PublishAsync(new AgentStartEvent("s1", history));
+
+        await Assert.That(panel.Timeline.Count).IsEqualTo(2); // user + assistant, once each
+    }
+
+    [Test]
+    public async Task AgentStart_SetsStatusRunning_AgentEnd_Idle()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel();
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        await bus.PublishAsync(new AgentStartEvent("s1", []));
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
+
+        await bus.PublishAsync(new AgentEndEvent([]));
+        await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Idle);
+    }
+
+    [Test]
+    public async Task SessionStats_Feed_StatusUsage()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var status = new StatusViewModel { Model = "m" };
+        using var bridge = new ChatScreenBridge(bus, panel, status);
+
+        var metadata = new Harbor.Abstractions.Models.SessionMetadata(
+            Cost: 0.0123m, TokensInput: 1500, TokensOutput: 300,
+            TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0,
+            MessageCount: 2, TimeCompacting: null);
+        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+
+        await Assert.That(status.Tokens).IsEqualTo("1.5k↑ 300↓");
+        await Assert.That(status.Cost).IsEqualTo("$0.0123");
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;

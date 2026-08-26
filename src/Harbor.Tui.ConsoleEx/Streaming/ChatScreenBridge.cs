@@ -39,6 +39,12 @@ public sealed class ChatScreenBridge : IDisposable
     private StreamingMarkdownBlock? _stream;
     private long _nowMs;
 
+    /// <summary>How many history messages the timeline already shows. The
+    /// agent republishes the FULL history snapshot on every run
+    /// (AgentLoop → AgentStartEvent.Messages), so replays must skip the
+    /// already-rendered prefix or turn 2+ would duplicate every block.</summary>
+    private int _replayedMessages;
+
     private readonly record struct PendingLine(string Text, long AtMs);
 
     private sealed class ToolCard
@@ -56,6 +62,13 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     public IDisposable Subscription { get; }
+
+    /// <summary>
+    ///     The REPL echoed the submitted prompt as a <see cref="UserBlock"/>
+    ///     before <c>PromptAsync</c> ran. Marks that message as already shown
+    ///     so the next <c>AgentStart</c> replay skips it instead of doubling it.
+    /// </summary>
+    public void NotifyLocalUserMessage() => _replayedMessages++;
 
     /// <summary>Monotonic clock injection point (frame pipeline calls each tick).</summary>
     public void Tick(long nowMs)
@@ -95,6 +108,7 @@ public sealed class ChatScreenBridge : IDisposable
         {
             case AgentStartEvent started:
                 ReplayHistory(started.Messages);
+                _status.Mode = StatusBarMode.Running;
                 break;
 
             case MessageStartEvent:
@@ -140,6 +154,10 @@ public sealed class ChatScreenBridge : IDisposable
                 _status.Mode = StatusBarMode.Running;
                 break;
 
+            case SessionStatsEvent stats:
+                _status.SetUsage(stats.Metadata.TokensInput, stats.Metadata.TokensOutput, stats.Metadata.Cost);
+                break;
+
             case AgentErrorEvent error:
                 FlushStreamNow();
                 AppendSystem("! " + error.Message);
@@ -159,31 +177,40 @@ public sealed class ChatScreenBridge : IDisposable
 
     internal void ReplayHistory(IReadOnlyList<AgentMessage> messages)
     {
-        foreach (var message in messages)
+        // Skip the prefix the screen already shows (locally echoed prompts +
+        // earlier replays); append only the genuinely new tail.
+        for (int i = Math.Min(_replayedMessages, messages.Count); i < messages.Count; i++)
         {
-            switch (message)
-            {
-                case UserMessage user:
-                    _panel.Timeline.Append(new UserBlock(user.Content));
-                    break;
+            AppendHistoryMessage(messages[i]);
+        }
 
-                case AssistantMessage assistant:
-                    var text = new StringBuilder();
-                    foreach (var part in assistant.Parts)
+        _replayedMessages = Math.Max(_replayedMessages, messages.Count);
+    }
+
+    private void AppendHistoryMessage(AgentMessage message)
+    {
+        switch (message)
+        {
+            case UserMessage user:
+                _panel.Timeline.Append(new UserBlock(user.Content));
+                break;
+
+            case AssistantMessage assistant:
+                var text = new StringBuilder();
+                foreach (var part in assistant.Parts)
+                {
+                    if (part is TextPart tp)
                     {
-                        if (part is TextPart tp)
-                        {
-                            text.AppendLine(tp.Text);
-                        }
+                        text.AppendLine(tp.Text);
                     }
+                }
 
-                    if (text.Length > 0)
-                    {
-                        _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
-                    }
+                if (text.Length > 0)
+                {
+                    _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
+                }
 
-                    break;
-            }
+                break;
         }
     }
 
@@ -326,6 +353,14 @@ public sealed class ChatScreenBridge : IDisposable
 
         var raw = args.GetRawText().Replace("\n", " ", StringComparison.Ordinal).Replace("  ", " ", StringComparison.Ordinal);
         return raw.Length <= 48 ? raw : raw[..47] + "…";
+    }
+
+    /// <summary>Host-driven notice into the timeline (slash-command output,
+    /// submit errors). Rendered as a system line and flagged dirty.</summary>
+    public void AppendSystemLine(string text)
+    {
+        AppendSystem(text);
+        _panel.Timeline.MarkLastDirty();
     }
 
     private void AppendSystem(string text) =>
