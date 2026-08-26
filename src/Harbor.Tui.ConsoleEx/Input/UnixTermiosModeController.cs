@@ -107,6 +107,12 @@ public sealed class UnixTermiosModeController : ITerminalModeController
         public uint CLflag;
         public byte CLine;
         public ControlCharacters ControlCharacters;
+        // kernel termios (asm-generic/termbits.h) is 60 bytes on Linux x64:
+        // 4×tcflag_t + cc_t c_line + cc_t c_cc[32] + speed_t c_ispeed/c_ospeed.
+        // Missing trailing fields let tcgetattr write 11 bytes past the struct
+        // → stack corruption → AccessViolationException (CE-4 live-run bug).
+        public uint CIspeed;
+        public uint COspeed;
     }
 
     [InlineArray(32)]
