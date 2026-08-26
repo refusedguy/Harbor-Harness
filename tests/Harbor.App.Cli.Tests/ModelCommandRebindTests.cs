@@ -20,7 +20,7 @@ public class ModelCommandRebindTests
     private static readonly Session BaseSession = new(
         Id: "sess-1",
         ProjectId: "proj",
-        Directory: "/tmp",
+        Directory: "workdir",
         Title: "t",
         Agent: "code",
         Model: "model-a",

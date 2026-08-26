@@ -85,7 +85,7 @@ public class OnboardingViewModelLiveModelsTests
         public Task<Result> SaveAsync(CommonConfig config, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
 
-        public Task<Result> UpdateAsync(Func<CommonConfig, CommonConfig> update, CancellationToken ct = default) =>
+        public Task<Result> UpdateAsync(Func<CommonConfig, CommonConfig> updater, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
     }
 
