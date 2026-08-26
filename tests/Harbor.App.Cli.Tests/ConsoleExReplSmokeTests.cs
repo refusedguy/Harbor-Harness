@@ -136,9 +136,9 @@ public class ConsoleExReplSmokeTests
         public CancellationTokenSource AbortSource { get; } = new();
         public AgentState State { get; private set; }
 
-        public void Initialize(Session session, AgentDefinition agentDef)
+        public void Initialize(Session session, AgentDefinition agent)
         {
-            State = AgentState.Idle(session.Id, agentDef);
+            State = AgentState.Idle(session.Id, agent);
         }
 
         public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
