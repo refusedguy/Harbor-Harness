@@ -33,6 +33,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     private readonly ILogger<OnboardingViewModel> _logger;
     private readonly IMessenger _messenger;
     private readonly Harbor.Abstractions.Providers.IProviderHealthCheck? _healthCheck;
+    private readonly Harbor.Abstractions.Providers.IProviderRegistry? _providers;
     private readonly IThemeService _theme;
     private readonly IToastService _toasts;
     private readonly CancellationTokenSource _wizardCts = new();
@@ -88,6 +89,25 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     /// </summary>
     public bool HasConnectionTest => _healthCheck is not null;
 
+    /// <summary>
+    ///     Live model ids for <see cref="SelectedProvider" /> fetched from the
+    ///     provider's catalog (PROD-UI-0 З.4). Empty until a successful fetch;
+    ///     while empty the free-text model box stays visible (explicit degrade).
+    /// </summary>
+    public ObservableCollection<string> AvailableModels { get; } = new();
+
+    /// <summary>True once the live list has been fetched for the current provider.</summary>
+    [ObservableProperty]
+    private bool _isLiveModelList;
+
+    /// <summary>True while the model list is being fetched.</summary>
+    [ObservableProperty]
+    private bool _isLoadingModels;
+
+    /// <summary>User-facing note about why the live list is unavailable (empty when live).</summary>
+    [ObservableProperty]
+    private string _modelListNote = string.Empty;
+
     /// <summary>Theme choice on step 5: "dark" / "light" / "system".</summary>
     [ObservableProperty]
     private string _themeChoice = "dark";
@@ -102,13 +122,18 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
     ///     Optional "test connection" probe (PROD-UI-0 З.2). When present, a
     ///     Test connection button is live on step 3; when absent the UI hides it.
     /// </param>
+    /// <param name="providers">
+    ///     Optional provider registry (PROD-UI-0 З.4) — enables the live model
+    ///     picker on step 4 with explicit free-text fallback.
+    /// </param>
     public OnboardingViewModel(
         ICommonConfigStore configStore,
         IThemeService theme,
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
         IMessenger messenger,
-        Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null)
+        Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
+        Harbor.Abstractions.Providers.IProviderRegistry? providers = null)
     {
         _configStore = configStore;
         _theme = theme;
@@ -116,6 +141,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         _logger = logger;
         _messenger = messenger;
         _healthCheck = healthCheck;
+        _providers = providers;
 
         // PROD-UI-0 З.1: single source of truth — the wizard catalogue is
         // derived from <see cref="ProviderPresets" /> (the same presets the
@@ -214,6 +240,14 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         if (CurrentStep == 2 && SelectedProvider is not null)
         {
             DefaultModel = SelectedProvider.DefaultModel;
+        }
+
+        if (CurrentStep == 3)
+        {
+            // PROD-UI-0 З.4: entering step 4 → fetch the live model list in
+            // the background; until it lands (or fails) the free-text box
+            // remains visible.
+            _ = LoadModelsAsync();
         }
 
         CurrentStep++;
@@ -331,6 +365,86 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         {
             IsTestingConnection = false;
         }
+    }
+
+    /// <summary>
+    ///     PROD-UI-0 З.4: fetch the selected provider's live model list.
+    ///     On success <see cref="AvailableModels"/> is populated and step 4
+    ///     switches to a picker; on failure the free-text box stays with an
+    ///     explicit note — degradation is visible, never silent. All faults
+    ///     are observed internally (safe fire-and-forget from <see cref="Next"/>).
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadModelsAsync(CancellationToken ct = default)
+    {
+        if (_providers is null || IsLoadingModels) return;
+        string? providerId = SelectedProvider?.Id;
+        if (providerId is null) return;
+
+        var pid = Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(providerId);
+        if (pid.IsFailure)
+            return;
+
+        IsLoadingModels = true;
+        ModelListNote = string.Empty;
+        try
+        {
+            var clientResult = _providers.GetClient(pid.Value);
+            if (clientResult.IsFailure)
+            {
+                SetFreeTextFallback($"Model list unavailable ({clientResult.Error.TrimEnd('.')}).");
+                return;
+            }
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct, _wizardCts.Token);
+            cts.CancelAfter(Harbor.Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
+
+            var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(true);
+            if (result.IsFailure)
+            {
+                SetFreeTextFallback($"Model list unavailable ({result.Error.TrimEnd('.')}).");
+                return;
+            }
+
+            AvailableModels.Clear();
+            foreach (string id in result.Value.Select(m => m.Id).OrderBy(id => id, StringComparer.OrdinalIgnoreCase))
+            {
+                AvailableModels.Add(id);
+            }
+
+            if (AvailableModels.Count == 0)
+            {
+                SetFreeTextFallback("Provider responded but exposes no models.");
+                return;
+            }
+
+            IsLiveModelList = true;
+            if (!AvailableModels.Contains(DefaultModel))
+            {
+                DefaultModel = AvailableModels[0];
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            SetFreeTextFallback("Model list fetch cancelled/timed out.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Live model list failed for {Provider}", providerId);
+            SetFreeTextFallback($"Model list unavailable ({ex.Message.TrimEnd('.')}).");
+        }
+        finally
+        {
+            IsLoadingModels = false;
+        }
+    }
+
+    /// <summary>Degrade to manual entry with a visible reason.</summary>
+    private void SetFreeTextFallback(string note)
+    {
+        IsLiveModelList = false;
+        AvailableModels.Clear();
+        ModelListNote = note;
     }
 
     /// <summary>

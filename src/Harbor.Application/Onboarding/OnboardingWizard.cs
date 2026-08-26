@@ -17,7 +17,11 @@ public sealed class OnboardingWizard
     private readonly AuthStore _authStore;
     private readonly IConfigStore _configStore;
     private readonly Abstractions.Providers.IProviderHealthCheck? _healthCheck;
+    private readonly Abstractions.Providers.IProviderRegistry? _providers;
     private readonly ILogger<OnboardingWizard>? _logger;
+
+    /// <summary>Cap on the numbered live-model list shown during setup.</summary>
+    public const int MaxListedModels = 15;
 
     /// <summary>
     ///     Construct an <see cref="OnboardingWizard" /> wired to the supplied config and auth stores.
@@ -26,19 +30,26 @@ public sealed class OnboardingWizard
     /// <param name="authStore">The auth store to persist the entered API key.</param>
     /// <param name="logger">Optional logger.</param>
     /// <param name="healthCheck">
-    ///     Optional "test connection" probe (PROD-UI-0 З.2). When present, the
+    ///     Optional "test connection" probe (PRODUI-0 З.2). When present, the
     ///     wizard verifies the key right after it is saved instead of failing
     ///     on the first chat turn. When absent the step is skipped.
+    /// </param>
+    /// <param name="providers">
+    ///     Optional provider registry (PROD-UI-0 З.4). When present the model
+    ///     step shows a live list from <c>GetModelsAsync</c>; on failure it
+    ///     degrades explicitly to manual entry.
     /// </param>
     public OnboardingWizard(
         IConfigStore configStore,
         AuthStore authStore,
         ILogger<OnboardingWizard>? logger = null,
-        Abstractions.Providers.IProviderHealthCheck? healthCheck = null)
+        Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
+        Abstractions.Providers.IProviderRegistry? providers = null)
     {
         _configStore = configStore;
         _authStore = authStore;
         _healthCheck = healthCheck;
+        _providers = providers;
         _logger = logger;
     }
 
@@ -228,7 +239,103 @@ public sealed class OnboardingWizard
         ProviderPresets.Preset provider,
         CancellationToken ct)
     {
-        // Default to preset's default
+        // PROD-UI-0 З.4: try a live model list first; degrade explicitly to
+        // free-text when the provider is unreachable or the registry absent.
+        IReadOnlyList<string>? liveModels = await TryFetchLiveModelsAsync(provider, writer, ct).ConfigureAwait(false);
+        if (liveModels is not null)
+            return await PickFromLiveListAsync(reader, writer, provider, liveModels).ConfigureAwait(false);
+
+        return await PickFreeTextAsync(reader, writer, provider).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Fetch the provider's models with the standard 10 s budget.
+    ///     Returns <see langword="null" /> (with a printed reason) when the
+    ///     list is unavailable — never throws.
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> TryFetchLiveModelsAsync(
+        ProviderPresets.Preset provider, Action<string> writer, CancellationToken ct)
+    {
+        if (_providers is null)
+            return null;
+
+        var pid = Abstractions.Models.Identifiers.ProviderId.TryCreate(provider.Id);
+        if (pid.IsFailure)
+            return null;
+
+        var clientResult = _providers.GetClient(pid.Value);
+        if (clientResult.IsFailure)
+        {
+            writer($"  ⚠ Model list unavailable ({clientResult.Error.TrimEnd('.')}) — manual entry.");
+            return null;
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(Abstractions.Providers.IProviderHealthCheck.DefaultTimeout);
+        try
+        {
+            var result = await clientResult.Value.GetModelsAsync(cts.Token).ConfigureAwait(false);
+            if (result.IsSuccess && result.Value.Count > 0)
+                return result.Value.Select(m => m.Id).ToList();
+
+            writer($"  ⚠ Model list unavailable ({(result.IsSuccess ? "provider exposes no models" : result.Error.TrimEnd('.'))}) — manual entry.");
+            return null;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            writer("  ⚠ Model list unavailable (timed out) — manual entry.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Live model list fetch failed for {Provider}", provider.Id);
+            writer($"  ⚠ Model list unavailable ({ex.Message.TrimEnd('.')}) — manual entry.");
+            return null;
+        }
+    }
+
+    /// <summary>Numbered picker over the live list; accepts a number or any raw model id.</summary>
+    private static async Task<string> PickFromLiveListAsync(
+        Func<string, Task<string>> reader,
+        Action<string> writer,
+        ProviderPresets.Preset provider,
+        IReadOnlyList<string> liveModels)
+    {
+        writer("");
+        writer($"Available models for {provider.DisplayName} ({liveModels.Count}):");
+        int shown = Math.Min(liveModels.Count, MaxListedModels);
+        int defaultIndex = 0;
+        string presetDefault = $"{provider.Id}/{provider.DefaultModel}";
+        for (int i = 0; i < shown; i++)
+        {
+            writer($"  [{i + 1}] {liveModels[i]}");
+            if (string.Equals(liveModels[i], presetDefault, StringComparison.OrdinalIgnoreCase))
+                defaultIndex = i;
+        }
+
+        if (liveModels.Count > shown)
+            writer($"  … and {liveModels.Count - shown} more (type the id to select one)");
+
+        string input = await reader($"Enter number, or type a model id (default: {defaultIndex + 1}): ").ConfigureAwait(false);
+
+        if (string.IsNullOrWhiteSpace(input))
+            return presetDefault;
+
+        if (int.TryParse(input, out int idx) && idx >= 1 && idx <= liveModels.Count)
+            return $"{provider.Id}/{liveModels[idx - 1]}";
+
+        // Raw model id — prepend provider prefix unless already present.
+        if (!input.Contains('/'))
+            return $"{provider.Id}/{input.Trim()}";
+        return input.Trim();
+    }
+
+    /// <summary>The original free-text fallback (preset default on Enter).</summary>
+    private static async Task<string> PickFreeTextAsync(
+        Func<string, Task<string>> reader,
+        Action<string> writer,
+        ProviderPresets.Preset provider)
+    {
         string defaultModel = $"{provider.Id}/{provider.DefaultModel}";
 
         writer("");
