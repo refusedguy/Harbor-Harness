@@ -69,7 +69,9 @@ internal sealed class SlashCommandDispatcher
                     await new AuthCommand(authStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
                 case "model":
-                    await new ModelCommand(configStore, providers, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    // PROD-UI-0 З.3: pass the live agent + session so /model
+                    // rebinds the active session (no REPL restart).
+                    await new ModelCommand(configStore, providers, writer, agent, session).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
                 case "agent" or "mode":
                     await new AgentCommand(configStore, agentRegistry, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));

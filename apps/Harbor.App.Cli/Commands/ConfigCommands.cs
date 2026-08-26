@@ -1,7 +1,9 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tui;
 using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
@@ -114,18 +116,40 @@ public sealed class AuthCommand : ISlashCommand
 /// <summary>
 ///     /model — switch model.
 /// </summary>
+/// <remarks>
+///     PROD-UI-0 З.3: after persisting the new model the command REBINDS the
+///     active session (desktop SessionManager.RebindFromCommonConfigAsync
+///     pattern): fresh session record + AgentDefinition.WithModel +
+///     IAgent.Initialize — no REPL restart. The agent loop resolves the LLM
+///     client from the bound definition on every turn, so the next prompt
+///     goes through the new provider/model.
+/// </remarks>
 public sealed class ModelCommand : ISlashCommand
 {
 
     private readonly IConfigStore _configStore;
     private readonly IProviderRegistry _providers;
     private readonly Action<string> _writer;
+    private readonly IAgent? _agent;
+    private readonly Session? _session;
 
     public ModelCommand(IConfigStore configStore, IProviderRegistry providers, Action<string> writer)
+        : this(configStore, providers, writer, null, null)
+    {
+    }
+
+    public ModelCommand(
+        IConfigStore configStore,
+        IProviderRegistry providers,
+        Action<string> writer,
+        IAgent? agent,
+        Session? session)
     {
         _configStore = configStore;
         _providers = providers;
         _writer = writer;
+        _agent = agent;
+        _session = session;
     }
     public string Name => "model";
     public string Description => "Switch LLM model";
@@ -197,12 +221,60 @@ public sealed class ModelCommand : ISlashCommand
             return c;
         }, ct).ConfigureAwait(false);
 
-        if (updateResult.IsSuccess)
-            _writer($"✓ Switched to model: {model}");
-        else
+        if (updateResult.IsFailure)
+        {
             _writer($"✗ Failed: {updateResult.Error}");
+            return updateResult;
+        }
 
-        return updateResult;
+        _writer($"✓ Switched to model: {model}");
+
+        var rebindResult = await RebindActiveSessionAsync(model).ConfigureAwait(false);
+        return rebindResult;
+    }
+
+    /// <summary>
+    ///     Rebind the running agent to the freshly selected provider/model
+    ///     (PROD-UI-0 З.3). Best-effort: when the command was constructed
+    ///     without agent/session context (e.g. non-REPL usage) the config is
+    ///     still updated and takes effect on the next REPL start.
+    /// </summary>
+    private async Task<Result> RebindActiveSessionAsync(string model)
+    {
+        if (_agent is null || _session is null)
+        {
+            _writer("  (no active session — new model applies on next start)");
+            return Result.Success();
+        }
+
+        // Split "provider/model" the same way config resolution does; a bare
+        // model id keeps the currently-configured provider.
+        string[] parts = model.Split('/', 2);
+        string providerId;
+        string modelId;
+        if (parts.Length > 1)
+        {
+            providerId = parts[0];
+            modelId = parts[1];
+        }
+        else
+        {
+            var loadResult = await _configStore.LoadAsync(CancellationToken.None).ConfigureAwait(false);
+            providerId = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+            modelId = model;
+        }
+
+        var currentDef = _agent.State?.Agent;
+        if (currentDef is null)
+        {
+            _writer("⚠ Agent is not initialized — cannot rebind, restart the REPL.");
+            return Result.Success();
+        }
+
+        var reboundSession = _session with { ProviderId = providerId, Model = modelId };
+        _agent.Initialize(reboundSession, currentDef.WithModel(modelId, providerId));
+        _writer($"✓ Active session rebound to {providerId}/{modelId} (no restart needed).");
+        return Result.Success();
     }
 }
 
