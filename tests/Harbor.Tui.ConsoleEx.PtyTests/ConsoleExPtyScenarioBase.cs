@@ -35,6 +35,9 @@ public abstract class ConsoleExPtyScenarioBase
 
     protected int Rows { get; private set; } = 30;
 
+    /// <summary>Probe escape hatch: Information-level app logging for diagnostics.</summary>
+    protected bool VerboseLogging { get; set; }
+
     [Before(Test)]
     public async Task SetUpScenarioAsync()
     {
@@ -84,6 +87,7 @@ public abstract class ConsoleExPtyScenarioBase
         if (_pumpCts is not null)
         {
             await _pumpCts.CancelAsync().ConfigureAwait(false);
+            _pumpCts.Dispose();
         }
 
         if (Session is not null)
@@ -267,7 +271,7 @@ public abstract class ConsoleExPtyScenarioBase
         ["USERPROFILE"] = TempHome,
         ["HARBOR_MODEL"] = "mock/test-model",
         ["MOCK_API_KEY"] = "pty-test-key",
-        ["HARBOR_LOGLEVEL"] = "Warning",
+        ["HARBOR_LOGLEVEL"] = VerboseLogging ? "Information" : "Warning",
         ["HARBOR_SKIP_ONBOARDING"] = "1",
         ["HARBOR_TUI"] = "consoleex",
         ["TERM"] = "xterm-256color",

@@ -20,7 +20,15 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <NoWarn>$(NoWarn);TUnit0055</NoWarn>
+    <!--
+      TUnit0055: assertion overload guidance conflicts with TUnit's own idioms here.
+      TUnit0015: scenarios thread cancellation implicitly — threading a CT
+      parameter through the whole PtySession wait-API for analyzer parity is
+      churn without behavioural gain (all waits are already deadline-bounded).
+      TUnit0023: Server/Session disposal happens via the shared [After(Test)]
+      teardown in ConsoleExPtyScenarioBase — the analyzer cannot see the flow.
+    -->
+    <NoWarn>$(NoWarn);TUnit0055;TUnit0015;TUnit0023</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

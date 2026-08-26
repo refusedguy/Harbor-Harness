@@ -1,0 +1,2 @@
+Harbor — modular AI coding agent [consoleex]
+model: mock/test-model | ввод — текст, /help — команды, Ctrl+C×2 — выход

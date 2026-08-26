@@ -12,28 +12,15 @@ namespace Harbor.Tui.ConsoleEx.PtyTests;
 [NotInParallel("pty")]
 public class PtyHarnessSanityTests
 {
-    [Before(Test)]
-    public void SetUp() => PtySession.RequireLinux();
-
-    [After(Test)]
-    public async Task TearDown()
-    {
-        if (_session is not null)
-        {
-            await _session.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    private PtySession? _session;
-
     [Test]
     [Timeout(30_000)]
     public async Task Cat_EchoesLinesThroughPty()
     {
-        _session = PtySession.Start(new PtyStartSpec("cat", [], Cols: 80, Rows: 24));
+        PtySession.RequireLinux();
+        await using var session = PtySession.Start(new PtyStartSpec("cat", [], Cols: 80, Rows: 24));
 
-        _session.WriteLine("hello-pty");
-        bool echoed = await _session.WaitForTextAsync("hello-pty", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        session.WriteLine("hello-pty");
+        bool echoed = await session.WaitForTextAsync("hello-pty", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         await Assert.That(echoed).IsTrue();
     }
@@ -42,29 +29,31 @@ public class PtyHarnessSanityTests
     [Timeout(30_000)]
     public async Task Resize_IsVisibleToChildStty()
     {
+        PtySession.RequireLinux();
         // stty size prints "<rows> <cols>" of its controlling terminal.
-        _session = PtySession.Start(new PtyStartSpec(
+        await using var session = PtySession.Start(new PtyStartSpec(
             "sh", ["-c", "sleep 0.5; stty size"], Cols: 80, Rows: 24));
-        await _session.ResizeAsync(100, 30).ConfigureAwait(false);
+        await session.ResizeAsync(100, 30).ConfigureAwait(false);
 
-        int exit = await _session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(_session.RawText).Contains("30 100");
+        await Assert.That(session.RawText).Contains("30 100");
     }
 
     [Test]
     [Timeout(30_000)]
     public async Task Termios_ChangeSurvivesChildExit_AndIsObservableViaMaster()
     {
+        PtySession.RequireLinux();
         // Baseline BEFORE the child flips raw mode (child sleeps first).
-        _session = PtySession.Start(new PtyStartSpec(
+        await using var session = PtySession.Start(new PtyStartSpec(
             "sh", ["-c", "sleep 0.4; stty raw -echo"], Cols: 80, Rows: 24));
-        byte[] before = _session.CaptureTermios();
+        byte[] before = session.CaptureTermios();
 
-        int exit = await _session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(exit).IsEqualTo(0);
 
-        byte[] after = _session.CaptureTermios();
+        byte[] after = session.CaptureTermios();
 
         // The change persisted on the pty while the master stays open — this
         // is exactly what scenario CE-5 З.8 asserts against the real app.
@@ -80,10 +69,11 @@ public class PtyHarnessSanityTests
     [Timeout(30_000)]
     public async Task ExitCode_PropagatesFromChild()
     {
-        _session = PtySession.Start(new PtyStartSpec(
+        PtySession.RequireLinux();
+        await using var session = PtySession.Start(new PtyStartSpec(
             "sh", ["-c", "exit 7"], Cols: 80, Rows: 24));
 
-        int exit = await _session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        int exit = await session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         await Assert.That(exit).IsEqualTo(7);
     }

@@ -43,12 +43,14 @@ public sealed class PtySession : IAsyncDisposable
     private readonly List<byte> _raw = [];
     private readonly object _rawLock = new();
     private readonly object _writeLock = new();
+    private readonly byte[] _initialTermios;
 
-    private PtySession(int masterFd, int slaveFd, int pid)
+    private PtySession(int masterFd, int slaveFd, int pid, byte[] initialTermios)
     {
         _masterFd = masterFd;
         _slaveFd = slaveFd;
         _pid = pid;
+        _initialTermios = initialTermios;
 
         _exitTask = Task.Run(
             () =>
@@ -137,8 +139,11 @@ public sealed class PtySession : IAsyncDisposable
 
             // The child opens the slave itself via spawn file actions; the
             // test process never needs a slave fd of its own.
+            // Termios baseline BEFORE the child can touch raw mode — the
+            // reference point for CE-5 З.8 (restore-after-exit assertions).
+            byte[] initialTermios = CaptureTermiosOn(master);
             int pid = LibcNative.SpawnInPty(spec.FileName, spec.Args, env, slavePath, spec.SearchPath);
-            return new PtySession(master, -1, pid);
+            return new PtySession(master, -1, pid, initialTermios);
         }
         catch
         {
@@ -158,8 +163,13 @@ public sealed class PtySession : IAsyncDisposable
             while (offset < bytes.Length)
             {
                 int n = LibcNative.write(_masterFd, ref bytes[offset], bytes.Length - offset);
-                if (n <= 0)
+                if (n < 0)
                 {
+                    if (Marshal.GetLastWin32Error() == 4)
+                    {
+                        continue; // EINTR — retry the same range
+                    }
+
                     throw new IOException($"write(master) failed: errno={Marshal.GetLastWin32Error()}.");
                 }
 
@@ -200,7 +210,15 @@ public sealed class PtySession : IAsyncDisposable
         return false;
     }
 
-    /// <summary>Poll until <paramref name="needle" /> appears in decoded output.</summary>
+    /// <summary>
+    ///     Poll until <paramref name="needle" /> appears in decoded output.
+    ///     ⚠ Matches the RAW master-byte stream, where the app emits
+    ///     cursor-positioned runs — streamed timeline text never forms a
+    ///     contiguous phrase byte-wise. Assert screen CONTENT on an ANSI
+    ///     screen emulation (ConsoleExPtyScenarioBase.WaitForScreenAsync)
+    ///     instead; raw needles are valid only for atomic control sequences
+    ///     (alt-screen enter/leave) and short single-run fragments.
+    /// </summary>
     public Task<bool> WaitForTextAsync(string needle, TimeSpan? timeout = null) =>
         WaitForOutputAsync(text => text.Contains(needle, StringComparison.Ordinal), timeout ?? TimeSpan.FromSeconds(10));
 
@@ -228,10 +246,15 @@ public sealed class PtySession : IAsyncDisposable
     // ── Termios ────────────────────────────────────────────────────────────
 
     /// <summary>60-byte kernel view of the slave termios via tcgetattr(master).</summary>
-    public byte[] CaptureTermios()
+    public byte[] CaptureTermios() => CaptureTermiosOn(_masterFd);
+
+    /// <summary>Termios snapshot taken BEFORE the child was spawned (pre-raw baseline).</summary>
+    public byte[] InitialTermios => [.. _initialTermios];
+
+    private static byte[] CaptureTermiosOn(int fd)
     {
         var t = new LibcNative.TermiosKernel { Cc = new byte[32] };
-        if (LibcNative.tcgetattr(_masterFd, ref t) != 0)
+        if (LibcNative.tcgetattr(fd, ref t) != 0)
         {
             throw new IOException($"tcgetattr(master) failed: errno={Marshal.GetLastWin32Error()}.");
         }
@@ -312,6 +335,11 @@ public sealed class PtySession : IAsyncDisposable
         while (true)
         {
             int n = LibcNative.read(_masterFd, buf, buf.Length);
+            if (n < 0 && Marshal.GetLastWin32Error() == 4)
+            {
+                continue; // EINTR — retry, the fd is still alive
+            }
+
             if (n <= 0)
             {
                 return; // EOF/EIO after hangup or dispose — normal teardown
