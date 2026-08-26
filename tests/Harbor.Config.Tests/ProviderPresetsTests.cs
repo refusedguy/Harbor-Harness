@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Harbor.Application.Configuration;
 namespace Harbor.Config.Tests;
 /// <summary>
@@ -157,6 +158,53 @@ public class ProviderPresetsTests
         foreach (var p in ProviderPresets.All)
         {
             await Assert.That(string.IsNullOrWhiteSpace(p.DefaultModel)).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_IdMatchesPresetId()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            string? id = doc.RootElement.GetProperty("id").GetString();
+            await Assert.That(id).IsEqualTo(preset.Id);
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_AuthAlignsWithPreset()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("authType", out var authTypeEl))
+                continue;
+            string authType = authTypeEl.GetString() ?? "";
+
+            if (preset.RequiresApiKey)
+            {
+                // Key-requiring presets must not be 'none' and must carry the
+                // same env var name the onboarding wizard tells the user about.
+                await Assert.That(authType).IsNotEqualTo("none");
+                string? envVar = root.TryGetProperty("authEnvVar", out var envEl) ? envEl.GetString() : null;
+                await Assert.That(envVar).IsEqualTo(preset.EnvVarName);
+            }
+            else
+            {
+                // Local presets (ollama, vllm) must work without any key.
+                await Assert.That(authType).IsEqualTo("none");
+            }
         }
     }
 }
