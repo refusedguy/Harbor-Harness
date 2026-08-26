@@ -23,7 +23,7 @@ Environment variables (all optional):
 
 | Variable          | Default                   | Notes                                                 |
 |-------------------|---------------------------|-------------------------------------------------------|
-| `HARBOR_MODEL`    | `ollama/qwen2.5-coder:7b` | `provider/model` — picked up at startup.              |
+| `HARBOR_MODEL`    | `kilocode/tencent/hy3:free` | `provider/model` — picked up at startup.              |
 | `HARBOR_STORAGE`  | `memory`                  | `memory` (ephemeral) or `jsonl` (~/.harbor/sessions). |
 | `HARBOR_LOGLEVEL` | `Warning`                 | `Trace`/`Debug`/`Information`/`Warning`/`Error`.      |
 | `OLLAMA_HOST`     | `http://localhost:11434`  | Ollama server URL.                                    |

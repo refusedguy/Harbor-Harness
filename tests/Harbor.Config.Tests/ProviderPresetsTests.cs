@@ -103,4 +103,60 @@ public class ProviderPresetsTests
             await Assert.That(p.SetupHint).IsNotNull();
         }
     }
+
+    // ---- PROD-UI-0 З.1: catalog consistency (presets ↔ providers/*.json) ----
+
+    /// <summary>
+    ///     Locate the bundled <c>providers/</c> directory by walking up from
+    ///     the test binary towards the repo root (mirrors
+    ///     JsonProviderDiscovery.FindProvidersDirectories precedence).
+    /// </summary>
+    private static string? FindProvidersDirectory()
+    {
+        string? current = AppContext.BaseDirectory;
+        for (int i = 0; i < 10 && current is not null; i++)
+        {
+            string candidate = Path.Combine(current, "providers");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "kilocode.json")))
+                return candidate;
+            current = Path.GetDirectoryName(current);
+        }
+        return null;
+    }
+
+    [Test]
+    public async Task EveryPreset_HasBundledJsonConfig()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            await Assert.That(File.Exists(path)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_HaveNoOrphansOutsidePresets()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        HashSet<string> presetIds = ProviderPresets.All.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (string file in Directory.EnumerateFiles(dir!, "*.json"))
+        {
+            string id = Path.GetFileNameWithoutExtension(file);
+            await Assert.That(presetIds.Contains(id)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task All_DefaultModels_AreNonEmpty()
+    {
+        foreach (var p in ProviderPresets.All)
+        {
+            await Assert.That(string.IsNullOrWhiteSpace(p.DefaultModel)).IsFalse();
+        }
+    }
 }

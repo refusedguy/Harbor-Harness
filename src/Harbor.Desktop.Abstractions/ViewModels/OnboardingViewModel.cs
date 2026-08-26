@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.Abstractions.Messages;
+using Harbor.Application.Configuration;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,13 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
 {
     /// <summary>Number of steps in the wizard (1-based index, used by the view).</summary>
     public const int TotalSteps = 5;
+
+    /// <summary>
+    ///     Model used when nothing is selected/typed — always a keyless local
+    ///     provider default from <see cref="ProviderPresets" /> so the wizard
+    ///     can complete offline.
+    /// </summary>
+    public static string OfflineFallbackModel => ProviderPresets.Find("ollama")?.DefaultModel ?? "llama3.2";
 
     private readonly ICommonConfigStore _configStore;
     private readonly ILogger<OnboardingViewModel> _logger;
@@ -78,31 +86,44 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         _logger = logger;
         _messenger = messenger;
 
-        // Static catalogue of providers the wizard knows about. Each entry
-        // declares whether an API key is required (Ollama is the only one that
-        // doesn't need one). The user picks a subset via checkboxes; the
-        // wizard then collects keys + a default model + theme.
-        Providers =
-        [
-            new OnboardingProviderOption("anthropic", "Anthropic", "ANTHROPIC_API_KEY", true, "claude-sonnet-4-20250514", "🤖"),
-            new OnboardingProviderOption("openai", "OpenAI", "OPENAI_API_KEY", true, "gpt-4o", "🌐"),
-            new OnboardingProviderOption("openrouter", "OpenRouter", "OPENROUTER_API_KEY", true, "anthropic/claude-sonnet-4", "🛰️"),
-            new OnboardingProviderOption("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", true, "deepseek-chat", "🐋"),
-            new OnboardingProviderOption("groq", "Groq", "GROQ_API_KEY", true, "llama-3.3-70b-versatile", "⚡"),
-            new OnboardingProviderOption("mistral", "Mistral", "MISTRAL_API_KEY", true, "mistral-large-latest", "🌬️"),
-            new OnboardingProviderOption("xai", "xAI", "XAI_API_KEY", true, "grok-3", "✖️"),
-            new OnboardingProviderOption("together", "Together AI", "TOGETHER_API_KEY", true, "meta-llama/Llama-3.3-70B-Instruct-Turbo", "🤝"),
-            new OnboardingProviderOption("fireworks", "Fireworks", "FIREWORKS_API_KEY", true, "accounts/fireworks/models/llama-v3p1-70b-instruct", "🎆"),
-            new OnboardingProviderOption("cerebras", "Cerebras", "CEREBRAS_API_KEY", true, "llama-3.3-70b", "🧠"),
-            new OnboardingProviderOption("kilocode", "Kilo Code", "KILO_API_KEY", true, "tencent/hy3:free", "⌨️"),
-            new OnboardingProviderOption("ollama", "Ollama (local)", null, false, "qwen2.5-coder:7b", "🦙")
-        ];
+        // PROD-UI-0 З.1: single source of truth — the wizard catalogue is
+        // derived from <see cref="ProviderPresets" /> (the same presets the
+        // CLI wizard and /auth use). No per-VM hardcoded provider list: a new
+        // preset automatically appears here. Icons are pure presentation and
+        // stay in a small id→glyph map with a generic fallback.
+        Providers = new ObservableCollection<OnboardingProviderOption>(
+            ProviderPresets.All.Select(p => new OnboardingProviderOption(
+                p.Id,
+                p.DisplayName,
+                p.EnvVarName,
+                p.RequiresApiKey,
+                p.DefaultModel,
+                IconFor(p.Id))));
 
         // Default-select Ollama (works offline, no key needed) so the user
         // can finish onboarding without typing anything.
         Providers.First(p => p.Id == "ollama").IsSelected = true;
         RefreshSelectedProvider();
     }
+
+    /// <summary>Glyph shown next to a provider row; presentation-only mapping.</summary>
+    private static string IconFor(string id) => id switch
+    {
+        "anthropic" => "🤖",
+        "openai" => "🌐",
+        "openrouter" => "🛰️",
+        "deepseek" => "🐋",
+        "groq" => "⚡",
+        "mistral" => "🌬️",
+        "xai" => "✖️",
+        "together" => "🤝",
+        "fireworks" => "🎆",
+        "cerebras" => "🧠",
+        "kilocode" => "⌨️",
+        "ollama" => "🦙",
+        "vllm" => "🚀",
+        _ => "🔧"
+    };
 
     /// <summary>Provider catalogue shown on step 2.</summary>
     public ObservableCollection<OnboardingProviderOption> Providers { get; }
@@ -183,7 +204,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
         {
             string provider = SelectedProvider?.Id ?? "ollama";
             string model = string.IsNullOrWhiteSpace(DefaultModel)
-                ? SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b"
+                ? SelectedProvider?.DefaultModel ?? OfflineFallbackModel
                 : DefaultModel.Trim();
             string? newKey = SelectedProvider is not null
                              && SelectedProvider.RequiresKey
@@ -258,7 +279,7 @@ public partial class OnboardingViewModel : ObservableObject, IDisposable
             // wizard for a second provider doesn't wipe the first one's key.
             string provider = SelectedProvider?.Id ?? "ollama";
             string model = string.IsNullOrWhiteSpace(DefaultModel)
-                ? SelectedProvider?.DefaultModel ?? "qwen2.5-coder:7b"
+                ? SelectedProvider?.DefaultModel ?? OfflineFallbackModel
                 : DefaultModel.Trim();
             string? newKey = SelectedProvider is not null
                              && SelectedProvider.RequiresKey

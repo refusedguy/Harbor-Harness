@@ -28,7 +28,7 @@ if (args is { Length: > 0 } && args[0] is "--help" or "-h")
     Console.WriteLine("Environment variables:");
     Console.WriteLine("  HARBOR_SHELL     classic | orca (default: classic — same as --shell).");
     Console.WriteLine("  HARBOR_THEME     dark | light | system (default: dark).");
-    Console.WriteLine("  HARBOR_MODEL     provider/model (default: ollama/qwen2.5-coder:7b)");
+    Console.WriteLine("  HARBOR_MODEL     provider/model (default: kilocode/tencent/hy3:free)");
     Console.WriteLine("  HARBOR_STORAGE   memory | jsonl (default: memory)");
     Console.WriteLine("  HARBOR_LOGLEVEL  Trace|Debug|Information|Warning|Error (default: Information)");
     return 0;
