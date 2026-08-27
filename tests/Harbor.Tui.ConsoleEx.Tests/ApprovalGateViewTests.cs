@@ -156,4 +156,23 @@ public class ApprovalGateViewTests
         var fresh = new ApprovalGateView("bash", "ls");
         await Assert.That(fresh.TryHitDecision(1, 2)).IsNull();
     }
+
+    [Test]
+    public async Task TryDecide_ClickPath_OneShot_AndRejectsNone()
+    {
+        var (gate, hintRow) = PaintedGate(60);
+        var choice = gate.TryHitDecision(1, hintRow);
+        await Assert.That(choice).IsEqualTo(ApprovalChoice.Approve);
+
+        int fired = 0;
+        gate.DecisionRecorded += (_, _) => fired++;
+        await Assert.That(gate.TryDecide(choice!.Value)).IsTrue();
+        await Assert.That(fired).IsEqualTo(1);
+
+        // Second click / second TryDecide cannot rewrite the audit stamp.
+        await Assert.That(gate.TryDecide(ApprovalChoice.Deny)).IsFalse();
+        await Assert.That(fired).IsEqualTo(1);
+        await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.Approve);
+        await Assert.That(gate.TryDecide(ApprovalChoice.None)).IsFalse();
+    }
 }

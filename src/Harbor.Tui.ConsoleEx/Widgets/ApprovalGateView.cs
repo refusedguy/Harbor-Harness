@@ -74,6 +74,22 @@ public sealed class ApprovalGateView : IChatBlock
         DecisionRecorded?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Record a decision programmatically — the click-to-decide and host-side
+    /// path (<see cref="HandleKey" /> funnels through here too). Returns false
+    /// when the gate is already resolved; a decision is one-shot by contract.
+    /// </summary>
+    public bool TryDecide(ApprovalChoice choice)
+    {
+        if (!IsPending || choice == ApprovalChoice.None)
+        {
+            return false;
+        }
+
+        Decide(choice);
+        return true;
+    }
+
     public IReadOnlyList<string> WrappedDetail(int width)
     {
         EnsureWrapped(Math.Max(8, width));
@@ -179,37 +195,38 @@ public sealed class ApprovalGateView : IChatBlock
             return false;
         }
 
-        if (key.Key == KeyCode.Enter)
+        switch (key.Key)
         {
-            Decide(ApprovalChoice.Approve);
-            return true;
+            case KeyCode.Enter:
+                Decide(ApprovalChoice.Approve);
+                return true;
+
+            case KeyCode.Escape:
+                Decide(ApprovalChoice.Deny);
+                return true;
+
+            case KeyCode.Char:
+                break;
+
+            default:
+                return false;
         }
 
-        if (key.Key == KeyCode.Escape)
+        ApprovalChoice? byChar = Rune.ToUpperInvariant(key.Character).Value switch
         {
-            Decide(ApprovalChoice.Deny);
-            return true;
-        }
+            'Y' => ApprovalChoice.Approve,
+            'N' => ApprovalChoice.Deny,
+            'A' => ApprovalChoice.AlwaysAllow,
+            _ => null,
+        };
 
-        if (key.Key != KeyCode.Char)
+        if (byChar is not { } choice)
         {
             return false;
         }
 
-        switch (Rune.ToUpperInvariant(key.Character).Value)
-        {
-            case 'Y':
-                Decide(ApprovalChoice.Approve);
-                return true;
-            case 'N':
-                Decide(ApprovalChoice.Deny);
-                return true;
-            case 'A':
-                Decide(ApprovalChoice.AlwaysAllow);
-                return true;
-            default:
-                return false;
-        }
+        Decide(choice);
+        return true;
     }
 
     /// <summary>
