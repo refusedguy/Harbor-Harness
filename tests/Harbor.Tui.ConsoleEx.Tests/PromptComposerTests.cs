@@ -113,6 +113,67 @@ public class PromptBufferTests
     }
 
     [Test]
+    public async Task DeleteToLineEnd_KillsTailOfCurrentLineOnly()
+    {
+        // Mid-line kill on line 1 keeps the newline + line 2 intact.
+        var b = new PromptBuffer();
+        _ = b.InsertText("first\nsecond");
+        _ = b.MoveToStart();
+        _ = b.MoveRight();
+        _ = b.MoveRight();
+        _ = b.DeleteToLineEnd();
+        await Assert.That(b.SnapshotText()).IsEqualTo("fi\nsecond");
+
+        // At line end the kill is a no-op.
+        var atEnd = new PromptBuffer();
+        _ = atEnd.InsertText("abc");
+        await Assert.That(atEnd.DeleteToLineEnd().Kind).IsEqualTo(EditOutcomeKind.Unchanged);
+    }
+
+    [Test]
+    public async Task DeleteWordForward_RemovesWordAfterCaret()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("alpha beta gamma");
+        _ = b.MoveWordLeft();      // before "gamma"
+        _ = b.MoveWordLeft();      // before "beta"
+        await Assert.That(b.SnapshotText()[b.Cursor..]).StartsWith("beta");
+        _ = b.DeleteWordForward();
+        await Assert.That(b.SnapshotText()).IsEqualTo("alpha  gamma");
+
+        // At/beyond the end: unchanged.
+        _ = b.MoveToEnd();
+        await Assert.That(b.DeleteWordForward().Kind).IsEqualTo(EditOutcomeKind.Unchanged);
+    }
+
+    [Test]
+    public async Task WordMovement_HopsWhitespaceRuns_AndStopsAtEdges()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("one two   three");
+        _ = b.MoveToStart();
+
+        // Forward lands on the cell AFTER each word (emacs M-f), then drains
+        // whole whitespace runs before continuing to hop.
+        _ = b.MoveWordRight();
+        await Assert.That(b.Cursor).IsEqualTo(3);
+        _ = b.MoveWordRight();
+        await Assert.That(b.Cursor).IsEqualTo(7);
+        _ = b.MoveWordRight();
+        await Assert.That(b.Cursor).IsEqualTo(15);
+        await Assert.That(b.MoveWordRight().Kind).IsEqualTo(EditOutcomeKind.Unchanged);
+
+        // Backward always lands on a word start (emacs M-b).
+        _ = b.MoveWordLeft();
+        await Assert.That(b.Cursor).IsEqualTo(10);
+        _ = b.MoveWordLeft();
+        await Assert.That(b.Cursor).IsEqualTo(4);
+        _ = b.MoveWordLeft();
+        await Assert.That(b.Cursor).IsEqualTo(0);
+        await Assert.That(b.MoveWordLeft().Kind).IsEqualTo(EditOutcomeKind.Unchanged);
+    }
+
+    [Test]
     public async Task TakeText_ResetsState()
     {
         var b = new PromptBuffer();
@@ -248,6 +309,82 @@ public class ComposerControllerTests
         var action = composer.Buffer.InsertText("rm -rf /\nharbor --dangerous");
         await Assert.That(action.Kind).IsEqualTo(EditOutcomeKind.TextAndCursor);
         await Assert.That(composer.Buffer.LineCount).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task CtrlA_CtrlE_JumpLineBoundaries_LikeReadline()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "abc")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(CharKey('a', KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(0);
+        _ = composer.HandleKey(CharKey('e', KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task CtrlK_KillsToEndOfLine_MultilineSafe()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "first")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, isKittyEncoded: true));
+        foreach (var c in "second")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        // Park mid-line on row 0 (deterministic column 2), then kill to its end.
+        _ = composer.Buffer.MoveUp();           // clamps to end of the shorter row 0
+        await Assert.That(composer.Buffer.LineIndexOf(composer.Buffer.Cursor)).IsEqualTo(0);
+        _ = composer.Buffer.MoveToStart();
+        _ = composer.Buffer.MoveRight();
+        _ = composer.HandleKey(CharKey('k', KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.SnapshotText()).DoesNotContain("rst");
+        await Assert.That(composer.Buffer.SnapshotText()).Contains("second");
+    }
+
+    [Test]
+    public async Task CtrlArrows_WordHop_MetaBD_DeleteForward()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "one two")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Left, KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(4);
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Right, KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(7);
+
+        // Alt+B hops back to the start of the current word.
+        _ = composer.HandleKey(CharKey('b', KeyModifiers.Alt));
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(4);
+
+        // Alt+D from a word start kills the word itself, keeping separators ahead.
+        var altD = new ComposerController();
+        foreach (var c in "one two")
+        {
+            _ = altD.HandleKey(CharKey(c));
+        }
+
+        _ = altD.Buffer.MoveToStart();
+        _ = altD.HandleKey(CharKey('d', KeyModifiers.Alt));
+        await Assert.That(altD.Buffer.SnapshotText()).IsEqualTo(" two");
+
+        // Word delete backward still works after the new movement helpers.
+        _ = altD.Buffer.MoveToEnd();
+        _ = altD.HandleKey(CharKey('w', KeyModifiers.Ctrl));
+        await Assert.That(altD.Buffer.SnapshotText()).IsEqualTo(" ");
     }
 }
 
