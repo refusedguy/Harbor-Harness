@@ -22,8 +22,10 @@ public enum ApprovalChoice : byte
 /// history keeps an audit trail (height stays identical — layout never jumps).
 /// Blocks stay paint-only in this renderer, so decisions are made by the host
 /// frame loop calling <see cref="HandleKey" /> first while the gate is focused.
+/// Implements <see cref="IFocusTarget" /> so the host <c>FocusRouter</c> can
+/// traverse it via Tab and hosts render a visible keyboard-focus rail.
 /// </summary>
-public sealed class ApprovalGateView : IChatBlock
+public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 {
     private const string HeaderLabel = "⚠ permission required";
     private const string HintLine = "[y] approve   [n] deny   [a] always allow";
@@ -33,6 +35,13 @@ public sealed class ApprovalGateView : IChatBlock
     private List<string> _wrapped = [];
     private int _wrappedWidth = -1;
     private (int Start, int End)[]? _hintSpans;
+
+    private bool _focused;
+
+    /// <summary>Stable router id — one gate per tool invocation.</summary>
+    public string Id => $"approval:{ToolName}";
+
+    public void OnFocusChanged(bool focused) => _focused = focused;
 
     /// <summary>
     /// Screen-space clip rect from the most recent <see cref="Paint" /> pass.
@@ -157,7 +166,11 @@ public sealed class ApprovalGateView : IChatBlock
             headerStyle = glow > 0 ? PanelFx.WithAlpha(warning, 0.55 + (0.45 * glow)) : warning;
         }
 
-        buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Truncate(HeaderLabel + " · " + ToolName, ctx.Rect.Width), headerStyle);
+        // Keyboard-focus rail (HDS §Accessibility): accent caret in column 0
+        // while this gate is the routed target — visible without a mouse.
+        string focusRail = _focused && IsPending ? "▸" : string.Empty;
+        buffer.SetText(ctx.Rect.X, ctx.Rect.Y,
+            Truncate(focusRail + HeaderLabel + " · " + ToolName, ctx.Rect.Width), headerStyle);
 
         // Detail body, wrapped to the clip rect, plain tool-args tone.
         EnsureWrapped(inner);
