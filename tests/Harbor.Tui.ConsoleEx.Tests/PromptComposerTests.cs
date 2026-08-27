@@ -250,3 +250,112 @@ public class ComposerControllerTests
         await Assert.That(composer.Buffer.LineCount).IsEqualTo(2);
     }
 }
+
+public class ComposerHistoryRecallTests
+{
+    private static KeyEvent CharKey(char c, KeyModifiers mods = KeyModifiers.None) =>
+        KeyEvent.Char(new Rune(c), mods);
+
+    /// <summary>Type one letter + Enter, mimicking the host's post-submit TakeText.</summary>
+    private static void TypeAndSubmit(ComposerController composer, string text)
+    {
+        foreach (var c in text)
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter));
+        _ = composer.Buffer.TakeText();
+    }
+
+    [Test]
+    public async Task Submit_PushesTrimmed_NonEmpty_Only()
+    {
+        var composer = new ComposerController();
+        TypeAndSubmit(composer, "run tests");
+        TypeAndSubmit(composer, string.Empty);
+        TypeAndSubmit(composer, "  ");
+
+        await Assert.That(composer.History.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task UpThenDown_WalksHistory_AndRestoresDraft()
+    {
+        var composer = new ComposerController();
+        TypeAndSubmit(composer, "one");
+        TypeAndSubmit(composer, "two");
+        TypeAndSubmit(composer, "wip");     // becomes the saved draft
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("wip");
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("two");
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one");
+
+        // Oldest boundary: further Up keeps the oldest entry (caret move only).
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one");
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("two");
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("wip");
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        // Draft was captured right after the last TakeText ⇒ restored empty.
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+
+        // Walk ended — Down is plain caret movement again.
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+    }
+
+    [Test]
+    public async Task MultilineDraft_EscalatesToRecallOnlyAtFirstLine()
+    {
+        var composer = new ComposerController();
+        TypeAndSubmit(composer, "history-entry");
+
+        // Caret parked on the LAST logical line ⇒ Up must not hijack the key.
+        foreach (var c in "alpha")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Enter, KeyModifiers.Shift, isKittyEncoded: true));
+        foreach (var c in "beta")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("alpha\nbeta");
+        await Assert.That(composer.Buffer.LineIndexOf(composer.Buffer.Cursor)).IsEqualTo(0);
+
+        // Now at the first line with idle history? No — a walk never started,
+        // so Up falls through to caret movement until we hit TopLine+Enter-state…
+        // Here it DOES start a walk: topmost line + entries exist.
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("history-entry");
+    }
+
+    [Test]
+    public async Task CtrlC_Clear_ResetsWalk()
+    {
+        var composer = new ComposerController();
+        TypeAndSubmit(composer, "kept");
+        _ = composer.Buffer.InsertText("draft");
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Up));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("kept");
+
+        _ = composer.Buffer.InsertText("!");   // edit breaks nothing by contract below
+        _ = composer.HandleKey(CharKey('c', KeyModifiers.Ctrl));  // clear-all
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Down));
+        // Walk was reset — Down cannot resurrect the abandoned recall state.
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+    }
+}

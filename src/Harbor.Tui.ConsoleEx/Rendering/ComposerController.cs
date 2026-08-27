@@ -23,11 +23,16 @@ public enum ComposerAction : byte
 /// Keyboard routing for the inline composer: kitty-modifier aware Enter split
 /// (plain Enter submits; Shift+Enter / Alt+Enter insert a newline — the whole
 /// reason CE-0 pushed disambiguate flags), navigation/editing keys into
-/// <see cref="PromptBuffer"/>, Ctrl+C semantics, everything else ignored.
+/// <see cref="PromptBuffer"/>, prompt-history recall (<see cref="History"/>:
+/// Up from the first line walks back, Down from the last line forward),
+/// Ctrl+C semantics, everything else ignored.
 /// </summary>
 public sealed class ComposerController
 {
     public PromptBuffer Buffer { get; } = new();
+
+    /// <summary>Readline-style submitted-prompt history owned by the composer.</summary>
+    public PromptHistory History { get; } = new();
 
     /// <summary>Routes one decoded key event. Pure state machine over the buffer.</summary>
     public ComposerAction HandleKey(in KeyEvent key)
@@ -53,6 +58,7 @@ public sealed class ComposerController
                     return ComposerAction.Edited;
                 }
 
+                History.Push(Buffer.SnapshotText());
                 return ComposerAction.Submitted;
 
             case KeyCode.Char when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0:
@@ -91,10 +97,23 @@ public sealed class ComposerController
                 return ComposerAction.Edited;
 
             case KeyCode.Up when (mods & (KeyModifiers.Shift | KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) == 0:
+                // First logical line + available history ⇒ recall instead of caret movement.
+                if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && History.TryRecallPrevious(Buffer.SnapshotText(), out var previous))
+                {
+                    Recall(previous);
+                    return ComposerAction.Edited;
+                }
+
                 _ = Buffer.MoveUp();
                 return ComposerAction.Edited;
 
             case KeyCode.Down when (mods & (KeyModifiers.Shift | KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) == 0:
+                if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && History.TryRecallNext(out var next))
+                {
+                    Recall(next);
+                    return ComposerAction.Edited;
+                }
+
                 _ = Buffer.MoveDown();
                 return ComposerAction.Edited;
 
@@ -114,6 +133,13 @@ public sealed class ComposerController
     private ComposerAction ClearAll()
     {
         Buffer.Clear();
+        History.Reset();
         return ComposerAction.Edited;
+    }
+
+    private void Recall(string text)
+    {
+        Buffer.Clear();
+        _ = Buffer.InsertText(text);
     }
 }
