@@ -15,6 +15,12 @@ public sealed class VirtualizedChatTimeline
     private int _lastWidth = -1;
     private bool _dirtyGeometry = true;
     private bool _entranceFx;
+    private bool _smoothScroll;
+    private bool _scrollAnimating;
+    private double _visualScrollY;
+    private double _scrollFrom;
+    private long _scrollStartTick;
+    private long _scrollTarget;
 
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
@@ -27,6 +33,15 @@ public sealed class VirtualizedChatTimeline
     /// hosts opt in via <see cref="EnableEntranceFx" />.
     /// </summary>
     public void EnableEntranceFx() => _entranceFx = true;
+
+    /// <summary>
+    /// Enables smooth scrolling (HDS v1): user-initiated scroll deltas ease
+    /// toward their target over the micro fade (ease-out, 150 ms) instead of
+    /// jumping. Follow-tail motion and <see cref="ScrollToEnd" /> stay exact
+    /// snaps — only viewport-relative movement animates. Off by default;
+    /// hosts opt in via this method.
+    /// </summary>
+    public void EnableSmoothScroll() => _smoothScroll = true;
 
     public int Count => _cache.Count;
 
@@ -123,6 +138,7 @@ public sealed class VirtualizedChatTimeline
         }
 
         SetScrollY(ScrollY + lines);
+        BeginScrollAnimation();
     }
 
     public void PageUp(int viewportHeight) => ScrollBy(-Math.Max(1, viewportHeight - 1));
@@ -132,19 +148,55 @@ public sealed class VirtualizedChatTimeline
     public void ScrollToTop()
     {
         FollowTail = false;
-        SetScrollY(0);
+        SnapScroll(0);
     }
 
     /// <summary>Snaps to the bottom and re-engages follow mode.</summary>
     public void ScrollToEnd(int viewportHeight)
     {
         FollowTail = true;
-        SetScrollY(TotalHeightAfter(viewportHeight));
+        SnapScroll(TotalHeightAfter(viewportHeight));
     }
 
     private long TotalHeightAfter(int viewportH) => Math.Max(0, TotalHeight - viewportH);
 
-    private void SetScrollY(long y) => ScrollY = Math.Max(0, y);
+    private void SetScrollY(long y)
+    {
+        ScrollY = Math.Max(0, y);
+        if (!_scrollAnimating)
+        {
+            _visualScrollY = ScrollY;
+        }
+    }
+
+    /// <summary>Instant reposition — cancels any in-flight scroll animation.</summary>
+    private void SnapScroll(long y)
+    {
+        _scrollAnimating = false;
+        _visualScrollY = Math.Max(0, y);
+        ScrollY = Math.Max(0, y);
+    }
+
+    /// <summary>
+    /// Starts (or retargets) the eased scroll toward the current
+    /// <see cref="ScrollY" />, chaining from the on-screen position so
+    /// consecutive wheel events glide instead of restarting.
+    /// </summary>
+    private void BeginScrollAnimation()
+    {
+        if (!_smoothScroll || FollowTail || ScrollY == (long)Math.Round(_visualScrollY))
+        {
+            return;
+        }
+
+        _scrollFrom = _visualScrollY;
+        _scrollTarget = ScrollY;
+        _scrollStartTick = CurrentTick;
+        _scrollAnimating = true;
+    }
+
+    /// <summary>Scroll offset the next paint should use (animated value while easing).</summary>
+    public long EffectiveScrollY => _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
 
     /// <summary>
     /// Registers an entrance start for eligible blocks appended after the
@@ -193,6 +245,22 @@ public sealed class VirtualizedChatTimeline
         if (FollowTail)
         {
             ScrollY = Math.Max(0, TotalHeight - viewportH);
+            if (_scrollAnimating)
+            {
+                _scrollAnimating = false;
+                _visualScrollY = ScrollY;
+            }
+        }
+
+        if (_scrollAnimating)
+        {
+            double t = Math.Clamp((CurrentTick - _scrollStartTick) / (double)PanelFx.FadeFrames, 0.0, 1.0);
+            _visualScrollY = _scrollFrom + ((_scrollTarget - _scrollFrom) * PanelFx.EaseOut(t));
+            if (t >= 1.0)
+            {
+                _scrollAnimating = false;
+                _visualScrollY = _scrollTarget;
+            }
         }
 
         return outcome;
@@ -215,11 +283,11 @@ public sealed class VirtualizedChatTimeline
             return;
         }
 
-        var (first, last) = VisibleRange(rect.Height);
+        var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
         for (int i = first; i <= last; i++)
         {
             long blockTop = _cache.BlockTop(i);
-            long relTop = blockTop - ScrollY;
+            long relTop = blockTop - EffectiveScrollY;
             int screenY = rect.Y + (int)Math.Max(0, relTop);
             int skipRows = relTop < 0 ? -(int)relTop : 0;
             int h = _cache.EffectiveHeight(i);
