@@ -120,6 +120,7 @@ public static class Program
             new LogsCommand(Console.Out, Console.Error),
             new DaemonCommand(Console.Out, Console.Error),
             new StatusCommand(Console.Out, Console.Error),
+            new PluginsCommand(Console.Out, Console.Error),
         };
         if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
