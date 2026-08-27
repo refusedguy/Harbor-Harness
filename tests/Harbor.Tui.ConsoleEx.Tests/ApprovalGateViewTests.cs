@@ -114,4 +114,46 @@ public class ApprovalGateViewTests
         await Assert.That(fired).IsEqualTo(1);
         await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.Approve);
     }
+
+    private static (ApprovalGateView Gate, int HintRow) PaintedGate(int width)
+    {
+        var gate = new ApprovalGateView("bash", "cargo build --release");
+        var buf = new ScreenBuffer(width, 8);
+        gate.Paint(new BlockPaintContext(buf, new Rect(0, 0, width, 3), 0));
+        // header row 0 + one detail row 1 + hint/stamp row 2
+        return (gate, 2);
+    }
+
+    [Test]
+    public async Task TryHitDecision_Maps_ButtonZones()
+    {
+        var (gate, hintRow) = PaintedGate(60);
+
+        await Assert.That(gate.TryHitDecision(0, hintRow)).IsEqualTo(ApprovalChoice.Approve);      // "[y]"
+        await Assert.That(gate.TryHitDecision(5, hintRow)).IsEqualTo(ApprovalChoice.Approve);      // inside "approve"
+        await Assert.That(gate.TryHitDecision(14, hintRow)).IsEqualTo(ApprovalChoice.Deny);        // "[n]"
+        await Assert.That(gate.TryHitDecision(19, hintRow)).IsEqualTo(ApprovalChoice.Deny);
+        await Assert.That(gate.TryHitDecision(27, hintRow)).IsEqualTo(ApprovalChoice.AlwaysAllow); // "[a] …"
+        await Assert.That(gate.TryHitDecision(45, hintRow)).IsNull();                              // past label tail
+    }
+
+    [Test]
+    public async Task TryHitDecision_Ignores_OtherRows_AndResolvedGates()
+    {
+        var (gate, hintRow) = PaintedGate(50);
+        await Assert.That(gate.TryHitDecision(0, 0)).IsNull();              // header
+        await Assert.That(gate.TryHitDecision(0, 1)).IsNull();              // detail
+        await Assert.That(gate.TryHitDecision(0, hintRow + 1)).IsNull();    // below card
+
+        _ = gate.HandleKey(Y);
+        await Assert.That(gate.IsPending).IsFalse();
+        await Assert.That(gate.TryHitDecision(1, hintRow)).IsNull();
+    }
+
+    [Test]
+    public async Task TryHitDecision_BeforeFirstPaint_ReturnsNull()
+    {
+        var fresh = new ApprovalGateView("bash", "ls");
+        await Assert.That(fresh.TryHitDecision(1, 2)).IsNull();
+    }
 }

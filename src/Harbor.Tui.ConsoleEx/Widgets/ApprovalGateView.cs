@@ -32,6 +32,14 @@ public sealed class ApprovalGateView : IChatBlock
     private readonly string _detailText;
     private List<string> _wrapped = [];
     private int _wrappedWidth = -1;
+    private (int Start, int End)[]? _hintSpans;
+
+    /// <summary>
+    /// Screen-space clip rect from the most recent <see cref="Paint" /> pass.
+    /// Lets hosts hit-test mouse clicks against the card without a layout pass;
+    /// harmless staleness until the next frame.
+    /// </summary>
+    internal Rect? LastPaintRect { get; private set; }
 
     public ApprovalGateView(string toolName, string detail)
     {
@@ -97,6 +105,9 @@ public sealed class ApprovalGateView : IChatBlock
         {
             return;
         }
+
+        // Registered for click-to-decide hit-testing (mouse routing is host-side).
+        LastPaintRect = ctx.Rect;
 
         // Header — warning accent until decided, dim once stamped.
         var headerStyle = IsPending
@@ -199,6 +210,71 @@ public sealed class ApprovalGateView : IChatBlock
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Maps a mouse click to an approval choice: only the hint-row button
+    /// spans of a PENDING gate respond, and only while its last painted rect
+    /// is known. Returns null when the click lands outside any zone.
+    /// </summary>
+    public ApprovalChoice? TryHitDecision(int col, int row)
+    {
+        if (!IsPending || LastPaintRect is not { } rect)
+        {
+            return null;
+        }
+
+        int hintRow = rect.Y + _wrapped.Count + 1;
+        if (row != hintRow || !rect.Contains(rect.X, hintRow))
+        {
+            return null;
+        }
+
+        int relCol = col - rect.X;
+        EnsureHintSpans();
+        var spans = _hintSpans!;
+        for (int i = 0; i < spans.Length; i++)
+        {
+            if (relCol >= spans[i].Start && relCol < spans[i].End)
+            {
+                return (ApprovalChoice)(i + 1); // enum order: Approve, Deny, AlwaysAllow
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Column spans of the "[y] …", "[n] …", "[a] …" zones inside
+    /// <see cref="HintLine" /> — located by the bracket markers so label edits
+    /// cannot desync the hit map. Zone i runs from its '[' to the next zone's
+    /// '[' (the separating gap belongs to no button).
+    /// </summary>
+    private void EnsureHintSpans()
+    {
+        if (_hintSpans != null)
+        {
+            return;
+        }
+
+        var starts = new int[3];
+        int found = 0;
+        for (int i = 0; i < HintLine.Length && found < 3; i++)
+        {
+            if (HintLine[i] == '[')
+            {
+                starts[found++] = i;
+            }
+        }
+
+        var spans = new (int Start, int End)[3];
+        for (int i = 0; i < 3; i++)
+        {
+            int nextStart = i + 1 < 3 ? starts[i + 1] : HintLine.Length;
+            spans[i] = (starts[i], Math.Max(starts[i] + 1, nextStart));
+        }
+
+        _hintSpans = spans;
     }
 
     private void EnsureWrapped(int width)
