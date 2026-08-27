@@ -68,6 +68,11 @@ internal sealed class ConsoleExReplRunner(
     private readonly StatusViewModel _status = screen.Status.Vm;
     private readonly ComposerController _composer = screen.Composer.Composer;
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
+    private readonly CommandPaletteView _palette = new();
+
+    /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
+    /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
+    private CommandItem? _paletteCommitted;
 
     private int _timelineViewportH;
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
@@ -226,6 +231,15 @@ internal sealed class ConsoleExReplRunner(
             panel.Paint(screenSession.Back);
         }
 
+        if (_palette.Visible)
+        {
+            int w = Math.Clamp(cols - 8, 20, 56);
+            int h = Math.Min(_palette.Results.Count + 5, Math.Max(5, rows - 4));
+            int x = Math.Max(0, (cols - w) / 2);
+            int y = Math.Max(0, (rows - h) / 3);
+            _palette.Paint(screenSession.Back, new Rect(x, y, w, h));
+        }
+
         await screenSession.FlushFrameAsync(ct).ConfigureAwait(false);
     }
 
@@ -271,6 +285,36 @@ internal sealed class ConsoleExReplRunner(
 
     private async Task HandleKeyAsync(KeyEvent key, CancellationToken ct)
     {
+        // Command palette: ctrl+p toggles; a visible palette claims keys first
+        // so Enter/Esc/letters never leak into the approval gate or composer.
+        if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
+            && char.ToLowerInvariant((char)key.Character.Value) == 'p')
+        {
+            if (_palette.Visible)
+            {
+                _palette.Hide();
+            }
+            else
+            {
+                OpenCommandPalette();
+            }
+
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        if (_palette.Visible && _palette.HandleKey(key))
+        {
+            if (_paletteCommitted is { } committed)
+            {
+                _paletteCommitted = null;
+                await ExecutePaletteCommandAsync(committed, ct).ConfigureAwait(false);
+            }
+
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
         // Permission gate outranks the composer while one is pending: y/n/a/
         // Enter/Esc resolve the card and never leak into prompt editing.
         if (bridge.TryRouteApprovalKey(key))
@@ -327,6 +371,51 @@ internal sealed class ConsoleExReplRunner(
         _lastIdleAbortMs = now;
         bridge.AppendSystemLine("^C — ещё раз для выхода");
         _wake.Writer.TryWrite(null);
+    }
+
+    // ── Command palette ────────────────────────────────────────────────────
+
+    /// <summary>Suggested, arg-less slash commands that are safe to run from the palette.</summary>
+    private void OpenCommandPalette()
+    {
+        _palette.OnCommit = item => _paletteCommitted = item;
+        _palette.Show(
+        [
+            new CommandItem("help", "Help", "slash commands reference", "/help"),
+            new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
+            new CommandItem("providers", "Providers", "list configured providers", "/providers"),
+            new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
+            new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
+        ]);
+    }
+
+    private async Task ExecutePaletteCommandAsync(CommandItem item, CancellationToken ct)
+    {
+        string slash = '/' + item.Id;
+        var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
+        try
+        {
+            await dispatcher.HandleCoreAsync(
+                slash, services,
+                writer: line => { bridge.AppendSystemLine(line); _wake.Writer.TryWrite(null); },
+                reader: prompt =>
+                {
+                    bridge.AppendSystemLine($"{prompt} — интерактивный ввод недоступен в consoleex, используйте legacy TUI (/exit)");
+                    _wake.Writer.TryWrite(null);
+                    return Task.FromResult(string.Empty);
+                },
+                agent, services.GetRequiredService<IAgentRegistry>(),
+                services.GetRequiredService<IConfigStore>(),
+                services.GetRequiredService<AuthStore>(),
+                services.GetRequiredService<IProviderRegistry>(),
+                sessionModel).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Palette command /{Id} failed", item.Id);
+            bridge.AppendSystemLine($"! {ex.Message}");
+            _wake.Writer.TryWrite(null);
+        }
     }
 
     // ── Submit pipeline (same commands as the legacy REPL) ────────────────
