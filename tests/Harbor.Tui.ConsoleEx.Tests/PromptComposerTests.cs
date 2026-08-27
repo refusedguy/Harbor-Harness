@@ -57,6 +57,46 @@ public class PromptBufferTests
     }
 
     [Test]
+    public async Task MoveTo_ClampsAndReportsCursorOnly()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("abc");
+        _ = b.MoveTo(2);
+        await Assert.That(b.Cursor).IsEqualTo(2);
+        _ = b.MoveTo(-5);
+        await Assert.That(b.Cursor).IsEqualTo(0);
+        _ = b.MoveTo(99);
+        await Assert.That(b.Cursor).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task RemoveRange_MiddleSpan_ShiftsTail()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("**bold**");
+        var outcome = b.RemoveRange(0, 2);
+        await Assert.That(b.SnapshotText()).IsEqualTo("bold**");
+        await Assert.That(outcome.Kind).IsNotEqualTo(EditOutcomeKind.Unchanged);
+        _ = b.MoveToEnd();
+        _ = b.RemoveRange(4, 2);
+        await Assert.That(b.SnapshotText()).IsEqualTo("bold");
+        await Assert.That(b.Cursor).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task RemoveRange_CursorInsideOrPastShifts()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("abcdef");
+        _ = b.MoveTo(3);
+        _ = b.RemoveRange(1, 2); // "a" "d|ef" — caret lands on shift seam
+        await Assert.That(b.SnapshotText()).IsEqualTo("adef");
+        await Assert.That(b.Cursor).IsEqualTo(1);
+        _ = b.RemoveRange(99, 3);
+        await Assert.That(b.SnapshotText()).IsEqualTo("adef");
+    }
+
+    [Test]
     public async Task ShiftEnter_Newlines_MultiLineNavigation()
     {
         var b = new PromptBuffer();

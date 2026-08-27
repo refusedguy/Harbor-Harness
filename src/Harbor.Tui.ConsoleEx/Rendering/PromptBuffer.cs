@@ -249,6 +249,41 @@ public sealed class PromptBuffer
         return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
     }
 
+    /// <summary>Absolute caret seek clamped to [0, Length] — markdown helpers anchor here.</summary>
+    public EditOutcome MoveTo(int offset)
+    {
+        if (_cursor == offset)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        _cursor = Math.Clamp(offset, 0, _length);
+        return EditOutcome.Cursor();
+    }
+
+    /// <summary>
+    ///     Removes <paramref name="count" /> chars at <paramref name="start" /> in one
+    ///     array shift (markdown toggle unwrap needs non-caret spans). Char-index based:
+    ///     callers must pass rune-aligned bounds.
+    /// </summary>
+    internal EditOutcome RemoveRange(int start, int count)
+    {
+        if (count <= 0 || start < 0 || start >= _length)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        count = Math.Min(count, _length - start);
+        Array.Copy(_buf, start + count, _buf, start, _length - start - count);
+        _length -= count;
+        if (_cursor > start)
+        {
+            _cursor = Math.Max(start, _cursor - count);
+        }
+
+        return EditOutcome.Text(start, start, movedCursor: true);
+    }
+
     // ── Movement ───────────────────────────────────────────────────────────
 
     public EditOutcome MoveLeft()
