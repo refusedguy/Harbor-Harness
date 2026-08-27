@@ -41,12 +41,15 @@ while IFS= read -r line; do
     continue
   fi
 
+  # normalize sprint name to lowercase for filesystem paths
+  SPRINT_LOWER=$(echo "$SPRINT" | tr '[:upper:]' '[:lower:]')
+
   if [[ ! -f "$PROMPT" ]]; then
     log "WARN: prompt missing for $SPRINT: $PROMPT"
     continue
   fi
 
-  STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
+  STATUS_FILE=".kilo-docs/sprints/$SPRINT_LOWER/status.json"
   if [[ -f "$STATUS_FILE" ]]; then
     STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "queued")
     if [[ "$STATE" == "done" || "$STATE" == "failed" ]]; then
@@ -54,7 +57,7 @@ while IFS= read -r line; do
     fi
   fi
 
-  TARGET_SPRINT="$SPRINT"
+  TARGET_SPRINT="$SPRINT_LOWER"
   TARGET_MODEL="$MODEL"
   TARGET_PROMPT="$PROMPT"
   break
