@@ -17,7 +17,7 @@
 @implements IDisposable
 
 <div class="layout-shell" @onkeydown="OnKeyDownAsync">
-    <Sidebar/>
+    <Sidebar Collapsed="@_sidebarCollapsed" CollapsedChanged="@SetSidebarCollapsed"/>
     <div class="layout-main">
         <TopBar/>
         <main class="layout-body">
@@ -25,11 +25,22 @@
         </main>
         <StatusBar/>
     </div>
+    @if (_sidebarCollapsed)
+    {
+        <button class="sidebar-toggle sidebar-floating-toggle" title="Show sidebar" aria-label="Show sidebar" @onclick="() => SetSidebarCollapsed(false)">›</button>
+    }
     <ToastContainer/>
     <CommandPalette/>
 </div>
 
 @code {
+private bool _sidebarCollapsed;
+
+private Task SetSidebarCollapsed(bool collapsed)
+{
+    _sidebarCollapsed = collapsed;
+    return InvokeAsync(StateHasChanged);
+}
 protected override void OnInitialized()
 {
     Store.Changed += OnStoreChanged;

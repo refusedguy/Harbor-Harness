@@ -1,10 +1,12 @@
 @* Sidebar — left navigation pane. Lists the main pages + recent sessions.
-   Width: var(--sidebar-width) (240px). @*@
+   Width: var(--sidebar-width) (260px); collapsible via the shell's :has()
+   rule — the collapsed flag lives on this component only. @*@
 @inject NavigationManager Nav
 @inject SessionBrowserService Sessions
 
-<div class="sidebar">
+<div class="sidebar @(Collapsed ? "collapsed" : "")">
     <div class="sidebar-header">
+        <button class="sidebar-toggle" title="Hide sidebar" aria-label="Hide sidebar" @onclick="() => CollapsedChanged.InvokeAsync(true)">‹</button>
         <div class="logo">H</div>
         <span>Harbor</span>
     </div>
@@ -61,6 +63,9 @@
 </div>
 
 @code {
+[Parameter] public bool Collapsed { get; set; }
+[Parameter] public EventCallback<bool> CollapsedChanged { get; set; }
+
 private List<SessionSummary> _recent = new();
 
 protected override async Task OnInitializedAsync()
