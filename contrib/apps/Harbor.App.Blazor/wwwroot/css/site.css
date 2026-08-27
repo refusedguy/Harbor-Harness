@@ -91,7 +91,7 @@
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
 
     /* Layout */
-    --sidebar-width: 240px;
+    --sidebar-width: 260px;
     --topbar-height: 48px;
     --statusbar-height: 32px;
 
@@ -1134,4 +1134,67 @@ button {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--border);
+}
+
+/* ============== Collapsible sidebar (ChatGPT pattern) ============== */
+/* Toggle state lives on .sidebar itself; the shell reacts via :has(). */
+
+.layout-shell:has(.sidebar.collapsed) {
+    grid-template-columns: 0 1fr;
+}
+
+.sidebar.collapsed {
+    display: none;
+}
+
+.sidebar-toggle {
+    align-self: flex-start;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: var(--font-size-md);
+    line-height: 1;
+    padding: var(--space-1) var(--space-2);
+}
+
+.sidebar-toggle:hover {
+    background: var(--panel-hover);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+.sidebar-floating-toggle {
+    position: fixed;
+    top: calc(var(--topbar-height) + var(--space-2));
+    left: var(--space-2);
+    z-index: 40;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+}
+
+.sidebar-floating-toggle:hover {
+    color: var(--text);
+}
+
+/* ============== Dyslexia-friendly reading mode ============== */
+
+:root {
+    --font-dyslexic: 'OpenDyslexic', 'Atkinson Hyperlegible', 'Comic Sans MS', Verdana, sans-serif;
+}
+
+body.dyslexic,
+body.dyslexic button,
+body.dyslexic input,
+body.dyslexic textarea,
+body.dyslexic select {
+    font-family: var(--font-dyslexic) !important;
+}
+
+body.dyslexic {
+    letter-spacing: 0.02em;
+    word-spacing: 0.12em;
+    line-height: 1.7;
 }
