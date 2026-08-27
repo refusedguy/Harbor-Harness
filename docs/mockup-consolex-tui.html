@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor ConsoleEx TUI — Interactive Mockup</title>
+<style>
+  :root { --bg:#0b0c10; --panel:#15171e; --border:#232733; --text:#c5c8ce; --dim:#6e7380; --accent:#7aaaff; --ok:#7ee787; --warn:#e3b341; --err:#f85149; --tool:#ff7b72; --system:#7ee787; --user:#c5c8ce; --muted:#484f5b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; line-height:1.45; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 18px; }
+  .terminal { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .row { display: flex; gap: 12px; margin-top: 12px; }
+  .col { flex: 1; }
+  .timeline { background: var(--bg); border:1px solid var(--border); border-radius: 8px; padding: 10px; min-height: 320px; }
+  .msg { padding: 6px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+  .msg.user { background: rgba(122,170,255,.08); border:1px solid rgba(122,170,255,.15); }
+  .msg.assistant { background: rgba(126,231,135,.06); border:1px solid rgba(126,231,135,.12); }
+  .msg.tool { background: rgba(255,123,114,.06); border:1px solid rgba(255,123,114,.12); }
+  .msg.system { background: rgba(227,179,65,.06); border:1px solid rgba(227,179,65,.12); }
+  .msg .meta { color: var(--dim); font-size: 11px; margin-bottom: 2px; }
+  .approval { background: rgba(227,179,65,.08); border:1px solid rgba(227,179,65,.25); border-radius: 8px; padding: 10px; margin: 8px 0; }
+  .approval .title { color: var(--warn); font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  .approval .body { font-size: 12px; color: var(--text); }
+  .approval .actions { margin-top: 8px; display: flex; gap: 8px; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 11px; border:1px solid var(--border); }
+  .badge.ok { color: var(--ok); border-color: rgba(126,231,135,.25); }
+  .badge.warn { color: var(--warn); border-color: rgba(227,179,65,.25); }
+  .badge.err { color: var(--err); border-color: rgba(248,81,73,.25); }
+  .badge.accent { color: var(--accent); border-color: rgba(122,170,255,.25); }
+  .composer { background: var(--bg); border:1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; }
+  .composer .line { color: var(--text); font-size: 12px; }
+  .composer .cursor { display: inline-block; width: 6px; height: 14px; background: var(--accent); vertical-align: middle; animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .status { display: flex; gap: 12px; padding: 6px 10px; background: var(--panel); border:1px solid var(--border); border-radius: 8px; margin-bottom: 10px; font-size: 11px; color: var(--dim); }
+  .status .seg { display: flex; align-items: center; gap: 4px; }
+  .status .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+  .word-diff { font-size: 12px; }
+  .word-diff .del { color: var(--err); background: rgba(248,81,73,.08); padding: 1px 2px; border-radius: 3px; }
+  .word-diff .ins { color: var(--ok); background: rgba(126,231,135,.08); padding: 1px 2px; border-radius: 3px; }
+  .image-block { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: rgba(122,170,255,.06); border:1px solid rgba(122,170,255,.12); border-radius: 6px; font-size: 12px; margin: 6px 0; }
+  .image-block .thumb { width: 40px; height: 40px; background: var(--muted); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 10px; }
+  .hidden { display: none; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tab { padding: 6px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; border:1px solid var(--border); background: var(--panel); color: var(--text); }
+  .tab.active { background: var(--border); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Harbor ConsoleEx TUI — интерактивный макет</h1>
+  <div class="sub">Все спринты: CE-0..CE-5 + PROD-UI-POLISH + MVP-DELIVERY • Интерфейс: approval gates, word-diff, markdown editing, image preview</div>
+
+  <div class="terminal">
+    <div class="status">
+      <div class="seg"><div class="dot"></div> Агент: idle</div>
+      <div class="seg">Сессия: <span class="accent">main</span></div>
+      <div class="seg">Модель: <span class="accent">kilo-auto/free</span></div>
+      <div class="seg">Токены: <span class="accent">1,247 / 2,048</span></div>
+      <div class="seg" style="margin-left:auto"><span class="badge ok">AOT</span> <span class="badge accent">ConsoleEx</span></div>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <div class="msg system">
+        <div class="meta">system • 12:30</div>
+        <div>Session started. Type <b>/help</b> for commands.</div>
+      </div>
+
+      <div class="msg user">
+        <div class="meta">you • 12:31</div>
+        <div>поменяй цвет фона на тёмно-синий</div>
+      </div>
+
+      <div class="msg assistant">
+        <div class="meta">agent • 12:31</div>
+        <div>Я не могу менять фон терминала — это контролируется твоим терминальным эмулятором. Но могу показать цветовую палитру:</div>
+        <div class="word-diff" style="margin-top:4px">
+          <span class="del">Catppuccin Mocha</span> → <span class="ins">Nord</span><br>
+          <span class="del">#1e1e2e</span> → <span class="ins">#2e3440</span>
+        </div>
+      </div>
+
+      <div class="image-block">
+        <div class="thumb">IMG</div>
+        <div>
+          <div style="color:var(--accent); font-weight:600;">screenshot.png</div>
+          <div style="color:var(--dim); font-size:11px;">1920×1080 • 245 KB • image/png</div>
+        </div>
+      </div>
+
+      <div class="approval" id="approval">
+        <div class="title">⚠ Approval required</div>
+        <div class="body">Agent wants to run: <code>rm -rf /tmp/cache</code></div>
+        <div class="actions">
+          <span class="badge warn">y</span> <span class="badge">n</span> <span class="badge">a</span> <span class="badge">esc</span>
+        </div>
+      </div>
+
+      <div class="msg tool">
+        <div class="meta">tool • bash • 12:31</div>
+        <div><span class="badge err">denied</span> User rejected the command.</div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="line"><span style="color:var(--dim)">></span> <span id="draft">поменяй шрифт на JetBrains Mono</span><span class="cursor"></span></div>
+      <div style="margin-top:6px; display:flex; gap:8px; font-size:11px; color:var(--dim);">
+        <span><b style="color:var(--accent)">↑↓</b> history</span>
+        <span><b style="color:var(--accent)">Ctrl+K/U</b> kill</span>
+        <span><b style="color:var(--accent)">Ctrl+Y</b> yank</span>
+        <span><b style="color:var(--accent)">M-s/i/c</b> bold/italic/code</span>
+        <span><b style="color:var(--accent)">M-h/l</b> heading/list</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="terminal">
+        <div style="color:var(--dim); font-size:12px; margin-bottom:8px;">— STATUS BAR —</div>
+        <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--dim);">
+          <span>● 3 agents</span>
+          <span>▰▱▱ 32% tokens</span>
+          <span>⏱ 00:42</span>
+          <span>⟳ 2.1k msg/s</span>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="terminal">
+        <div style="color:var(--dim); font-size:12px; margin-bottom:8px;">— SHORTCUTS —</div>
+        <div style="font-size:11px; color:var(--dim); display:grid; grid-template-columns: 1fr 1fr; gap:4px;">
+          <span><b style="color:var(--accent)">Ctrl+C</b> abort turn</span>
+          <span><b style="color:var(--accent)">Ctrl+C</b> twice → quit</span>
+          <span><b style="color:var(--accent)">Ctrl+W</b> delete word</span>
+          <span><b style="color:var(--accent)">Alt+D</b> delete fwd</span>
+          <span><b style="color:var(--accent)">Ctrl+Y</b> yank</span>
+          <span><b style="color:var(--accent)">PageUp</b> scroll</span>
+          <span><b style="color:var(--accent)">/model</b> switch</span>
+          <span><b style="color:var(--accent)">/plugins</b> reload</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

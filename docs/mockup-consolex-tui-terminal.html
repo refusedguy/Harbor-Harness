@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor ConsoleEx — Terminal Mockup</title>
+<style>
+  :root {
+    --term-bg: #0a0e14;
+    --term-fg: #b3b9c5;
+    --term-dim: #5c6773;
+    --term-accent: #39bae6;
+    --term-ok: #7fd962;
+    --term-warn: #ffb454;
+    --term-err: #ff6b6b;
+    --term-tool: #d2a6ff;
+    --term-user: #b3b9c5;
+    --term-system: #f29668;
+    --term-border: #1f2430;
+    --term-panel: #0d1117;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #000;
+    color: var(--term-fg);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 20px;
+  }
+  .terminal {
+    max-width: 960px;
+    margin: 0 auto;
+    background: var(--term-bg);
+    border: 1px solid var(--term-border);
+    border-radius: 4px;
+    padding: 12px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.8), 0 20px 60px rgba(0,0,0,.6);
+  }
+  .titlebar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--term-border);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; }
+  .dot.y { background: #febc2e; }
+  .dot.g { background: #28c840; }
+  .title { margin-left: 12px; color: var(--term-dim); font-size: 11px; }
+  .status {
+    display: flex;
+    gap: 10px;
+    padding: 4px 8px;
+    background: var(--term-panel);
+    border: 1px solid var(--term-border);
+    border-radius: 3px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--term-dim);
+  }
+  .seg { display: flex; align-items: center; gap: 4px; }
+  .seg .val { color: var(--term-fg); }
+  .seg .hi { color: var(--term-accent); }
+  .seg .ok { color: var(--term-ok); }
+  .seg .warn { color: var(--term-warn); }
+  .seg .err { color: var(--term-err); }
+  .seg .tool { color: var(--term-tool); }
+  .sep { color: var(--term-border); }
+  .spacer { flex: 1; }
+  .badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 10px;
+    border: 1px solid var(--term-border);
+    color: var(--term-dim);
+    background: var(--term-panel);
+  }
+  .badge.a { color: var(--term-accent); border-color: rgba(57,186,230,.25); background: rgba(57,186,230,.08); }
+  .badge.o { color: var(--term-ok); border-color: rgba(127,217,98,.25); background: rgba(127,217,98,.08); }
+  .timeline {
+    background: var(--term-bg);
+    border: 1px solid var(--term-border);
+    border-radius: 3px;
+    padding: 8px;
+    min-height: 280px;
+    max-height: 340px;
+    overflow: hidden;
+  }
+  .row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .row .time { color: var(--term-dim); min-width: 52px; }
+  .row .role { min-width: 70px; font-weight: 600; }
+  .role.user { color: var(--term-user); }
+  .role.assistant { color: var(--term-accent); }
+  .role.tool { color: var(--term-tool); }
+  .role.system { color: var(--term-system); }
+  .row .content { flex: 1; word-wrap: break-word; }
+  .word-diff .del { color: #ff6b6b; background: rgba(255,107,107,.1); }
+  .word-diff .ins { color: #7fd962; background: rgba(127,217,98,.1); }
+  .approval {
+    border: 1px solid rgba(255,180,84,.35);
+    background: rgba(255,180,84,.06);
+    border-radius: 3px;
+    padding: 6px 8px;
+    margin: 6px 0;
+  }
+  .approval .title { color: var(--term-warn); font-weight: 600; margin-bottom: 2px; }
+  .approval .cmd { color: var(--term-fg); }
+  .approval .keys { margin-top: 4px; display: flex; gap: 8px; font-size: 11px; color: var(--term-dim); }
+  .approval .keys .k { color: var(--term-accent); }
+  .image-block {
+    border: 1px solid rgba(57,186,230,.25);
+    background: rgba(57,186,230,.05);
+    border-radius: 3px;
+    padding: 4px 8px;
+    margin: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--term-dim);
+  }
+  .image-block .name { color: var(--term-accent); }
+  .image-block .meta { color: var(--term-dim); }
+  .image-block .icon { color: var(--term-accent); }
+  .composer {
+    border: 1px solid var(--term-border);
+    background: var(--term-panel);
+    border-radius: 3px;
+    padding: 6px 8px;
+    margin-top: 8px;
+  }
+  .prompt { color: var(--term-dim); }
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--term-accent);
+    vertical-align: middle;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .hints {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--term-dim);
+  }
+  .hints b { color: var(--term-accent); font-weight: 600; }
+  .panel-row { display: flex; gap: 10px; margin-top: 10px; }
+  .panel {
+    flex: 1;
+    border: 1px solid var(--term-border);
+    background: var(--term-panel);
+    border-radius: 3px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: var(--term-dim);
+  }
+  .panel .title { color: var(--term-dim); margin-bottom: 4px; }
+  .panel .row { display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+  <div class="terminal">
+    <div class="titlebar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <div class="title">Harbor — ConsoleEx • bash — 80×24</div>
+    </div>
+
+    <div class="status">
+      <div class="seg"><span class="ok">●</span> <span class="ok">agent</span> <span class="val">idle</span></div>
+      <div class="sep">│</div>
+      <div class="seg">session:<span class="hi"> main</span></div>
+      <div class="sep">│</div>
+      <div class="seg">model:<span class="hi"> kilo-auto/free</span></div>
+      <div class="sep">│</div>
+      <div class="seg">tokens:<span class="val"> 1,247</span>/<span class="val">2,048</span></div>
+      <div class="spacer"></div>
+      <div class="seg"><span class="badge a">AOT</span> <span class="badge a">ConsoleEx</span></div>
+    </div>
+
+    <div class="timeline">
+      <div class="row">
+        <div class="time">12:30:01</div>
+        <div class="role system">system</div>
+        <div class="content">Session started. <b>Type /help for commands.</b></div>
+      </div>
+
+      <div class="row">
+        <div class="time">12:31:04</div>
+        <div class="role user">you</div>
+        <div class="content">поменяй цвет фона на тёмно-синий</div>
+      </div>
+
+      <div class="row">
+        <div class="time">12:31:05</div>
+        <div class="role assistant">agent</div>
+        <div class="content">Я не могу менять фон терминала — это контролируется твоим терминальным эмулятором. Но могу показать палитру:</div>
+      </div>
+      <div class="row" style="margin-top:-2px">
+        <div class="time"></div>
+        <div class="role"></div>
+        <div class="content word-diff">
+          <span class="del">Catppuccin Mocha</span> → <span class="ins">Nord</span><br>
+          <span class="del">#1e1e2e</span> → <span class="ins">#2e3440</span>
+        </div>
+      </div>
+
+      <div class="image-block">
+        <div class="icon">🖼</div>
+        <div class="name">screenshot.png</div>
+        <div class="meta">1920×1080 • 245 KB • image/png • <span style="color:var(--term-ok)">preview available</span></div>
+      </div>
+
+      <div class="approval">
+        <div class="title">⚠ Approval required</div>
+        <div class="cmd">Agent wants to run: <code>rm -rf /tmp/cache</code></div>
+        <div class="keys">
+          <span><span class="k">y</span> yes</span>
+          <span><span class="k">n</span> no</span>
+          <span><span class="k">a</span> always</span>
+          <span><span class="k">esc</span> ignore</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="time">12:31:06</div>
+        <div class="role tool">tool</div>
+        <div class="content"><span class="err">denied</span> User rejected the command.</div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div>
+        <span class="prompt">❯ </span>
+        <span>поменяй шрифт на JetBrains Mono</span><span class="caret"></span>
+      </div>
+      <div class="hints">
+        <span><b>↑↓</b> history</span>
+        <span><b>Ctrl+K/U</b> kill</span>
+        <span><b>Ctrl+Y</b> yank</span>
+        <span><b>M-s/i/c</b> bold/italic/code</span>
+        <span><b>M-h/l</b> heading/list</span>
+        <span><b>Ctrl+W</b> delete word</span>
+        <span><b>Alt+D</b> delete fwd</span>
+      </div>
+    </div>
+
+    <div class="panel-row">
+      <div class="panel">
+        <div class="title">— STATUS —</div>
+        <div class="row"><span>agents</span><span class="val">3</span></div>
+        <div class="row"><span>tokens</span><span class="warn">32%</span></div>
+        <div class="row"><span>time</span><span class="val">00:42</span></div>
+        <div class="row"><span>rate</span><span class="val">2.1k msg/s</span></div>
+      </div>
+      <div class="panel">
+        <div class="title">— COMMANDS —</div>
+        <div class="row"><span>/model</span><span class="val">switch</span></div>
+        <div class="row"><span>/plugins</span><span class="val">reload</span></div>
+        <div class="row"><span>/sessions</span><span class="val">list</span></div>
+        <div class="row"><span>/help</span><span class="val">?</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

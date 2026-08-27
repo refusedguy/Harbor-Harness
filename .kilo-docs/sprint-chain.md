@@ -13,3 +13,7 @@ sprint|NAME|MODEL|PROMPT_PATH
 sprint|AGENTLOOP-DECOMP|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-agentloop-decomp.md
 
 # дальше новые спринты добавятся строками сверху вниз
+
+sprint|PROD-UI-POLISH|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-prod-ui-polish-v2.md
+
+sprint|DOCS-SYNC|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-docs-sync.md

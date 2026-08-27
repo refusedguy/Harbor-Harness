@@ -35,7 +35,7 @@ while IFS= read -r line; do
     continue
   fi
 
-  echo "[chain] === starting sprint: $SPRINT (model=$MODEL, prompt=$PROMPT) ==="
+  echo "[chain] $(date '+%d.%m %H:%M') === starting sprint: $SPRINT (model=$MODEL, prompt=$PROMPT) ==="
   bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$BASE_SHA" -M 360 -i 300
   RC=$?
 
@@ -43,12 +43,24 @@ while IFS= read -r line; do
   NEW_SHA="$(git rev-parse HEAD)"
   if [[ "$NEW_SHA" != "$BASE_SHA" ]]; then
     COMMITS="$(git rev-list --count "$BASE_SHA"..HEAD)"
-    echo "[chain] $SPRINT finished, progress: $COMMITS commits (new base=$NEW_SHA)"
+    echo "[chain] $(date '+%d.%m %H:%M') $SPRINT finished, progress: $COMMITS commits (new base=$NEW_SHA)"
     BASE_SHA="$NEW_SHA"
+    # авто-финализация спринта: пуш + обновление PR #2
+    if command -v gh >/dev/null 2>&1; then
+      echo "[chain] $(date '+%d.%m %H:%M') finalizing sprint: push + PR update"
+      git -C "$REPO" push origin dev 2>&1 | tee -a "$CHAIN_FILE.log" || true
+      # дописать секцию спринта в описание PR #2
+      PR_BODY="$(gh pr view 2 --json body -q .body 2>/dev/null || echo '')"
+      if [[ -n "$PR_BODY" ]]; then
+        APPEND="### Спринт $SPRINT ($(date '+%d.%m %Y'))\n- Прогресс: $COMMITS коммитов с последнего спринта\n- HEAD: $NEW_SHA\n"
+        printf "%s\n%s" "$PR_BODY" "$APPEND" | gh pr edit 2 --body-file - 2>&1 | tee -a "$CHAIN_FILE.log" || true
+      fi
+      echo "[chain] $(date '+%d.%m %H:%M') finalize done"
+    fi
   else
-    echo "[chain] $SPRINT finished, NO progress, chain stopped"
+    echo "[chain] $(date '+%d.%m %H:%M') $SPRINT finished, NO progress, chain stopped"
     exit $RC
   fi
 done < "$CHAIN_FILE"
 
-echo "[chain] all sprints done"
+echo "[chain] $(date '+%d.%m %H:%M') all sprints done"
