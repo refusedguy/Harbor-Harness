@@ -84,6 +84,13 @@ internal static class RegistriesModule
         ctx.Registries.Providers = providerRegistry;
         ctx.Registries.Panels = panelRegistry;
 
+#if HARBOR_WITH_PLUGINS
+        services.AddSingleton(sp => new PluginReloadService(
+            sp,
+            ctx.Options.HarborDir,
+            sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>()));
+#endif
+
         return services;
     }
 
@@ -98,7 +105,10 @@ internal static class RegistriesModule
         PanelRegistry panelRegistry)
     {
         string harborDir = ctx.Options.HarborDir;
-        var pluginHost = new PluginLoadHost(
+        string globalPluginsDir = Path.Combine(harborDir, "plugins");
+        string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
+
+        var (pluginHost, pluginRuntime) = PluginRuntimeComposer.Compose(
             services,
             ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
             ctx.LoggerFactory,
@@ -106,26 +116,11 @@ internal static class RegistriesModule
             toolRegistry,
             providerRegistry,
             agentRegistry,
-            panelRegistry);
+            panelRegistry,
+            globalPluginsDir,
+            projectPluginsDir,
+            trustPrompt: script => PromptForProjectPluginTrustAsync(script, ctx.Logger));
 
-        string globalPluginsDir = Path.Combine(harborDir, "plugins");
-        string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
-        string pluginsCacheDir = Path.Combine(globalPluginsDir, "cache");
-        var pluginReferences = new PluginAssemblyReferences(
-            ctx.LoggerFactory.CreateLogger<PluginAssemblyReferences>());
-
-        var pluginRuntime = new PluginHostBuilder()
-            .WithSource(BuildTrustedPluginSource(harborDir, globalPluginsDir, projectPluginsDir, ctx))
-            .WithCompiler(new CachingCompiler(
-                new RoslynPluginCompiler(pluginReferences),
-                pluginsCacheDir,
-                ctx.LoggerFactory.CreateLogger<CachingCompiler>()))
-            .WithInstantiator(new ReflectionPluginInstantiator())
-            .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(globalPluginsDir, ctx.LoggerFactory.CreateLogger<PluginRegistrar>(), ctx.LoggerFactory),
-                ctx.LoggerFactory.CreateLogger<SafePluginRegistrar>()))
-            .WithOptions(o => o.PluginRoot = globalPluginsDir)
-            .Build(ctx.LoggerFactory.CreateLogger<PluginHost>());
 #pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load.
         var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
 #pragma warning restore RS0030
@@ -144,32 +139,10 @@ internal static class RegistriesModule
     }
 
     /// <summary>
-    ///     Trust-gated plugin discovery: the user-managed global scope is trusted
-    ///     implicitly, project-local scripts (<c>&lt;cwd&gt;/.harbor/plugins</c>) go
-    ///     through <see cref="FileTrustPolicy" /> — a persisted per path+hash decision,
-    ///     with an interactive console prompt on first sight. Non-interactive hosts fail
-    ///     closed and skip unreviewed project plugins (ROADMAP v0.5 trust prompt).
+    ///     Interactive first-sight approval for project-local plugins at startup.
+    ///     Non-interactive hosts fail closed and skip unreviewed plugins (ROADMAP v0.5
+    ///     trust prompt). Accepted decisions are persisted by <see cref="FileTrustPolicy" />.
     /// </summary>
-    private static IPluginSource BuildTrustedPluginSource(
-        string harborDir,
-        string globalPluginsDir,
-        string projectPluginsDir,
-        HarborCompositionContext ctx)
-    {
-        var fsLogger = ctx.LoggerFactory.CreateLogger<FileSystemPluginSource>();
-        var inner = new FileSystemPluginSource(
-            new[] { globalPluginsDir, projectPluginsDir },
-            fsLogger);
-
-        var policy = new FileTrustPolicy(
-            new[] { globalPluginsDir, harborDir },
-            Path.Combine(globalPluginsDir, "trust.json"),
-            ctx.LoggerFactory.CreateLogger<FileTrustPolicy>(),
-            trustPrompt: script => PromptForProjectPluginTrustAsync(script, ctx.Logger));
-
-        return new TrustingPluginSource(inner, policy, ctx.LoggerFactory.CreateLogger<TrustingPluginSource>());
-    }
-
     private static async Task<bool> PromptForProjectPluginTrustAsync(PluginScript script, ILogger log)
     {
         if (Console.IsInputRedirected || Console.IsOutputRedirected)
