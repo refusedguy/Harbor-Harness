@@ -219,9 +219,22 @@ public sealed class ChatScreenBridge : IDisposable
                 var text = new StringBuilder();
                 foreach (var part in assistant.Parts)
                 {
-                    if (part is TextPart tp)
+                    switch (part)
                     {
-                        text.AppendLine(tp.Text);
+                        case TextPart tp:
+                            text.AppendLine(tp.Text);
+                            break;
+                        case FilePart { MimeType: var mime } file when mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase):
+                            // Порядок карточек = порядку частей: накопленный
+                            // текст коммитится перед изображением.
+                            if (text.Length > 0)
+                            {
+                                _panel.Timeline.Append(new AssistantMarkdownBlock(text.ToString()));
+                                text.Clear();
+                            }
+
+                            AppendImageCard(file.Path, mime, file.SizeBytes, file.Data);
+                            break;
                     }
                 }
 
@@ -365,7 +378,25 @@ public sealed class ChatScreenBridge : IDisposable
             TimeSpan.FromMilliseconds(durationMs),
             TryExtractDiff(e.Result)));
         _cards.Remove(e.ToolCallId);
+
+        // Вложенные изображения результата — карточки в таймлайне следом за тулом.
+        if (e.Result.Attachments is { Count: > 0 } attachments)
+        {
+            foreach (var att in attachments)
+            {
+                if (att.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppendImageCard(att.Path, att.MimeType, att.Data.Length, att.Data);
+                }
+            }
+        }
+
         _panel.Timeline.MarkLastDirty();
+    }
+
+    private void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data)
+    {
+        _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data));
     }
 
     /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a

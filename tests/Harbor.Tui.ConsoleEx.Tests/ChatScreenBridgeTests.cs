@@ -228,8 +228,43 @@ public class ChatScreenBridgeTests
     }
 
     [Test]
-    public async Task RequestApprovalGate_OffThread_LandsOnTimeline_OnlyOnTick()
+    public async Task HistoryReplay_ImageFilePart_BecomesImageCard()
     {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 40, 6);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var image = new AssistantMessage(
+            Guid.NewGuid().ToString("N"), "s1", DateTimeOffset.UtcNow,
+            [
+                new TextPart("before"),
+                new FilePart("shots/a.png", "image/png", 2048, ImageTestPng.Header(640, 480)),
+            ], StopReason.Stop, new Usage(0, 0), "test-model");
+
+        await bus.PublishAsync(new AgentStartEvent("s1", [image]));
+
+        await Assert.That(panel.Timeline.Count).IsEqualTo(2); // markdown + image card
+        var card = (Harbor.Tui.ConsoleEx.Widgets.ImageBlock)panel.Timeline.BlockAt(1);
+        await Assert.That(card.HasPngHeader).IsTrue();
+        await Assert.That(card.Dimensions).IsEqualTo("640×480");
+    }
+
+    private static class ImageTestPng
+    {
+        internal static byte[] Header(uint w, uint h)
+        {
+            var d = new byte[24];
+            d[0] = 0x89; d[1] = 0x50; d[2] = 0x4E; d[3] = 0x47;
+            d[4] = 0x0D; d[5] = 0x0A; d[6] = 0x1A; d[7] = 0x0A;
+            d[12] = (byte)'I'; d[13] = (byte)'H'; d[14] = (byte)'D'; d[15] = (byte)'R';
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(d.AsSpan(16), w);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(d.AsSpan(20), h);
+            return d;
+        }
+    }
+
+    [Test]
+    public async Task RequestApprovalGate_OffThread_LandsOnTimeline_OnlyOnTick()    {
         var bus = new FakeEventBus();
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
