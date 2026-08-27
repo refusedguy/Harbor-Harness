@@ -61,7 +61,10 @@ public sealed class ComposerController
                 History.Push(Buffer.SnapshotText());
                 return ComposerAction.Submitted;
 
-            case KeyCode.Char when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) == 0:
+            // Plain text never arrives with Alt set: legacy terminals encode
+            // M-x as ESC-prefix (Meta), kitty/CSI-u set the Alt bit. Routing
+            // those to insertion made readline chords unreachable.
+            case KeyCode.Char when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta | KeyModifiers.Alt)) == 0:
                 _ = Buffer.Insert(key.Character);
                 return ComposerAction.Edited;
 
@@ -79,6 +82,40 @@ public sealed class ComposerController
                 _ = Buffer.DeleteWordBackward();
                 return ComposerAction.Edited;
             }
+
+            // Readline kill/yank-lite family: Ctrl+A/E line jumps, Ctrl+K
+            // kill-to-line-end, Alt+B/D/F word-wise move/delete.
+            case KeyCode.Char when key.Character == new Rune('a') && mods == KeyModifiers.Ctrl:
+                _ = Buffer.MoveToLineStart();
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('e') && mods == KeyModifiers.Ctrl:
+                _ = Buffer.MoveToLineEnd();
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('k') && mods == KeyModifiers.Ctrl:
+                _ = Buffer.DeleteToLineEnd();
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('b') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = Buffer.MoveWordLeft();
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('f') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = Buffer.MoveWordRight();
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('d') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = Buffer.DeleteWordForward();
+                return ComposerAction.Edited;
+
+            case KeyCode.Left when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (mods & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0:
+                _ = Buffer.MoveWordLeft();
+                return ComposerAction.Edited;
+
+            case KeyCode.Right when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (mods & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0:
+                _ = Buffer.MoveWordRight();
+                return ComposerAction.Edited;
 
             case KeyCode.Backspace when mods == KeyModifiers.None || mods == KeyModifiers.Shift:
                 _ = Buffer.Backspace();

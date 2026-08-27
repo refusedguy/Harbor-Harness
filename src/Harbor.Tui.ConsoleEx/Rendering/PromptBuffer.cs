@@ -204,6 +204,51 @@ public sealed class PromptBuffer
         return EditOutcome.Text(i, i, movedCursor: true);
     }
 
+    /// <summary>Ctrl+K: remove everything from the caret to the end of the current line.</summary>
+    public EditOutcome DeleteToLineEnd()
+    {
+        int lineEnd = LineEndOf(_cursor);
+        if (_cursor == lineEnd)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        int removed = lineEnd - _cursor;
+        Array.Copy(_buf, lineEnd, _buf, _cursor, _length - lineEnd);
+        _length -= removed;
+        return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
+    }
+
+    /// <summary>
+    ///     Kill-ring-free readline <c>M-d</c>: remove the word in front of the
+    ///     caret up to the next whitespace run. At end-of-line this mirrors
+    ///     <see cref="MoveWordRight" /> boundaries so <c>Alt+d</c>/<c>Alt+b</c>
+    ///     agree on what "word" means.
+    /// </summary>
+    public EditOutcome DeleteWordForward()
+    {
+        if (_cursor >= _length)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        int i = _cursor;
+        while (i < _length && char.IsWhiteSpace(_buf[i]))
+        {
+            i++;
+        }
+
+        while (i < _length && !char.IsWhiteSpace(_buf[i]))
+        {
+            i++;
+        }
+
+        int removed = i - _cursor;
+        Array.Copy(_buf, i, _buf, _cursor, _length - i);
+        _length -= removed;
+        return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
+    }
+
     // ── Movement ───────────────────────────────────────────────────────────
 
     public EditOutcome MoveLeft()
@@ -232,6 +277,52 @@ public sealed class PromptBuffer
     public EditOutcome MoveToLineEnd() { _cursor = LineEndOf(_cursor); return EditOutcome.Cursor(); }
     public EditOutcome MoveToStart() { _cursor = 0; return EditOutcome.Cursor(); }
     public EditOutcome MoveToEnd() { _cursor = _length; return EditOutcome.Cursor(); }
+
+    /// <summary>Alt+B / Ctrl+Left: jump to the start of the word before the caret.</summary>
+    public EditOutcome MoveWordLeft()
+    {
+        int i = _cursor;
+        while (i > 0 && char.IsWhiteSpace(_buf[i - 1]))
+        {
+            i--;
+        }
+
+        while (i > 0 && !char.IsWhiteSpace(_buf[i - 1]))
+        {
+            i--;
+        }
+
+        if (i == _cursor)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        _cursor = i;
+        return EditOutcome.Cursor();
+    }
+
+    /// <summary>Alt+F / Ctrl+Right: jump past the whitespace run and the word after the caret.</summary>
+    public EditOutcome MoveWordRight()
+    {
+        int i = _cursor;
+        while (i < _length && char.IsWhiteSpace(_buf[i]))
+        {
+            i++;
+        }
+
+        while (i < _length && !char.IsWhiteSpace(_buf[i]))
+        {
+            i++;
+        }
+
+        if (i == _cursor)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        _cursor = i;
+        return EditOutcome.Cursor();
+    }
 
     /// <summary>Up arrow: previous logical line at the same display column.</summary>
     public EditOutcome MoveUp()
