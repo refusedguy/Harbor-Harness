@@ -129,10 +129,7 @@ internal sealed class PipeStream : Stream
         var sequence = result.Buffer;
         int bytes = (int)Math.Min(buffer.Length, sequence.Length);
         var slice = sequence.Slice(0, bytes);
-        var source = slice.FirstSpan;
-        var dest = buffer.Span;
-        for (int i = 0; i < bytes; i++)
-            dest[i] = source[i];
+        slice.CopyTo(buffer.Span);
         _pipe.Reader.AdvanceTo(slice.End, slice.End);
         return bytes;
     }

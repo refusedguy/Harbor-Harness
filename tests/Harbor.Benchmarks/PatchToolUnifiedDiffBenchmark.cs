@@ -44,7 +44,7 @@ public class PatchToolUnifiedDiffBenchmark
     public async Task<string> ApplyPatch()
     {
         var args = System.Text.Json.JsonDocument.Parse(
-            $"{{\"path\":\"{_tempFilePath}\",\"patch\":{System.Text.Json.JsonSerializer.Serialize(_patch)}}}").RootElement.Clone();
+            System.Text.Json.JsonSerializer.Serialize(new { path = _tempFilePath, patch = _patch })).RootElement.Clone();
         var ctx = new ToolContext(
             SessionId: "session-1",
             MessageId: "msg-1",

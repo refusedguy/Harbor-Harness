@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Harbor.Abstractions.Tools;
 
@@ -40,6 +41,55 @@ public static class WorkspaceContextSource
     private const int MaxDescriptionLength = 160;
     // Safety valve so a stray huge file cannot swallow the model's context window.
     private const long MaxContextFileBytes = 256 * 1024;
+
+    private sealed record CachedSnapshot(
+        IReadOnlyList<ContextFile> Files,
+        IReadOnlyList<SkillDescriptor> Skills,
+        long Version);
+
+    private static readonly ConcurrentDictionary<string, CachedSnapshot> _cache = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     Cached variant of the two per-turn loads. Version = XOR of last-write ticks of
+    ///     AGENTS.md/CLAUDE.md and both skill directories. Fast path reuses the cached
+    ///     lists without touching skill-file contents.
+    /// </summary>
+    public static (IReadOnlyList<ContextFile> Files, IReadOnlyList<SkillDescriptor> Skills) GetOrLoadCached(string workingDirectory)
+    {
+        long version = 0;
+        try
+        {
+            foreach (string name in ContextFileNames)
+            {
+                string path = Path.Combine(workingDirectory, name);
+                if (File.Exists(path))
+                    version ^= new FileInfo(path).LastWriteTimeUtc.Ticks;
+            }
+            string projectSkillsDir = Path.Combine(workingDirectory, ProjectSkillsDir);
+            if (Directory.Exists(projectSkillsDir))
+                version ^= new DirectoryInfo(projectSkillsDir).LastWriteTimeUtc.Ticks;
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(userProfile))
+            {
+                string globalSkillsDir = Path.Combine(userProfile, ProjectSkillsDir);
+                if (Directory.Exists(globalSkillsDir))
+                    version ^= new DirectoryInfo(globalSkillsDir).LastWriteTimeUtc.Ticks;
+            }
+        }
+        catch { /* best-effort version */ }
+
+        if (_cache.TryGetValue(workingDirectory, out var snap) && snap.Version == version)
+            return (snap.Files, snap.Skills);
+
+        var files = LoadContextFiles(workingDirectory);
+        var skills = LoadSkills(workingDirectory);
+        var entry = new CachedSnapshot(files, skills, version);
+        _cache[workingDirectory] = entry;
+        return (files, skills);
+    }
+
+    /// <summary>Evict one directory from the workspace cache (tests/benchmarks).</summary>
+    public static void Invalidate(string workingDirectory) => _cache.TryRemove(workingDirectory, out _);
 
     /// <summary>Load project context files found in <paramref name="workingDirectory" />.</summary>
     public static IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory)

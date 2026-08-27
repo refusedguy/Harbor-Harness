@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Results;
@@ -47,7 +48,18 @@ public sealed class SqliteSessionStore : ISessionStore
                                   CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
                                   CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
                                   """;
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        };
+        options.Converters.Add(new ContentPartJsonConverter());
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
 
     private readonly string _connectionString;
     private readonly object _lock = new();
@@ -454,5 +466,59 @@ public sealed class SqliteSessionStore : ISessionStore
             createdAt,
             updatedAt,
             meta);
+    }
+
+    private sealed class ContentPartJsonConverter : JsonConverter<ContentPart>
+    {
+        public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var doc = JsonDocument.ParseValue(ref reader);
+            var el = doc.RootElement;
+            string? type = el.TryGetProperty("type", out var tp) ? tp.GetString() : el.TryGetProperty("Type", out var tp2) ? tp2.GetString() : null;
+            return type switch
+            {
+                "text" => new TextPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
+                "thinking" => new ThinkingPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
+                "tool_call" => new ToolCallPart(
+                    el.TryGetProperty("id", out var id) ? id.GetString()! : el.GetProperty("Id").GetString()!,
+                    el.TryGetProperty("toolName", out var tn) ? tn.GetString()! : el.GetProperty("ToolName").GetString()!,
+                    el.TryGetProperty("args", out var a) ? a.Clone() : el.TryGetProperty("Args", out var a2) ? a2.Clone() : default),
+                "file" => new FilePart(
+                    el.TryGetProperty("path", out var p) ? p.GetString()! : el.GetProperty("Path").GetString()!,
+                    el.TryGetProperty("mimeType", out var mt) ? mt.GetString()! : el.GetProperty("MimeType").GetString()!,
+                    el.TryGetProperty("sizeBytes", out var sb) ? sb.GetInt64() : el.GetProperty("SizeBytes").GetInt64()),
+                _ => null
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, ContentPart value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            switch (value)
+            {
+                case TextPart t:
+                    writer.WriteString("type", "text");
+                    writer.WriteString("text", t.Text);
+                    break;
+                case ThinkingPart th:
+                    writer.WriteString("type", "thinking");
+                    writer.WriteString("text", th.Text);
+                    break;
+                case ToolCallPart tc:
+                    writer.WriteString("type", "tool_call");
+                    writer.WriteString("id", tc.Id);
+                    writer.WriteString("toolName", tc.ToolName);
+                    writer.WritePropertyName("args");
+                    JsonSerializer.Serialize(writer, tc.Args, options);
+                    break;
+                case FilePart f:
+                    writer.WriteString("type", "file");
+                    writer.WriteString("path", f.Path);
+                    writer.WriteString("mimeType", f.MimeType);
+                    writer.WriteNumber("sizeBytes", f.SizeBytes);
+                    break;
+            }
+            writer.WriteEndObject();
+        }
     }
 }
