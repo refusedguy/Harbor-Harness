@@ -292,7 +292,8 @@ public class ChatScreenBridgeTests
     }
 
     [Test]
-    public async Task RequestApprovalGate_OffThread_LandsOnTimeline_OnlyOnTick()    {
+    public async Task RequestApprovalGate_OffThread_LandsOnTimeline_OnlyOnTick()
+    {
         var bus = new FakeEventBus();
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());

@@ -20,8 +20,14 @@ public class ImageBlockTests
 
         static void Signature(byte[] d)
         {
-            d[0] = 0x89; d[1] = 0x50; d[2] = 0x4E; d[3] = 0x47;
-            d[4] = 0x0D; d[5] = 0x0A; d[6] = 0x1A; d[7] = 0x0A;
+            d[0] = 0x89;
+            d[1] = 0x50;
+            d[2] = 0x4E;
+            d[3] = 0x47;
+            d[4] = 0x0D;
+            d[5] = 0x0A;
+            d[6] = 0x1A;
+            d[7] = 0x0A;
         }
     }
 
