@@ -11,16 +11,20 @@
    sub-interfaces: `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`) with a parameterless
    constructor.
 3. Start Harbor — the file is compiled in-memory, instantiated, and registered.
-4. Compilation errors are logged to the console and to `~/.harbor/logs/plugins.log`.
+4. Compilation errors are logged to the console and to the host file log
+   (`~/.harbor/logs/harbor-cli-*.log`).
 5. Compiled assemblies are cached by source SHA-256 in `~/.harbor/plugins/cache/`.
 
 ## Architecture (layered runtime)
 
-The plugin runtime in `src/Harbor.Plugins.Runtime/` is split into five single-purpose
-layers. Each layer depends only on the previous layer's **interface**, never its
-implementation. This separation lets you swap storage backends (filesystem, embedded
-resources, network, git), compilation engines (Roslyn, scripted, pre-built DLL), and
-instantiation strategies (reflection, DI-aware, interpreter) independently.
+The plugin runtime is split across dedicated `Harbor.Plugins.*` projects
+(`src/Harbor.Plugins.{Storage,Compilation,Instantiation,Registration,Hosting}`,
+with shared contracts in `Harbor.Plugins.Abstractions` and the legacy
+`CsPluginLoader` facade kept in `src/Harbor.Plugins.Runtime/`). Each layer depends
+only on the previous layer's **interface**, never its implementation. This separation
+lets you swap storage backends (filesystem, embedded resources, network, git),
+compilation engines (Roslyn, scripted, pre-built DLL), and instantiation strategies
+(reflection, DI-aware, interpreter) independently.
 
 ```mermaid
 flowchart TD
@@ -66,13 +70,17 @@ flowchart TD
     SAFE --> REG
 ```
 
-| Layer | Interface | Default impl | What it does |
-|---|---|---|---|
-| Storage | `IPluginSource` | `FileSystemPluginSource` | Async-streams `PluginScript` values from disk / embedded / in-memory. |
-| Compilation | `IPluginCompiler` | `CachingCompiler` over `RoslynPluginCompiler` | Compiles a `PluginScript` into a loaded `CompiledPluginAssembly`. Caches by SHA-256. |
-| Instantiation | `IPluginInstantiator` | `ReflectionPluginInstantiator` | Finds `IPlugin` impls in the assembly, `Activator.CreateInstance`, returns `LoadedPlugin`. Does NOT call `Initialize`. |
-| Registration | `IPluginRegistrar` | `SafePluginRegistrar` over `PluginRegistrar` | Builds `PluginContext`, calls `IPlugin.Initialize`, dispatches `RegisterTools` / `RegisterProviders` / `RegisterAgents` / `RegisterTuiPlugin` / `RegisterPanels`. |
-| Hosting | (no interface — `PluginHost` is the facade) | `PluginHost` + `PluginHostBuilder` | Iterates `source → compile → instantiate → register`. Logs per-plugin failures; honors `ContinueOnError`. |
+| Layer | Project | Interface | Default impl | What it does |
+|---|---|---|---|---|
+| Storage | `Harbor.Plugins.Storage` | `IPluginSource` | `FileSystemPluginSource` | Async-streams `PluginScript` values from disk / embedded / in-memory. |
+| Compilation | `Harbor.Plugins.Compilation` | `IPluginCompiler` | `CachingCompiler` over `RoslynPluginCompiler` | Compiles a `PluginScript` into a loaded `CompiledPluginAssembly`. Caches by SHA-256. |
+| Instantiation | `Harbor.Plugins.Instantiation` | `IPluginInstantiator` | `ReflectionPluginInstantiator` | Finds `IPlugin` impls in the assembly, `Activator.CreateInstance`, returns `LoadedPlugin`. Does NOT call `Initialize`. |
+| Registration | `Harbor.Plugins.Registration` | `IPluginRegistrar` | `SafePluginRegistrar` over `PluginRegistrar` | Builds `PluginContext`, calls `IPlugin.Initialize`, dispatches `RegisterTools` / `RegisterProviders` / `RegisterAgents` / `RegisterTuiPlugin` / `RegisterPanels`. |
+| Hosting | `Harbor.Plugins.Hosting` | (no interface — `PluginHost` is the facade) | `PluginHost` + `PluginHostBuilder` | Iterates `source → compile → instantiate → register`. Logs per-plugin failures; honors `ContinueOnError`. |
+
+Shared contracts (`IPluginSource`, `IPluginCompiler`, `IPluginInstantiator`,
+`IPluginRegistrar`, `IPluginLoadHost`, `PluginScript`, `CompiledPluginAssembly`,
+`LoadedPlugin`) live in `src/Harbor.Plugins.Abstractions/`.
 
 ### Why the split
 
@@ -160,7 +168,7 @@ var pluginHost = new PluginHostBuilder()
         loggerFactory.CreateLogger<CachingCompiler>()))
     .WithInstantiator(new ReflectionPluginInstantiator())
     .WithRegistrar(new SafePluginRegistrar(
-        new PluginRegistrar(globalPluginsDir, loggerFactory.CreateLogger<PluginRegistrar>()),
+        new PluginRegistrar(globalPluginsDir, loggerFactory.CreateLogger<PluginRegistrar>(), loggerFactory),
         loggerFactory.CreateLogger<SafePluginRegistrar>()))
     .WithOptions(o => o.PluginRoot = globalPluginsDir)
     .Build(loggerFactory.CreateLogger<PluginHost>());
@@ -365,8 +373,8 @@ When a plugin fails to compile, the loader:
      [Error] /home/me/.harbor/plugins/Broken.cs(12,9): CS1002 — ; expected
      [Error] /home/me/.harbor/plugins/Broken.cs(15,3): CS0103 — The name 'foo' does not exist
    ```
-2. Writes the full Roslyn diagnostics (including warnings) to
-   `~/.harbor/logs/plugins.log` (via the host's `FileLogger`).
+2. Writes the full Roslyn diagnostics (including warnings) to the host file log
+   `~/.harbor/logs/harbor-cli-*.log` (via the host's `FileLoggerProvider`).
 
 To see verbose loader output:
 

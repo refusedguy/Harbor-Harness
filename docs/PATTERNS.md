@@ -15,24 +15,24 @@
 
 | # | Pattern | Where in Harbor | Key file |
 |---|---|---|---|
-| 1 | Strategy | `ILlmClient`, `ITool`, `ITuiRenderer`, `ISessionStore` | `Harbor.Abstractions/Tools/ITool.cs` |
-| 2 | Registry | `ToolRegistry`, `ProviderRegistry`, `AgentRegistry` | `Harbor.Core/Tools/ToolRegistry.cs` |
-| 3 | Observer | `IEventBus` / `InMemoryEventBus` | `Harbor.Core/Events/InMemoryEventBus.cs` |
-| 4 | Builder | `IToolRegistryBuilder`, `ISystemPromptBuilder` | `Harbor.Core/Tools/ToolRegistry.cs:194` |
-| 5 | Adapter | `MessageConverter`, `OpenAiCompatibleLlmClient` | `Harbor.Core/Sessions/MessageConverter.cs` |
-| 6 | Command | `IAgent`, `DefaultAgent`, `TaskTool` | `Harbor.Core/Agents/DefaultAgent.cs` |
-| 7 | Specification | `PermissionRuleset`, `PermissionService` | `Harbor.Abstractions/Permissions/PermissionRuleset.cs` |
-| 8 | Value Object | `SessionId`, `ProviderId`, `ToolName` (7 types) | `Harbor.Abstractions/Models/Identifiers/Identifiers.cs` |
-| 9 | Factory Method | `Session.Create`, `ToolResult.Success/Error` | `Harbor.Abstractions/Models/Session.cs:42` |
-| 10 | Plugin | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` | `Harbor.Abstractions/Plugins/IPlugin.cs` |
-| 11 | Repository | `ISessionStore` | `Harbor.Abstractions/Sessions/ISessionStore.cs` |
-| 12 | Chain of Responsibility | `AgentLoop` (prompt → LLM → tool → next turn → compaction) | `Harbor.Core/Agents/AgentLoop.cs` |
-| 13 | Flyweight | `StringPool.Shared` for tool name interning | `Harbor.Core/Agents/AgentLoop.cs:317` |
-| 14 | Object Pool | `StringBuilderPool`, `ArrayPool<T>.Shared` | `Harbor.Core/Agents/AgentLoop.cs:191` |
-| 15 | MVVM | `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` | `Harbor.Tui.Abstractions/ViewModels/TuiViewModels.cs` |
-| 16 | Decorator | `BaseTuiRenderer` decorates concrete renderers | `Harbor.Tui.Abstractions/BaseTuiRenderer.cs` |
-| 17 | TEA (The Elm Architecture) | `UiReducer` / `UiState` / `UiMsg` | `Harbor.Tui.Abstractions/State/UiReducer.cs` |
-| 18 | Discriminated Union | `AgentEvent`, `LlmEvent` (16 + 12 variants) | `Harbor.Abstractions/Events/AgentEvent.cs` |
+| 1 | Strategy | `ILlmClient`, `ITool`, `ITuiRenderer`, `ISessionStore` | `src/Harbor.Abstractions/Tools/ITool.cs` |
+| 2 | Registry | `ToolRegistry`, `ProviderRegistry`, `AgentRegistry` | `src/Harbor.Registries/Tools/ToolRegistry.cs` |
+| 3 | Observer | `IEventBus` / `InMemoryEventBus` | `src/Harbor.Registries/Events/InMemoryEventBus.cs` |
+| 4 | Builder | `IToolRegistryBuilder`, `ISystemPromptBuilder` | `src/Harbor.Registries/Tools/ToolRegistry.cs:194` |
+| 5 | Adapter | `MessageConverter`, `OpenAiCompatibleLlmClient` | `src/Harbor.Application/Sessions/MessageConverter.cs` |
+| 6 | Command | `IAgent`, `DefaultAgent`, `TaskTool` | `src/Harbor.Application/Agents/DefaultAgent.cs` |
+| 7 | Specification | `PermissionRuleset`, `PermissionService` | `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs` |
+| 8 | Value Object | `SessionId`, `ProviderId`, `ToolName` (7 types) | `src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs` |
+| 9 | Factory Method | `Session.Create`, `ToolResult.Success/Error` | `src/Harbor.Abstractions.Contracts/Models/Session.cs:42` |
+| 10 | Plugin | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ITuiPlugin` | `src/Harbor.Abstractions/Plugins/IPlugin.cs` |
+| 11 | Repository | `ISessionStore` | `src/Harbor.Abstractions/Sessions/ISessionStore.cs` |
+| 12 | Chain of Responsibility | `AgentLoop` (prompt → LLM → tool → next turn → compaction) | `src/Harbor.Application/Agents/AgentLoop.cs` |
+| 13 | Flyweight | interned tool names in frozen dictionaries (`ToolRegistry`) | `src/Harbor.Registries/Tools/ToolRegistry.cs` |
+| 14 | Object Pool | `StringBuilderPool`, `ArrayPool<T>.Shared` | `src/Harbor.Extensions/ArrayPoolExtensions.cs` |
+| 15 | MVVM | `ObservableObject`, `[ObservableProperty]`, `[RelayCommand]` | `src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs` |
+| 16 | Decorator | `BaseTuiRenderer` decorates concrete renderers | `src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs` |
+| 17 | TEA (The Elm Architecture) | `UiReducer` / `UiState` / `UiMsg` | `src/Harbor.Ui.Framework.State/State/UiReducer.cs` |
+| 18 | Discriminated Union | `AgentEvent`, `LlmEvent` (16 + 12 variants) | `src/Harbor.Abstractions.Contracts/Events/AgentEvent.cs` |
 
 ---
 
@@ -98,7 +98,7 @@ antipattern that snuck into `OpenAiCompatibleLlmClient` for provider quirks.)
 | `ViewRegistry` (TUI) | `Dictionary` (single-threaded) | `string Id` |
 | `ViewModelRegistry` (TUI) | `Dictionary` (single-threaded) | `string Id` |
 
-**Code snippet** (`src/Harbor.Core/Tools/ToolRegistry.cs:11`):
+**Code snippet** (`src/Harbor.Registries/Tools/ToolRegistry.cs:11`):
 
 ```csharp
 public sealed class ToolRegistry : IToolRegistry
@@ -149,7 +149,7 @@ them of state changes by publishing typed events.
 **Where in Harbor.** `IEventBus` + `InMemoryEventBus`. The agent loop is the
 publisher; TUI, loggers, plugins are subscribers.
 
-**Code snippet** (`src/Harbor.Core/Events/InMemoryEventBus.cs:54`):
+**Code snippet** (`src/Harbor.Registries/Events/InMemoryEventBus.cs:54`):
 
 ```csharp
 public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
@@ -210,7 +210,7 @@ Lets the same construction process create different representations.
 | `ISystemPromptBuilder` | Assembles system prompt string |
 | `LlmRequest` (record, fluent) | LLM request payload |
 
-**Code snippet** (`src/Harbor.Core/Tools/ToolRegistry.cs:194`):
+**Code snippet** (`src/Harbor.Registries/Tools/ToolRegistry.cs:194`):
 
 ```csharp
 public sealed class ToolRegistryBuilder : IToolRegistryBuilder
@@ -267,7 +267,7 @@ interfaces.
 | `AnthropicLlmClient` | Generic `LlmRequest` → Anthropic Messages API JSON |
 | `ConfigAuthResolver` | `AuthStore` → `string` (API key resolution) |
 
-**Code snippet** (conceptual — `src/Harbor.Core/Sessions/MessageConverter.cs`):
+**Code snippet** (conceptual — `src/Harbor.Application/Sessions/MessageConverter.cs`):
 
 ```csharp
 // Domain model:
@@ -329,7 +329,7 @@ clients with different requests, queue or log requests, and support undoable ope
 | `TaskTool` | Delegates to a sub-agent (`explore`, `plan`) |
 | `ISlashCommand` implementations | REPL slash commands (`/help`, `/sessions`, ...) |
 
-**Code snippet** (`src/Harbor.Core/Agents/DefaultAgent.cs`, simplified):
+**Code snippet** (`src/Harbor.Application/Agents/DefaultAgent.cs`, simplified):
 
 ```csharp
 public sealed class DefaultAgent : IAgent
@@ -368,7 +368,7 @@ object, composable with `And` / `Or` / `Not`.
 `(toolName, glob) → action`. The ruleset evaluates `(toolName, argPath)` and
 returns `Allow | Ask | Deny`.
 
-**Code snippet** (`src/Harbor.Abstractions/Permissions/PermissionRuleset.cs`):
+**Code snippet** (`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`):
 
 ```csharp
 public sealed record PermissionRule(string ToolName, string ArgPattern, PermissionAction Action);
@@ -428,7 +428,7 @@ Two VOs with the same value are equal.
 | `ToolName` | `string` | lowercase alphanumeric + underscore |
 | `AgentName` | `string` | lowercase alphanumeric + underscore |
 
-**Code snippet** (`src/Harbor.Abstractions/Models/Identifiers/Identifiers.cs`):
+**Code snippet** (`src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs`):
 
 ```csharp
 public sealed class ProviderId : ValueObject
@@ -482,7 +482,7 @@ static methods decide which class to instantiate.
 | `ProviderId.TryCreate(string?)` | A `Result<ProviderId>` |
 | `AssistantMessage.Empty(...)` | An empty streaming-accumulation message |
 
-**Code snippet** (`src/Harbor.Abstractions/Models/Session.cs:42`):
+**Code snippet** (`src/Harbor.Abstractions.Contracts/Models/Session.cs:42`):
 
 ```csharp
 public static Session Create(string directory, string agentName, string providerId, string modelId, string? title = null)
@@ -607,7 +607,7 @@ it or pass it on.
 **Where in Harbor.** `AgentLoop.RunAsync` is a linear chain:
 `prompt → LLM stream → tool execution → next turn → compaction → repeat`.
 
-**Code snippet** (`src/Harbor.Core/Agents/AgentLoop.cs:89`, simplified):
+**Code snippet** (`src/Harbor.Application/Agents/AgentLoop.cs:89`, simplified):
 
 ```csharp
 public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
@@ -675,30 +675,17 @@ a linear flow, hides the control flow.
 **Definition.** Share data among many objects to reduce memory usage. Useful when
 many objects have identical immutable parts.
 
-**Where in Harbor.** `StringPool.Shared` interns highly-repeated strings (tool
-names, provider ids, role names) so they share a single `string` instance.
+**Where in Harbor.** Repeated strings (tool names, provider ids, role names) are
+interned at parse/registration time instead of per-event allocation — `ToolRegistry`
+keeps tool names in frozen dictionaries keyed by interned `ToolName` values.
 
-**Code snippet** (`src/Harbor.Core/Agents/AgentLoop.cs:317`):
+**Code snippet** (`src/Harbor.Application/Agents/AgentLoop.cs`, simplified):
 
 ```csharp
-// Tool names are highly repeated (8 names across thousands of events).
-// Interning via StringPool avoids allocating a new string per LLM event.
-string internedName = StringPool.Shared.GetOrAdd(name);
-var newToolCall = new ToolCallPart(id, internedName, parsedArgs);
-partial = partial.AppendToolCall(newToolCall);
+// Tool names are highly repeated (a handful of names across thousands of events).
+// Resolve the shared tool instance once instead of allocating per event.
+var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
 ```
-
-**Why this pattern.**
-- A 50-turn session with 10 tool calls/turn = 500 tool-name strings. Interning
-  reduces to 8 (one per unique name).
-- `StringPool.Shared` is thread-safe, lock-free for reads.
-
-**Alternative considered.** `Dictionary<string, string>` per session. Rejected —
-more memory, no cross-session dedup.
-
-**Common mistakes.**
-- Interning large unique strings (e.g. user prompts) — pool grows unbounded.
-- Not clearing the pool for long-running processes — `StringPool` is bounded.
 
 ---
 
@@ -712,9 +699,9 @@ them. Avoids GC pressure on hot paths.
 | Pool | What it pools | Used in |
 |---|---|---|
 | `ArrayPool<T>.Shared` | `T[]` buffers | `InMemoryEventBus` (dead subscribers), `ProviderRegistry` (task array), `ReadTool` (binary probe) |
-| `StringBuilderPool` (CommunityToolkit) | `StringBuilder` instances | `AgentLoop` (streaming coalesce), `CompactionService`, `SystemPromptBuilder` |
+| `StringBuilderPool` (`Harbor.Extensions`) | `StringBuilder` instances | `StreamingCoalescer` / agent streaming, `BashTool`, `TreeTool`, `PatchTool`, `NotebookTool` |
 
-**Code snippet** (`src/Harbor.Core/Agents/AgentLoop.cs:191`):
+**Code snippet** (`src/Harbor.Application/Agents/AgentLoop.cs`, simplified):
 
 ```csharp
 // Pre-allocate pooled StringBuilders for streaming text + thinking deltas.

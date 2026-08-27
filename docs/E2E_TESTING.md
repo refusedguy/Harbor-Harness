@@ -103,7 +103,7 @@ points at the mock server. Also writes `~/.harbor/config.json` with
 
 ## 3. What's covered
 
-### 3.1 `tests/Harbor.E2E.Cli/` (6 tests, all passing)
+### 3.1 `tests/Harbor.E2E.Cli/` (7 tests, all passing)
 
 | Test | Asserts |
 |---|---|
@@ -113,6 +113,7 @@ points at the mock server. Also writes `~/.harbor/config.json` with
 | `StorageCommand_ListsBackends` | `harbor storage` lists `jsonl`, `memory`, `sqlite` |
 | `ProvidersCommand_ListsAllRegisteredProviders` | `harbor providers` lists `ollama` (always-registered) |
 | `AskCommand_WithMockServer_ReturnsResponse` | `harbor ask "..."` with mock server returns the canned text; `Server.ReceivedRequests.Count > 0` |
+| `VersionCommand_CapturesScreenshot` | smoke capture of rendered output for regression diffs |
 
 ### 3.2 `contrib/tests/Harbor.E2E.App.Blazor/` (3 tests, all passing)
 
@@ -152,7 +153,7 @@ Both build commands pull in the framework + app under test as project refs
 dotnet test tests/Harbor.E2E.Cli --no-build
 ```
 
-Expected: `Passed! - Failed: 0, Passed: 6, Skipped: 0, Total: 6`.
+Expected: `Passed! - Failed: 0, Passed: 7, Skipped: 0, Total: 7`.
 
 ### 4.3 Run the Blazor E2E suite
 
@@ -164,15 +165,13 @@ Expected: `Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3`.
 
 ### 4.4 Filter by Category
 
-All E2E tests are tagged `[Category("E2E")]`. Run only E2E tests across the
-whole solution:
+All E2E tests are tagged `[Category("E2E")]`. Run only E2E tests within one
+project (whole-solution `dotnet test` breaks under the MTP host — always
+target a single project directory):
 
 ```bash
-dotnet test --filter "Category=E2E"
+dotnet test tests/Harbor.E2E.Cli --no-build --treenode-filter "/*/*/CliE2ETests/*"
 ```
-
-Useful in CI to keep E2E (slow, ~5s total) separate from the fast unit suite
-(~3s for 400+ tests).
 
 ### 4.5 Detailed per-test output
 
@@ -207,25 +206,32 @@ exercised with zero external dependencies.
 
 ---
 
-## 6. Roadmap — TUI + Avalonia E2E (TODO)
+## 6. Roadmap — TUI E2E
 
-These are scoped but not delivered in the current sprint due to environment
-constraints (PTY allocation in CI sandboxes, headless Avalonia on Linux).
+### 6.1 PTY-based TUI E2E — DELIVERED for ConsoleEx
 
-### 6.1 TUI E2E (SpectreTui / Termina / Terminal.Gui / RazorConsole)
+**Status:** ✅ `tests/Harbor.Tui.ConsoleEx.PtyTests/` runs real L2 scenarios: a
+`PtyHarness` spawns the CLI as a real process inside a pseudo-terminal and
+drives it — launch, submit, kitty-keyboard keys, mouse, paste injection,
+resize, Ctrl+C, termios restore, plus golden grid-dump fixtures. Run with:
 
-**Status:** Test projects exist at `contrib/tests/Harbor.E2E.Tui.{SpectreTui,Termina,TerminalGui,RazorConsole}/`
-(moved to contrib in sprint-2; build via `contrib/Contrib.slnx`)
-with placeholder tests. They will not pass in the current sandbox because:
+```bash
+dotnet build
+dotnet test tests/Harbor.Tui.ConsoleEx.PtyTests -c Release --no-build
+```
 
-- TUI renderers call `Console.ReadKey(true)` in raw mode, which requires a
+The legacy placeholder suites for the contrib renderers remain at
+`contrib/tests/Harbor.E2E.Tui.{SpectreTui,Termina,TerminalGui,RazorConsole}/`
+(build via `contrib/Contrib.slnx`). They will not pass in the current sandbox because:
+
+- Those renderers call `Console.ReadKey(true)` in raw mode, which requires a
   real PTY. The sandbox blocks `forkpty`/`openpty` via seccomp.
 - `TuiDriver` wraps `script -qfc` on Linux to allocate a PTY, but `script(1)`
   is killed before it can exec the app.
 - `E2eTestBase.EnsurePtyAvailable()` guards every TUI test — it logs a `[SKIP]`
   message and the test passes as a no-op when PTY is unavailable.
 
-**To finish:**
+**To finish (for contrib renderers):**
 1. Run in a sandbox with PTY allocation (or use ConPTY on Windows).
 2. Replace placeholder tests with real driver scenarios: type a prompt, wait
    for the agent's response to render, assert on the visible screen.

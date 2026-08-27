@@ -32,7 +32,7 @@
 Самый простой tool: возвращает текущее время. 30 строк.
 
 ```csharp
-// src/Harbor.Tools.Builtin/Time/TimeTool.cs
+// src/Harbor.Tools.Builtin/Tools/Time/TimeTool.cs
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
@@ -63,10 +63,11 @@ public sealed class TimeTool : ITool
 }
 ```
 
-Register in `HostBuilder.CreateToolRegistry`:
+Register in `ToolsCatalog.CreateToolRegistry`
+(`src/Harbor.Hosting/Modules/ToolsCatalog.cs`):
 
 ```csharp
-tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));
+tb.AddTool(lf => new TimeTool(lf.CreateLogger<TimeTool>()));
 registry.Freeze();
 ```
 
@@ -92,7 +93,7 @@ public Result ValidateArguments(JsonElement args)
 
 ```bash
 $ dotnet run --project apps/Harbor.App.Cli -- ask \
-    "Read the first 20 lines of src/Harbor.Core/Agents/AgentLoop.cs and summarize it"
+    "Read the first 20 lines of src/Harbor.Application/Agents/AgentLoop.cs and summarize it"
 ```
 
 LLM вызовет `read` с `{"path":"...","offset":1,"limit":20}`. Tool вернёт строки в формате `[0001] using ...`.
@@ -232,7 +233,8 @@ public sealed class MyLlmClient : ILlmClient
 }
 ```
 
-Register in `HostBuilder.CreateProviderRegistry`:
+Register in `ProviderFactories.CreateProviderRegistry`
+(`src/Harbor.Hosting/Modules/ProviderFactories.cs`):
 
 ```csharp
 pb.AddProvider("myllm", () => new MyLlmClient(httpFactory.CreateClient("myllm")));
@@ -319,7 +321,8 @@ public sealed class RedisSessionStore : ISessionStore
 }
 ```
 
-Register in `HostBuilder.RegisterStorage`.
+Register in `StorageModule` (`src/Harbor.Hosting/Modules/StorageModule.cs`) —
+the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend.
 
 ---
 
@@ -330,9 +333,12 @@ Register in `HostBuilder.RegisterStorage`.
 ```bash
 export HARBOR_TUI=plain      # no colors, for pipes
 export HARBOR_TUI=ansi       # default streaming
-export HARBOR_TUI=spectre    # rich panels/tables
-export HARBOR_TUI=fullscreen # interactive (scroll, hotkeys)
+export HARBOR_TUI=spectre    # rich interactive shell (contrib renderer, compiled in by default)
+export HARBOR_TUI=consoleex  # second in-process interactive shell (raw mode, cell-diff)
 ```
+
+> `HARBOR_MINIMAL=true` / `-p:HarborWithSpectreTui=false` excludes the contrib
+> renderers from the CLI build; unsupported ids then fall back to `plain`.
 
 ### 19. Add a TUI view model with MVVM
 

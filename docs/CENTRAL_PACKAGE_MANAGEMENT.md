@@ -2,7 +2,7 @@
 
 > **Task ID:** G (researcher-r4)
 > **Purpose:** Document what Central Package Management is, why Harbor uses it, how it was migrated from per-csproj `PackageReference` declarations to the central `Directory.Packages.props` file, and how to add/remove/upgrade packages under CPM.
-> **Output scope:** single document, ~400 lines, lives at `/home/z/my-project/extracted/docs/CENTRAL_PACKAGE_MANAGEMENT.md`.
+> **Output scope:** single document, lives at `docs/CENTRAL_PACKAGE_MANAGEMENT.md`.
 > **Status:** ✅ **Already implemented** — `Directory.Packages.props` exists at the repo root, `ManagePackageVersionsCentrally=true` is set in `Directory.Build.props`, all .csproj files declare `<PackageReference Include="..." />` without a `Version` attribute. This doc is the reference guide.
 > **Companion docs:**
 > - `docs/DESKTOP_APP_PLAN.md` — master plan for 4 desktop apps (companion, written in same round)
@@ -49,7 +49,7 @@ Every `.csproj` declared its own package versions:
 ```
 
 ```xml
-<!-- apps/Harbor.App.Cli/Harbor.Cli.csproj -->
+<!-- apps/Harbor.App.Cli/Harbor.App.Cli.csproj -->
 <ItemGroup>
   <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0"/>
   <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
@@ -100,7 +100,7 @@ NuGet resolves the version from `Directory.Packages.props`. If a package is refe
 
 ## 2. Why Harbor needs CPM
 
-Harbor has **54 `.csproj` files** (and growing — the desktop apps in `apps/` will add 5 more, plus 5 shared desktop libraries under `desktop/`). Before CPM, package versions were declared per-csproj and we had documented drift:
+Harbor has **~80 `.csproj` files** across `src/`, `apps/`, and `tests/` (plus the contrib tree). Before CPM, package versions were declared per-csproj and we had documented drift:
 
 | Package | Versions seen across the repo (before CPM) |
 |---------|--------------------------------------------|
@@ -172,7 +172,8 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 
 **Key difference from `Directory.Build.props`:** `Directory.Packages.props` is **only** evaluated during NuGet restore. It does not affect compilation or build properties. It only affects which NuGet package versions get restored.
 
-**Harbor's `Directory.Packages.props`** (138 lines, 41 `<PackageVersion>` entries) — see §4 below.
+Harbor's `Directory.Packages.props` now carries **79 `<PackageVersion>` entries**
+(194 lines) — the original migration shipped 41; the desktop/UI sprint added the rest.
 
 ### 3.4 Evaluation order
 
@@ -203,7 +204,7 @@ When you run `dotnet build src/Harbor.Core/Harbor.Core.csproj`, MSBuild evaluate
 
 ## 4. Harbor's `Directory.Packages.props` — full annotated listing
 
-The full file lives at `/home/z/my-project/extracted/Directory.Packages.props` (138 lines). Below is an annotated walkthrough:
+The full file lives at `Directory.Packages.props` (repo root, ~194 lines). Below is an annotated walkthrough of its structure:
 
 ### 4.1 The header comment
 
@@ -245,7 +246,7 @@ Grouped top-to-bottom (see the file for the full listing):
 | Performance / collections / serialization | 8 | `ZLinq`, `ZLinq.DropInGenerator`, `DotNext`, `DotNext.Threading`, `NonBlocking`, `KZDev.PerfUtils`, `MemoryPack`, `CSharpFunctionalExtensions` |
 | SQLite native driver | 1 | `SQLitePCLRaw.lib.e_sqlite3` |
 | Source generators | 1 | `Termina.Generators` |
-| **Total** | **41** | |
+| **Total (at migration time; now 79)** | **41** | |
 
 ### 4.4 Note on `Markdig` version
 
@@ -571,7 +572,7 @@ If a vulnerable transitive shows up, add it to `Directory.Packages.props` with t
 
 ### 9.4 Harbor's current transitive pinning status
 
-Harbor pins **41** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
+Harbor pins **79** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
 
 ---
 
@@ -776,12 +777,10 @@ dotnet list package --vulnerable
 - **Author:** Subagent G (researcher-r4)
 - **Date:** 2026
 - **Task ID:** G
-- **Length:** ~580 lines
 - **Files written:**
-  - `/home/z/my-project/extracted/docs/CENTRAL_PACKAGE_MANAGEMENT.md` (this file)
-  - `/home/z/my-project/extracted/docs/FEATURE_RESEARCH.md` §11 (grok-build analysis — companion)
-  - `/home/z/my-project/extracted/docs/DESKTOP_APP_PLAN.md` (4-app master plan — companion)
+  - `docs/CENTRAL_PACKAGE_MANAGEMENT.md` (this file)
+  - `docs/FEATURE_RESEARCH.md` §11 (grok-build analysis — companion)
+  - `docs/DESKTOP_APP_PLAN.md` (4-app master plan — companion)
 - **Migration status:** ✅ Complete (performed by Subagent C in round R4)
-- **Worklog entry:** appended to `/home/z/my-project/worklog.md` (see Task ID: G section)
 
 End of document.

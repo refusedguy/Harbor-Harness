@@ -107,7 +107,7 @@ Each composition root has a dedicated test project under
 
 | Test project | Composition root | TFM |
 |--------------|------------------|-----|
-| `Harbor.App.Cli.Tests` | `Harbor.Cli.Hosting.HostBuilder.Build` | `net10.0` |
+| `Harbor.App.Cli.Tests` | `Harbor.App.Cli.Hosting.HostBuilder.Build` | `net10.0` |
 | `Harbor.App.Avalonia.Tests` | `Harbor.App.Avalonia.AppHost.BuildAsync` | `net10.0` |
 | `Harbor.App.Wpf.Tests` | `Harbor.App.Wpf.App.BuildHostInternal` | `net10.0-windows10.0.19041` |
 | `Harbor.App.Blazor.Tests` | `Harbor.App.Blazor.Program.BuildApp` | `net10.0` |
@@ -151,7 +151,9 @@ that are already enforced mechanically.
 
 Canonical enforcement now lives in `tests/Harbor.Architecture.Tests/`
 (46 tests: reflection-based + NetArchTest + the ROP-D full-project matrix in
-`FullLayerMatrixTests.cs` covering all 45 main-solution src assemblies). It runs
+`FullLayerMatrixTests.cs`). Per the ROP-D close-out the matrix covers 47 of 50
+`src/` directories; the other 3 (CodeGen build tool, Plugins.Host exe,
+Providers.Shared linked source) are documented out-of-scope. It runs
 as part of the regular `dotnet test` step — no extra tool install, single source
 of truth. See docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
 

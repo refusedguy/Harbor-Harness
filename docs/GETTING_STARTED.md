@@ -85,17 +85,17 @@ LLM ответит текстом без tool calls. Event sequence:
 ```bash
 $ export HARBOR_TUI=ansi   # ANSI для интерактивности
 $ dotnet run --project apps/Harbor.App.Cli
-harbor> Add a TODO comment to the top of src/Harbor.Core/Agents/AgentLoop.cs
+harbor> Add a TODO comment to the top of src/Harbor.Application/Agents/AgentLoop.cs
 ```
 
 LLM вызовет `read` (чтобы увидеть файл), затем `edit` (добавить строку). Permission
 system спросит подтверждение, если сработает `Ask`-rule.
 
 ```bash
-[tool_execution_start] id=tc_1 tool=read args={"path":"src/Harbor.Core/Agents/AgentLoop.cs"}
+[tool_execution_start] id=tc_1 tool=read args={"path":"src/Harbor.Application/Agents/AgentLoop.cs"}
 [tool_execution_end]   id=tc_1 ok=true
 [tool_execution_start] id=tc_2 tool=edit args={"path":"...","old":"...","new":"..."}
-[permission] edit wants to access src/Harbor.Core/Agents/AgentLoop.cs
+[permission] edit wants to access src/Harbor.Application/Agents/AgentLoop.cs
   [a] allow  [d] deny  [A] always allow
 ```
 
@@ -258,14 +258,17 @@ export HARBOR_TUI=ansi
 # No colors — for pipes, CI, accessibility
 export HARBOR_TUI=plain
 
-# Rich panels/tables via Spectre.Console
+# Rich interactive shell (contrib renderers are compiled into the CLI by default)
 export HARBOR_TUI=spectre
+
+# Second interactive shell (raw mode, cell-diff output) — opt-in
+export HARBOR_TUI=consoleex
 ```
 
-> `spectre` and the other rich renderers (spectre-tui, fullscreen, termina,
-> terminal-gui, razor) are built from [`contrib/tui/`](../contrib/tui/) and compiled
-> into the CLI by the default-on `HarborWithSpectreTui` MSBuild flag (turn off with
-> `HARBOR_MINIMAL=true`).
+> The rich renderers (`spectre-tui`, `spectre`, `fullscreen`, `termina`,
+> `terminal-gui`, `razor`) live in [`contrib/tui/`](../contrib/tui/) and are
+> compiled into the CLI by the default-on `HarborWithSpectreTui` MSBuild flag;
+> `HARBOR_MINIMAL=true` excludes them (then such ids fall back to `plain`).
 
 See all options: `harbor tui`
 
@@ -350,12 +353,19 @@ harbor providers  # verify it's loaded
 | Command | Description |
 |---|---|
 | `/help` | Show available commands |
+| `/setup` | Interactive onboarding wizard |
+| `/auth` | Provider authentication |
+| `/model` | Switch model without restarting the REPL |
+| `/agent`, `/mode` | Switch agent mode (`code` / `plan` / `explore`) |
+| `/config` | Inspect configuration |
 | `/providers` | List registered providers |
-| `/models [provider]` | List models (all or by provider) |
 | `/sessions` | List saved sessions |
 | `/tui` | Show TUI renderer options |
 | `/storage` | Show storage backend options |
-| `/exit` | Quit |
+| `exit`, `quit`, `:q` | Quit the REPL |
+
+> There is no `/tools` slash command — see the tools table below and
+> [TOOLS_CATALOG.md](./TOOLS_CATALOG.md) for the full reference.
 
 ## Session management
 
@@ -367,6 +377,9 @@ harbor sessions  # list
 
 ## Tools available to the agent
 
+Full set (`HarborToolSetKind.Full14`, the CLI default — see
+[TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
+
 | Tool | Description |
 |---|---|
 | `read` | Read file contents (text or image, with line numbers) |
@@ -377,6 +390,15 @@ harbor sessions  # list
 | `grep` | Search file contents (regex) |
 | `ls` | List directory contents |
 | `task` | Delegate to a sub-agent (e.g. `explore`, `plan`) |
+| `webfetch` | Fetch URL → markdown (HTML stripped, code kept) |
+| `patch` | Apply a unified-diff patch atomically |
+| `notebook` | Persistent per-session markdown notes |
+| `ripgrep` | Fast content search via `rg` binary (gitignore-aware) |
+| `tree` | ASCII directory tree (gitignore-aware) |
+| `mcp` | Bridge to registered MCP servers |
+
+The Avalonia desktop host registers the smaller `Standard10` set (without
+`task`, `webfetch`, `ripgrep`, `mcp`).
 
 ## Agents (modes)
 
@@ -441,7 +463,7 @@ fail: Harbor.Providers.OpenAiCompatible.ConfigAuthResolver[0]
       Auth failed for provider 'kilocode': Set $KILO_API_KEY
       Expected env var: KILO_API_KEY
       Got: (null)
-fail: Harbor.Cli.Program[0]
+fail: Harbor.App.Cli.Program[0]
       Unhandled exception in CLI entry point
       Harbor.Abstractions.Providers.ProviderAuthException: Auth failed for provider 'kilocode'
          at Harbor.Providers.OpenAiCompatible.ConfigAuthResolver.GetApiKeyAsync()
@@ -502,8 +524,8 @@ Fix: запусти `ollama serve` в отдельном терминале.
 
 ```bash
 $ dotnet run --project apps/Harbor.App.Cli -- providers
-warn: Harbor.Core.Configuration.JsonConfigStore[0]
-      Failed to parse providers/myllm.json: Unexpected token ',' at position 142
+warn: Harbor.Hosting.JsonProviderDiscovery[0]
+      Skipping provider config 'providers/myllm.json': Unexpected token ',' at position 142
 ```
 
 Fix: убери trailing comma, запусти `python3 -m json.tool providers/myllm.json`
@@ -554,16 +576,17 @@ HARBOR_TUI=plain dotnet run --project apps/Harbor.App.Cli -- ask "..." | grep fo
 
 ### "Tool 'X' is not registered" в логах
 
-Plugin не загрузился. Проверь `~/.harbor/plugins/` и логи CsPluginLoader.
+Plugin не загрузился. Проверь `~/.harbor/plugins/` и лог
+(`~/.harbor/logs/harbor-cli-*.log`).
 
 ```bash
 $ ls ~/.harbor/plugins/
 hello.cs  webhook.cs
 
-$ tail -50 ~/.harbor/harbor.log | grep -i plugin
-info: Harbor.Core.Plugins.CsPluginLoader[0]
-     Loaded plugin 'hello' from ~/.harbor/plugins/hello.cs
-warn: Harbor.Core.Plugins.CsPluginLoader[0]
+$ grep -i plugin ~/.harbor/logs/harbor-cli-*.log | tail -5
+info: Harbor.Plugins.Hosting.PluginHost[0]
+     Loaded 1 CS plugin(s)
+warn: Harbor.Plugins.Runtime.CsPluginLoader[0]
      Failed to compile ~/.harbor/plugins/webhook.cs: (12,17): error CS0103: The name 'HttpClient' does not exist in the current context
 ```
 
@@ -571,29 +594,17 @@ Fix: добавь `using System.Net.Http;` в `webhook.cs`, перезапуст
 
 ### Agent отвечает "I don't have a tool for that"
 
-LLM пытается вызвать tool, который не зарегистрирован. Проверь что tool
-реально есть:
-
-```bash
-harbor> /tools
-  read     Read file contents
-  write    Write/create files
-  edit     String replacement
-  bash     Execute shell commands
-  glob     Find files by pattern
-  grep     Search file contents
-  ls       List directory
-  task     Delegate to sub-agent
-```
-
-Если нужного tool нет — поставь plugin (см. [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md)).
+LLM пытается вызвать tool, который не зарегистрирован. Зарегистрированные tools
+видны в логе и в [TOOLS_CATALOG.md §1](./TOOLS_CATALOG.md#1-inventory) (REPL-команды
+`/tools` нет). Если нужного tool нет — поставьте plugin
+(см. [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md)).
 
 ### Streaming залипает на одном месте
 
-Возможно LLM-strim ждёт tool-call но tool не валидируется. Проверь логи:
+Возможно LLM-стрим ждёт tool-call, но tool не валидируется. Проверь лог:
 
 ```bash
-tail -100 ~/.harbor/harbor.log | grep -E "tool|stream"
+tail -100 ~/.harbor/logs/harbor-cli-*.log | grep -E "tool|stream"
 ```
 
 Если видишь `Validating tool call args... failed: Missing 'path' argument` —
@@ -605,7 +616,7 @@ Compaction должен срабатывать автоматически ког
 Если не срабатывает — проверь `HeuristicTokenEstimator` и `CompactionService`:
 
 ```bash
-$ HARBOR_LOG_LEVEL=debug dotnet run --project apps/Harbor.App.Cli
+$ HARBOR_LOGLEVEL=debug dotnet run --project apps/Harbor.App.Cli
 # В логах должно быть:
 # debug: CompactionService.ShouldCompact: estimated=12345 / context=8192 → true
 # info:  Compaction triggered for session abc123

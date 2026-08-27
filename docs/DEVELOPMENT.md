@@ -12,7 +12,7 @@
 git clone https://github.com/harbor-sh/harbor
 cd harbor
 dotnet build
-dotnet test
+dotnet test tests/Harbor.Core.Tests -c Release --no-build
 ```
 
 ## Project structure
@@ -41,28 +41,34 @@ find . -type d \( -name bin -o -name obj \) -not -path '*/node_modules/*' -exec 
 
 ## Test commands
 
+> **Known limitation:** whole-solution `dotnet test` over `Harbor.slnx` breaks under
+> the MTP host. Always run **per project**: `dotnet test tests/<Project> -c Release --no-build`.
+
 ```bash
-# Run all tests (note: .NET 10 + Microsoft.Testing.Platform requires `dotnet run` on test projects)
+# Build everything first (tests use --no-build)
 dotnet build
-dotnet test
 
-# Run a specific test project (preferred: use `dotnet run` because of MTP)
-dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build
-dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build
+# Run a specific test project (known-good pattern)
+dotnet test tests/Harbor.Core.Tests -c Release --no-build
+dotnet test tests/Harbor.Plugins.Runtime.Tests -c Release --no-build
 
-# Run with detailed output
-dotnet run --project tests/Harbor.Core.Tests -c Release -- --detailed-stacktrace
+# Run one test class — TUnit uses --treenode-filter, not --filter
+dotnet test tests/Harbor.Abstractions.Tests -c Release --no-build \
+  --treenode-filter "/*/*/IdentifiersTests/*"
+
+# Detailed output
+dotnet test tests/Harbor.Core.Tests -c Release --no-build --logger "console;verbosity=detailed"
 
 # Enforce layer-dep rules (architecture tests)
-dotnet test tests/Harbor.Architecture.Tests
+dotnet test tests/Harbor.Architecture.Tests -c Release --no-build
 ```
 
 Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Testing Platform v2.3.2. Test files are in `tests/<Project>.Tests/`.
 
 ### Known test status
 
-- **3 pre-existing Avalonia 12 headless failures**: `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — fail with `Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Not Harbor bugs.
-- **8 IPC timing-test failures on Linux**: named-pipe disposal race in `Harbor.Ipc.Tests`. Pass on Windows.
+- **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `AvaloniaPropertyDictionaryPool.Get()`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
+- **IPC named-pipe event-stream tests on Linux** (`Harbor.Ipc.Tests`) self-skip unless `HARBOR_IPC_EVENTSTREAM=1` is set; some timing flakes remain.
 
 ## Running the CLI
 
@@ -132,13 +138,15 @@ export HARBOR_MODEL=openrouter/anthropic/claude-3.5-sonnet
 
 ### Add a new builtin tool
 
-1. Create `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs`.
-2. Implement `ITool` interface.
-3. Register in `apps/Harbor.App.Cli/Program.cs` — `builder.AddTool<YourTool>()`.
-4. Add tests in `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs`.
-5. `dotnet build && dotnet test`.
+1. Create `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` (sealed class, implements `ITool`).
+2. Register in `src/Harbor.Hosting/Modules/ToolsCatalog.cs` —
+   `tb.AddTool(lf => new YourTool(lf.CreateLogger<YourTool>()));`.
+3. Add a rule to `PermissionRuleset.Default`
+   (`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`).
+4. Add tests in `tests/Harbor.Tools.Builtin.Tests/YourToolTests.cs`.
+5. `dotnet build && dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build`.
 
-See [CLAUDE.md](../CLAUDE.md) for code example.
+See [TOOLS_CATALOG.md §5](./TOOLS_CATALOG.md#5-building-your-own-tool--webfetchtool-walkthrough) for the full walkthrough.
 
 ### Add a new LLM provider (JSON-only)
 
@@ -181,8 +189,8 @@ public class YourTests
 #### Step 1: Create the tool
 
 ```bash
-mkdir -p src/Harbor.Tools.Builtin/Time
-cat > src/Harbor.Tools.Builtin/Time/TimeTool.cs << 'EOF'
+mkdir -p src/Harbor.Tools.Builtin/Tools/Time
+cat > src/Harbor.Tools.Builtin/Tools/Time/TimeTool.cs << 'EOF'
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
@@ -222,17 +230,16 @@ EOF
 
 #### Step 2: Register in DI
 
-Edit `apps/Harbor.App.Cli/Hosting/HostBuilder.cs`:
+Edit `src/Harbor.Hosting/Modules/ToolsCatalog.cs` (`CreateToolRegistry`):
 
 ```csharp
-private static ToolRegistry CreateToolRegistry(IServiceProvider sp)
+internal static ToolRegistry CreateToolRegistry(
+    HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry)
 {
     var registry = new ToolRegistry();
-    var tb = new ToolRegistryBuilder(registry);
-    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-    tb.AddTool(() => new ReadTool(loggerFactory.CreateLogger<ReadTool>()));
+    var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
     // ... existing tools
-    tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));  // ← NEW
+    tb.AddTool(lf => new TimeTool(lf.CreateLogger<TimeTool>()));  // ← NEW
     registry.Freeze();
     return registry;
 }
@@ -286,7 +293,7 @@ EOF
 ```bash
 $ dotnet build
   Harbor.Tools.Builtin succeeded.
-  Harbor.Cli succeeded.
+  Harbor.App.Cli succeeded.
   Harbor.Tools.Builtin.Tests succeeded.
   0 Warning(s)  0 Error(s)
 ```
@@ -294,7 +301,8 @@ $ dotnet build
 #### Step 5: Run tests
 
 ```bash
-$ dotnet test tests/Harbor.Tools.Builtin.Tests --filter "FullyQualifiedName~TimeToolTests"
+$ dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build \
+    --treenode-filter "/*/*/TimeToolTests/*"
 
 Passed: 2
 Failed: 0
@@ -319,8 +327,8 @@ The current UTC time is 2026-07-16T14:23:45.1234567Z.
 # 0 warnings, 0 errors
 dotnet build -c Release
 
-# All tests pass
-dotnet test
+# Affected test projects pass (per-project; whole-slnx test runs break under MTP)
+dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build
 
 # Code review checklist (see CLAUDE.md §Code review checklist)
 # - [ ] CancellationToken threaded through
@@ -333,8 +341,8 @@ dotnet test
 Commit:
 
 ```bash
-git add src/Harbor.Tools.Builtin/Time/ tests/Harbor.Tools.Builtin.Tests/TimeToolTests.cs \
-        apps/Harbor.App.Cli/Hosting/HostBuilder.cs
+git add src/Harbor.Tools.Builtin/Tools/Time/ tests/Harbor.Tools.Builtin.Tests/TimeToolTests.cs \
+        src/Harbor.Hosting/Modules/ToolsCatalog.cs
 git commit -m "feat: add 'time' builtin tool returning current UTC time"
 ```
 
@@ -346,13 +354,12 @@ git commit -m "feat: add 'time' builtin tool returning current UTC time"
 #### Step 1: Reproduce in isolation
 
 ```bash
-$ dotnet test tests/Harbor.Core.Tests \
-    --filter "FullyQualifiedName~EventBusTests.Publish_DeadSubscriber_Removed" \
+$ dotnet test tests/Harbor.Core.Tests -c Release --no-build \
+    --treenode-filter "/*/*/EventBusTests/Publish_DeadSubscriber_Removed" \
     --logger "console;verbosity=detailed"
 
 Starting test execution, please wait...
-A total of 1 test files matched the specified pattern.
-[xUnit.net] ... Publish_DeadSubscriber_Removed FAILED.
+TUnit ... Publish_DeadSubscriber_Removed FAILED.
   Expected: 1
   But was:  0
   at EventBusTests.Publish_DeadSubscriber_Removed() in /path/tests/Harbor.Core.Tests/EventBusTests.cs:line 42
@@ -405,7 +412,8 @@ dead=0 healthy=1
 ```
 
 The dead subscriber was never called — looks like `PublishAsync` short-circuited
-*before* the throwing handler. Read `InMemoryEventBus.PublishAsync`:
+*before* the throwing handler. Read `InMemoryEventBus.PublishAsync`
+(`src/Harbor.Registries/Events/InMemoryEventBus.cs`):
 
 ```csharp
 public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
@@ -476,7 +484,8 @@ bus.Subscribe(async (e, ct) => { /* healthy */ await Task.CompletedTask; });
 Re-run:
 
 ```bash
-$ dotnet test tests/Harbor.Core.Tests --filter "Publish_DeadSubscriber_Removed"
+$ dotnet test tests/Harbor.Core.Tests -c Release --no-build \
+    --treenode-filter "/*/*/EventBusTests/Publish_DeadSubscriber_Removed"
 Passed: 1  Failed: 0
 ```
 
@@ -648,24 +657,34 @@ public sealed class HelloTool : ITool
 }
 EOF
 
-# 2. Restart Harbor — CsPluginLoader picks it up
+# 2. Restart Harbor — the plugin runtime compiles it on startup (see log line
+#    «Loaded N CS plugin(s)» in ~/.harbor/logs/harbor-cli-*.log)
 dotnet run --project apps/Harbor.App.Cli
-harbor> /plugins
-  hello  v1.0.0  Says hello
 ```
 
 #### Option B: DLL plugin (samples/plugins/)
 
 См. [PLUGIN_DEVELOPMENT.md §Migration from DLL](./PLUGIN_DEVELOPMENT.md#migration-from-dll-to-cs).
+Note: `~/.harbor/plugins/` only scans `*.cs` — compiled DLLs must be registered
+by host code or served out-of-process via `src/Harbor.Plugins.Host`.
 
-#### Option C: MCP server (planned v0.4)
+#### Option C: MCP server
 
-> **TODO: confirm with subagent #4** — `McpToolTool` is being built.
+Если ваш инструмент уже MCP-сервер, Harbor оборачивает его через builtin `mcp`.
+Опишите сервер в `~/.harbor/mcp.json` (или `<project>/.harbor/mcp.json`):
 
-```bash
-# Harbor will be able to wrap an MCP server as a Harbor tool
-harbor mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /tmp
+```jsonc
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${harborHome}"]
+    }
+  }
+}
 ```
+
+Детали: [TOOLS_CATALOG.md §9](./TOOLS_CATALOG.md#9-mcp-integration--adding-an-mcp-server).
 
 ### Workflow: profile a memory leak
 
@@ -676,11 +695,11 @@ If RSS grows over time on a long-running session:
 HARBOR_TUI=plain dotnet run --project apps/Harbor.App.Cli -- ask "Long task..."
 
 # 2. In another terminal, find the Harbor process
-ps aux | grep Harbor.Cli
+ps aux | grep Harbor.App.Cli
 
 # 3. Take a heap dump
 dotnet tool install -g dotnet-gcdump
-dotnet-gcdump collect -n Harbor.Cli -o harbor.dump
+dotnet-gcdump collect -n Harbor.App.Cli -o harbor.dump
 
 # 4. Analyze with PerfView or dotnet-heapstat
 dotnet-heapstat harbor.dump | sort -k 2 -n -r | head -20
@@ -723,7 +742,7 @@ See [CLAUDE.md](../CLAUDE.md) for full conventions.
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/apps/Harbor.App.Cli/bin/Debug/net10.0/Harbor.Cli.dll",
+      "program": "${workspaceFolder}/apps/Harbor.App.Cli/bin/Debug/net10.0/Harbor.App.Cli.dll",
       "args": ["ask", "Hello"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole",
@@ -843,11 +862,13 @@ dotnet-gcdump collect -n harbor
 - [ ] No `Assembly.Load` / `AssemblyLoadContext` collectible (использовать out-of-process plugins).
 - [ ] `dotnet build -c Release` — 0 IL2026 warnings.
 
-## SpectreTUI development
+## SpectreTUI development (contrib)
 
 Если меняете `contrib/tui/Harbor.Tui.SpectreTui/` — обязательно прочитайте [docs/SPECTRE_TUI_DEEP_DIVE.md](./SPECTRE_TUI_DEEP_DIVE.md):
 архитектура render-loop, layout tree, scroll conventions, и квесты из opencode/kilocode/pi-agent (diff-view, slash-completion, file-tree).
-Проект живёт в contrib с sprint-2: собирайте через `contrib/Contrib.slnx` или флаг `HarborWithSpectreTui` в основном решении.
+Проект живёт в contrib с sprint-2 и собирается через `contrib/Contrib.slnx`; при этом дефолтная CLI-сборка
+референсит альтернативные рендереры через `HarborWithSpectreTui` (включён по умолчанию). Вторая интерактивная
+оболочка — `src/Harbor.Tui.ConsoleEx/` (opt-in: `HARBOR_TUI=consoleex`, см. README проекта).
 
 ## Troubleshooting
 

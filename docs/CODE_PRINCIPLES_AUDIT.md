@@ -66,7 +66,7 @@ Findings NOT touched in this sprint (Sprint 3+ scope): §SOLID-001, §SOLID-002,
 
 ### §SOLID-001 — AgentLoop: нарушение Single Responsibility
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** medium  
 **Line:** ~16 (класс целиком, ~650 строк)
 
@@ -220,7 +220,7 @@ private static AgentMessage? DeserializeMessage(string sessionId, JsonElement el
 
 ### §OOP-004 — AgentLoop.RunAsync: OCP violation (switch on LlmEvent)
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** medium  
 **Line:** 199 (`switch (evt)`)
 
@@ -256,7 +256,7 @@ await foreach (var evt in client.StreamAsync(request, ct)) {
 
 ### §OOP-005 — ToolRegistry/ProviderRegistry: двойной путь (frozen vs concurrent)
 
-**Файлы:** `src/Harbor.Core/Tools/ToolRegistry.cs`, `src/Harbor.Core/Providers/ProviderRegistry.cs`  
+**Файлы:** `src/Harbor.Registries/Tools/ToolRegistry.cs`, `src/Harbor.Registries/Providers/ProviderRegistry.cs`  
 **Severity:** low  
 
 Каждый registry держит **две коллекции** — `ConcurrentDictionary` (для записи) и `FrozenDictionary?` (для чтения после `Freeze()`). Каждый метод (`GetAllTools`, `ResolveTools`, `GetTool`) имеет `if (_frozen is not null) { /* fast path */ } else { /* slow path */ }` — дублирование логики.
@@ -296,7 +296,7 @@ public sealed class ToolRegistry {
 
 ### §OOP-007 — CompactionService.ReserveTokens / KeepRecentTokens: mutable properties
 
-**Файл:** `src/Harbor.Core/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 89, 94, 99
 
@@ -409,7 +409,7 @@ Mutable dictionary как accumulator — нарушение immutability. Дл�
 
 > **Status:** ✅ RESOLVED (Sprint 1) — the `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch that logs failures at Warning level instead of letting them die as unobserved task exceptions.
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** **high**  
 **Line:** 620 (в `ToolContext.ReportProgress`)
 
@@ -552,7 +552,7 @@ private static Result<AgentMessage> DeserializeMessage(JsonElement element) {
 
 > **Status:** ✅ RESOLVED (Sprint 1) — `CheckAsync` and `GetRuleset` now pattern-match `Result<AgentName>` instead of calling `.Value` (which threw `InvalidOperationException` on invalid input). On failure, `CheckAsync` returns `Result.Failure<PermissionResponse>` and `GetRuleset` returns `PermissionRuleset.Empty` (its contract is best-effort lookup).
 
-**Файл:** `src/Harbor.Core/Permissions/PermissionService.cs`  
+**Файл:** `src/Harbor.Application/Permissions/PermissionService.cs`  
 **Severity:** **high**  
 **Line:** 35
 
@@ -840,7 +840,7 @@ public void Dispatch(UiMsg msg) {
 
 ### §PERF-008 — InMemoryEventBus.GetScrollback: drains channel
 
-**Файл:** `src/Harbor.Core/Events/InMemoryEventBus.cs`  
+**Файл:** `src/Harbor.Registries/Events/InMemoryEventBus.cs`  
 **Severity:** medium  
 **Line:** 140
 
@@ -898,7 +898,7 @@ private static readonly ConcurrentDictionary<string, List<TextSpan>> Cache = new
 
 ### §LOW-001 — AgentLoop.SnapshotMessages: List copy on every event
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** low  
 **Line:** 450
 
@@ -920,7 +920,7 @@ private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> m
 
 ### §LOW-002 — CompactionService.AppendFormattedMessage: GetRawText per tool call
 
-**Файл:** `src/Harbor.Core/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 316
 
@@ -1091,7 +1091,7 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 
 | Файл | Нарушения | Severity |
 |---|---|---|
-| `src/Harbor.Core/Agents/AgentLoop.cs` | §SOLID-001, §OOP-004, §FP-003, §LOW-001 | medium |
+| `src/Harbor.Application/Agents/AgentLoop.cs` | §SOLID-001, §OOP-004, §FP-003, §LOW-001 | medium |
 | `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs` | §OOP-001, §OOP-002, §FP-001, §PERF-001, §PERF-002, §AOT-001, §AOT-002, §ROP-004 | **high** |
 | `src/Harbor.Storage.Jsonl/JsonlSessionStore.cs` | §OOP-003, §OOP-008, §FP-002, §PERF-003, §PERF-004, §PERF-005, §ROP-001, §ROP-003, §AOT-001 | **high** |
 | `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs` | §SOLID-002, ~~§FP-005~~ (RESOLVED) | medium |
@@ -1102,10 +1102,10 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 | `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderContext.cs` | §LOW-005 | low |
 | `src/Harbor.Tui.Abstractions/State/UiStore.cs` | §PERF-007, ~~§FP-007~~ (RESOLVED) | medium |
 | `src/Harbor.Tui.Abstractions/State/TuiEffectHost.cs` | §FP-006 | **high** |
-| `src/Harbor.Core/Permissions/PermissionService.cs` | §ROP-002 | **high** |
-| `src/Harbor.Core/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
-| `src/Harbor.Core/Events/InMemoryEventBus.cs` | §PERF-008 | medium |
-| `src/Harbor.Core/Tools/ToolRegistry.cs` | §OOP-005, §GOF-001 | low |
+| `src/Harbor.Application/Permissions/PermissionService.cs` | §ROP-002 | **high** |
+| `src/Harbor.Application/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
+| `src/Harbor.Registries/Events/InMemoryEventBus.cs` | §PERF-008 | medium |
+| `src/Harbor.Registries/Tools/ToolRegistry.cs` | §OOP-005, §GOF-001 | low |
 | `src/Harbor.Tools.Builtin/Bash/BashTool.cs` | §PERF-006 | medium |
 
 ---
