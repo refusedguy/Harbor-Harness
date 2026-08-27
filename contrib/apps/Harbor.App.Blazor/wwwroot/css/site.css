@@ -101,9 +101,84 @@
     --transition-slow: 400ms ease;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   HDS v1 design tokens — Harbor Terminal catalog
+   (docs/design-system-report-20260827.html; single source of truth:
+   src/Harbor.DesignSystem TerminalColorPalette). Usable from any page.
+   ══════════════════════════════════════════════════════════════ */
+:root {
+    /* HDS role colors */
+    --hds-accent: #39bae6;
+    --hds-success: #7fd962;
+    --hds-warning: #ffb454;
+    --hds-error: #ff6b6b;
+    --hds-tool: #d2a6ff;
+    --hds-system: #f29668;
+    --hds-user: #b3b9c5;
+
+    /* HDS surfaces */
+    --hds-bg: #0a0e14;
+    --hds-panel: #0d1117;
+    --hds-surface: #131820;
+    --hds-surface2: #1a1f2b;
+    --hds-border: #1f2430;
+    --hds-muted: #5c6773;
+    --hds-text: #b3b9c5;
+
+    /* HDS spacing scale */
+    --hds-space-xs: 4px;
+    --hds-space-sm: 8px;
+    --hds-space-md: 12px;
+    --hds-space-lg: 16px;
+    --hds-space-xl: 24px;
+
+    /* HDS typography (JetBrains Mono for terminal, system stack for chrome) */
+    --hds-font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+    --hds-font-size-base: 12px;
+
+    /* HDS animation timing */
+    --hds-duration-micro: 150ms;
+    --hds-duration-standard: 300ms;
+    --hds-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --hds-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+/* Harbor Terminal palette — maps the shared semantic aliases onto the
+   HDS v1 catalog so every existing var(--…) consumer switches theme by
+   setting data-theme="harbor-terminal" on <html>. */
+[data-theme="harbor-terminal"] {
+    --bg: var(--hds-bg);
+    --bg-elevated: var(--hds-panel);
+    --bg-overlay: var(--hds-surface2);
+    --panel: var(--hds-surface);
+    --panel-hover: var(--hds-surface2);
+    --border: var(--hds-border);
+    --text: var(--hds-text);
+    --text-dim: var(--hds-muted);
+    --text-faint: var(--hds-muted);
+    --accent: var(--hds-accent);
+    --accent-blue: var(--hds-accent);
+    --accent-green: var(--hds-success);
+    --accent-yellow: var(--hds-warning);
+    --accent-orange: var(--hds-system);
+    --accent-red: var(--hds-error);
+
+    --role-user: var(--hds-accent);
+    --role-assistant: var(--hds-text);
+    --role-thinking: var(--hds-muted);
+    --role-tool: var(--hds-tool);
+    --role-tool-result: var(--hds-success);
+    --role-system: var(--hds-system);
+    --role-error: var(--hds-error);
+
+    /* Transitions follow HDS micro/standard timings */
+    --transition-fast: var(--hds-duration-micro) ease-out;
+    --transition-med: var(--hds-duration-standard) ease-out;
+    --transition-slow: var(--hds-duration-standard) ease-in;
+}
+
 /* Catppuccin-Latte (light) */
-[data-theme="latte"] {
-    --ctp-base: #eff1f5;
+[data-theme="latte"] {    --ctp-base: #eff1f5;
     --ctp-mantle: #e6e9ef;
     --ctp-crust: #dce0e8;
     --ctp-text: #4c4f69;
