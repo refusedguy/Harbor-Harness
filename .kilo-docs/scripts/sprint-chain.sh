@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set +m
 
 REPO="${1:-.}"
 cd "$REPO"
@@ -13,42 +14,34 @@ LOG_FILE=".kilo-docs/scripts/sprint-chain.log"
 log() { echo "[chain] $(date '+%d.%m %H:%M:%S') $*" | tee -a "$LOG_FILE"; }
 last_commits() { git log --oneline -5 --no-decorate 2>/dev/null || echo "no commits yet"; }
 kill_duplicates() {
-  # kill duplicate kilo-dispatch processes for the same prompt, keep oldest
   local pids
   pids=$(ps aux | grep -E "kilo-dispatch|kilo run" | grep -v grep | awk '{print $2}' | sort -u)
   for pid in $pids; do
     local cmdline
     cmdline=$(ps -p "$pid" -o args= 2>/dev/null || true)
     if [[ -z "$cmdline" ]]; then continue; fi
-    # if there are multiple processes with the same prompt, kill all but the oldest
     local count
     count=$(ps aux | grep -F "$cmdline" | grep -v grep | wc -l)
     if [[ $count -gt 1 ]]; then
       log "WARN: duplicate kilo process detected ($count instances): $cmdline"
-      # kill all but the first (oldest by PID)
       ps aux | grep -F "$cmdline" | grep -v grep | awk '{print $2}' | sort -n | tail -n +2 | xargs -r kill 2>/dev/null || true
       log "killed duplicates, kept oldest"
     fi
   done
 }
 
-# ── detect current sprint from branch name ───────────────────────────
-detect_current_sprint() {
-  local branch
-  branch="$(git branch --show-current 2>/dev/null || echo "")"
-  if [[ -n "$branch" ]]; then
-    # map branch → sprint name if there's a convention
-    case "$branch" in
-      *ui-final*|*ui-final*) echo "UI-FINAL" ;;
-      *ui-v2*|*ui-v2*)     echo "UI-V2" ;;
-      *multi-agent*)       echo "Multi-Agent" ;;
-      *perf*)              echo "Performance" ;;
-      *ide*)               echo "IDE-Integration" ;;
-      *security*)          echo "Security" ;;
-      *release*)           echo "Release-Engineering" ;;
-      *testing*)           echo "Testing-Strategy" ;;
-      *)                   echo "" ;;
-    esac
+dirty_count() { git status --porcelain | grep -vc '.nuke/' ; }
+
+update_status() {
+  local sprint="$1" state="$2"
+  local status_file=".kilo-docs/sprints/$sprint/status.json"
+  if [[ -f "$status_file" ]]; then
+    local tmp
+    tmp=$(mktemp)
+    jq --arg state "$state" --arg head "$(git rev-parse --short HEAD)" \
+       --arg last "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+       '.state = $state | .head = $head | .last_activity = $last' \
+       "$status_file" > "$tmp" && mv "$tmp" "$status_file"
   fi
 }
 
@@ -58,30 +51,15 @@ if [[ ! -f "$CHAIN_FILE" ]]; then
   exit 1
 fi
 
-# clean up duplicate kilo processes on startup
 kill_duplicates
-
-# show what we're working with
-CURRENT_SPRINT="$(detect_current_sprint)"
 log "=== sprint-chain starting ==="
 log "repo: $REPO"
 log "branch: $(git branch --show-current)"
 log "HEAD: $(git rev-parse --short HEAD)"
 log "last commits:"
 last_commits | while read -r line; do log "  $line"; done
-if [[ -n "$CURRENT_SPRINT" ]]; then
-  log "detected current sprint from branch: $CURRENT_SPRINT"
-fi
 
 # ── parse chain and run sprints ──────────────────────────────────────
-IN_CHAIN=false
-SKIP_UNTIL_CURRENT=false
-
-if [[ -n "$CURRENT_SPRINT" ]]; then
-  # skip sprints until we find the current one in the chain
-  SKIP_UNTIL_CURRENT=true
-fi
-
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   [[ "$line" =~ ^# ]] && continue
@@ -102,44 +80,56 @@ while IFS= read -r line; do
     continue
   fi
 
-  # skip already-completed sprints if we detected current sprint from branch
-  if [[ "$SKIP_UNTIL_CURRENT" == true ]]; then
-    if [[ "$SPRINT" == "$CURRENT_SPRINT" ]]; then
-      SKIP_UNTIL_CURRENT=false
-      log "=== resuming at sprint: $SPRINT (detected from branch) ==="
-    else
-      log "SKIP: $SPRINT (already done, branch is at $CURRENT_SPRINT)"
+  # skip if prompt file missing
+  if [[ ! -f "$PROMPT" ]]; then
+    log "WARN: prompt file missing for $SPRINT: $PROMPT"
+    continue
+  fi
+
+  # check status.json — skip if already done
+  STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
+  if [[ -f "$STATUS_FILE" ]]; then
+    STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "")
+    if [[ "$STATE" == "done" || "$STATE" == "failed" ]]; then
+      log "SKIP: $SPRINT (state=$STATE)"
       continue
     fi
   fi
 
   log "=== starting sprint: $SPRINT (model=$MODEL, prompt=$PROMPT) ==="
-  log "git status before:"
-  git status --short | head -20 | while read -r sl; do log "  $sl"; done
+  update_status "$SPRINT" "running"
 
-  # run the dispatch, capture output
+  # run dispatch, capture output
   DISPATCH_OUT=$(bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$BASE_SHA" -M 360 -i 300 2>&1) || true
   RC=${PIPESTATUS[0]:-$?}
 
-  # log dispatch output (last 30 lines)
+  # log dispatch output
   echo "$DISPATCH_OUT" | tail -30 | while read -r line; do log "  [kilo] $line"; done
 
-  # check progress
+  # verify finish
   NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo "$BASE_SHA")"
-  if [[ "$NEW_SHA" != "$BASE_SHA" ]]; then
-    COMMITS="$(git rev-list --count "$BASE_SHA"..HEAD 2>/dev/null || echo 0)"
-    log "✓ $SPRINT finished: $COMMITS new commits (base=$NEW_SHA)"
+  DIRTY=$(dirty_count)
+  LAST_MSG=$(git log -1 --format="%s" 2>/dev/null || echo "")
+  KILO_ALIVE=$(pgrep -fc '[k]ilo run' 2>/dev/null || echo 0)
+
+  if [[ "$NEW_SHA" != "$BASE_SHA" ]] && [[ "$DIRTY" -eq 0 ]] && [[ "$KILO_ALIVE" -eq 0 ]]; then
+    log "✓ $SPRINT finished: $(git rev-list --count "$BASE_SHA"..HEAD) new commits"
+    update_status "$SPRINT" "done"
     BASE_SHA="$NEW_SHA"
+    
+    # move prompt to done/
+    if [[ -d ".kilo-docs/sprints/$SPRINT/done" ]]; then
+      log "→ $SPRINT marked done"
+    fi
   else
-    log "⚠ $SPRINT finished: no new commits (RC=$RC), continuing chain"
+    log "⚠ $SPRINT did not finish cleanly (RC=$RC, head_changed=$([ "$NEW_SHA" != "$BASE_SHA" ] && echo yes || echo no), dirty=$DIRTY, kilo_alive=$KILO_ALIVE)"
+    update_status "$SPRINT" "failed"
   fi
 
-  # show last 5 commits after each sprint
   log "current HEAD: $(git rev-parse --short HEAD)"
   log "last commits:"
   last_commits | while read -r line; do log "  $line"; done
 
-  # clean up any duplicates kilo left behind
   kill_duplicates
 
 done < "$CHAIN_FILE"
