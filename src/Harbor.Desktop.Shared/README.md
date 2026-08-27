@@ -14,6 +14,9 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 - **`Services/RecentItemsService`**: most-recently-used items list persisted
   to `~/.harbor/recent.json`. Used by the command palette and the recent-files
   menu.
+- **`Locators/ViewModelLocator` (+ `IViewModelLocator`, `LocatorRegistration`,
+  `IShowPlaceholderFactory`)**: design-time-friendly VM resolution used by
+  platform views that construct view-models by contract.
 - **`Commands/BuiltInCommands`**: catalog of built-in command-palette item
   templates (Open Session, New Session, Branch, Toggle Theme, etc.).
 - **`Commands/SlashCommands`**: catalog of slash commands (`/help`, `/clear`,
@@ -21,8 +24,9 @@ desktop app) and `Microsoft.Extensions.Logging.Abstractions`.
 
 ## Dependency rules
 
-✅ **Allowed**: `Harbor.Desktop.Abstractions`, `Markdig`,
-`Microsoft.Extensions.Logging.Abstractions`.
+✅ **Allowed**: `Harbor.Desktop.Abstractions`, `Harbor.Ui.Framework`,
+`Markdig`, `Microsoft.Extensions.Logging.Abstractions`,
+`Microsoft.Extensions.DependencyInjection.Abstractions`.
 
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,
 `Microsoft.Maui.*`, `Microsoft.AspNetCore.Components.*`).

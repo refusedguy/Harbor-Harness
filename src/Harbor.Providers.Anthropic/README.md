@@ -14,21 +14,15 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 
 ## Public API
 
-- `AnthropicLlmClient` — implements `ILlmClient` from Harbor.Abstractions
-- `AnthropicLlmClient` — concrete HTTP client
-- `AnthropicMessageConverter` — translates `Message` <-> Anthropic Messages API JSON
-- `AnthropicStreamParser` — SSE parser for streaming responses
+- `AnthropicLlmClient` — the only public client type: implements `ILlmClient` from Harbor.Abstractions, owns SSE parsing and Messages-API JSON conversion internally (via `Harbor.Providers.Shared` helpers linked as source)
+- `AnthropicConfig` — base URL / API version / beta features knobs
 
 ## Usage
 
-Registered via DI in the composition root (e.g. `Harbor.App.Cli/Hosting/HostBuilder.cs`):
-
-```csharp
-services.AddHttpClient<AnthropicLlmClient>(c => c.BaseAddress = new Uri(baseUri));
-services.AddSingleton<ILlmClient, AnthropicLlmClient>();
-```
-
-Then resolved by `ProviderRegistry` when an agent run targets the `anthropic` provider.
+Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` via
+`pb.AddProvider(new AnthropicProviderFactory(httpFactory, authStore))` and resolved by
+`ProviderRegistry` when an agent run targets the `anthropic` provider id from
+`providers/anthropic.json`.
 
 ## Configuration
 

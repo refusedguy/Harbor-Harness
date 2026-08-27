@@ -9,10 +9,17 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
   `SessionListViewModelBase`, `ProviderBrowserViewModelBase`,
   `SettingsViewModelBase`, `CodeEditorViewModelBase`, `DiffViewModelBase`,
   `TokenUsageViewModelBase`, `CommandPaletteViewModelBase`,
-  `ToastNotificationViewModelBase`. Each holds the observable state for its
+  `ToastNotificationViewModelBase`, plus newer bases for theme settings,
+  focus sessions and provider/model pickers
+  (`ThemeSettingsViewModelBase`, `FocusSessionViewModelBase`,
+  `ProviderModelPickerViewModelBase`). Each holds the observable state for its
   screen; platform VMs derive from these and add platform-specific bindings.
   All derive from <see cref="Harbor.Ui.Framework.ViewModels.StoreSubscriberViewModel" />,
   which provides store-subscription + selector-based projection.
+- **Configuration** (`Configuration/`): `IAppConfigStore` / `ICommonConfigStore`
+  and their JSON implementations + the shared config DTOs (`AppConfigBase`,
+  `CommonConfig`, `CompositeConfig`, `ConfigJsonContext`).
+- **Messages** (`Messages/CrossVmMessages.cs`): typed cross-view-model events.
 - **Service interfaces** (`Services/`): `IDispatcherAdapter`, `IThemeService`,
   `IFilePicker`, `IDialogService`, `IToastService`. Each platform implements
   these with its own native primitive.
@@ -24,7 +31,9 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
 
 ## Dependency rules
 
-✅ **Allowed**: `Harbor.Abstractions`, `Harbor.Core`, `Harbor.Tui.Abstractions`,
+✅ **Allowed**: `Harbor.Abstractions`, `Harbor.Core`,
+`Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ its submodules:
+`.Abstractions`, `.State`, `.Services`, `.Sessions`, `.ViewModels`),
 `CommunityToolkit.Mvvm`, `Microsoft.Extensions.Logging.Abstractions`.
 
 ❌ **Forbidden**: any UI framework (`Avalonia*`, `System.Windows.*`,

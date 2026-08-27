@@ -12,14 +12,16 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
 
 ## Public API
 
-- `ReflectionPluginInstantiator` — reflects over `CompiledPluginAssembly`, finds `IPlugin` types with parameterless ctors, activates them
-- `PluginLifecycle` — `Initialize` / `ShutdownAsync` helpers
+- `ReflectionPluginInstantiator` — parameterless ctor; `Instantiate(CompiledPluginAssembly)` returns `Result<IReadOnlyList<LoadedPlugin>>`, reflecting over the assembly for public `IPlugin` types with parameterless ctors
+- `PluginLifecycle` — static `Initialize` / `ShutdownAsync` helpers returning `Result`
 
 ## Usage
 
 ```csharp
-var instantiator = new ReflectionPluginInstantiator(logger);
-await foreach (var loaded in instantiator.InstantiateAsync(compiled, ct)) { ... }
+var instantiator = new ReflectionPluginInstantiator();
+var result = instantiator.Instantiate(compiled);   // Result<IReadOnlyList<LoadedPlugin>>
+if (result.IsSuccess)
+    PluginLifecycle.Initialize(result.Value[0], pluginContext);
 ```
 
 ## Pipeline position

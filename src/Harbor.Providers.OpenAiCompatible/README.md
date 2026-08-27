@@ -15,19 +15,19 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 ## Public API
 
 - `OpenAiCompatibleLlmClient` — implements `ILlmClient` from Harbor.Abstractions
-- `OpenAiCompatibleLlmClient` — concrete HTTP client
-- `OpenAiCompatibleOptions` — base URL, API key, model name, custom headers
+- `ProviderConfig` — JSON preset mapping: base URL, auth env var, api type, `modelMapping`, headers (`ProviderConfig.cs:8`)
+- `ModelMapping` — field names for `/models` parsing (`id`, `displayName`, `contextWindow`) (`ProviderConfig.cs:83`)
+- `EnvVarAuthResolver` — resolves the per-provider API key from its env var (`ProviderConfig.cs:107`)
+- `DynamicModelCatalog` — live `/models` fetching through the preset's mapping (`ProviderConfig.cs:143`)
+- `Compat/IProviderCompatFlag` + `DeepSeekReasonerCompatFlag`, `GroqMaxTokensCompatFlag` — Strategy-pattern quirk flags replacing string switches on provider ids
+- `OpenAiSseParser` *(internal)* — incremental SSE parse used by the client
 
 ## Usage
 
-Registered via DI in the composition root (e.g. `Harbor.App.Cli/Hosting/HostBuilder.cs`):
-
-```csharp
-services.AddHttpClient<OpenAiCompatibleLlmClient>(c => c.BaseAddress = new Uri(baseUri));
-services.AddSingleton<ILlmClient, OpenAiCompatibleLlmClient>();
-```
-
-Then resolved by `ProviderRegistry` when an agent run targets the `openai-compatible` provider.
+Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` and driven by the
+JSON presets in `providers/*.json` (`apiType: "openai-compatible"`). Every OpenAI-compatible
+provider (kilocode, openrouter, deepseek, groq, mistral, xai, together,
+fireworks, cerebras, vllm) is a JSON file — no code.
 
 ## Configuration
 

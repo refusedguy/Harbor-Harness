@@ -4,12 +4,12 @@ Contracts shared across the entire plugin pipeline. Contains the leaf-level inte
 
 ## Layer
 
-Infrastructure — plugin pipeline layer. References `Harbor.Abstractions` (Domain) + `Harbor.Tui.Abstractions` (for the panel/TUI-plugin contracts surfaced on `IPluginLoadHost`). Never references `Harbor.Core`.
+Infrastructure — plugin pipeline layer. References `Harbor.Abstractions` + `Harbor.Terminal.Abstractions` (for the panel/TUI-plugin contracts surfaced on `IPluginLoadHost`). Never references `Harbor.Core`.
 
 ## Dependencies
 
-- `Harbor.Abstractions` (Domain)
-- `Harbor.Tui.Abstractions` (panel contracts)
+- `Harbor.Abstractions`
+- `Harbor.Terminal.Abstractions` (panel contracts)
 - `Microsoft.CodeAnalysis.CSharp` (for `Diagnostic` type)
 - `Microsoft.Extensions.Logging.Abstractions`
 - `Microsoft.Extensions.DependencyInjection.Abstractions`
@@ -34,7 +34,7 @@ Implement these contracts in your own pipeline layers, or use the Harbor-provide
 ```csharp
 public sealed class MyPluginSource : IPluginSource
 {
-    public IAsyncEnumerable<PluginScript> DiscoverAsync(CancellationToken ct) { ... }
+    public IAsyncEnumerable<PluginScript> GetScriptsAsync(CancellationToken ct = default) { ... }
 }
 ```
 

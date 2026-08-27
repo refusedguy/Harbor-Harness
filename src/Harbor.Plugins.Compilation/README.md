@@ -22,7 +22,7 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
 
 ```csharp
 IPluginCompiler compiler = new CachingCompiler(
-    new RoslynPluginCompiler(referenceCollector, logger),
+    new RoslynPluginCompiler(references),   // ctor takes only PluginAssemblyReferences
     cacheDir, logger);
 var result = await compiler.CompileAsync(script, ct);
 ```

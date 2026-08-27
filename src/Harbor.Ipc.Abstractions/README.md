@@ -44,7 +44,6 @@ The rich domain types (`Session`, `AgentMessage`, `ToolDescriptor`, `ModelInfo`,
 
 ## See also
 
-- `docs/IPC.md` — full architecture, transport, security, performance notes.
 - `Harbor.Ipc.InProcess/README.md` — default in-process client.
 - `Harbor.Ipc.Server/README.md` — MessagePack RPC server.
 - `Harbor.Ipc.Client/README.md` — remote IPC client.

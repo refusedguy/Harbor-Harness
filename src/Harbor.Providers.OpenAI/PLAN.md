@@ -4,29 +4,29 @@
 
 ## Done
 
-- [x] OpenAiLlmClient implementing ILlmClient
+- [x] OpenAILlmClient implementing ILlmClient
 - [x] Streaming message conversion (assistant deltas -> AgentEvent.StreamDelta)
 - [x] Tool-call serialization
 - [x] Error handling via Result<T>
 - [x] Chat Completions API
-- [x] Responses API for o1/o3 reasoning models
+- [x] Responses API for reasoning models (o1/o3/o4-mini, or `ForceResponsesApi`) — selected per request (`OpenAILlmClient.cs:80-83`)
 - [x] Tool-call streaming
+- [x] Cancellation token propagation through all HTTP calls (`OpenAILlmClient.cs:59`, operation-canceled handling at :108)
+- [x] Token-usage reporting on the final step event (`StepFinishEvent(usage)` at `OpenAILlmClient.cs:424`)
 
 ## TODO
 
-- [ ] Retry + exponential backoff on 429 / 5xx
-- [ ] Cancellation token propagation through all HTTP calls
-- [ ] Token-usage reporting (prompt/completion/cache) on final event
+- [ ] Wire centralized retry for 429 / 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
 - [ ] Vision content blocks
 - [ ] Structured outputs (JSON schema)
 
 ## Known issues
 
 - Cold-start latency on first request (HTTP connection pool warm-up).
-- No native prompt-caching hints emitted (only Harbor.Providers.OpenAI supports them).
+- OpenAI prompt caching is server-side and automatic; no client-side cache hints are emitted.
 
 ## Next priorities
 
-1. **P0**: Tighten cancellation semantics; verify CT flows into HttpClient.SendAsync
-2. **P1**: Add retry policy for transient 5xx
-3. **P2**: Surface token-usage telemetry as an event
+1. **P2**: Vision content blocks
+2. **P2**: Structured outputs (JSON schema)
+3. **P2**: Decorate `ILlmClient` with the shared retry policy

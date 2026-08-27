@@ -1,12 +1,12 @@
 # Harbor.Ipc.Client
 
-Out-of-process `IHarborClient` implementation. Talks to a remote `HarborIpcServer` via MessagePack-over-pipe (Windows) or MessagePack-over-Unix-domain-socket (Linux/Mac). Used when `HARBOR_MODE=ipc-client`.
+Out-of-process `IHarborClient` implementation. Talks to a remote `HarborIpcServer` via MessagePack-over-pipe (Windows), MessagePack-over-Unix-domain-socket (Linux/Mac), or MessagePack-over-TCP (cross-host). Used when `HARBOR_MODE=ipc-client`.
 
 ## When to use
 
 - **Client mode.** UI process wants to talk to a server running elsewhere.
-- When you want the UI process to be small (~5 MB) and not pull in `Harbor.Application` / `Harbor.Registries` / `Harbor.Tools.Builtin` / `Harbor.Providers.*` (which together total ~150 MB).
-- When the UI is written in a non-.NET language (use the MessagePack protocol directly — see `docs/IPC.md` §Custom-clients).
+- When you want the UI process to be small (~5 MB) and not pull in `Harbor.Application` / `Harbor.Registries` / `Harbor.Tools.Builtin` / `Harbor.Providers.*`.
+- When the UI is written in a non-.NET language (use the MessagePack protocol directly).
 
 ## When NOT to use
 
@@ -48,8 +48,10 @@ Out-of-process `IHarborClient` implementation. Talks to a remote `HarborIpcServe
 | `IpcHarborClient.cs`               | `IHarborClient` impl. Maps each call to a `HarborRequest`, sends via RPC, awaits response, deserializes domain payload. |
 | `IpcHarborClientExtensions.cs`     | `UseIpcHarborClient()` DI helper.                                                                                       |
 | `Protocol/MessagePackRpcClient.cs` | Request/response multiplexer with demultiplexed event stream.                                                           |
+| `Protocol/ReconnectableRpcClient.cs` | Auto-reconnect decorator that re-establishes the pipe after a drop and re-subscribes event listeners.                 |
 | `Protocol/EventSubscription.cs`    | Adapter from RPC client's event channel to `IAsyncEnumerable<HarborEvent>`.                                             |
 | `Transport/ClientPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) outbound connect.                                                 |
+| `Transport/TcpClientTransport.cs`  | Outbound TCP connect (Tailscale / cross-host scenarios).                                                                |
 
 ## Registration
 
@@ -70,6 +72,5 @@ await client.ConnectAsync();
 
 ## See also
 
-- `docs/IPC.md` — full architecture, transport, security, performance notes.
 - `Harbor.Ipc.Abstractions/README.md` — protocol contract.
 - `Harbor.Ipc.Server/README.md` — server.

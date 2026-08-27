@@ -12,9 +12,11 @@ the concrete impl.
 |---------------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Agents/AgentRegistry.cs`       | `IAgentRegistry`    | Thread-safe agent-definition registry. Backed by `NonBlocking.ConcurrentDictionary` for lock-free scaling. Also exposes `AgentRegistryBuilder` for fluent registration. |
 | `Tools/ToolRegistry.cs`         | `IToolRegistry`     | Thread-safe tool registry with a `FrozenDictionary` fast-lookup snapshot taken after startup. Also exposes `ToolRegistryBuilder`.                                       |
+| `Tools/CompositeToolRegistry.cs`| `IToolRegistry`     | Fan-in over several tool sources (builtins + plugins) without re-freezing.                                                                                              |
 | `Tools/InMemoryMcpRegistry.cs`  | `IMcpRegistry`      | In-memory MCP server registry. Tracks registrations but cannot actually invoke — production hosts swap in a real stdio JSON-RPC client.                                 |
 | `Providers/ProviderRegistry.cs` | `IProviderRegistry` | Thread-safe provider registry with lazy `ILlmClient` instantiation and a frozen lookup table. Also exposes `ProviderRegistryBuilder`.                                   |
 | `Events/InMemoryEventBus.cs`    | `IEventBus`         | In-memory pub/sub event bus. Bounded scrollback buffer (DropOldest `Channel<T>`), lock-free snapshot reads, pooled dead-subscriber collection.                          |
+| `Events/SamplingMiddleware.cs`, `Events/TypeFilterMiddleware.cs` | middleware | Composable bus middleware (type filters, sampling) wrapping an inner bus.                          |
 
 ## Why this project exists
 
@@ -49,11 +51,15 @@ over `Assembly.GetReferencedAssemblies()`.
 
 ## Namespaces
 
-The registry impls kept their original namespaces for backward
-compatibility. The AgentRegistry/ToolRegistry/ProviderRegistry/InMemoryEventBus
-already lived in `Harbor.Abstractions.*` namespaces (so the interfaces
-and impls shared a namespace — a deliberate choice that makes discovery
-easier). `InMemoryMcpRegistry` lives in `Harbor.Core.Tools` (also unchanged).
+Registries use two namespace families:
+
+* `Harbor.Abstractions.{Agents, Tools, Providers, Events}` — kept from the
+  pre-split era so that interfaces and their original implementations shared
+  a namespace (`AgentRegistry`, `ToolRegistry`, `ProviderRegistry`,
+  `InMemoryEventBus`).
+* `Harbor.Registries.{Events, Tools}` — newer members live here:
+  `CompositeToolRegistry`, `InMemoryMcpRegistry`, `SamplingMiddleware`,
+  `TypeFilterMiddleware`.
 
 ## Performance intent
 

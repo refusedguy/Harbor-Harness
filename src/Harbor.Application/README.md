@@ -14,8 +14,14 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Sessions/SystemPromptBuilder.cs`  | Assembles the system prompt: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files. |
 | `Sessions/MessageConverter.cs`     | Adapter from domain `AgentMessage`s to LLM-specific `LlmMessage`s.                                                      |
 | `Permissions/PermissionService.cs` | Specification-pattern permission evaluator: looks up the agent's `PermissionRuleset` and applies allow/deny/ask.        |
-| `Onboarding/OnboardingWizard.cs`   | First-run interactive wizard: pick provider → enter API key → pick model → pick agent → save config.                    |
-| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets`.                                           |
+| `Sessions/CachingSystemPromptBuilder.cs` | Memoizing decorator over `ISystemPromptBuilder` — re-assembles the prompt only when inputs change.                    |
+| `Sessions/TokenTracker.cs`         | `ITokenTracker` impl — running token accounting per session/turn.                                                       |
+| `Sessions/WorkspaceContextSource.cs` | Injects workspace context files into the system prompt.                                                                |
+| `Providers/ProviderHealthCheck.cs` | `IProviderHealthCheck` — probes provider endpoints before onboarding/picking a model.                                   |
+| `Resilience/RetryPolicyExtensions.cs` | Central retry policy helpers for transient provider errors (429/5xx).                                                   |
+| `Telemetry/`                       | Usage telemetry plumbing consumed by the app hosts.                                                                      |
+| `Onboarding/OnboardingWizard.cs`   | First-run interactive wizard: pick provider → enter API key → pick live model → pick agent → save config.                |
+| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (single preset catalog backing `/model`).    |
 
 ## Why this project exists
 
@@ -34,7 +40,8 @@ Application projects (`Harbor.Plugins.Runtime`, `Harbor.Scripting.*`).
 
 ## Dependency rules
 
-* **May reference:** `Harbor.Abstractions` only.
+* **May reference:** `Harbor.Abstractions`, `Harbor.Extensions`,
+  `Harbor.Diagnostics.Abstractions`.
 * **Must not reference:** `Harbor.Registries`, `Harbor.Core`,
   `Harbor.Plugins.*`, `Harbor.Scripting.*`, `Harbor.Providers.*`,
   `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app.
@@ -49,12 +56,13 @@ over `Assembly.GetReferencedAssemblies()`.
 
 ## Namespaces
 
-All types kept their original `Harbor.Core.*` namespaces for backward
-compatibility — `Harbor.Core.Sessions`, `Harbor.Core.Agents`,
-`Harbor.Core.Permissions`, `Harbor.Core.Onboarding`,
-`Harbor.Core.Configuration`. The C# compiler resolves namespace contents
-across referenced assemblies, so existing `using` directives resolve
-unchanged when consumers switch from `Harbor.Core` to `Harbor.Application`.
+Types declare namespaces matching their assembly of residence (ROP-D Z1):
+`Harbor.Application.Agents`, `Harbor.Application.Sessions`,
+`Harbor.Application.Permissions`, `Harbor.Application.Onboarding`,
+`Harbor.Application.Configuration`, `Harbor.Application.Resilience`,
+`Harbor.Application.Providers`, `Harbor.Application.Telemetry`. Consumers that
+switch from the old `Harbor.Core` facade must update their `using` directives
+once when they migrate.
 
 ## Performance intent
 

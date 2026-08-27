@@ -9,13 +9,13 @@ Infrastructure — plugin pipeline layer. Facade over `Harbor.Plugins.Hosting` (
 ## Dependencies
 
 - `Harbor.Plugins.Hosting` (facaded)
-- `Harbor.Tui.Abstractions` (legacy logging reference)
+- `Harbor.Terminal.Abstractions` (panel contracts referenced by the loader path)
 - `Microsoft.CodeAnalysis.CSharp`
 - `Microsoft.Extensions.Logging.Abstractions`
 
 ## Public API
 
-- `CsPluginLoader` — `[Obsolete]` wrapper around `PluginHostBuilder`/`PluginHost`
+- `CsPluginLoader` — `[Obsolete]` wrapper around `PluginHost`/`PluginHostBuilder`
 - `CompiledPlugin` — legacy record type returned by `CsPluginLoader`
 - `PluginCompilationResult` — legacy result struct
 
@@ -25,14 +25,14 @@ Infrastructure — plugin pipeline layer. Facade over `Harbor.Plugins.Hosting` (
 
 ```csharp
 var host = new PluginHostBuilder().WithSource(...).Build();
-await host.LoadAllAsync(ct);
+await host.LoadAllAsync(loadHost, ct);   // load host passed per call, see PluginHost.LoadAllAsync
 ```
 
 Legacy (still works, emits `Obsolete` warning):
 
 ```csharp
-var loader = new CsPluginLoader(logger);
-await loader.DiscoverAndLoadAsync(loadHost, ct);
+var loader = new CsPluginLoader(loadHost, logger);   // (IPluginLoadHost, ILogger<CsPluginLoader>, ...)
+await loader.DiscoverAndLoadAsync(ct);
 ```
 
 ## Pipeline position

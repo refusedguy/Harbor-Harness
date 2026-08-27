@@ -13,20 +13,15 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 
 ## Public API
 
-- `OllamaLlmClient` — implements `ILlmClient` from Harbor.Abstractions
-- `OllamaLlmClient` — concrete HTTP client
-- `OllamaNdjsonReader` — incremental NDJSON line parser over HTTP stream
+- `OllamaLlmClient` — the only public client type: implements `ILlmClient` from Harbor.Abstractions, NDJSON line parsing happens inline while streaming
+- `OllamaConfig` — base URL / model knobs
 
 ## Usage
 
-Registered via DI in the composition root (e.g. `Harbor.App.Cli/Hosting/HostBuilder.cs`):
-
-```csharp
-services.AddHttpClient<OllamaLlmClient>(c => c.BaseAddress = new Uri(baseUri));
-services.AddSingleton<ILlmClient, OllamaLlmClient>();
-```
-
-Then resolved by `ProviderRegistry` when an agent run targets the `ollama` provider.
+Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` via
+`pb.AddProvider(new OllamaProviderFactory(httpFactory))` and resolved by
+`ProviderRegistry` when an agent run targets the `ollama` provider id from
+`providers/ollama.json`. No API key is needed for a local daemon (`OLLAMA_HOST`).
 
 ## Configuration
 

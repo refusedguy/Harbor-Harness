@@ -8,17 +8,19 @@
 - [x] Streaming message conversion (assistant deltas -> AgentEvent.StreamDelta)
 - [x] Tool-call serialization
 - [x] Error handling via Result<T>
-- [x] Configurable base URL + headers
-- [x] Streaming SSE parsing
+- [x] Configurable base URL + headers via JSON presets (`ProviderConfig`)
+- [x] Streaming SSE parsing (`OpenAiSseParser` + `Harbor.Providers.Shared/SsePump.cs`)
 - [x] Tool-call support
-- [x] Provider-specific quirk flags (e.g. some providers don't support system role)
+- [x] Live `/models` catalog mapping via `DynamicModelCatalog` / `ModelMapping` (PROD-UI-0 preset work)
+- [x] Provider-specific quirk flags as a Strategy instead of string switches:
+      `Compat/IProviderCompatFlag.cs` with `DeepSeekReasonerCompatFlag` (:49) and
+      `GroqMaxTokensCompatFlag` (:71), cataloged in `ProviderCompatFlags`
+- [x] Usage forwarding from stream end events (`OpenAiCompatibleLlmClient.cs:84`)
 
 ## TODO
 
-- [ ] Retry + exponential backoff on 429 / 5xx
-- [ ] Cancellation token propagation through all HTTP calls
-- [ ] Token-usage reporting (prompt/completion/cache) on final event
-- [ ] Per-provider quirk profiles (OpenRouter, DeepSeek, Groq, etc.)
+- [ ] Wire centralized retry for 429 / 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
+- [ ] Extend quirk-flag coverage beyond DeepSeek/Groq where providers deviate further
 
 ## Known issues
 
@@ -27,7 +29,5 @@
 
 ## Next priorities
 
-1. **P0**: Tighten cancellation semantics; verify CT flows into HttpClient.SendAsync
-2. **P1**: Add retry policy for transient 5xx
-3. **P2**: Surface token-usage telemetry as an event
-4. **P2**: Per-provider quirk profiles
+1. **P2**: Decorate `ILlmClient` with the shared retry policy
+2. **P2**: Broaden quirk-flag profiles as new compatible providers are onboarded

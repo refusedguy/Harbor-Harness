@@ -13,21 +13,18 @@ Infrastructure — LLM provider implementation. References `Harbor.Abstractions`
 
 ## Public API
 
-- `OpenAiLlmClient` — implements `ILlmClient` from Harbor.Abstractions
-- `OpenAiLlmClient` — concrete HTTP client
-- `OpenAiMessageConverter` — translates `Message` <-> OpenAI Chat Completions JSON
-- `OpenAiResponsesConverter` — alternate converter for the Responses API
+- `OpenAILlmClient` — implements `ILlmClient` from Harbor.Abstractions; owns both Chat Completions and Responses wire formats internally
+- `OpenAIConfig` — client configuration incl. `ForceResponsesApi`
+- `OpenAIModels` — well-known model constants
 
 ## Usage
 
-Registered via DI in the composition root (e.g. `Harbor.App.Cli/Hosting/HostBuilder.cs`):
-
-```csharp
-services.AddHttpClient<OpenAiLlmClient>(c => c.BaseAddress = new Uri(baseUri));
-services.AddSingleton<ILlmClient, OpenAiLlmClient>();
-```
-
-Then resolved by `ProviderRegistry` when an agent run targets the `openai` provider.
+Registered in `src/Harbor.Hosting/Modules/ProviderFactories.cs` and resolved by
+`ProviderRegistry` when an agent run targets the `openai` provider id from
+`providers/openai.json`. The client itself picks the API per request:
+reasoning models (o1/o3/o4-mini) or `_config.ForceResponsesApi = true` route
+through the Responses API, everything else uses Chat Completions
+(`OpenAILlmClient.cs:80`).
 
 ## Configuration
 

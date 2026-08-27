@@ -8,24 +8,22 @@
 - [x] Streaming message conversion (assistant deltas -> AgentEvent.StreamDelta)
 - [x] Tool-call serialization
 - [x] Error handling via Result<T>
-- [x] NDJSON streaming
-- [x] Local model name resolution
+- [x] NDJSON streaming (parsing inline in `OllamaLlmClient.cs`)
+- [x] Local model name resolution; no API key needed (`OLLAMA_HOST` daemon)
+- [x] Cancellation token propagation through all HTTP calls
+- [x] Token-usage reporting on the final step event (`OllamaLlmClient.cs:325`)
 
 ## TODO
 
-- [ ] Retry + exponential backoff on 429 / 5xx
-- [ ] Cancellation token propagation through all HTTP calls
-- [ ] Token-usage reporting (prompt/completion/cache) on final event
-- [ ] Pull / list models endpoint
+- [ ] Wire centralized retry for transient 5xx (helpers exist in `Harbor.Application/Resilience/RetryPolicyExtensions.cs`)
+- [ ] Pull / list models endpoint from code paths that need it outside `/models`
 - [ ] Embeddings endpoint
 
 ## Known issues
 
-- Cold-start latency on first request (HTTP connection pool warm-up).
-- No native prompt-caching hints emitted (only Harbor.Providers.Ollama supports them).
+- Cold-start latency while the local daemon loads a model into VRAM/RAM.
 
 ## Next priorities
 
-1. **P0**: Tighten cancellation semantics; verify CT flows into HttpClient.SendAsync
-2. **P1**: Add retry policy for transient 5xx
-3. **P2**: Surface token-usage telemetry as an event
+1. **P2**: Embeddings endpoint support
+2. **P2**: Decorate `ILlmClient` with the shared retry policy

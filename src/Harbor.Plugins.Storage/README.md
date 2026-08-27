@@ -22,9 +22,9 @@ Infrastructure — plugin pipeline layer. Depends only on `Harbor.Plugins.Abstra
 
 ```csharp
 var source = new FileSystemPluginSource(
-    Path.Combine(AppContext.BaseDirectory, "plugins"),
+    new[] { Path.Combine(AppContext.BaseDirectory, "plugins") },
     logger);
-await foreach (var script in source.DiscoverAsync(ct)) { ... }
+await foreach (var script in source.GetScriptsAsync(ct)) { ... }
 ```
 
 ## Pipeline position
