@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using CSharpFunctionalExtensions;
 using Harbor.Application.Sessions;
 
 namespace Harbor.Application.Tests;
@@ -205,7 +207,8 @@ public class FileClaimRegistryTests : IDisposable
         await Assert.That(Directory.Exists(_dir) ? Directory.GetFiles(_dir, "*.claim").Length : 0).IsEqualTo(0);
     }
 
-    /// <summary>Spawns a short-lived child process and returns its (reaped) pid.</summary>
+    /// <summary>
+    /// Spawns a short-lived child process and returns its (reaped) pid.</summary>
     private static int StartChildAndReap()
     {
         bool isWindows = OperatingSystem.IsWindows();
@@ -216,5 +219,119 @@ public class FileClaimRegistryTests : IDisposable
         using var child = Process.Start(psi)!;
         child.WaitForExit(5000);
         return child.Id;
+    }
+
+    /// <summary>
+    /// E2E multi-"process" simulation: independent registry instances share
+    /// NOTHING but the claims directory, so every grant/fail decision rides
+    /// on CreateNew atomicity alone. Each parallel round admits exactly one
+    /// winner; serialized hand-off rounds terminate with zero orphan files.
+    /// </summary>
+    [Test]
+    public async Task IndependentRegistries_Race_OneWinner_PerRound_ZeroOrphans()
+    {
+        const int contendersPerRound = 8;
+        const int rounds = 6;
+        string scopeName = $"multiN{Guid.NewGuid():N}";
+        var registries = Enumerable.Range(0, contendersPerRound).Select(_ => New()).ToArray();
+        try
+        {
+            int grants = 0;
+            for (int round = 0; round < rounds; round++)
+            {
+                ConcurrentBag<Result<FileClaim>> attempts = [];
+                await Parallel.ForAsync(
+                    0,
+                    contendersPerRound,
+                    new ParallelOptions { MaxDegreeOfParallelism = contendersPerRound },
+                    async (_, _) => attempts.Add(await registries[Random.Shared.Next(contendersPerRound)]
+                        .AcquireAsync(scopeName, CancellationToken.None)));
+
+                var winners = attempts.Where(a => a.IsSuccess).ToArray();
+                await Assert.That(winners.Length).IsEqualTo(1);
+                grants++;
+
+                // Live self-pid stamp is refused by every OTHER instance too.
+                var losser = await registries[round % contendersPerRound].AcquireAsync(scopeName, CancellationToken.None);
+                await Assert.That(losser.IsFailure).IsTrue();
+
+                foreach (var w in winners)
+                {
+                    w.Value.Dispose();
+                }
+            }
+
+            await Assert.That(grants).IsEqualTo(rounds);
+            await Assert.That(Directory.GetFiles(_dir, "*.claim").Length).IsEqualTo(0);
+        }
+        finally
+        {
+            foreach (var r in registries)
+            {
+                r.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// E2E steal storm: K independent instances hammer one dead-owner claim
+    /// past grace. Deterministic outcome for same-process contenders — the
+    /// first recreated stamp carries OUR live pid, freezing all later
+    /// candidates — so at most one simultaneous grant and no leftovers.
+    /// </summary>
+    [Test]
+    public async Task StealStorm_DeadOwner_AtMostOneGrant_NoOrphans()
+    {
+        const int stormSize = 10;
+        string scopeName = $"stormN{Guid.NewGuid():N}";
+        int deadPid = StartChildAndReap();
+
+        Directory.CreateDirectory(_dir);
+        await File.WriteAllTextAsync(
+            Path.Combine(_dir, $"{scopeName}.claim"),
+            string.Create(CultureInfo.InvariantCulture,
+                $"pid={deadPid};token=frozen;ts={DateTime.UtcNow.AddSeconds(-2):o}"),
+            CancellationToken.None);
+
+        var registries = Enumerable.Range(0, stormSize).Select(_ => New(grace: TimeSpan.FromMilliseconds(50))).ToArray();
+        List<FileClaim> winners = [];
+        try
+        {
+            await Parallel.ForAsync(
+                0,
+                stormSize,
+                new ParallelOptions { MaxDegreeOfParallelism = stormSize },
+                async (_, _) =>
+                {
+                    var attempt = await registries[Random.Shared.Next(stormSize)].AcquireAsync(scopeName, CancellationToken.None);
+                    if (attempt.IsSuccess)
+                    {
+                        lock (winners)
+                        {
+                            winners.Add(attempt.Value);
+                        }
+                    }
+                });
+
+            await Assert.That(winners.Count).IsLessThanOrEqualTo(1);
+
+            foreach (var w in winners)
+            {
+                w.Dispose();
+            }
+
+            // Either the lone winner released its own file, or no contender
+            // ever won (kernel-side jitter) and the frozen seed remains —
+            // both states leave at most the one original artifact behind.
+            string[] leftovers = Directory.GetFiles(_dir, "*.claim");
+            await Assert.That(leftovers.Length).IsLessThanOrEqualTo(1);
+        }
+        finally
+        {
+            foreach (var r in registries)
+            {
+                r.Dispose();
+            }
+        }
     }
 }
