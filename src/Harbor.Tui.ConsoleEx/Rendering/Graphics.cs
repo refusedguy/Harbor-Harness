@@ -55,8 +55,8 @@ public static class Graphics
             {
                 return (w, h);
             }
+            return null;
         }
-
         return null;
     }
 

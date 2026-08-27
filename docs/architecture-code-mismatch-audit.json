@@ -1,0 +1,377 @@
+{
+  "audit_meta": {
+    "repository": "/mnt/projects/Harbor-Harness",
+    "framework": ".NET 10",
+    "audit_date": "2026-08-27",
+    "auditor": "subagent (static analysis)",
+    "scope": "docs/ architecture and research documents vs actual src/ code",
+    "methodology": "Read docs, then verified each structural/behavioral claim against source code via grep, wc -l, and targeted file reads."
+  },
+  "summary": {
+    "total_findings": 24,
+    "by_severity": {
+      "critical": 6,
+      "high": 8,
+      "medium": 7,
+      "low": 3
+    },
+    "by_document": {
+      "FEATURE_RESEARCH.md": 7,
+      "ROADMAP.md": 5,
+      "ANTIPATTERNS.md": 4,
+      "CODE_PRINCIPLES_AUDIT.md": 3,
+      "ALTERNATIVE_UIS.md": 3,
+      "ARCHITECTURE.md": 1,
+      "XML_DOC_AUDIT.md": 1
+    },
+    "top_theme": "FEATURE_RESEARCH.md and several other docs are based on a stale extracted snapshot and reference a non-existent src/Harbor.Tui.Avalonia project. Multiple 'known bugs' cited in ANTIPATTERNS.md and CODE_PRINCIPLES_AUDIT.md have already been fixed in code but the docs present them as live issues. Line-count and location claims in ROADMAP.md tech-debt table are materially wrong."
+  },
+  "findings": [
+    {
+      "id": "DOC-001",
+      "severity": "critical",
+      "document": "FEATURE_RESEARCH.md",
+      "section": "3.6 Action plan — bringing Orca's UX to Harbor",
+      "claim": "Harbor already has src/Harbor.Tui.Avalonia/ scaffolded with Avalonia 11.2.7 + CommunityToolkit.Mvvm 8.4. The project contains MainWindow.axaml, AvaloniaTuiRenderer.cs, Program.cs, etc.",
+      "reality": "The project src/Harbor.Tui.Avalonia does NOT exist. The actual Avalonia desktop app is apps/Harbor.App.Avalonia (confirmed by find and ls). It targets Avalonia 12.1, not 11.2.7 (confirmed by Harbor.App.Avalonia.csproj). The entire Section 3.6 action plan — including the NuGet package list, design-token stylesheet, and component build-out — is addressed to a phantom project.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/src -name 'Harbor.Tui.Avalonia*' → 0 results",
+        "ls /mnt/projects/Harbor-Harness/apps/ → Harbor.App.Avalonia, Harbor.App.Cli",
+        "grep 'Avalonia 12.1' apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj",
+        "FEATURE_RESEARCH.md lines 322-334 describe a file tree that does not exist in the repo"
+      ],
+      "mismatch_type": "stale_reference"
+    },
+    {
+      "id": "DOC-002",
+      "severity": "critical",
+      "document": "FEATURE_RESEARCH.md",
+      "section": "Header / throughout",
+      "claim": "Document claims to be current research mapping Orca/Pi/Kilocode/OpenCode features onto Harbor's .NET 10 architecture.",
+      "reality": "The doc is a stale extracted copy. Line 11 says 'Output scope: single document, ~2 000 lines, lives at /home/z/my-project/extracted/docs/FEATURE_RESEARCH.md'. Line 5 says paths are not updated and optional components moved to contrib/. The entire doc references pre-sprint-2 paths and a project layout that has since been reorganized (e.g. apps/ split from contrib/apps/).",
+      "evidence": [
+        "FEATURE_RESEARCH.md line 11: '/home/z/my-project/extracted/docs/FEATURE_RESEARCH.md'",
+        "FEATURE_RESEARCH.md line 5: 'paths are not updated'",
+        "ROADMAP.md line 8: 'Sprint-2 note: optional UI/scripting components moved to contrib/'"
+      ],
+      "mismatch_type": "stale_document"
+    },
+    {
+      "id": "DOC-003",
+      "severity": "critical",
+      "document": "FEATURE_RESEARCH.md",
+      "section": "3.6.2 Add the missing libraries",
+      "claim": "Recommends adding NuGet packages (Markdown.Avalonia 11.0.3-a1, AvaloniaEdit 11.0.6, LiveChartsCore 2.0.0-rc5.4, etc.) to Harbor.Tui.Avalonia.csproj.",
+      "reality": "Since Harbor.Tui.Avalonia.csproj does not exist, these package recommendations cannot be applied as written. The actual Avalonia app (apps/Harbor.App.Avalonia) already includes AvaloniaEdit, Markdown.Avalonia, and other packages at different versions (confirmed by the .csproj and obj/Generated files listing AvaloniaEdit and MarkdownRenderer).",
+      "evidence": [
+        "apps/Harbor.App.Avalonia/obj/Generated/ contains AvaloniaEdit and MarkdownRenderer generated files",
+        "FEATURE_RESEARCH.md lines 361-433 list packages for a non-existent csproj"
+      ],
+      "mismatch_type": "stale_reference"
+    },
+    {
+      "id": "DOC-004",
+      "severity": "high",
+      "document": "ROADMAP.md",
+      "section": "Tech Debt — God-objects still pending decomposition",
+      "claim": "apps/Harbor.App.Avalonia/Services/SessionManager.cs is 492 lines and should be moved to Ui.Framework.",
+      "reality": "There is no SessionManager.cs in apps/Harbor.App.Avalonia/Services/. The actual SessionManager is at src/Harbor.Ui.Framework.Sessions/Sessions/SessionManager.cs and is 426 lines, not 492. It has already been moved to Ui.Framework per the R31 decomposition noted elsewhere in ROADMAP.md.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/apps/Harbor.App.Avalonia -name 'SessionManager.cs' → 0 results",
+        "find /mnt/projects/Harbor-Harness/src -name 'SessionManager.cs' → src/Harbor.Ui.Framework.Sessions/Sessions/SessionManager.cs",
+        "wc -l src/Harbor.Ui.Framework.Sessions/Sessions/SessionManager.cs → 426"
+      ],
+      "mismatch_type": "wrong_location_and_size"
+    },
+    {
+      "id": "DOC-005",
+      "severity": "high",
+      "document": "ROADMAP.md",
+      "section": "Tech Debt — God-objects still pending decomposition",
+      "claim": "apps/Harbor.App.Cli/Hosting/HostBuilder.cs is 644 lines.",
+      "reality": "The actual HostBuilder.cs is 114 lines. The tech-debt table is materially wrong.",
+      "evidence": [
+        "wc -l /mnt/projects/Harbor-Harness/apps/Harbor.App.Cli/Hosting/HostBuilder.cs → 114"
+      ],
+      "mismatch_type": "wrong_size"
+    },
+    {
+      "id": "DOC-006",
+      "severity": "high",
+      "document": "ROADMAP.md",
+      "section": "Tech Debt — God-objects still pending decomposition",
+      "claim": "Harbor.Providers.OpenAI/OpenAILlmClient.cs is 656 lines; Harbor.Providers.Anthropic/AnthropicLlmClient.cs is 562 lines.",
+      "reality": "OpenAILlmClient.cs is 519 lines; AnthropicLlmClient.cs is 494 lines. Both are smaller than claimed.",
+      "evidence": [
+        "wc -l /mnt/projects/Harbor-Harness/src/Harbor.Providers.OpenAI/OpenAILlmClient.cs → 519",
+        "wc -l /mnt/projects/Harbor-Harness/src/Harbor.Providers.Anthropic/AnthropicLlmClient.cs → 494"
+      ],
+      "mismatch_type": "wrong_size"
+    },
+    {
+      "id": "DOC-007",
+      "severity": "high",
+      "document": "ROADMAP.md",
+      "section": "Metrics",
+      "claim": "Source projects (src/): 51 (+26 in contrib/); Test projects: 27.",
+      "reality": "Actual src/ projects: 51 (verified by find). Actual test projects: 28 (verified by find), not 27. contrib/ has 7 tui + 2 apps + 1 scripting = 10, not 26.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/src -name '*.csproj' | wc -l → 51",
+        "find /mnt/projects/Harbor-Harness/tests -name '*.csproj' | wc -l → 28",
+        "find /mnt/projects/Harbor-Harness/contrib -name '*.csproj' | wc -l → 10"
+      ],
+      "mismatch_type": "wrong_count"
+    },
+    {
+      "id": "DOC-008",
+      "severity": "high",
+      "document": "ANTIPATTERNS.md",
+      "section": "OOP / SOLID — 3. Mutable singleton state",
+      "claim": "OpenAiCompatibleLlmClient._toolCallIndexToId is a known instance-level mutable singleton bug (high severity).",
+      "reality": "The field _toolCallIndexToId does NOT exist in the current code (grep returns 0 matches). The bug was fixed: per-call local state (ChunkStreamState) is now used inside StreamAsync. The doc presents a resolved bug as a live antipattern.",
+      "evidence": [
+        "grep -n '_toolCallIndexToId' /mnt/projects/Harbor-Harness/src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs → no matches",
+        "OpenAiCompatibleLlmClient.cs line 74: 'var chunkState = new ChunkStreamState();' — per-call state"
+      ],
+      "mismatch_type": "resolved_bug_presented_as_live"
+    },
+    {
+      "id": "DOC-009",
+      "severity": "high",
+      "document": "ANTIPATTERNS.md",
+      "section": "OOP / SOLID — 2. Switch on type (OCP violation)",
+      "claim": "OpenAiCompatibleLlmClient.BuildRequest has a switch (ProviderId.Value) OCP violation.",
+      "reality": "No switch on ProviderId.Value exists in the current OpenAiCompatibleLlmClient (grep returns 0 matches). Provider quirks are now handled via IProviderCompatFlag strategy injected via ProviderConfig.Quirks.",
+      "evidence": [
+        "grep -n 'switch.*ProviderId' /mnt/projects/Harbor-Harness/src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs → no matches",
+        "OpenAiCompatibleLlmClient.cs imports Harbor.Providers.OpenAiCompatible.Compat"
+      ],
+      "mismatch_type": "resolved_bug_presented_as_live"
+    },
+    {
+      "id": "DOC-010",
+      "severity": "high",
+      "document": "ANTIPATTERNS.md",
+      "section": "OOP / SOLID — 1. God class",
+      "claim": "AgentLoop is currently a god class (650 lines, 8 responsibilities).",
+      "reality": "AgentLoop.cs is 757 lines, not 650. More importantly, the doc claims it has 8 responsibilities including tool dispatch, streaming coalescing, and event publishing. The current code has extracted ToolDispatcher (338 lines) and StreamingCoalescer, and uses CachingSystemPromptBuilder and RetryPolicy. The class is still large but the specific responsibilities listed are outdated.",
+      "evidence": [
+        "wc -l /mnt/projects/Harbor-Harness/src/Harbor.Application/Agents/AgentLoop.cs → 757",
+        "wc -l /mnt/projects/Harbor-Harness/src/Harbor.Application/Agents/ToolDispatcher.cs → 338",
+        "AgentLoop.cs XML doc: 'Decomposition (Task R32): streaming-buffer coalescing and tool-execution dispatch were extracted'"
+      ],
+      "mismatch_type": "outdated_size_and_responsibilities"
+    },
+    {
+      "id": "DOC-011",
+      "severity": "medium",
+      "document": "ANTIPATTERNS.md",
+      "section": "ROP — 6. Returning null instead of Result<T>",
+      "claim": "MessageConverter.DeserializeMessage returns null instead of Result<T>.",
+      "reality": "MessageConverter does not have a DeserializeMessage method at all. It has ToLlmMessages which returns IReadOnlyList<LlmMessage>. The null-return bug was in JsonlSessionStore.DeserializeMessage, which has been fixed to return Result<AgentMessage>.",
+      "evidence": [
+        "grep -n 'DeserializeMessage' /mnt/projects/Harbor-Harness/src/Harbor.Application/Sessions/MessageConverter.cs → no matches",
+        "MessageConverter.cs is 106 lines and contains only ToLlmMessages and ConvertParts"
+      ],
+      "mismatch_type": "wrong_file_and_method"
+    },
+    {
+      "id": "DOC-012",
+      "severity": "medium",
+      "document": "CODE_PRINCIPLES_AUDIT.md",
+      "section": "1. OOP / SOLID — §SOLID-001",
+      "claim": "AgentLoop is ~650 lines with 8 mixed responsibilities (orchestration, streaming coalescing, tool-call accumulation, tool execution dispatch, error handling, event publishing, permission gating, steering queue draining).",
+      "reality": "AgentLoop is 757 lines. Tool dispatch and streaming coalescing have been extracted into separate classes (ToolDispatcher, StreamingCoalescer). The RunAsync method no longer contains inline tool execution dispatch or streaming buffer management. The audit is from 2026-07-17 and the code has been refactored since.",
+      "evidence": [
+        "AgentLoop.cs line 25: 'Decomposition (Task R32): streaming-buffer coalescing and tool-execution dispatch were extracted'",
+        "wc -l AgentLoop.cs → 757"
+      ],
+      "mismatch_type": "outdated_audit"
+    },
+    {
+      "id": "DOC-013",
+      "severity": "medium",
+      "document": "CODE_PRINCIPLES_AUDIT.md",
+      "section": "4. ROP — §ROP-002",
+      "claim": "PermissionService.CheckAsync throws InvalidOperationException on invalid agent name via .Value on Result<AgentName>.",
+      "reality": "The current PermissionService.CheckAsync uses AgentName.TryCreate(agentName).Bind(_agents.GetAgent).Bind(...) with no .Value read on the failure path. The bug was fixed. The doc correctly marks it RESOLVED in the status table, but the detailed code example below still shows the old buggy code as if it were current.",
+      "evidence": [
+        "PermissionService.cs lines 58-60: 'return AgentName.TryCreate(agentName).Bind(_agents.GetAgent).Bind(agent => EvaluateActionAsync(...))'",
+        "CODE_PRINCIPLES_AUDIT.md line 551-553: 'Status: ✅ RESOLVED' but code block at lines 560-562 still shows the old .Value crash pattern"
+      ],
+      "mismatch_type": "resolved_bug_shown_as_current_code"
+    },
+    {
+      "id": "DOC-014",
+      "severity": "medium",
+      "document": "CODE_PRINCIPLES_AUDIT.md",
+      "section": "5. Performance — §PERF-008",
+      "claim": "InMemoryEventBus.GetScrollback drains the channel via ReadAllAsync().ToBlockingEnumerable(), emptying it for late subscribers.",
+      "reality": "The current InMemoryEventBus uses a fixed-capacity AgentEvent[] ring buffer. GetScrollback copies the requested tail under a lock into an exact-size array. The channel-drain bug was fixed. The doc's status table marks it resolved, but the detailed code example still shows the old buggy implementation.",
+      "evidence": [
+        "InMemoryEventBus.cs lines 16-31: XML doc describes the old bug and the fix",
+        "InMemoryEventBus.cs lines 371-389: actual GetScrollback uses ring buffer + lock + array copy"
+      ],
+      "mismatch_type": "resolved_bug_shown_as_current_code"
+    },
+    {
+      "id": "DOC-015",
+      "severity": "medium",
+      "document": "ALTERNATIVE_UIS.md",
+      "section": "1. Big comparison table; 9. Open questions",
+      "claim": "Avalonia renderer uses Avalonia 12.1 + Skia. Table lists ~60 MB RSS.",
+      "reality": "The actual project apps/Harbor.App.Avalonia uses Avalonia 12.1 (verified). However, the doc's architecture diagram (Section 2) shows Harbor.Tui.Avalonia as a separate project in the PRESENTATION layer, which does not exist. The diagram also omits Harbor.Ui.Framework* projects which are the actual shared UI layer.",
+      "evidence": [
+        "apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj contains 'Avalonia 12.1' references",
+        "ALTERNATIVE_UIS.md line 42: 'Avalonia 12.1 + Skia'",
+        "ALTERNATIVE_UIS.md lines 99-155: architecture diagram shows non-existent Harbor.Tui.Avalonia"
+      ],
+      "mismatch_type": "diagram_shows_non_existent_project"
+    },
+    {
+      "id": "DOC-016",
+      "severity": "medium",
+      "document": "ALTERNATIVE_UIS.md",
+      "section": "1a. Interactive TUI 4-way comparison",
+      "claim": "SpectreTui uses Spectre.Tui v0.50 and is the default interactive renderer.",
+      "reality": "SpectreTui is indeed the default interactive renderer (verified in TuiMode.cs:97). However, the underlying library is Spectre.Console + custom TUI framework, not a package called 'Spectre.Tui v0.50'. The version number appears fabricated.",
+      "evidence": [
+        "TuiMode.cs line 97: 'return \"spectre-tui\";'",
+        "contrib/tui/Harbor.Tui.SpectreTui/Harbor.Tui.SpectreTui.csproj — actual package references differ from claimed 'Spectre.Tui v0.50'"
+      ],
+      "mismatch_type": "fabricated_version"
+    },
+    {
+      "id": "DOC-017",
+      "severity": "medium",
+      "document": "ROADMAP.md",
+      "section": "Completed — UI Component Decomposition (R28-R31)",
+      "claim": "StatusBadge, ChatBubble, SessionRow implemented in 3 platforms (Avalonia / Blazor / WPF) with identical prop names + shared StatusMappers helpers.",
+      "reality": "There is no Blazor or WPF implementation of these components in the current repo. Blazor is in contrib/apps/Harbor.App.Blazor but the shared components StatusBadge/ChatBubble/SessionRow are only in apps/Harbor.App.Avalonia/Views/Components/. The claim of 3-platform parity is aspirational, not actual.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/contrib/apps -name '*.razor' | head -5 → confirms Blazor exists but has no shared components",
+        "find /mnt/projects/Harbor-Harness/src -path '*Wpf*' -name '*.xaml' → no WPF project in src/",
+        "apps/Harbor.App.Avalonia/Views/Components/ contains StatusBadge, ChatBubble, SessionRow"
+      ],
+      "mismatch_type": "aspirational_claim_as_completed"
+    },
+    {
+      "id": "DOC-018",
+      "severity": "medium",
+      "document": "ROADMAP.md",
+      "section": "Completed — Business Logic Extraction (R30-R31)",
+      "claim": "Moved platform-agnostic logic out of Harbor.App.Avalonia into Harbor.Ui.Framework: ChatMessageRenderer, ChatStreamingPresenter, SessionContext, SessionFactory, SessionSwitcher, SessionGitTracker.",
+      "reality": "SessionContext, SessionFactory, SessionSwitcher, and SessionGitTracker are in Harbor.Ui.Framework.Sessions (verified). However, ChatMessageRenderer and ChatStreamingPresenter do not exist as separate classes in Harbor.Ui.Framework.Rendering. The actual rendering lives in ViewModels and Controls within apps/Harbor.App.Avalonia.",
+      "evidence": [
+        "ls /mnt/projects/Harbor-Harness/src/Harbor.Ui.Framework.Rendering/ → empty or non-existent",
+        "ls /mnt/projects/Harbor-Harness/src/Harbor.Ui.Framework.Sessions/Sessions/ → SessionContext, SessionFactory, SessionManager, SessionSwitcher, TokenTracker"
+      ],
+      "mismatch_type": "partial_completion_claimed_as_full"
+    },
+    {
+      "id": "DOC-019",
+      "severity": "medium",
+      "document": "ARCHITECTURE.md",
+      "section": "Solution structure diagram",
+      "claim": "Shows Harbor.Tui.Avalonia as a separate in-solution project in the PRESENTATION layer.",
+      "reality": "Harbor.Tui.Avalonia does not exist. The actual desktop GUI project is apps/Harbor.App.Avalonia. The architecture diagram is stale and misleading.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/src -name 'Harbor.Tui.Avalonia*' → 0 results",
+        "ARCHITECTURE.md lines 61-66 list 'Harbor.App.Avalonia (cross-platform desktop GUI)' but diagram at lines 59-110 shows Harbor.Tui.Avalonia"
+      ],
+      "mismatch_type": "diagram_shows_non_existent_project"
+    },
+    {
+      "id": "DOC-020",
+      "severity": "medium",
+      "document": "ROADMAP.md",
+      "section": "Completed — Plugin System (R30 fix) + Plugin Host Decomposition",
+      "claim": "8 plugin projects: Harbor.Plugins.{Abstractions, Storage, Compilation, Instantiation, Registration, Hosting, Runtime} + Harbor.Plugins.Host.",
+      "reality": "There are indeed 8 plugin projects (verified). However, the claim about Roslyn-based CS-source pipeline replacing AssemblyLoadContext needs nuance: CsPluginLoader exists, but the legacy DLL path is NOT just for 'legacy samples' — the Plugins.Host exe uses MCP stdio server for out-of-process plugins, which is a different architecture than described.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/src -maxdepth 1 -name 'Harbor.Plugins.*' -type d → 8 dirs",
+        "src/Harbor.Plugins.Runtime/CsPluginLoader.cs exists",
+        "src/Harbor.Plugins.Host/Program.cs exists with McpPluginLoadHost"
+      ],
+      "mismatch_type": "oversimplified_architecture_description"
+    },
+    {
+      "id": "DOC-021",
+      "severity": "medium",
+      "document": "ROADMAP.md",
+      "section": "v0.6.0 — MCP Integration",
+      "claim": "MCP client — собственная реализация (не NuGet) в src/Harbor.Tools.Builtin/Tools/Mcp/.",
+      "reality": "The MCP client implementation is indeed in src/Harbor.Tools.Builtin/Tools/Mcp/ and does not use a NuGet package. However, the docs imply this is a 'completed' milestone when the ROADMAP status says only the client is done and transports/resources/prompts/OAuth are still pending. The framing in the completed section could mislead readers into thinking full MCP integration is done.",
+      "evidence": [
+        "find /mnt/projects/Harbor-Harness/src/Harbor.Tools.Builtin/Tools/Mcp -name '*.cs' | head -10",
+        "ROADMAP.md lines 147-155: only client, stdio, and config are checked; HTTP/SSE/resources/prompts/OAuth are unchecked"
+      ],
+      "mismatch_type": "completion_framing_misleading"
+    },
+    {
+      "id": "DOC-022",
+      "severity": "low",
+      "document": "ANTIPATTERNS.md",
+      "section": "OOP / SOLID — 3. Mutable singleton state",
+      "claim": "OpenAiCompatibleLlmClient._toolCallIndexToId is a known instance-level mutable (high severity).",
+      "reality": "Same as DOC-008. The antipattern example shows the old buggy code. The current code uses per-call ChunkStreamState. The doc should be updated to show the current pattern or remove the Harbor status note.",
+      "evidence": [
+        "ANTIPATTERNS.md lines 112-134 show the old _toolCallIndexToId bug",
+        "Current OpenAiCompatibleLlmClient.cs has no such field"
+      ],
+      "mismatch_type": "stale_code_example"
+    },
+    {
+      "id": "DOC-023",
+      "severity": "low",
+      "document": "XML_DOC_AUDIT.md",
+      "section": "Summary",
+      "claim": "Total members audited: 2861; With XML doc: 2021 (70%); Without XML doc: 840 (29%).",
+      "reality": "This is a point-in-time snapshot and is inherently stale. The file does not state when the audit was run. Given the rapid iteration (multiple sprints per week), these numbers are likely outdated. The doc should include a timestamp and methodology.",
+      "evidence": [
+        "XML_DOC_AUDIT.md has no date header",
+        "ROADMAP.md shows 51 src projects with ongoing refactoring — member counts change frequently"
+      ],
+      "mismatch_type": "unstamped_snapshot"
+    },
+    {
+      "id": "DOC-024",
+      "severity": "low",
+      "document": "ALTERNATIVE_UIS.md",
+      "section": "6. Performance characteristics",
+      "claim": "Avalonia RSS idle: ~60 MB; Startup time: ~700 ms; Cold publish size: ~40 MB.",
+      "reality": "These are unmeasured estimates presented as measured facts. The doc says 'All numbers measured on Linux x64, .NET 10' but provides no date, no hardware specs, and no methodology. Given Avalonia was recently upgraded from 11.2.7 to 12.1, these numbers are certainly stale.",
+      "evidence": [
+        "ALTERNATIVE_UIS.md lines 427-445: performance table with no date or hardware",
+        "ROADMAP.md line 230: 'Pre-existing Avalonia 12 headless test failures' — confirms recent Avalonia upgrade"
+      ],
+      "mismatch_type": "unverified_performance_claims"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "P0",
+      "action": "Archive or rewrite FEATURE_RESEARCH.md. The entire document is based on a stale extracted snapshot from /home/z/my-project/extracted/. It references a non-existent src/Harbor.Tui.Avalonia project and recommends NuGet packages for a phantom csproj. Either delete it or rewrite against the actual apps/Harbor.App.Avalonia project."
+    },
+    {
+      "priority": "P0",
+      "action": "Update ROADMAP.md tech-debt table line counts. HostBuilder.cs is 114 lines (not 644), SessionManager is 426 lines in Ui.Framework.Sessions (not 492 in Avalonia), OpenAILlmClient is 519 lines (not 656), AnthropicLlmClient is 494 lines (not 562)."
+    },
+    {
+      "priority": "P1",
+      "action": "Refresh ANTIPATTERNS.md and CODE_PRINCIPLES_AUDIT.md. At least 4 cited live bugs (_toolCallIndexToId, ProviderId switch, PermissionService .Value crash, MessageConverter.DeserializeMessage) have been fixed. Update the Harbor status notes to point to current code, or remove the entries if the fixes are stable."
+    },
+    {
+      "priority": "P1",
+      "action": "Fix ARCHITECTURE.md and ALTERNATIVE_UIS.md diagrams. Replace non-existent Harbor.Tui.Avalonia with apps/Harbor.App.Avalonia. Add Harbor.Ui.Framework* projects to the PRESENTATION/APPLICATION boundary diagram since they are the actual shared UI layer."
+    },
+    {
+      "priority": "P2",
+      "action": "Stamp all audit docs with date and commit hash. XML_DOC_AUDIT.md and ALTERNATIVE_UIS.md performance table lack timestamps. Add a 'last verified against commit X' footer to every doc that claims code facts."
+    },
+    {
+      "priority": "P2",
+      "action": "Reconcile the '3-platform parity' claim in ROADMAP.md. StatusBadge/ChatBubble/SessionRow are only in Avalonia today. Either implement them in Blazor/WPF or change the doc to 'Avalonia-only, Blazor/WPF planned'."
+    }
+  ]
+}

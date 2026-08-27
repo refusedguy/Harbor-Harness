@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor Future Sprints — Competitive & Technical Analysis</title>
+<style>
+  body { background:#0a0e14; color:#b3b9c5; font-family:monospace; padding:20px; }
+  .ok { color:#7fd962; } .err { color:#ff6b6b; } .warn { color:#ffb454; } .accent { color:#39bae6; }
+  .card { background:#0d1117; border:1px solid #1f2430; border-radius:4px; padding:12px; margin:8px 0; }
+  .title { color:#5c6773; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  h1 { color:#39bae6; font-size:20px; margin:0 0 8px; }
+  h2 { color:#39bae6; font-size:16px; margin:16px 0 8px; }
+  h3 { color:#b3b9c5; font-size:14px; margin:12px 0 6px; }
+  .sub { color:#5c6773; font-size:12px; margin-bottom:16px; }
+  ul { margin:8px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  code { background:#131820; border:1px solid #1f2430; border-radius:3px; padding:2px 6px; font-size:11px; color:#d2a6ff; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #1f2430; }
+  th { color:#5c6773; font-weight:normal; }
+  .highlight { background:rgba(57,186,230,.08); border-left:2px solid #39bae6; padding:8px; margin:8px 0; }
+  .priority { display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:600; margin-right:6px; }
+  .p1 { background:rgba(127,217,98,.15); color:#7fd962; border:1px solid rgba(127,217,98,.3); }
+  .p2 { background:rgba(255,180,84,.15); color:#ffb454; border:1px solid rgba(255,180,84,.3); }
+  .p3 { background:rgba(210,166,255,.15); color:#d2a6ff; border:1px solid rgba(210,166,255,.3); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Harbor Future Sprints — Technical Analysis</h1>
+  <div class="sub">6 исследований: multi-agent, IDE integration, performance, security, release engineering, testing</div>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint Roadmap</div>
+  <table>
+    <tr><th>Sprint</th><th>Focus</th><th>Priority</th><th>Source</th></tr>
+    <tr><td><span class="accent">UI-V2</span></td><td>Animations, Command Palette, Themes, Sidebar, Web Polish, Killer Features</td><td><span class="priority p1">P0</span></td><td>docs/next-sprint-ui-v2-20260827.html</td></tr>
+    <tr><td><span class="accent">Multi-Agent</span></td><td>Fleet Manager, worktree isolation, shared context, conflict resolution</td><td><span class="priority p1">P0</span></td><td>/home/nbook/multi-agent-orchestration-analysis.md</td></tr>
+    <tr><td><span class="accent">Performance</span></td><td>60fps rendering, zero-alloc hot paths, SIMD, data virtualization</td><td><span class="priority p1">P0</span></td><td>docs/performance-patterns-analysis.md</td></tr>
+    <tr><td><span class="accent">IDE Integration</span></td><td>/ide IPC bridge, diff provider abstraction, inline editing</td><td><span class="priority p2">P1</span></td><td>docs/IDE_INTEGRATION_PATTERNS.md</td></tr>
+    <tr><td><span class="accent">Security</span></td><td>Named permission profiles, OS sandbox abstraction, audit logging</td><td><span class="priority p2">P1</span></td><td>docs/security-sandboxing-analysis.md</td></tr>
+    <tr><td><span class="accent">Release Engineering</span></td><td>Homebrew/Chocolatey/WinGet, auto-updater, GitHub Actions CI</td><td><span class="priority p2">P1</span></td><td>release-engineering analysis</td></tr>
+    <tr><td><span class="accent">Testing Strategy</span></td><td>Golden files, Verify.Avalonia, allocation-budget CI gates</td><td><span class="priority p2">P1</span></td><td>testing-strategies analysis</td></tr>
+  </table>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 1: UI-V2 (immediate)</div>
+  <p><strong>Goal:</strong> Make Harbor visually competitive with modern AI coding tools.</p>
+
+  <h3>Priority 1: Animations & Transitions</h3>
+  <ul>
+    <li>Panel fade-in/slide-in: 150ms fast, 300ms normal, ease-out</li>
+    <li>Tool cards slide-in + fade</li>
+    <li>Approval gate pulse/warn glow</li>
+    <li>Status bar smooth transitions between states</li>
+    <li>Timeline smooth scroll + opacity transitions</li>
+    <li>Spring physics для panel resizing</li>
+  </ul>
+
+  <h3>Priority 2: Command Palette & Navigation</h3>
+  <ul>
+    <li>Command Palette (ctrl+p) с fuzzy search + suggested commands</li>
+    <li>Quick-switch slots для recent sessions</li>
+    <li>Leader-key system для power users</li>
+    <li>Vim mode toggle для composer</li>
+  </ul>
+
+  <h3>Priority 3: Theme System Expansion</h3>
+  <ul>
+    <li>Multiple built-in themes: Harbor Dark, Light, Warm, Cool</li>
+    <li>Custom JSON theme support с live-reload</li>
+    <li>OSC 11 auto-theme detection</li>
+    <li>Per-component theme overrides</li>
+  </ul>
+
+  <h3>Priority 4: Sidebar & Context Panels</h3>
+  <ul>
+    <li>Optional right sidebar (42px default, auto-show на wide terminals)</li>
+    <li>Plugin-extensible sidebar slots</li>
+    <li>Session info, token counter, model picker в sidebar</li>
+    <li>Modified files / LSP status / MCP status widgets</li>
+  </ul>
+
+  <h3>Priority 5: Web UI Polish</h3>
+  <ul>
+    <li>Floating pill composer (ChatGPT pattern)</li>
+    <li>260px collapsible sidebar с session list</li>
+    <li>Spring-physics button animations</li>
+    <li>Dyslexic font support</li>
+  </ul>
+
+  <h3>Priority 6: Killer Features</h3>
+  <ul>
+    <li>Ambient mascot/avatar (Petdex-style)</li>
+    <li>Cost/token display в prompt footer</li>
+    <li>Retry countdown timers</li>
+    <li>Copy-on-select</li>
+    <li>Braille streaming spinner</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 2: Multi-Agent Orchestration</div>
+  <p><strong>Goal:</strong> Enable concurrent agent execution with proper isolation and aggregation.</p>
+
+  <h3>Phase 1: Fleet Manager</h3>
+  <ul>
+    <li>Git worktree isolation для каждого агента</li>
+    <li>Agent lifecycle management (spawn, monitor, terminate)</li>
+    <li>Dashboard/Kanban view для active agents</li>
+  </ul>
+
+  <h3>Phase 2: Subagent Delegation</h3>
+  <ul>
+    <li>ISubAgentRunner implementation с own session</li>
+    <li>Context isolation + shared task lists</li>
+    <li>Result aggregation через diffs</li>
+  </ul>
+
+  <h3>Phase 3: Shared Context</h3>
+  <ul>
+    <li>ISharedContextStore для cross-agent state</li>
+    <li>Living spec synchronization</li>
+    <li>Conflict resolution через human review</li>
+  </ul>
+
+  <h3>Phase 4: Coordinator Pipeline</h3>
+  <ul>
+    <li>Coordinator/Executor/Verifier roles</li>
+    <li>Plan/Pair/Execute collaboration modes</li>
+    <li>Multi-agent UI: split-pane terminals, agent tabs</li>
+  </ul>
+
+  <h3>Phase 5: Standards & Compatibility</h3>
+  <ul>
+    <li>ACP compatibility</li>
+    <li>MCP server support в IDE</li>
+    <li>Worktree isolation для parallel sessions</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 3: Performance & Scale</div>
+  <p><strong>Goal:</strong> 60fps rendering, zero GC pressure, fast startup, 10k+ message handling.</p>
+
+  <h3>Rendering Performance</h3>
+  <ul>
+    <li>SIMD row hashing для diff engine</li>
+    <li>Zero-alloc markdown→ANSI pipeline</li>
+    <li>BitmapCache для static chat rows</li>
+    <li>Pooled Cell arrays</li>
+  </ul>
+
+  <h3>Memory Management</h3>
+  <ul>
+    <li>LOH compaction after history loads</li>
+    <li>String interning для repeated UI tokens</li>
+    <li>GC pressure profiling в CI</li>
+  </ul>
+
+  <h3>Startup Time</h3>
+  <ul>
+    <li>NativeAOT для CLI backend</li>
+    <li>ReadyToRun для Avalonia</li>
+    <li>Lazy module loading</li>
+  </ul>
+
+  <h3>Large Datasets</h3>
+  <ul>
+    <li>Data-virtualized chat source (10k+ messages)</li>
+    <li>Incremental loading для transcripts</li>
+    <li>VirtualizingStackPanel с BufferFactor tuning</li>
+  </ul>
+
+  <h3>Benchmarking</h3>
+  <ul>
+    <li>Extend BenchmarkDotNet suite: DiffEngine, render blit paths</li>
+    <li>Allocation-budget CI gates</li>
+    <li>60fps timeline assertions</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 4: IDE Integration</div>
+  <p><strong>Goal:</strong> First-class IDE integrations for Cursor, VS Code, JetBrains.</p>
+
+  <h3>IPC Bridge</h3>
+  <ul>
+    <li>Unix domain socket transport (Codex pattern)</li>
+    <li>JSON payloads: file, selection range, open tabs</li>
+    <li>WebSocket fallback для Windows</li>
+  </ul>
+
+  <h3>Diff Provider Abstraction</h3>
+  <ul>
+    <li>IDiffRenderer interface</li>
+    <li>ConsoleEx implementation</li>
+    <li>VS Code extension implementation</li>
+    <li>JetBrains plugin implementation</li>
+    <li>Avalonia diff viewer</li>
+  </ul>
+
+  <h3>Inline Editing</h3>
+  <ul>
+    <li>Ghost text preview</li>
+    <li>Accept/reject per-edit</li>
+    <li>Source Control integration</li>
+  </ul>
+
+  <h3>IDE Plugins</h3>
+  <ul>
+    <li>Cursor fork integration (Composer diffs)</li>
+    <li>VS Code extension with ACP stdio mode</li>
+    <li>JetBrains AI Assistant compatibility</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 5: Security & Sandboxing</div>
+  <p><strong>Goal:</strong> Production-grade security for untrusted code execution.</p>
+
+  <h3>Named Permission Profiles</h3>
+  <ul>
+    <li>read-only</li>
+    <li>workspace-write</li>
+    <li>danger-full-access</li>
+    <li>Custom profile editor</li>
+  </ul>
+
+  <h3>OS Sandbox Abstraction</h3>
+  <ul>
+    <li>Linux: Landlock + seccomp</li>
+    <li>macOS: Seatbelt</li>
+    <li>Windows: RestrictedToken + DACLs</li>
+  </ul>
+
+  <h3>Audit Logging</h3>
+  <ul>
+    <li>Per-action audit trail</li>
+    <li>Structured logging (JSON)</li>
+    <li>Network isolation policies</li>
+    <li>Filesystem access controls</li>
+  </ul>
+
+  <h3>Tool Execution</h3>
+  <ul>
+    <li>Out-of-process execution over IPC</li>
+    <li>Container/VM fallback для hostile workloads</li>
+    <li>Permission rules enforcement</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 6: Release Engineering</div>
+  <p><strong>Goal:</strong> Production-ready distribution for v0.5-v1.0.</p>
+
+  <h3>Packaging</h3>
+  <ul>
+    <li>Homebrew formula</li>
+    <li>Chocolatey package</li>
+    <li>WinGet manifest</li>
+    <li>Scoop bucket</li>
+  </ul>
+
+  <h3>Auto-Updates</h3>
+  <ul>
+    <li>Velopack integration</li>
+    <li>Channel management (stable/beta/nightly)</li>
+    <li>Delta updates</li>
+  </ul>
+
+  <h3>CI/CD</h3>
+  <ul>
+    <li>GitHub Actions workflows</li>
+    <li>Multi-platform matrix (Windows/macOS/Linux)</li>
+    <li>Automated changelog generation</li>
+    <li>Draft releases on merge</li>
+  </ul>
+
+  <h3>Versioning</h3>
+  <ul>
+    <li>Semantic versioning enforcement</li>
+    <li>Nerdbank.GitVersioning или MinVer</li>
+    <li>Package version alignment</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 7: Testing Strategy</div>
+  <p><strong>Goal:</strong> Comprehensive test coverage with modern patterns.</p>
+
+  <h3>Golden/Snapshot Tests</h3>
+  <ul>
+    <li>AnsiTuiRenderer golden files (Bubble Tea pattern)</li>
+    <li>PlainTuiRenderer golden files</li>
+    <li>ConsoleEx snapshot tests с --update-goldens</li>
+    <li>Verify.Avalonia для desktop visual regression</li>
+  </ul>
+
+  <h3>Unit Testing</h3>
+  <ul>
+    <li>Pure state logic isolation (Textual Pilot pattern)</li>
+    <li>Pure Update/View functions (Bubble Tea pattern)</li>
+    <li>UI state reducer tests</li>
+  </ul>
+
+  <h3>Integration Testing</h3>
+  <ul>
+    <li>PTY-based terminal I/O tests</li>
+    <li>In-memory backends для fast tests</li>
+    <li>Escape-sequence edge cases</li>
+  </ul>
+
+  <h3>Accessibility Testing</h3>
+  <ul>
+    <li>Appium tests для Avalonia accessibility tree</li>
+    <li>Playwright + axe для web dashboard</li>
+    <li>Keyboard navigation verification</li>
+  </ul>
+
+  <h3>Performance Testing</h3>
+  <ul>
+    <li>BenchmarkDotNet microbenchmarks</li>
+    <li>Allocation-budget CI gates</li>
+    <li>60fps timeline assertions</li>
+    <li>Memory leak soak tests (8+ hours)</li>
+  </ul>
+</div>
+
+<div class="highlight">
+  <strong>Ready for review.</strong> Approve these sprint plans and I will generate the prompt files + update sprint chain for each.
+</div>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor UI Sprint Status</title>
+<style>
+  body { background:#0a0e14; color:#b3b9c5; font-family:monospace; padding:20px; }
+  .ok { color:#7fd962; } .err { color:#ff6b6b; } .warn { color:#ffb454; } .accent { color:#39bae6; }
+  .card { background:#0d1117; border:1px solid #1f2430; border-radius:4px; padding:12px; margin:8px 0; }
+  .title { color:#5c6773; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:4px 8px; border-bottom:1px solid #1f2430; }
+  th { color:#5c6773; font-weight:normal; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title">Sprint Status</div>
+  <table>
+    <tr><th> Sprint </th><th> State </th><th> Head </th><th> Dirty </th><th> Kilo alive </th></tr>
+    <tr>
+      <td><span class="accent">UI-FINAL</span></td>
+      <td><span class="ok">running</span></td>
+      <td>98d6086</td>
+      <td>12 files</td>
+      <td><span class="ok">yes</span></td>
+    </tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="title">Uncommitted changes</div>
+  <table>
+    <tr><th> File </th><th> Status </th></tr>
+    <tr><td>.kilo-docs/sprint-chain.md</td><td>modified</td></tr>
+    <tr><td>src/Harbor.Desktop.Abstractions/DesignSystem/* → src/Harbor.DesignSystem/DesignSystem/*</td><td>renamed</td></tr>
+    <tr><td>src/Harbor.DesignSystem/Harbor.DesignSystem.csproj</td><td>added</td></tr>
+    <tr><td>src/Harbor.DesignSystem/DesignSystem/TerminalColorPalette.cs</td><td>added</td></tr>
+    <tr><td>src/Harbor.DesignSystem/DesignSystem/GlobalUsings.cs</td><td>added</td></tr>
+    <tr><td>src/Harbor.Tui.ConsoleEx/Widgets/ChatPalette.cs</td><td>modified</td></tr>
+    <tr><td>src/Harbor.Tui.ConsoleEx/Harbor.Tui.ConsoleEx.csproj</td><td>modified</td></tr>
+    <tr><td>src/Harbor.Desktop.Animations/GlobalUsings.cs</td><td>modified</td></tr>
+    <tr><td>.kilo-docs/agent-prompts/kilo-prompt-ui-final.md</td><td>added</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="title">Known gaps from audit</div>
+  <table>
+    <tr><th> Area </th><th> Gap </th></tr>
+    <tr><td>Terminal</td><td>ChatPalette still on Catppuccin, not TerminalColorPalette from HTML spec</td></tr>
+    <tr><td>Avalonia</td><td>No HarborDesignTokens.axaml; hardcoded colors in AppStyles.axaml</td></tr>
+    <tr><td>Blazor</td><td>CSS custom properties exist in contrib/app, not in apps/ path</td></tr>
+    <tr><td>Tests</td><td>No screenshot-diff pixel comparison; only text golden + existence PNG checks</td></tr>
+    <tr><td>Animations</td><td>No panel fade/slide in ConsoleEx; desktop tokens unused in TUI</td></tr>
+    <tr><td>i18n</td><td>No .resx files for UI shells</td></tr>
+    <tr><td>WordDiff</td><td>Exists but not integrated into DiffBlock rendering</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="title">Prompt</div>
+  <pre style="color:#b3b9c5; font-size:11px; line-height:1.5;">.kilo-docs/agent-prompts/kilo-prompt-ui-final.md — 77 lines</pre>
+</div>
+</body>
+</html>

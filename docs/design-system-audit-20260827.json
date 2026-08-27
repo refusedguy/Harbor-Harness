@@ -1,0 +1,382 @@
+{
+  "audit_meta": {
+    "repository": "/mnt/projects/Harbor-Harness",
+    "doc_file": "docs/design-system-report-20260827.html",
+    "audit_date": "2026-08-27",
+    "platforms": [
+      "TUI",
+      "Avalonia",
+      "Blazor"
+    ],
+    "shared_library": "src/Harbor.DesignSystem"
+  },
+  "summary": {
+    "overall_coverage": "HIGH — Avalonia achieves 100% theme-key parity (106 keys across 6 themes). C# core tokens are complete and tested. Blazor covers the essential terminal catalog but lacks structural tokens (spacing, radius, shadows, layout). TUI ChatPalette correctly bridges TerminalColorPalette but omits a standalone User color.",
+    "critical_mismatches": 4,
+    "warnings": 7,
+    "test_coverage": {
+      "avalonia": "ThemeParityTests enforces exact key parity across all HDS themes",
+      "csharp": "AccessibilityTests validates WCAG 2.x contrast ratios for all dark surfaces and accents",
+      "blazor": "NO automated parity or contrast tests found",
+      "tui": "NO dedicated token-coverage tests found"
+    }
+  },
+  "platform_findings": {
+    "csharp_core": {
+      "files": [
+        "src/Harbor.DesignSystem/DesignSystem/TerminalColorPalette.cs",
+        "src/Harbor.DesignSystem/DesignSystem/DesignTokens.cs",
+        "src/Harbor.DesignSystem/DesignSystem/Typography.cs",
+        "src/Harbor.DesignSystem/DesignSystem/ColorPalette.cs",
+        "src/Harbor.DesignSystem/DesignSystem/Accessibility.cs"
+      ],
+      "token_counts": {
+        "terminal_colors": 14,
+        "spacing_tokens": 9,
+        "radius_tokens": 6,
+        "font_size_tokens": 9,
+        "font_weight_tokens": 4,
+        "font_stack_tokens": 2
+      },
+      "color_alignment": {
+        "status": "EXACT_MATCH",
+        "notes": "All 13 documented HDS v1 terminal colors (accent, success, warning, error, tool, system, user, text, muted, bg, panel, surface, surface2, border) match the HTML report hex values. User is aliased to Text (#B3B9C5)."
+      },
+      "spacing_alignment": {
+        "status": "MISMATCH",
+        "doc_scale": [
+          "xs=4px",
+          "sm=8px",
+          "md=12px",
+          "lg=16px",
+          "xl=24px",
+          "2xl=32px"
+        ],
+        "code_scale": [
+          "Space2=2px",
+          "Space4=4px",
+          "Space8=8px",
+          "Space12=12px",
+          "Space16=16px",
+          "Space24=24px",
+          "Space32=32px",
+          "Space48=48px",
+          "Space64=64px"
+        ],
+        "issue": "Code includes 2px hairline and 48/64px scales not mentioned in doc. Doc includes 2xl (32px) which exists in code but is not labeled '2xl' in C# (it's Space32)."
+      },
+      "typography_alignment": {
+        "status": "PARTIAL_MISMATCH",
+        "doc_scale": "Display=20px/600, H1=18px/600, H2=16px/600, H3=14px/500, Body=13px/400, Caption=11px/400, Mono=12px/JetBrains Mono",
+        "code_scale": "FontSize11..FontSize32 (11,12,13,14,16,18,20,24,32) + FontWeightNormal/Medium/SemiBold/Bold",
+        "issue": "C# has no named H1/H2/H3/Caption/Display tokens; only raw pixel constants. Doc naming convention not encoded in C#."
+      },
+      "font_stack_alignment": {
+        "status": "MISMATCH",
+        "doc_mono": "'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace...",
+        "code_mono": "JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, monospace",
+        "code_ui": "Inter, Segoe UI, San Francisco, Roboto, Arial",
+        "issue": "Doc includes 'Fira Code' and 'Cascadia Code'; C# matches. Doc mentions 'ui-monospace' fallback not present in C#."
+      }
+    },
+    "tui_consoleex": {
+      "files": [
+        "src/Harbor.Tui.ConsoleEx/Widgets/ChatPalette.cs"
+      ],
+      "bridge_status": "CORRECT",
+      "notes": "ChatPalette correctly delegates to TerminalColorPalette via FromToken(). No hardcoded hex values.",
+      "missing_tokens": [
+        "No standalone PackedColor for 'User' (aliased to Text in TerminalColorPalette; ChatPalette uses Accent+Bold for UserPrefix and Text for UserText instead)"
+      ],
+      "semantic_styles": [
+        "UserPrefix",
+        "UserText",
+        "System",
+        "ToolName",
+        "ToolArgs",
+        "ToolRunning",
+        "ToolOk",
+        "ToolError",
+        "ToolBody",
+        "Dim"
+      ]
+    },
+    "avalonia": {
+      "files": [
+        "apps/Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/CatppuccinMocha.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/HarborDesignTokens.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Vapor.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Mono.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Paper.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Lumen.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Elevation.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Typography.axaml",
+        "apps/Harbor.App.Avalonia/Themes/Hds/Paper.axaml"
+      ],
+      "theme_parity": {
+        "status": "PERFECT",
+        "baseline_keys": 106,
+        "themes_tested": 6,
+        "missing_keys_any_theme": 0
+      },
+      "terminal_theme_alignment": {
+        "file": "HarborDesignTokens.axaml",
+        "status": "EXACT_MATCH_FOR_CORE_TOKENS",
+        "notes": "All 13 core HDS v1 colors map correctly to TerminalColorPalette values. Derived tones (hover/pressed/secondary text) are computed from the catalog."
+      },
+      "hardcoded_colors_in_themes": {
+        "status": "ACCEPTABLE",
+        "count": 0,
+        "notes": "All color values in theme dictionaries are tokenized via x:Key. No stray literals in component styles."
+      },
+      "mismatches": [
+        {
+          "category": "animation_semantics",
+          "severity": "MEDIUM",
+          "issue": "BaseTokens defines EaseStandard, EaseFast, EaseNormal, TransitionBrush as TimeSpan durations (100ms, 150ms, 300ms), but their names imply easing curves. Doc specifies cubic-bezier ease-out/ease-in curves.",
+          "doc_claim": "Easing: ease-out for entrance, ease-in for exit",
+          "code_reality": "EaseStandard = 0:0:0.15 (TimeSpan, 150ms), not a bezier curve",
+          "files": [
+            "apps/Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml"
+          ]
+        },
+        {
+          "category": "typography_naming",
+          "severity": "LOW",
+          "issue": "Doc defines H1/H2/H3 classes. Avalonia Typography.axaml provides Caption/Label/Code/Body/Subtitle/Title/Heading/Display — no H1/H2/H3 mapping.",
+          "files": [
+            "apps/Harbor.App.Avalonia/Themes/Hds/Typography.axaml"
+          ]
+        },
+        {
+          "category": "typography_scale_overflow",
+          "severity": "LOW",
+          "issue": "Avalonia Display=32px and Heading=24px exceed the doc's largest documented size (Display=20px). Extra sizes are not documented in the HDS v1 report.",
+          "files": [
+            "apps/Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml"
+          ]
+        },
+        {
+          "category": "surface_hierarchy_inconsistency",
+          "severity": "LOW",
+          "issue": "HarborDesignTokens.axaml sets MochaCrust = #0A0E14 (same as MochaBase), breaking the expected Base > Mantle > Crust depth ladder present in other themes.",
+          "files": [
+            "apps/Harbor.App.Avalonia/Themes/Hds/HarborDesignTokens.axaml"
+          ]
+        }
+      ]
+    },
+    "blazor": {
+      "files": [
+        "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+      ],
+      "hds_v1_token_count": 24,
+      "token_list": [
+        "--hds-accent",
+        "--hds-success",
+        "--hds-warning",
+        "--hds-error",
+        "--hds-tool",
+        "--hds-system",
+        "--hds-user",
+        "--hds-bg",
+        "--hds-panel",
+        "--hds-surface",
+        "--hds-surface2",
+        "--hds-border",
+        "--hds-muted",
+        "--hds-text",
+        "--hds-space-xs",
+        "--hds-space-sm",
+        "--hds-space-md",
+        "--hds-space-lg",
+        "--hds-space-xl",
+        "--hds-font-mono",
+        "--hds-font-size-base",
+        "--hds-duration-micro",
+        "--hds-duration-standard",
+        "--hds-ease-out",
+        "--hds-ease-in"
+      ],
+      "color_alignment": {
+        "status": "EXACT_MATCH",
+        "notes": "All 13 HDS v1 colors match the HTML report exactly."
+      },
+      "mismatches": [
+        {
+          "category": "missing_spacing_token",
+          "severity": "MEDIUM",
+          "issue": "HDS v1 block lacks --hds-space-2xl (32px). Doc spacing scale includes 2xl=32px.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        },
+        {
+          "category": "missing_radius_tokens",
+          "severity": "MEDIUM",
+          "issue": "No HDS-prefixed radius tokens in Blazor. BaseTokens defines RadiusXs..RadiusFull.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        },
+        {
+          "category": "missing_shadow_tokens",
+          "severity": "MEDIUM",
+          "issue": "No HDS-prefixed shadow tokens. Blazor defines generic --shadow-sm/md/lg but they are not tied to the HDS v1 catalog.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        },
+        {
+          "category": "missing_layout_tokens",
+          "severity": "LOW",
+          "issue": "No HDS layout constants (sidebar-width, topbar-height, statusbar-height) in CSS.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        },
+        {
+          "category": "font_stack_inconsistency",
+          "severity": "LOW",
+          "issue": "HDS block uses 'Cascadia Mono'; Catppuccin block uses 'Fira Code', 'SF Mono'. C# uses 'Cascadia Code'. Doc uses 'Cascadia Code'. Inconsistent mono fallback across layers.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        },
+        {
+          "category": "hardcoded_rgba",
+          "severity": "LOW",
+          "issue": "Two rgba() literals bypass the token system: error bubble background rgba(243,139,168,0.08) and command-palette backdrop rgba(17,17,27,0.6).",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ],
+          "affected_lines": [
+            607,
+            776
+          ]
+        },
+        {
+          "category": "redundant_user_token",
+          "severity": "INFO",
+          "issue": "--hds-user and --hds-text are identical (#b3b9c5). Doc shows them as separate swatches but they are the same value in the terminal catalog.",
+          "files": [
+            "contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css"
+          ]
+        }
+      ]
+    }
+  },
+  "doc_claims_vs_code_verification": {
+    "claim_1": {
+      "claim": "HDS v1 terminal palette defines 13 semantic colors",
+      "verdict": "TRUE",
+      "evidence": "TerminalColorPalette.cs + ChatPalette.cs + all platform implementations define the same 13 colors with matching hex values."
+    },
+    "claim_2": {
+      "claim": "Muted (#5C6773) is decorative tier; clears UI-component ratio on base surfaces",
+      "verdict": "PARTIALLY_TRUE",
+      "evidence": "Muted on bg/panel/surface passes 3:1 (3.35, 3.28, 3.09). Muted on surface2 (#1A1F2B) fails 3:1 (2.86:1). C# test explicitly excludes Surface2."
+    },
+    "claim_3": {
+      "claim": "Spacing scale: xs 4px, sm 8px, md 12px, lg 16px, xl 24px, 2xl 32px",
+      "verdict": "TRUE_WITH_GAPS",
+      "evidence": "All platforms implement these values, but Blazor HDS v1 block omits 2xl (32px). C# extends beyond with 48/64px."
+    },
+    "claim_4": {
+      "claim": "Typography: Display 20px/600, H1 18px/600, H2 16px/600, H3 14px/500, Body 13px/400, Caption 11px/400, Mono 12px/JetBrains Mono",
+      "verdict": "PARTIALLY_TRUE",
+      "evidence": "C# has all sizes but no semantic names. Avalonia uses Title/Heading/Display with different sizes (32px Display). Blazor has most sizes but no explicit Caption in HDS block."
+    },
+    "claim_5": {
+      "claim": "Animation: Micro 100-150ms, Standard 200-300ms, ease-out for entrance, ease-in for exit",
+      "verdict": "TRUE_WITH_SEMANTIC_GAP",
+      "evidence": "Blazor correctly maps to cubic-bezier. Avalonia stores durations as TimeSpans but names like EaseStandard suggest curves, not times."
+    },
+    "claim_6": {
+      "claim": "ChatPalette is the single source of truth for block colors in ConsoleEx",
+      "verdict": "TRUE",
+      "evidence": "ChatPalette.cs bridges TerminalColorPalette and exposes semantic CellStyles. No hardcoded colors in the file."
+    },
+    "claim_7": {
+      "claim": "Accessibility: >=4.5:1 normal text, >=3:1 large text/UI components",
+      "verdict": "VERIFIED",
+      "evidence": "Computed contrast ratios: text on all surfaces >=9:1 (pass). All role accents on all surfaces >=5.94:1 (pass). Muted on bg/panel/surface passes 3:1. Muted on surface2 fails 3:1 (2.86:1)."
+    }
+  },
+  "missing_tokens_by_platform": {
+    "blazor_hds_v1_block": [
+      "--hds-space-2xl",
+      "--hds-radius-xs",
+      "--hds-radius-sm",
+      "--hds-radius-md",
+      "--hds-radius-lg",
+      "--hds-radius-xl",
+      "--hds-radius-full",
+      "--hds-shadow-sm",
+      "--hds-shadow-md",
+      "--hds-shadow-lg",
+      "--hds-sidebar-width",
+      "--hds-topbar-height",
+      "--hds-statusbar-height",
+      "--hds-font-size-xs",
+      "--hds-font-size-caption"
+    ],
+    "avalonia_structural_gaps": [],
+    "csharp_named_semantic_gaps": [
+      "No named H1/H2/H3/Caption/Display constants (only raw pixel values)",
+      "No animation easing curve constants (only durations exist in BaseTokens)"
+    ]
+  },
+  "inconsistencies": [
+    {
+      "id": "INC-01",
+      "severity": "MEDIUM",
+      "platform": "Avalonia",
+      "description": "EaseStandard/EaseFast/EaseNormal are TimeSpans (durations) but named as easing functions. Doc claims ease-out/ease-in curves.",
+      "recommendation": "Rename to DurationStandard/DurationFast or replace with actual Avalonia Easing curves."
+    },
+    {
+      "id": "INC-02",
+      "severity": "MEDIUM",
+      "platform": "Blazor",
+      "description": "HDS v1 block missing --hds-space-2xl (32px) and all radius/shadow/layout tokens documented in Avalonia BaseTokens.",
+      "recommendation": "Expand Blazor HDS block to include structural tokens from BaseTokens.axaml."
+    },
+    {
+      "id": "INC-03",
+      "severity": "LOW",
+      "platform": "Cross-platform",
+      "description": "Mono font stack inconsistency: C#/doc use 'Cascadia Code', Blazor HDS uses 'Cascadia Mono', Blazor Catppuccin uses 'Fira Code'/'SF Mono'.",
+      "recommendation": "Unify to 'JetBrains Mono, Cascadia Code, Fira Code, Menlo, Consolas, monospace' everywhere."
+    },
+    {
+      "id": "INC-04",
+      "severity": "LOW",
+      "platform": "Avalonia",
+      "description": "HarborDesignTokens MochaCrust equals MochaBase (#0A0E14), unlike other themes where Crust is a distinct deeper shade.",
+      "recommendation": "Document whether this is intentional (single-surface terminal) or a copy-paste oversight."
+    },
+    {
+      "id": "INC-05",
+      "severity": "LOW",
+      "platform": "Avalonia",
+      "description": "Avalonia Display (32px) and Heading (24px) exceed doc's max documented size (Display=20px). Doc H1/H2/H3 have no Avalonia class equivalents.",
+      "recommendation": "Either extend doc to document 24/32px scales, or add H1/H2/H3 classes mapping to existing sizes."
+    },
+    {
+      "id": "INC-06",
+      "severity": "INFO",
+      "platform": "TUI",
+      "description": "TerminalColorPalette.User equals Text (#B3B9C5). Doc shows them as separate swatches but they are identical values.",
+      "recommendation": "Clarify in doc that User is an alias for Text in the terminal catalog, or remove the redundant swatch."
+    },
+    {
+      "id": "INC-07",
+      "severity": "INFO",
+      "platform": "Blazor",
+      "description": "--hds-user is redundant with --hds-text (same hex).",
+      "recommendation": "Remove redundant token or document the intent if they will diverge in future themes."
+    }
+  ]
+}

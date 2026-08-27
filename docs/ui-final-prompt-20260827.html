@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor UI-FINAL Sprint Prompt</title>
+<style>
+  body { background:#0a0e14; color:#b3b9c5; font-family:monospace; padding:20px; }
+  .ok { color:#7fd962; } .err { color:#ff6b6b; } .warn { color:#ffb454; } .accent { color:#39bae6; }
+  .card { background:#0d1117; border:1px solid #1f2430; border-radius:4px; padding:12px; margin:8px 0; }
+  .title { color:#5c6773; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  h1 { color:#39bae6; font-size:20px; margin:0 0 8px; }
+  h2 { color:#39bae6; font-size:16px; margin:16px 0 8px; }
+  h3 { color:#b3b9c5; font-size:14px; margin:12px 0 6px; }
+  .sub { color:#5c6773; font-size:12px; margin-bottom:16px; }
+  ul { margin:8px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  code { background:#131820; border:1px solid #1f2430; border-radius:3px; padding:2px 6px; font-size:11px; color:#d2a6ff; }
+  .section { margin:16px 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Harbor UI-FINAL Sprint Prompt</h1>
+  <div class="sub">Спринт: UI-FINAL | Модель: openrouter/z-ai/glm-5.3-flash | Репо: Harbor-Harness (.NET 10)</div>
+</div>
+
+<div class="section card">
+  <div class="title">СТАТУС</div>
+  <p>Агент-человек уже сделал часть инфраструктуры, но UI всё ещё выглядит как кал. Твоя задача — довести до продакшена.</p>
+</div>
+
+<div class="section card">
+  <div class="title">УЖЕ СДЕЛАНО (не трогай)</div>
+  <ul>
+    <li>Создан отдельный проект <code>Harbor.DesignSystem</code> с:
+      <ul>
+        <li><code>ColorPalette.cs</code> — Catppuccin Mocha/Latte palette</li>
+        <li><code>TerminalColorPalette.cs</code> — ТОЧНЫЕ цвета из HTML-дизайн-системы (<span style="color:#39bae6">#39bae6</span>, <span style="color:#7fd962">#7fd962</span>, <span style="color:#ffb454">#ffb454</span>, <span style="color:#ff6b6b">#ff6b6b</span>, <span style="color:#d2a6ff">#d2a6ff</span>, <span style="color:#f29668">#f29668</span>, <span style="color:#0a0e14">#0a0e14</span>, <span style="color:#0d1117">#0d1117</span>, <span style="color:#131820">#131820</span>, <span style="color:#1a1f2b">#1a1f2b</span>, <span style="color:#1f2430">#1f2430</span>, <span style="color:#5c6773">#5c6773</span>)</li>
+        <li><code>DesignTokens.cs</code> — spacing/radius/typography scale</li>
+        <li>Все через <code>Harbor.Ui.Framework.Projection.RgbColor</code></li>
+      </ul>
+    </li>
+    <li><code>ChatPalette.cs</code> в ConsoleEx начат, но НЕ подключён к <code>TerminalColorPalette</code></li>
+    <li>Цепочка спринтов переключена на этот промпт</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">ЗАДАЧА</div>
+  <p>Только UI/UX код. Не возвращайся к сессиям/плагинам/агенту/storage.</p>
+</div>
+
+<div class="section card">
+  <div class="title">ЖЁСТКИЕ ПРАВИЛА</div>
+  <ul>
+    <li>Один коммит = 1–2 файла. Не собирай гигантский дифф.</li>
+    <li>После каждого коммита проверяй <code>git status</code> — должно быть 0 или 1–2 файла.</li>
+    <li>Документы уже готовы: <code>docs/design-system-report-20260827.html</code> — их достаточно, не пиши новые.</li>
+    <li>Мессенджеры НИКОГДА в ядре <code>src/</code> — только <code>contrib/plugins</code>.</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">ДИЗАЙН-СИСТЕМА (обязательно используй)</div>
+  <ul>
+    <li>Terminal colors: accent <span style="color:#39bae6">#39bae6</span>, success <span style="color:#7fd962">#7fd962</span>, warning <span style="color:#ffb454">#ffb454</span>, error <span style="color:#ff6b6b">#ff6b6b</span>, tool <span style="color:#d2a6ff">#d2a6ff</span>, system <span style="color:#f29668">#f29668</span></li>
+    <li>Surfaces: bg <span style="color:#0a0e14">#0a0e14</span>, panel <span style="color:#0d1117">#0d1117</span>, surface <span style="color:#131820">#131820</span>, surface2 <span style="color:#1a1f2b">#1a1f2b</span>, border <span style="color:#1f2430">#1f2430</span>, muted <span style="color:#5c6773">#5c6773</span></li>
+    <li>Typography: JetBrains Mono 12px для TUI, system font для desktop</li>
+    <li>Spacing: xs 4px, sm 8px, md 12px, lg 16px, xl 24px</li>
+    <li>Animation: micro 100–150ms, standard 200–300ms, ease-out entrance, ease-in exit</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">ЗАДАЧИ В ПОРЯДКЕ ВЫПОЛНЕНИЯ</div>
+
+  <h3>A. ВНЕДРИ ДИЗАЙН-ТОКЕНЫ (сначала это)</h3>
+  <ul>
+    <li><code>src/Harbor.Tui.ConsoleEx/Widgets/ChatPalette.cs</code> — переключи на <code>TerminalColorPalette</code> из Harbor.DesignSystem</li>
+    <li><code>apps/Harbor.App.Avalonia/Themes/</code> — создай <code>HarborDesignTokens.axaml</code> с цветами из TerminalColorPalette</li>
+    <li><code>contrib/apps/Harbor.App.Blazor/wwwroot/css/site.css</code> — добавь CSS custom properties для всех токенов</li>
+    <li>Убедись что все виджеты ConsoleEx (ApprovalGateView, DiffBlock, ImageBlock, ToolCallBlock, StatusViewModel) используют ChatPalette</li>
+  </ul>
+
+  <h3>B. АНИМАЦИИ ПАНЕЛЕЙ В CONSOLEEX (самое важное — сейчас оно скучное)</h3>
+  <ul>
+    <li>Добавь анимации появления/исчезновения панелей в ConsoleEx: fade 150ms, slide 300ms</li>
+    <li>Tool cards — slide-in + fade</li>
+    <li>Approval gate — pulse/warn glow</li>
+    <li>Status bar — smooth transitions между состояниями</li>
+    <li>Timeline — smooth scroll + opacity transitions</li>
+    <li>Используй <code>Harbor.Desktop.Animations</code> токены: Fast=150ms, Normal=300ms, EasingEaseOut</li>
+  </ul>
+
+  <h3>C. SCREENSHOT-DIFF ТЕСТЫ</h3>
+  <ul>
+    <li>Напиши тесты для Avalonia сравнивающие скриншоты с golden'ами</li>
+    <li>Используй <code>tests/Harbor.E2E.Framework/HeadlessAvaloniaDriver.cs</code></li>
+    <li>Добавь baseline hashes, не просто existence check</li>
+  </ul>
+
+  <h3>D. ACCESSIBILITY</h3>
+  <ul>
+    <li>Проверь contrast ratios для всех цветов дизайн-системы</li>
+    <li>Focus indicators в ConsoleEx и Avalonia</li>
+    <li>Keyboard navigation — все действия доступны без мыши</li>
+  </ul>
+
+  <h3>E. KILLER FEATURES</h3>
+  <ul>
+    <li>Image preview inline: Sixel/kitty graphics</li>
+    <li>Dictation input: voice-to-text в композер</li>
+    <li>Tab-strip drag-reorder</li>
+  </ul>
+
+  <h3>F. I18N</h3>
+  <ul>
+    <li>Вынеси все строки в <code>.resx</code></li>
+    <li>Русский/английский локали</li>
+  </ul>
+
+  <h3>G. MARKDOWN RICH EDITOR</h3>
+  <ul>
+    <li>Таблицы, задачи-листы, подсветка синтаксиса</li>
+  </ul>
+
+  <h3>H. WORD-DIFF</h3>
+  <ul>
+    <li>Интегрируй <code>WordDiff.cs</code> в <code>DiffBlock.cs</code> если ещё не сделано</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">ПОСЛЕ КАЖДОГО ЭТАПА</div>
+  <ul>
+    <li>Запусти <code>dotnet run --project tests/X</code> для проверки</li>
+    <li>Если зелёный — атомарный коммит</li>
+    <li>Если красный — фикс перед коммитом</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">ФИНАЛ</div>
+  <p>Список коммитов, сырые числа прогонов, статус каждого пункта выше.</p>
+</div>
+</body>
+</html>

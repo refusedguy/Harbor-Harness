@@ -22,13 +22,13 @@ public class GraphicsTests
     [Test]
     public async Task KittyPngInline_ChunksBase64_WithFinalMarker()
     {
-        int pixelCount = Graphics.KittyChunkChars * 3 / 4 + 8; // force ≥2 chunks of payload bytes
-        var png = new byte[pixelCount];
-        Random.Shared.NextBytes(png);
-        png[0] = 0x89;
-        png[1] = (byte)'P'; // valid IHDR so the size precheck passes
+        var png = MakeFakePng(Graphics.KittyChunkChars * 3 / 4 + 8); // ≥2 base64 chunks
 
         string seq = Encoding.ASCII.GetString(Graphics.KittyPngInline(png));
+        if (!Graphics.PngSize(png).HasValue)
+        {
+            throw new InvalidOperationException("precondition failed: MakeFakePng header rejected");
+        }
 
         AssertStartsAndEndsDcs(seq);
         // Multiple DCS strings for a chunked payload.
@@ -42,7 +42,7 @@ public class GraphicsTests
         {
             if (!s.StartsWith("\u001B_Gf=100,a=T,m=", StringComparison.Ordinal))
             {
-                throw new InvalidOperationException("must open with Gf=100,a=T header");
+                throw new InvalidOperationException($"must open with Gf=100,a=T header; got len={{seq.Length}} head={{string.Create(seq.Length, seq, (span, s) => s.AsSpan(0, Math.Min(8, span.Length)).CopyTo(span))}}");
             }
 
             if (!s.EndsWith("\u001B\\", StringComparison.Ordinal))
@@ -108,5 +108,18 @@ public class GraphicsTests
         await Assert.That(Graphics.NearestSlot(0x39, 0xBA, 0xE6)).IsEqualTo(5);
         await Assert.That(Graphics.NearestSlot(0x7F, 0xD9, 0x62)).IsEqualTo(3);
         await Assert.That(Graphics.NearestSlot(0x10, 0x10, 0x10)).IsEqualTo(0);
+    }
+
+    /// <summary>Synthetic PNG-shaped buffer: real signature + IHDR dims (64x64) + filler.</summary>
+    private static byte[] MakeFakePng(int totalBytes)
+    {
+        var png = new byte[Math.Max(32, totalBytes)];
+        png[0] = 0x89;
+        png[1] = (byte)'P';
+        png[2] = (byte)'N';
+        png[3] = (byte)'G';
+        png[19] = 64;  // width
+        png[23] = 64;  // height
+        return png;
     }
 }

@@ -45,10 +45,22 @@ public class ScreenshotHashTests
                 $"baseline manifest missing: {manifestPath} (run once with HARBOR_UPDATE_GOLDENS=1)");
         }
 
-        var expected = File.ReadAllLines(manifestPath)
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .Select(l => l.Split(':', 2))
-            .ToDictionary(p => p[0], p => p[1], StringComparer.Ordinal);
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string line in File.ReadAllLines(manifestPath))
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            int sep = line.IndexOf(':');
+            if (sep <= 0)
+            {
+                continue;
+            }
+
+            expected[line[..sep]] = line[(sep + 1)..];
+        }
 
         List<string> diffs = [];
         foreach (string key in actual.Keys.Union(expected.Keys).OrderBy(k => k, StringComparer.Ordinal))
