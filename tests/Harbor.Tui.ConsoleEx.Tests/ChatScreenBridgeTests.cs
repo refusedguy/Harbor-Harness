@@ -228,6 +228,34 @@ public class ChatScreenBridgeTests
     }
 
     [Test]
+    public async Task ClickRouting_PendingGate_HintZones_ResolveAndDisarm()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        _ = bridge.BeginApprovalGate("bash", "rm -rf build/");
+        var tl = panel.Timeline;
+        tl.PrepareFrame(40, 8);
+        tl.Paint(new ScreenBuffer(40, 8), new Rect(0, 0, 40, 8)); // registers LastPaintRect
+
+        // Outside any hint zone → no consumption.
+        await Assert.That(bridge.TryRouteApprovalClick(
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 1, 0, KeyModifiers.None))).IsFalse();
+
+        // Left press on "[y]" approves; a right press never decides anything.
+        await Assert.That(bridge.TryRouteApprovalClick(
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Right, 1, 2, KeyModifiers.None))).IsFalse();
+        await Assert.That(bridge.TryRouteApprovalClick(
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 15, 2, KeyModifiers.None))).IsTrue();
+        await Assert.That(tl.Count).IsEqualTo(1);
+
+        // After resolution, further clicks fall through (routing disarmed).
+        await Assert.That(bridge.TryRouteApprovalClick(
+            new Input.MouseEvent(MouseEventType.Press, MouseButton.Left, 27, 2, KeyModifiers.None))).IsFalse();
+    }
+
+    [Test]
     public async Task HistoryReplay_ImageFilePart_BecomesImageCard()
     {
         var bus = new FakeEventBus();
