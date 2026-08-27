@@ -48,7 +48,7 @@ Second render path for the interactive REPL (`src/Harbor.Tui.ConsoleEx/`, opt-in
 
 ### ✅ Completed — Tools (14 builtin)
 
-`read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `web_fetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`
+`read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`
 
 ### ✅ Completed — Plugin System (R30 fix) + Plugin Host Decomposition (F-sprints)
 

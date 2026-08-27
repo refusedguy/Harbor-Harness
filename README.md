@@ -11,9 +11,9 @@ Harbor is a from-scratch reimagining of AI coding agents (kilocode, opencode, pi
 
 ## Key features
 
-- **LLM providers** — 3 native clients + 13 JSON-config providers:
-  - Native: `Anthropic` (cache_control, extended thinking), `OpenAI` (Chat Completions + Responses API), `Ollama` (local NDJSON)
-  - JSON configs: `openai-compatible` adapter plus `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/)
+- **LLM providers** — 4 native clients + 13 JSON-config providers:
+  - Native: `Anthropic` (cache_control, extended thinking), `OpenAI` (Chat Completions + Responses API), `Ollama` (local NDJSON), `OpenAiCompatible` (generic adapter)
+  - JSON configs: `anthropic`, `kilocode` (with **FREE** models), `deepseek`, `groq`, `mistral`, `xai`, `together`, `fireworks`, `cerebras`, `openrouter`, `vllm`, `ollama` presets in [`providers/*.json`](./providers/)
 - **Storage backends**: `Jsonl` (default, zero native deps), `Memory` (tests), `Sqlite` — switched via `HARBOR_STORAGE`
 - **Terminal UIs**:
   - `Harbor.Tui.ConsoleEx` — the new second render path: own raw-mode input pipeline (kitty keyboard protocol, SGR mouse 1000/1002/1006, bracketed paste), cell-grid diff renderer (`DiffEngine`), zero-allocation steady-state budgets, virtualized chat timeline with streaming markdown and unified-diff blocks. Opt-in, see below.
@@ -126,7 +126,7 @@ Presentation      apps/Harbor.App.Cli (composition root), apps/Harbor.App.Avalon
                   contrib/tui/* (extra interactive shells compiled in by default)
 ```
 
-All IDs are strongly-typed value objects (`SessionId`, `ProviderId`, `ToolName`, …) defined in `Harbor.Abstractions.Contracts.Models.Identifiers`. Agent state reaches every UI exclusively as `AgentEvent`s published on `IEventBus` — renderers never touch Core.
+All IDs are strongly-typed value objects (`SessionId`, `ProviderId`, `ToolName`, …) defined in `Harbor.Abstractions.Models.Identifiers`. Agent state reaches every UI exclusively as `AgentEvent`s published on `IEventBus` — renderers never touch Core.
 
 ### Data flow
 

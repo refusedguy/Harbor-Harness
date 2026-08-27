@@ -90,7 +90,7 @@ full backlog. Highlights:
 | IPC (MessagePack over pipe/UDS) | `src/Harbor.Ipc.{Abstractions,Client,Server,InProcess}/` + `src/Harbor.Transport.Remote/` |
 | Storage backends | `src/Harbor.Storage.{Jsonl,Memory,Sqlite}/` |
 | LLM providers | `src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/` |
-| Builtin tools (14) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/web_fetch/patch/notebook/ripgrep/tree/mcp и др.) |
+| Builtin tools (14) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/webfetch/patch/notebook/ripgrep/tree/mcp и др.) |
 | Terminal TUI renderers | in-solution: `src/Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}/`; optional (`contrib/tui/`): Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel |
 | Platform apps (composition roots) | `apps/Harbor.App.{Cli,Avalonia}/`; WPF / MAUI / Blazor — `contrib/apps/` |
 | Reusable UI components | `apps/Harbor.App.Avalonia/Views/Components/`, `contrib/apps/Harbor.App.Blazor/Components/Shared/`, `contrib/apps/Harbor.App.Wpf/Controls/` |

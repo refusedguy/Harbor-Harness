@@ -78,7 +78,7 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    Ollama / Shared                                              │
 │  - Harbor.Tools.Builtin — все builtin tools в одном проекте,    │
 │    каталог Tools/ (read/write/edit/bash/glob/grep/ls/task/      │
-│    web_fetch/patch/notebook/ripgrep/tree/mcp; MCP-клиент в      │
+│    webfetch/patch/notebook/ripgrep/tree/mcp; MCP-клиент в       │
 │    подкаталоге Mcp/)                                            │
 │  - DesignSystem lives in src/Harbor.Desktop.Abstractions/       │
 │    DesignSystem/ (не отдельный проект)                          │
