@@ -1,5 +1,10 @@
 # ConsoleEx — дизайн терминального рендерера для Harbor
 
+> **СТАТУС (2026-08-27): реализовано (CE-0…CE-4, PTY-хардненинг CE-5).** См. ADR-003 в
+> [DECISIONS.md](../DECISIONS.md); включение и актуальные ограничения MVP —
+> [src/Harbor.Tui.ConsoleEx/README.md](../src/Harbor.Tui.ConsoleEx/README.md).
+> Этот файл сохранён как design rationale привязки фаз к спринтам.
+
 > Спринт-фундамент: raw stdin парсер, kitty keyboard protocol, SGR mouse,
 > bracketed paste, NativeAOT-safe. READ ONLY анализ репо `/mnt/projects/Harbor-Harness`
 > (dev). v1.0 — финал: вычитка, фазовая оценка трудозатрат, привязка к спринту-5.

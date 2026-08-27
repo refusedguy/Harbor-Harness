@@ -1,5 +1,10 @@
 # CSharpFunctionalExtensions 3.7.0 — полный каталог API + дизайн максимального внедрения в Harbor
 
+> **СТАТУС (2026-08-27): внедрение закрыто** волнами ROP-B/C/D — см. ADR-002 в [DECISIONS.md](../DECISIONS.md).
+> Числа аудита ниже («0 fluent-вызовов», ~94 if-IsFailure) — снимок @ dev/5b01b2d и больше не отражают код;
+> самоделка `ResultGuard.Try/TryAsync`, упомянутая здесь, впоследствии удалена (`9e954a5`) в пользу CSE `Result.Try`.
+> Каталог API (часть 1) остаётся справедливым справочником по CSE 3.7.0.
+
 > **Библия спринта ROP.** Repo `/mnt/projects/Harbor-Harness`, ветка `dev`, HEAD `5b01b2d`.
 > Пакет: `CSharpFunctionalExtensions 3.7.0` (Directory.Packages.props, группа «Performance»).
 > Источники каталога: XML-доки из `~/.nuget/packages/csharpfunctionalextensions/3.7.0/lib/net8.0/CSharpFunctionalExtensions.xml`

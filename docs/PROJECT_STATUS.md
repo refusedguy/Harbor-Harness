@@ -3,7 +3,7 @@
 > Quick-reference card: what's done, what's broken, what's next.
 > For the full plan see [ROADMAP.md](./ROADMAP.md). For change history see [CHANGELOG.md](../CHANGELOG.md).
 >
-> **Last updated:** 2026-08-27 (после спринтов F1-decoupling, PROD-UI-0, ConsoleEx CE-3…CE-5; HEAD 8f3d93b). Последний полный bench+test sweep — 2026-08-22.
+> **Last updated:** 2026-08-27 (после спринтов F1-decoupling, PROD-UI-0, ConsoleEx CE-3…CE-5, docs-pass DOCS-ZERO и добавления автономной спринт-цепочки `.kilo-docs/sprint-chain.{md,sh}`; HEAD 3625e8e). Последний полный bench+test sweep — 2026-08-22.
 
 ## Build & test status (полный прогон 2026-08-22)
 
@@ -39,9 +39,10 @@ EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P
 
 ## Recent milestones
 
+- **DOCS-ZERO + sprint chain** (27.08) — кросс-чек документации по коду (ROADMAP/PROJECT_STATUS, README+PLAN групп проектов, AGENTS/CLAUDE/README корневые, 233 ссылки — 0 битых); добавлена автономная спринт-цепочка `.kilo-docs/sprint-chain.md` (очередь `sprint|NAME|MODEL|PROMPT_PATH`) + `scripts/sprint-chain.sh` (диспетчер через kilo-dispatch с проверкой прогресса по SHA)
 - **ConsoleEx CE-3…CE-5** (26.08) — второй рендер REPL: virtualized timeline, streaming markdown, DiffBlock, StatusSegmentBar/SpinnerStrip, perf-бюджеты (0 alloc steady-state), живой REPL c `ui.consoleEx{enabled,syncUpdates}`, PTY e2e (`PtyHarness`), фикс Termios struct 49→60 байт
 - **PROD-UI-0** (25–26.08) — единый каталог провайдеров из `ProviderPresets`, `IProviderHealthCheck` («Test connection»), `/model` перепривязывает сессию без рестарта REPL, живые списки моделей в onboarding-визардах
-- **F1 decoupling** (24.08) — `Harbor.Domain.dll` → `Harbor.Abstractions.Contracts`; ADR-007; замеры rebuild-set в docs/BUILD.md (commit 7449cd0)
+- **F1 decoupling** (24.08) — `Harbor.Domain.dll` → `Harbor.Abstractions.Contracts`; ADR-008 (DECISIONS.md); замеры rebuild-set в docs/BUILD.md (commit 7449cd0)
 - **R31** — God-object decomposition: MarkdownRenderer (487→110+4 classes), JsonlSessionStore (688→528+codec), SessionManager (495→492+IChatViewBinder)
 - **R30** — Plugin system bug fix (24/24 tests pass), business-logic extraction (6 files moved from Avalonia to Ui.Framework)
 - **R29** — Blazor + WPF ports of reusable components (StatusBadge, ChatBubble, SessionRow)

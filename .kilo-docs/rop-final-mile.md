@@ -1,5 +1,10 @@
 # Последняя миля ROP: каждый оставшийся try/catch, IsFailure-лесенка, switch-by-string
 
+> **СТАТУС (2026-08-27): план выполнен** волнами ROP-B/C/D — см. ADR-002 в [DECISIONS.md](../DECISIONS.md).
+> `ResultGuard` удалён как дубликат канона (`9e954a5`); канон = CSE `Result.Try` + `ResultErrors.Message`,
+> legacy `.GetResult()` запрещены BannedApi (`be81e42`). Легитимные (c)-сайты из оси 1 зафиксированы
+> как осознанные отказы. Дальше файл — исторический снимок @ dev/5b01b2d.
+
 READ-ONLY. Репо /mnt/projects/Harbor-Harness @ dev/5b01b2d. Территория: Harbor.Application + Harbor.Hosting + Harbor.Registries.
 Не дублирует fp-solid-audit.md §1-3 (метрики), deep2-application.md A1-A6, arch2-application.md F1-F16 — пересечения помечены «→ см.».
 

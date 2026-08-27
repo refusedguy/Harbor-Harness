@@ -1,6 +1,8 @@
 # Roadmap
 
-> Harbor development roadmap. Last updated: 2026-08-27 (post CE-5 / PROD-UI-0 sprints, HEAD 8f3d93b).
+> Harbor development roadmap. Last updated: 2026-08-27 (post CE-5 / PROD-UI-0 sprints and the
+> DOCS-ZERO docs pass; autonomous sprint-chain infra lives in [`.kilo-docs/`](../.kilo-docs/) —
+> `sprint-chain.md` queue + `scripts/sprint-chain.sh` dispatcher, HEAD 3625e8e).
 > See [CHANGELOG.md](../CHANGELOG.md) for the per-release change history.
 >
 > **Sprint-2 note:** optional UI/scripting components moved to [`contrib/`](../contrib/)
@@ -215,7 +217,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 - [x] `Harbor.Desktop.Abstractions` namespace drift: 4 files declared `namespace Harbor.App.Avalonia.ViewModels` while living in `Harbor.Desktop.Abstractions/ViewModels/`. **Verified fixed (ROP-D Z1, 25.08): every file in the project now declares `Harbor.Desktop.Abstractions.*`.**
 - [x] Namespace drift `Harbor.Core.*` in Harbor.Application.dll (42 declarations) and Harbor.Registries.dll (3) — migrated to assembly-matching namespaces (ROP-D Z1).
-- [x] Namespace drift `Harbor.Cli.*` in Harbor.App.Cli — 18 declarations + all references migrated to `Harbor.App.Cli.*`; remaining census findings documented as intentional (ADR-007 compat namespaces in Contracts/Extensions/Registries; same-family sub-namespaces in Ipc/Telemetry/Ui.Framework) (ROP-D Z1, 25.08).
+- [x] Namespace drift `Harbor.Cli.*` in Harbor.App.Cli — 18 declarations + all references migrated to `Harbor.App.Cli.*`; remaining census findings documented as intentional at migration time (compat namespaces in Contracts/Extensions/Registries; same-family sub-namespaces in Ipc/Telemetry/Ui.Framework) (ROP-D Z1, 25.08; see commit 9ec5c7b).
 - [x] BannedApi.txt was dead (never wired, wrong filename for the analyzer) — renamed to `BannedSymbols.txt`, wired via AdditionalFiles in Directory.Build.props; all 9 production GetResult sites resolved or pragma-exempted with a catalogued reason (ROP-D Z2, commit be81e42).
 - [x] Arch tests probed the wrong assembly for "TuiAbstractions" (typeof(UiStore) from Ui.Framework.State); retargeted to Terminal.Abstractions + new UiFrameworkState rule (ROP-D Z2, commit 9060475).
 - [x] ~28 src projects outside arch enforcement → FullLayerMatrixTests covers all 45 main-solution src assemblies (reference check + table guard + exception liveness + coverage guard); stale `dotnetarch.json` deleted in favor of the single enforcement surface (ROP-D Z2, commits 5d2df19/6566be2).
@@ -237,8 +239,8 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### Documentation debt
 
 - [ ] API docs not published (DocFX / MdDocs pipeline stubbed but not wired).
-- [ ] Per-project README.md files are stale — many reference v0.1.0 architecture.
-- [ ] No architecture decision records (ADRs) for the major splits (Domain/Abstractions, Ui.Framework/Tui.Abstractions, etc.).
+- [ ] Per-project READMEs: 19 of 51 src projects still have no README (coverage **32/51**; major groups rewritten against real code in DOCS-ZERO D1a/b, D2a/b, D3 — commits b9e6010…9ec5c7b, 2026-08-27) — write one when a project is next touched.
+- [x] Architecture decision records exist: `DECISIONS.md` (ADR-001…ADR-008 — production stabilization, ROP rails, ConsoleEx, sub-agent `task`, plugin hosting split, MCP adapter, ProviderPresets catalog, F1 Abstractions.Contracts decoupling).
 
 ---
 
@@ -301,7 +303,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Decision | Rationale | Date |
 |---|---|---|
 | Split `Harbor.Abstractions.Models` types into `Harbor.Domain.dll` | Domain layer should hold value objects + entities; Abstractions is just interfaces | v0.3 |
-| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-007 and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
+| **Reverse the split**: `Harbor.Domain.dll` renamed to `Harbor.Abstractions.Contracts` (F1 decoupling) | Full decoupling of Abstractions from external callers; see ADR-008 in [`DECISIONS.md`](../DECISIONS.md) and commit fa8d3ae (2026-08-24). Namespace stays `Harbor.Abstractions.Models` | 2026-08-24 |
 | Extract `Harbor.Ui.Framework` from `Harbor.Tui.Abstractions` | TEA + Panel system is shared by TUI and desktop GUIs; terminal-specific stuff stays separate | v0.4 (R6) |
 | Per-session `UiStore` instead of singleton | User wanted concurrent agents: "agents don't stop when I switch sessions" | v0.4 (R25) |
 | Move `ToolCallViewModel` to `Harbor.Ui.Framework.ViewModels` | Same VM reusable by Avalonia / WPF / MAUI / Blazor; replace `IBrush` with `string StatusBrushKey` | v0.4 (R28) |

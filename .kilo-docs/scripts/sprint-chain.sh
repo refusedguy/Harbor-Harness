@@ -14,8 +14,12 @@ if [[ ! -f "$CHAIN_FILE" ]]; then
 fi
 
 while IFS= read -r line; do
-  # пропуск пустых строк и комментариев
-  [[ -z "$line" || "$line" =~ ^# ]] && continue
+  # пропуск пустых строк и строк-примеров/комментариев
+  [[ -z "$line" ]] && continue
+  [[ "$line" =~ ^# ]] && continue
+  [[ "$line" =~ ^FORMAT: ]] && continue
+  [[ "$line" =~ ^- ]] && continue
+  [[ "$line" =~ ^sprint\|NAME\| ]] && continue
 
   if [[ "$line" =~ ^sprint\|([^|]+)\|([^|]+)\|(.+)$ ]]; then
     SPRINT="${BASH_REMATCH[1]}"
@@ -25,6 +29,7 @@ while IFS= read -r line; do
     continue
   fi
 
+  # финальная проверка что это не мусор
   if [[ -z "$SPRINT" || -z "$MODEL" || -z "$PROMPT" ]]; then
     echo "[chain] malformed line: $line"
     continue

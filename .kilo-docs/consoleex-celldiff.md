@@ -1,5 +1,9 @@
 # ConsoleEx фаза 2 — дизайн ядра cell-diff рендера
 
+> **СТАТУС (2026-08-27): реализовано (CE-1…CE-3 + resize/hardening CE-5).** ScreenBuffer/DiffEngine/AnsiWriter/
+> resize-policy живут в `src/Harbor.Tui.ConsoleEx/{Rendering,Parsing}/`; perf-бюджеты закреплены тестами и
+> golden-фикстурами. Файл — design rationale (см. ADR-003 в DECISIONS.md).
+
 > Спринт-7 волна аудитов Harbor. Компаньон к `consoleex-design.md` §8.5 (фаза 2
 > «Full»: alt-screen + cell-diff буфер, полноэкранный layout, resize-детектор,
 > ~10–14 дн.). READ ONLY — код репо не менялся. Ограничения неизменны:

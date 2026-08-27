@@ -1,5 +1,12 @@
 # Аудит tools конкурентов → вердикт для Harbor
 
+> **СТАТУС (2026-08-27): частично внедрено.**
+> - ✅ **SSRF-guard webfetch** — сделан: `WebFetchTool` блокирует loopback/link-local/RFC1918/IPv6-UL + metadata-endpoint;
+> - ❌ todo/plan tool, question tool, MCP annotations, admission control субагентов — ещё НЕ реализованы
+>   (toolset по-прежнему 14 builtin; актуальный план — [ROADMAP v0.5–v0.7](../docs/ROADMAP.md)).
+>
+> Ниже — point-in-time вердикт по клонам конкурентов от 25.08.2026; перед стартом нового спринта сверяйте пункты с ROADMAP.
+
 > 4 параллельных субагента, 25.08.2026. Полные отчёты: audit-tools-{grok,codex,opencode,aider-goose}.md
 > + codex-rs-tools-full.md (31КБ дип-дайв). Клоны: ~/Projects/Harbor-Harness-Analysis/repos/ + /tmp/audit-{aider,goose}, ~/opencode.
 

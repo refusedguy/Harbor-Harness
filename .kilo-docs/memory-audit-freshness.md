@@ -1,3 +1,9 @@
+# Freshness-исследование Graft — point-in-time снимок (25.08.2026)
+
+> Point-in-time заметка: внешние пути (`/home/nbook/graft-*`, отчёт `graft-freshness-research-2026-08-25.md`)
+> лежат вне репозитория и могут не существовать. Выводы о guardrails'ах фрешности хранятся здесь как входные
+> данные для будущих спринтов про память агентов.
+
 Готово. Отчёт: `/home/nbook/graft-freshness-research-2026-08-25.md`; код Graft склонирован в `/home/nbook/graft-research/`.
 
 ## Что найдено (все пруфы — из кода/issues, проверены по клону)

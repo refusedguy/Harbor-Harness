@@ -1,5 +1,9 @@
 # ConsoleEx — перф-аудит рендеринга и ввода (волна спринта-7)
 
+> **СТАТУС (2026-08-27): выводы применены.** Убийцы из «до» в новом пути рендера устранены — steady-state
+> ConsoleEx держит 0 аллокаций (perf-budget tests CE-3, golden smoke CE-4, PTY e2e CE-5). Файл оставлен как
+> чек-лист антипаттернов («до»/«после») для будущих изменений рендереров и VM.
+
 > READ-ONLY аудит. Донор анти-паттернов: `AnsiTuiRenderer` + `AnsiRenderContext`
 > (`src/Harbor.Tui.Ansi/`, 629 строк: AnsiTuiRenderer.cs 213 + Ansi.cs 70 +
 > TerminalQrRenderer.cs 334 + GlobalUsings 12). База дизайна:

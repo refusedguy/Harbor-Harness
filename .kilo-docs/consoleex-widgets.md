@@ -1,5 +1,10 @@
 # ConsoleEx фаза 2.5 — builtin views: разбор лучших TUI + дизайн компонентов
 
+> **СТАТУС (2026-08-27): реализовано (CE-2…CE-4).** Virtualized timeline со streaming-markdown (pacer-gated reveal),
+> tool-call карты с unified-diff телами, status-segment bar + tick-spinner, multi-line composer — в
+> `src/Harbor.Tui.ConsoleEx/Widgets/`. Сравнительный разбор grok/codex/lazygit/Spectre ниже оставлен как rationale
+> (см. ADR-003 в DECISIONS.md).
+
 > Спринт-7 волна аудитов Harbor. Компаньон к `consoleex-design.md` (фазы 0–2,
 > ввод/конвейер) и `consoleex-celldiff.md` (ядро cell-diff). Эта волна — слой
 > ВИДОВ поверх ядра: что показываем и как считаем. READ ONLY — код репо не
