@@ -29,13 +29,13 @@
         }
     </div>
 
-    <div class="chat-input-row">
+    <div class="chat-composer" role="form" aria-label="Message composer">
         <textarea class="chat-input"
                   @bind="Vm.Input"
                   @bind:event="oninput"
                   @onkeydown="OnKeyDownAsync"
                   placeholder="Type a message…  (Enter = send, Shift+Enter = newline)"
-                  rows="3"></textarea>
+                  rows="2"></textarea>
         <div style="display:flex;flex-direction:column;gap:8px;">
             <button class="btn-primary" @onclick="Vm.SendAsync" disabled="@Vm.State.IsAgentRunning">
                 @(Vm.State.IsAgentRunning ? "…" : "Send")
