@@ -68,6 +68,7 @@ public class FullLayerMatrixTests
         "Harbor.Ui.Framework.Services",
         "Harbor.Ui.Framework.ViewModels",
         "Harbor.Ui.Framework.Projection",
+        "Harbor.DesignSystem",
         "Harbor.Ui.Framework.Sessions",
         "Harbor.Desktop.Abstractions",
         "Harbor.Desktop.Shared",
@@ -172,6 +173,10 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions"]),
+        // HDS v1 token catalog — leaf Presentation library over the projection
+        // primitives (RgbColor); consumed by Desktop.Animations / ConsoleEx / apps.
+        ["Harbor.DesignSystem"] = new(Layer.Presentation,
+            ["Harbor.Ui.Framework.Projection"]),
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Desktop.Abstractions"] = new(Layer.Presentation,
@@ -183,7 +188,10 @@ public class FullLayerMatrixTests
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
             ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework"]),
-        ["Harbor.Desktop.Animations"] = new(Layer.Presentation, ["Harbor.Desktop.Abstractions"]),
+        // RgbColor resolves its AssemblyRef directly to the projection primitive
+        // library even though token types come through Harbor.DesignSystem.
+        ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
+            ["Harbor.DesignSystem", "Harbor.Ui.Framework.Projection"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         ["Harbor.Tui.Plain"] = new(Layer.Presentation,

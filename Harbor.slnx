@@ -82,6 +82,7 @@
     </Folder>
 
     <Folder Name="/src/Desktop/">
+        <Project Path="src/Harbor.DesignSystem/Harbor.DesignSystem.csproj"/>
         <Project Path="src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj"/>
         <Project Path="src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj"/>
     </Folder>
