@@ -29,8 +29,11 @@ public sealed record PtyStartSpec(
 ///         everything is async-signal-safe libc surface.
 ///     </para>
 ///     <para>
-///         <b>Platform:</b> Linux only (CI platform). Windows ConPTY is a
-///         follow-up — callers guard via <see cref="RequireLinux" />.
+///         <b>Platform:</b> Linux + macOS (POSIX PTY APIs are identical modulo
+///         per-OS flag constants resolved in <see cref="LibcNative" />);
+///         Windows ConPTY is a follow-up — callers guard via
+///         <see cref="RequireUnix" />. Scenarios asserting raw kernel struct
+///         layouts (termios byte offsets) additionally use <see cref="RequireLinux" />.
 ///     </para>
 /// </remarks>
 public sealed class PtySession : IAsyncDisposable
@@ -90,21 +93,30 @@ public sealed class PtySession : IAsyncDisposable
     /// <summary>Exit code once exited; throws before that. -1 when SIGKILLed on timeout.</summary>
     public int ExitCode => _exitTask.IsCompleted ? _exitTask.Result : throw new InvalidOperationException("Process has not exited.");
 
-    /// <summary>TUnit skip off-Linux — Windows ConPTY is an explicit follow-up.</summary>
+    /// <summary>TUnit skip off-Unix — Windows ConPTY is an explicit follow-up.</summary>
+    public static void RequireUnix()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            Skip.Test("PTY scenarios are Unix-only (Linux + macOS); Windows ConPTY is a follow-up.");
+        }
+    }
+
+    /// <summary>TUnit skip off-Linux — for scenarios asserting Linux kernel struct layouts.</summary>
     public static void RequireLinux()
     {
         if (!OperatingSystem.IsLinux())
         {
-            Skip.Test("PTY scenarios are Linux-only in CE-5 (Windows ConPTY is a follow-up).");
+            Skip.Test("This scenario asserts asm-generic (Linux) struct layouts — macOS uses a different termios layout.");
         }
     }
 
     /// <summary>Spawn <paramref name="spec" /> inside a fresh PTY of the given geometry.</summary>
     public static PtySession Start(PtyStartSpec spec)
     {
-        if (!OperatingSystem.IsLinux())
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
         {
-            throw new PlatformNotSupportedException("PtySession requires Linux (ConPTY follow-up).");
+            throw new PlatformNotSupportedException("PtySession requires a POSIX PTY platform (Windows ConPTY follow-up).");
         }
 
         int master = LibcNative.posix_openpt(LibcNative.O_RDWR | LibcNative.O_NOCTTY | LibcNative.O_CLOEXEC);
@@ -141,7 +153,8 @@ public sealed class PtySession : IAsyncDisposable
             // test process never needs a slave fd of its own.
             // Termios baseline BEFORE the child can touch raw mode — the
             // reference point for CE-5 З.8 (restore-after-exit assertions).
-            byte[] initialTermios = CaptureTermiosOn(master);
+            // Linux only: the snapshot's byte layout is asm-generic.
+            byte[] initialTermios = OperatingSystem.IsLinux() ? CaptureTermiosOn(master) : [];
             int pid = LibcNative.SpawnInPty(spec.FileName, spec.Args, env, slavePath, spec.SearchPath);
             return new PtySession(master, -1, pid, initialTermios);
         }
@@ -245,8 +258,16 @@ public sealed class PtySession : IAsyncDisposable
 
     // ── Termios ────────────────────────────────────────────────────────────
 
-    /// <summary>60-byte kernel view of the slave termios via tcgetattr(master).</summary>
-    public byte[] CaptureTermios() => CaptureTermiosOn(_masterFd);
+    /// <summary>Kernel view of the slave termios via tcgetattr(master). Linux layout — off-Linux callers are rejected.</summary>
+    public byte[] CaptureTermios()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            throw new PlatformNotSupportedException("Termios snapshots use the asm-generic struct layout (Linux).");
+        }
+
+        return CaptureTermiosOn(_masterFd);
+    }
 
     /// <summary>Termios snapshot taken BEFORE the child was spawned (pre-raw baseline).</summary>
     public byte[] InitialTermios => [.. _initialTermios];

@@ -1,3 +1,4 @@
+using Harbor.E2E.Framework;
 using TUnit.Assertions;
 
 namespace Harbor.Tui.ConsoleEx.PtyTests;
@@ -16,6 +17,8 @@ public sealed class TermiosRestoreScenarioTests : ConsoleExPtyScenarioBase
     [Timeout(30_000)]
     public async Task AfterGracefulExit_TermiosRestoredToPreLaunchSnapshot()
     {
+        // Byte-offset assertions below are asm-generic (lflag @ 12) — macOS layout differs.
+        PtySession.RequireLinux();
         await StartAppAsync(100, 30).ConfigureAwait(false);
         byte[] baseline = Session.InitialTermios;
 

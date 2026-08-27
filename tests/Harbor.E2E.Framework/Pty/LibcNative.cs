@@ -6,26 +6,30 @@ namespace Harbor.E2E.Framework.Pty;
 ///     Raw libc P/Invoke surface for the CE-5 PTY harness. Test-only code —
 ///     never referenced from prod binaries (BCL-only/AOT-safe rule applies to
 ///     src/, P/Invoke libc is sanctioned inside tests/ per the sprint charter).
-///     All constants are Linux (asm-generic) values; the harness refuses to
-///     start off-Linux.
+///     Flag/request constants are resolved per-OS at first touch:
+///     asm-generic (Linux) vs Darwin values. struct layouts remain Linux
+///     shaped — kernel-struct scenarios are Linux-gated at the session level.
 /// </summary>
 internal static class LibcNative
 {
-    // open(2) flags (Linux)
-    internal const int O_RDWR = 0x2;
-    internal const int O_NOCTTY = 0x400;
-    internal const int O_CLOEXEC = 0x80000;
+    private static readonly bool IsDarwin = OperatingSystem.IsMacOS();
 
-    // termios optional actions
+    // open(2) flags — O_NOCTTY/O_CLOEXEC differ between asm-generic and Darwin.
+    internal const int O_RDWR = 0x2;
+    internal static readonly int O_NOCTTY = IsDarwin ? 0x20000 : 0x400;
+    internal static readonly int O_CLOEXEC = IsDarwin ? 0x1000000 : 0x80000;
+
+    // termios optional actions (same value on every BSD/POSIX system).
     internal const int TCSANOW = 0;
 
-    // ioctl request for TIOCSWINSZ (set window size), Linux x86_64/arm64.
-    internal const uint TIOCSWINSZ = 0x5414;
+    // ioctl request for TIOCSWINSZ: Linux x86_64/arm64 = 0x5414;
+    // Darwin encodes it through the IOC machinery = 0x80087414.
+    internal static readonly uint TIOCSWINSZ = IsDarwin ? 0x80087414u : 0x5414u;
 
     // posix_spawn attribute flag: setsid(2) in the spawned child.
-    // Value per this host's /usr/include/spawn.h (glibc ≥ 2.44 moved SETSID
-    // to 0x80; older headers had 0x400 — probed empirically before pinning).
-    internal const ushort POSIX_SPAWN_SETSID = 0x80;
+    // Darwin pins POSIX_SPAWN_SETSID to 0x400. On glibc ≥ 2.44 SETSID moved
+    // to 0x80 (older headers had 0x400 — probed empirically before pinning).
+    internal static readonly ushort POSIX_SPAWN_SETSID = IsDarwin ? (ushort)0x400 : (ushort)0x80;
 
     internal const int SIGKILL = 9;
     internal const int WNOHANG = 1;

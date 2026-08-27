@@ -41,7 +41,7 @@ public abstract class ConsoleExPtyScenarioBase
     [Before(Test)]
     public async Task SetUpScenarioAsync()
     {
-        PtySession.RequireLinux();
+        PtySession.RequireUnix();
 
         Server = new MockLlmServer();
         await Server.StartAsync().ConfigureAwait(false);

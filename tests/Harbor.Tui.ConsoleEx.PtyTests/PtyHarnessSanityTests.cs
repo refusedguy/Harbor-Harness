@@ -16,7 +16,7 @@ public class PtyHarnessSanityTests
     [Timeout(30_000)]
     public async Task Cat_EchoesLinesThroughPty()
     {
-        PtySession.RequireLinux();
+        PtySession.RequireUnix();
         await using var session = PtySession.Start(new PtyStartSpec("cat", [], Cols: 80, Rows: 24));
 
         session.WriteLine("hello-pty");
@@ -29,7 +29,7 @@ public class PtyHarnessSanityTests
     [Timeout(30_000)]
     public async Task Resize_IsVisibleToChildStty()
     {
-        PtySession.RequireLinux();
+        PtySession.RequireUnix();
         // stty size prints "<rows> <cols>" of its controlling terminal.
         await using var session = PtySession.Start(new PtyStartSpec(
             "sh", ["-c", "sleep 0.5; stty size"], Cols: 80, Rows: 24));
@@ -69,7 +69,7 @@ public class PtyHarnessSanityTests
     [Timeout(30_000)]
     public async Task ExitCode_PropagatesFromChild()
     {
-        PtySession.RequireLinux();
+        PtySession.RequireUnix();
         await using var session = PtySession.Start(new PtyStartSpec(
             "sh", ["-c", "exit 7"], Cols: 80, Rows: 24));
 
