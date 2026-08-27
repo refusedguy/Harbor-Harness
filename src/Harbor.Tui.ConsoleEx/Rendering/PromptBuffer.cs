@@ -98,6 +98,7 @@ public sealed class PromptBuffer
     {
         int size = rune.Utf16SequenceLength;
         EnsureCapacity(_length + size);
+        Array.Copy(_buf, _cursor, _buf, _cursor + size, _length - _cursor);
         if (size == 1)
         {
             _buf[_cursor++] = (char)rune.Value;
@@ -122,6 +123,7 @@ public sealed class PromptBuffer
         }
 
         EnsureCapacity(_length + text.Length);
+        Array.Copy(_buf, _cursor, _buf, _cursor + text.Length, _length - _cursor);
         text.CopyTo(0, _buf, _cursor, text.Length);
         _cursor += text.Length;
         _length += text.Length;

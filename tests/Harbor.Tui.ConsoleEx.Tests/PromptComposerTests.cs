@@ -70,6 +70,36 @@ public class PromptBufferTests
     }
 
     [Test]
+    public async Task Insert_MidBuffer_ShiftsTailInsteadOfOverwrite()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("helo");
+        _ = b.MoveLeft();
+        _ = b.MoveLeft();
+        _ = b.Insert(new Rune('l'));
+
+        await Assert.That(b.SnapshotText()).IsEqualTo("hello");
+        await Assert.That(b.Cursor).IsEqualTo(3);
+
+        _ = b.MoveToStart();
+        _ = b.InsertText("**");
+        await Assert.That(b.SnapshotText()).IsEqualTo("**hello");
+        await Assert.That(b.Cursor).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Insert_SurrogatePairMidBuffer_NeverSplits()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("ab!");
+        _ = b.MoveLeft();
+        _ = b.Insert(new Rune(0x1F600));
+
+        await Assert.That(b.SnapshotText()).IsEqualTo("ab😀!");
+        await Assert.That(b.Cursor).IsEqualTo(4);
+    }
+
+    [Test]
     public async Task RemoveRange_MiddleSpan_ShiftsTail()
     {
         var b = new PromptBuffer();
