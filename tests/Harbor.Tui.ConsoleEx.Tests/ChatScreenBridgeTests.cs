@@ -227,6 +227,23 @@ public class ChatScreenBridgeTests
         await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('n')))).IsFalse();
     }
 
+    [Test]
+    public async Task RequestApprovalGate_OffThread_LandsOnTimeline_OnlyOnTick()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var gate = bridge.RequestApprovalGate("bash", "cargo build");
+        await Assert.That(panel.Timeline.Count).IsEqualTo(0); // not mutated off the render thread
+
+        bridge.Tick(100);
+        await Assert.That(panel.Timeline.BlockAt(panel.Timeline.Count - 1)).IsSameReferenceAs(gate);
+
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('a')))).IsTrue();
+        await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.AlwaysAllow);
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;

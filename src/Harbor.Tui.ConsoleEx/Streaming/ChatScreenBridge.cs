@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
@@ -92,6 +93,7 @@ public sealed class ChatScreenBridge : IDisposable
     public void Tick(long nowMs)
     {
         _nowMs = nowMs;
+        DrainGateQueue();
         if (_stream is null || _pending.Count == 0)
         {
             return;
@@ -314,6 +316,23 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
+    /// <summary>Render-thread drain of gates requested off-thread; newest wins the routing slot.</summary>
+    private void DrainGateQueue()
+    {
+        bool appended = false;
+        while (_gateQueue.TryDequeue(out var gate))
+        {
+            _pendingApproval = gate;
+            _panel.Timeline.Append(gate);
+            appended = true;
+        }
+
+        if (appended)
+        {
+            _panel.Timeline.MarkLastDirty();
+        }
+    }
+
     // ── Tool cards ─────────────────────────────────────────────────────────
 
     private ToolCard EnsureCard(string id, string toolName, string? argsSummary)
@@ -388,6 +407,22 @@ public sealed class ChatScreenBridge : IDisposable
 
     /// <summary>Newest undecided <see cref="ApprovalGateView" /> — keys are routed here first.</summary>
     private ApprovalGateView? _pendingApproval;
+
+    /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="Tick" />.</summary>
+    private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
+
+    /// <summary>
+    /// Thread-safe approval request for the agent-loop side of the seam:
+    /// creates a gate the caller can await via <c>DecisionRecorded</c>, and
+    /// enqueues it so the frame loop appends it onto the timeline on its next
+    /// tick — all list mutation stays on the render thread.
+    /// </summary>
+    public ApprovalGateView RequestApprovalGate(string toolName, string detail)
+    {
+        var gate = new ApprovalGateView(toolName, detail);
+        _gateQueue.Enqueue(gate);
+        return gate;
+    }
 
     /// <summary>
     /// Appends a permission gate to the timeline and arms it as the newest
