@@ -1,6 +1,6 @@
 {
   "name": "UI-V2",
-  "state": "running",
+  "state": "queued",
   "head": "66423ef",
   "base": "66423ef084a0de2288427bf9fb310f68a452ff17",
   "commits": 0,

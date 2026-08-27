@@ -87,7 +87,8 @@ while IFS= read -r line; do
   fi
 
   # check status.json — skip if already done
-  STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
+  SPRINT_LOWER=$(echo "$SPRINT" | tr '[:upper:]' '[:lower:]')
+  STATUS_FILE=".kilo-docs/sprints/$SPRINT_LOWER/status.json"
   if [[ -f "$STATUS_FILE" ]]; then
     STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "")
     RETRIES=$(jq -r '.retries // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
