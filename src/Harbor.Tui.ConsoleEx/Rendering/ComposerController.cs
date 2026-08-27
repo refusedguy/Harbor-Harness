@@ -94,6 +94,19 @@ public sealed class ComposerController
                 _ = Buffer.MoveToLineEnd();
                 return ComposerAction.Edited;
 
+            case KeyCode.Char when key.Character == new Rune('z') && mods == KeyModifiers.Ctrl:
+                // No history ⇒ ignored, matching the Ctrl+Y dead-yank contract.
+                return Buffer.Undo().Kind == EditOutcomeKind.Unchanged
+                    ? ComposerAction.Ignored
+                    : ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('Z') && mods == (KeyModifiers.Ctrl | KeyModifiers.Shift):
+                // Kitty CSI-u reports the shifted codepoint; legacy terminals
+                // cannot express C-S-z distinctly and stay on undo-only.
+                return Buffer.Redo().Kind == EditOutcomeKind.Unchanged
+                    ? ComposerAction.Ignored
+                    : ComposerAction.Edited;
+
             case KeyCode.Char when key.Character == new Rune('k') && mods == KeyModifiers.Ctrl:
                 _ = Buffer.DeleteToLineEnd();
                 return ComposerAction.Edited;

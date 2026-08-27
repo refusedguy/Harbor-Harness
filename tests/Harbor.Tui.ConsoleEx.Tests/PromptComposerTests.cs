@@ -417,6 +417,44 @@ public class ComposerControllerTests
     }
 
     [Test]
+    public async Task CtrlZ_Undoes_Last_Edit_CtrlShiftZ_Redoes()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "abc")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        await Assert.That(composer.HandleKey(CharKey('z', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("ab");
+
+        // Kitty CSI-u reports the shifted codepoint with C|S modifiers set.
+        await Assert.That(
+                composer.HandleKey(CharKey('Z', KeyModifiers.Ctrl | KeyModifiers.Shift)))
+            .IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("abc");
+    }
+
+    [Test]
+    public async Task Undo_Chords_Are_Dead_When_History_Empty()
+    {
+        var composer = new ComposerController();
+
+        await Assert.That(composer.HandleKey(CharKey('z', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Ignored);
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+
+        // Redo is ignored even after edits — nothing undone yet, fork rule.
+        foreach (var c in "draft")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        await Assert.That(composer.HandleKey(CharKey('Z', KeyModifiers.Ctrl | KeyModifiers.Shift)))
+            .IsEqualTo(ComposerAction.Ignored);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("draft");
+    }
+
+    [Test]
     public async Task ArrowsAndHomeEnd_MoveCaret()
     {
         var composer = new ComposerController();
