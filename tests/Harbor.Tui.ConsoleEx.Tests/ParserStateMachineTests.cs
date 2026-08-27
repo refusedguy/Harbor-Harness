@@ -288,4 +288,69 @@ public class ParserStateMachineTests
         var events = T.Feed(_parser, "\u001B[A");
         await Assert.That(events.Length).IsEqualTo(1);
     }
+
+    // ── Raw C0 control bytes in ground state (CE-5 input edge cases) ─────
+
+    [Test]
+    public async Task RawCtrlC_Byte_Decodes_To_CtrlCharC()
+    {
+        // ISIG is off in raw mode: the 0x03 byte itself must become the abort key
+        // (Char 'c' + Ctrl) the REPL abort path relies on.
+        var events = T.FeedBytes(_parser, [(byte)0x03]);
+
+        await A.IsChar(events[0], new Rune('c'), KeyModifiers.Ctrl);
+        await Assert.That(_parser.State).IsEqualTo(ParserState.Ground);
+    }
+
+    [Test]
+    public async Task RawCtrlC_AfterEsc_Composes_AltModifier()
+    {
+        // ESC + 0x03: Alt-Ctrl-C composite, not a broken sequence.
+        var events = T.FeedBytes(_parser, [0x1B, 0x03]);
+
+        await A.IsChar(events[0], new Rune('c'), KeyModifiers.Alt | KeyModifiers.Ctrl);
+    }
+
+    [Test]
+    public async Task C0_Legacy_Boundaries_Map_Correctly()
+    {
+        // NUL → Ctrl+Space; 0x1A → Ctrl+Z; FS/GS/RS/US → Ctrl+\ ] ^ _
+        var events = T.FeedBytes(
+            _parser,
+            [0x00],
+            [0x1A],
+            [0x1C],
+            [0x1F]);
+
+        await A.IsChar(events[0], new Rune(' '), KeyModifiers.Ctrl);
+        await A.IsChar(events[1], new Rune('z'), KeyModifiers.Ctrl);
+        // Legacy C0|0x40 table (crossterm-compatible): FS→\ , GS→] , RS→^ , US→_
+        await A.IsChar(events[2], new Rune('\\'), KeyModifiers.Ctrl);
+        await A.IsChar(events[3], new Rune('_'), KeyModifiers.Ctrl);
+    }
+
+    [Test]
+    public async Task Bell_Control_Byte_Decodes_To_CtrlG_Legacy()
+    {
+        // BEL has no dedicated key but maps through the legacy table (Ctrl+G),
+        // like crossterm; parser state stays Ground and following input survives.
+        var events = T.FeedBytes(_parser, [0x07, (byte)'x']);
+
+        await Assert.That(events.Length).IsEqualTo(2);
+        await A.IsChar(events[0], new Rune('g'), KeyModifiers.Ctrl);
+        await A.IsChar(events[1], new Rune('x'));
+    }
+
+    [Test]
+    public async Task CtrlC_During_Pending_Paste_StaysInsidePaste()
+    {
+        // Anti-injection: raw ^C between open and close markers is literal payload —
+        // it can NEVER abort a running generation from inside a paste.
+        var parser = new EscapeSequenceParser();
+        var events = T.Feed(parser, "\u001B[200~do \u0003 not abort\u001B[201~");
+
+        await Assert.That(events.Length).IsEqualTo(1);
+        await Assert.That(events[0].Kind).IsEqualTo(InputEventKind.Paste);
+        await Assert.That(events[0].Paste.Text).IsEqualTo("do \u0003 not abort");
+    }
 }
