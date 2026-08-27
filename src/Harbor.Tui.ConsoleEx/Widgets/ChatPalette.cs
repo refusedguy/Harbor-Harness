@@ -1,45 +1,54 @@
+using Harbor.DesignSystem;
+using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Projection;
+
 namespace Harbor.Tui.ConsoleEx.Widgets;
 
 /// <summary>
 /// Shared cell styles for chat widgets — the terminal-side instance of the
 /// HDS v1 design tokens (docs/design-system-report-20260827.html, §Design
-/// Tokens). HDS §7.1 names ChatPalette as the single source of truth for
-/// block colors in the ConsoleEx renderer; widget code must reference these
-/// styles (or the raw <see cref="PackedColor" /> tokens below) and never
-/// hardcode hex values.
+/// Tokens). All raw colors are derived from
+/// <see cref="TerminalColorPalette" /> in Harbor.DesignSystem — this file is
+/// the PackedColor projection of the token catalog, not a second source of
+/// truth. HDS §7.1 names ChatPalette as the single source of truth for block
+/// colors inside the ConsoleEx renderer: widget code must reference these
+/// styles and never hardcode hex values.
 /// </summary>
 public static class ChatPalette
 {
+    // ── Token bridge (Harbor.DesignSystem → truecolor cells) ────────────────
+    private static PackedColor FromToken(RgbColor c) => PackedColor.Rgb(c.R, c.G, c.B);
+
     // ── HDS v1 raw color tokens (truecolor 24-bit) ─────────────────────────
     /// <summary>Accent — primary actions, active states (#39BAE6).</summary>
-    public static readonly PackedColor Accent = PackedColor.Rgb(0x39, 0xBA, 0xE6);
+    public static readonly PackedColor Accent = FromToken(TerminalColorPalette.Accent);
     /// <summary>Success — tool success, approved gates (#7FD962).</summary>
-    public static readonly PackedColor Success = PackedColor.Rgb(0x7F, 0xD9, 0x62);
+    public static readonly PackedColor Success = FromToken(TerminalColorPalette.Success);
     /// <summary>Warning — pending approvals, running tools (#FFB454).</summary>
-    public static readonly PackedColor Warning = PackedColor.Rgb(0xFF, 0xB4, 0x54);
+    public static readonly PackedColor Warning = FromToken(TerminalColorPalette.Warning);
     /// <summary>Error — tool errors, denied gates (#FF6B6B).</summary>
-    public static readonly PackedColor Error = PackedColor.Rgb(0xFF, 0x6B, 0x6B);
+    public static readonly PackedColor Error = FromToken(TerminalColorPalette.Error);
     /// <summary>Tool — tool-call cards / role label (#D2A6FF).</summary>
-    public static readonly PackedColor Tool = PackedColor.Rgb(0xD2, 0xA6, 0xFF);
+    public static readonly PackedColor Tool = FromToken(TerminalColorPalette.Tool);
     /// <summary>System — system notices role accent (#F29668).</summary>
-    public static readonly PackedColor SystemToken = PackedColor.Rgb(0xF2, 0x96, 0x68);
-    /// <summary>Primary text on dark surfaces (#B3B9C5).</summary>
-    public static readonly PackedColor Text = PackedColor.Rgb(0xB3, 0xB9, 0xC5);
+    public static readonly PackedColor SystemToken = FromToken(TerminalColorPalette.System);
+    /// <summary>Primary text on dark surfaces.</summary>
+    public static readonly PackedColor Text = FromToken(TerminalColorPalette.Text);
     /// <summary>Muted / secondary text and hints (#5C6773).</summary>
-    public static readonly PackedColor Muted = PackedColor.Rgb(0x5C, 0x67, 0x73);
+    public static readonly PackedColor Muted = FromToken(TerminalColorPalette.Muted);
 
     // Surfaces — used by cell-diff rendering (borders, fills) when a block
     // needs an explicit background instead of the terminal default.
     /// <summary>BG — app background surface (#0A0E14).</summary>
-    public static readonly PackedColor Bg = PackedColor.Rgb(0x0A, 0x0E, 0x14);
+    public static readonly PackedColor Bg = FromToken(TerminalColorPalette.Background);
     /// <summary>PANEL — elevated panel surface (#0D1117).</summary>
-    public static readonly PackedColor Panel = PackedColor.Rgb(0x0D, 0x11, 0x17);
+    public static readonly PackedColor Panel = FromToken(TerminalColorPalette.Panel);
     /// <summary>SURFACE — card body surface (#131820).</summary>
-    public static readonly PackedColor Surface = PackedColor.Rgb(0x13, 0x18, 0x20);
+    public static readonly PackedColor Surface = FromToken(TerminalColorPalette.Surface);
     /// <summary>SURFACE2 — hover/active surface (#1A1F2B).</summary>
-    public static readonly PackedColor Surface2 = PackedColor.Rgb(0x1A, 0x1F, 0x2B);
+    public static readonly PackedColor Surface2 = FromToken(TerminalColorPalette.Surface2);
     /// <summary>BORDER — hairline separators (#1F2430).</summary>
-    public static readonly PackedColor Border = PackedColor.Rgb(0x1F, 0x24, 0x30);
+    public static readonly PackedColor Border = FromToken(TerminalColorPalette.Border);
 
     // ── Semantic cell styles (HDS v1 §1.3/§4.2 role map) ───────────────────
     /// <summary>User prompt prefix — accent + bold.</summary>
