@@ -160,29 +160,85 @@ public sealed class StatusPanel : Panel
     }
 }
 
+/// <summary>
+/// Right sidebar leaf (sprint UI-V2 P4): paints <see cref="SideBarView" />
+/// into the resolved rect. Minimum width pins the 42-column context panel on
+/// wide terminals; priority 5 makes it collapse first when the terminal is
+/// too narrow (auto-show policy lives in <see cref="SideBarLayout" />).
+/// </summary>
+public sealed class SideBarPanel : Panel
+{
+    public const string DefaultId = "chat.sidebar";
+
+    private volatile SideBarState _state = SideBarState.Empty;
+
+    public SideBarPanel(string id, int minWidth = SideBarLayout.DefaultWidth, int priority = 5)
+        : base(id, new Size(minWidth, 1), priority)
+    {
+    }
+
+    /// <summary>Latest sidebar snapshot — replaced wholesale by the host.</summary>
+    public SideBarState State
+    {
+        get => _state;
+        set => _state = value ?? SideBarState.Empty;
+    }
+
+    /// <summary>Plugin-contributed slots painted below the built-in sections.</summary>
+    public IReadOnlyList<SideBarSlot>? Slots { get; set; }
+
+    public override void Paint(ScreenBuffer buffer)
+    {
+        if (Rect.Width <= 0 || Rect.Height <= 0)
+        {
+            return;
+        }
+
+        SideBarView.Paint(buffer, Rect, State, Slots);
+    }
+}
+
 /// <summary>Assembled chat screen: timeline above, composer below, status footer.</summary>
-public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, ComposerPanel Composer, StatusPanel Status)
+public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, ComposerPanel Composer, StatusPanel Status, SideBarPanel? Sidebar = null)
 {
     public const string TimelineId = "chat.timeline";
     public const string ComposerId = "chat.composer";
     public const string StatusId = "chat.status";
+    public const string SidebarId = SideBarPanel.DefaultId;
 
     public static ChatScreen Build(
         Rendering.ComposerController composer,
         StatusViewModel status,
         float timelineRatio = 0.82f,
-        int minComposerRows = 3)
+        int minComposerRows = 3,
+        bool includeSidebar = true)
     {
         var tree = new LayoutTree();
-        var timeline = new ChatTimelinePanel(TimelineId, minWidth: 20, minHeight: 4, priority: 10);
+        // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
+        // with the sidebar present the timeline keeps
+        // (AutoShowMinWidth − DefaultWidth − gap) columns minimum, so the
+        // solver collapses the sidebar (priority 5) below 120 total columns
+        // in favor of the timeline (priority 10).
+        int timelineMinWidth = includeSidebar
+            ? SideBarLayout.AutoShowMinWidth - SideBarLayout.DefaultWidth - 1
+            : 20;
+        var timeline = new ChatTimelinePanel(TimelineId, minWidth: timelineMinWidth, minHeight: 4, priority: 10);
         var composerPanel = new ComposerPanel(ComposerId, composer, minWidth: 10, minHeight: minComposerRows, priority: 50);
         var statusRow = new StatusPanel(StatusId, status, minWidth: 10, minHeight: 1, priority: int.MaxValue);
         timeline.Timeline.EnableEntranceFx();
 
+        SideBarPanel? sidebar = includeSidebar
+            ? new SideBarPanel(SidebarId, minWidth: SideBarLayout.DefaultWidth, priority: 5)
+            : null;
+
         tree.AddRoot(timeline);
         tree.Split(TimelineId, SplitDir.Vertical, timelineRatio, composerPanel, gap: 0);
         tree.Split(ComposerId, SplitDir.Vertical, ratio: 1f - (1f / Math.Max(2, minComposerRows)), statusRow, gap: 0);
+        if (sidebar is not null)
+        {
+            tree.Split(TimelineId, SplitDir.Horizontal, 0.74f, sidebar, gap: 1);
+        }
 
-        return new ChatScreen(tree, timeline, composerPanel, statusRow);
+        return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar);
     }
 }
