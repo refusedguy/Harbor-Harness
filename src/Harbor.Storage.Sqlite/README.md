@@ -1,6 +1,6 @@
 # Harbor.Storage.Sqlite
 
-SQLite session storage backend. Indexed on `session_id` and `created_at` — efficient queries for session listing, time-range scans, and full-text search over message content.
+SQLite session storage backend. `SqliteSessionStore` keeps sessions and messages in indexed tables — efficient session listing, message reads, and stats without a full-file scan. Selected via `HARBOR_STORAGE=sqlite` (`src/Harbor.Hosting/Modules/StorageModule.cs:33`); the database file lives at `<HarborDir>/sessions.db`.
 
 ## Layer
 
@@ -15,19 +15,19 @@ Infrastructure — session/persistence backend. References `Harbor.Abstractions`
 
 ## Public API
 
-- `SqliteSessionStore` — implements `ISessionStore` from Harbor.Abstractions
-- `SqliteSessionSchema` — DDL constants (creates tables on first use)
-- `SqliteSessionQueries` — parameterized SQL for CRUD operations
+- `SqliteSessionStore(dbPath, logger)` — implements `ISessionStore` from Harbor.Abstractions; schema + queries live inside this single implementation (DDL on first use, parameterized SQL)
 
 ## Usage
 
-Registered via DI in the composition root:
+Registered via DI by the host's `StorageModule`:
 
 ```csharp
-services.AddSingleton<ISessionStore, SqliteSessionStore>();
+string sqlitePath = Path.Combine(ctx.Options.HarborDir, "sessions.db");
+services.AddSingleton<ISessionStore>(new SqliteSessionStore(sqlitePath, logger));
 ```
 
-The `AgentLoop` resolves `ISessionStore` and calls `AppendAsync` / `LoadAsync` / `CompactAsync` as messages flow.
+WAL mode is enabled for concurrent readers (`PRAGMA journal_mode = WAL`,
+`src/Harbor.Storage.Sqlite/SqliteSessionStore.cs:345`). The agent persists messages through the same `ISessionStore` contract as every other backend.
 
 ## See also
 

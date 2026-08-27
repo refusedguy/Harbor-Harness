@@ -1,37 +1,32 @@
 # Harbor.Tui.Plain
 
-Plain-text TUI renderer — no ANSI, no colors, no cursor movement. Designed for piped output, CI logs, screen readers, and accessibility. Output is a linear stream suitable for `>` redirection.
+Plain-text TUI renderer — no ANSI, no colors, no cursor movement. Designed for piped output, CI logs, screen readers, and accessibility. Output is a linear stream suitable for `>` redirection. Fallback renderer for minimal builds without Spectre (`TuiMode.ResolveTuiId`, `HARBOR_WITH_SPECTRE_TUI=false` ⇒ `plain`).
 
 ## Layer
 
-Presentation — TUI renderer. References `Harbor.Abstractions` (Domain) + `Harbor.Tui.Abstractions` (Presentation contracts).
+Presentation — terminal renderer. References `Harbor.Terminal.Abstractions` (`ITuiRenderer`, `ITuiRenderContext`, `BaseTuiRenderer`).
 
 ## Dependencies
 
 - `Harbor.Abstractions` (Domain)
-- `Harbor.Tui.Abstractions` (Presentation contracts: `ITuiRenderer`, `UiState`, `UiEvent`)
+- `Harbor.Terminal.Abstractions`
 
 ## Public API
 
-- `PlainTuiRenderer` — implements `ITuiRenderer` from Harbor.Tui.Abstractions
-- `PlainTuiRenderer` — minimal stream writer
+- `PlainTuiRenderer : BaseTuiRenderer` — implements `ITuiRenderer` (`PlainTuiRenderer.cs`)
 
 ## Usage
 
-Registered via DI in the composition root:
+Set `HARBOR_TUI=plain` or pipe stdout to a file (`src/Harbor.Hosting`/`apps/Harbor.App.Cli/Hosting/TuiMode.cs`). Output shapes seen today:
 
-```csharp
-services.AddSingleton<ITuiRenderer, PlainTuiRenderer>();
-```
+- `[assistant] ` prefix at message start; deltas streamed verbatim (`PlainTuiRenderer.cs:41-47`)
+- Live tool line per call: `→ {tool} {args}` (`PlainTuiRenderer.cs:54-58`)
+- Compaction summary: `[compacted: pruned N msgs, saved ~X tokens]` (`PlainTuiRenderer.cs:60-61`)
+- Errors: `[ERROR] {message}` (`PlainTuiRenderer.cs:63-64`)
 
-Then `AgentLoop` emits `AgentEvent`s; the active `ITuiReducer` folds them into a `UiState`; the renderer is called once per state change.
-
-## When to use
-
-Set `HARBOR_TUI=plain` or pipe stdout to a file. The renderer emits one line per assistant delta and bracketed `[tool:start]`/`[tool:end]` markers for tool calls.
+This exact surface is what the E2E smoke tests assert against (see AGENTS.md E2E section).
 
 ## See also
 
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
 - [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)

@@ -4,27 +4,19 @@
 
 ## Done
 
-- [x] Implements ITuiRenderer contract
+- [x] Implements `ITuiRenderer` (`PlainTuiRenderer : BaseTuiRenderer`)
 - [x] Streams assistant text deltas to console
-- [x] Renders tool-call borders (start/end events)
-- [x] Error rendering (red text)
-- [x] Zero ANSI escapes
-- [x] Linear streaming output
-- [x] Bracketed tool-call markers
+- [x] Live tool-call lines (`→ tool args`)
+- [x] Error lines (`[ERROR] …`) and compaction markers
+- [x] Zero ANSI escapes — linear streaming output
+- [x] Baseline renderer for minimal builds + CI/E2E assertions
 
 ## TODO
 
-- [ ] Inline image rendering (where supported)
-- [ ] Token-usage footer
-- [ ] Permission-prompt interactivity
 - [ ] Optional timestamp prefix
 - [ ] JSON Lines output mode (for structured logging)
+- [ ] Permission-prompt interactivity (non-interactive by design today)
 
 ## Known issues
 
 - No interactivity — read-only.
-
-## Next priorities
-
-1. **P1**: Polish rendering for long tool outputs (truncation + expand)
-2. **P2**: Theme/color customization via appsettings

@@ -1,39 +1,33 @@
 # Harbor.Tui.Ansi
 
-Default streaming TUI renderer using raw ANSI escape codes. AOT-compatible. Writes assistant text deltas, tool-call borders, and errors in red. The renderer used by `harbor` CLI when no other is selected.
+ANSI streaming TUI renderer using raw escape codes. AOT-compatible. Writes assistant text deltas, tool-call borders, and errors inline to the console.
 
 ## Layer
 
-Presentation — TUI renderer. References `Harbor.Abstractions` (Domain) + `Harbor.Tui.Abstractions` (Presentation contracts).
+Presentation — terminal renderer. References `Harbor.Terminal.Abstractions` (`ITuiRenderer`, `ITuiRenderContext`, `BaseTuiRenderer`).
 
 ## Dependencies
 
 - `Harbor.Abstractions` (Domain)
-- `Harbor.Tui.Abstractions` (Presentation contracts: `ITuiRenderer`, `UiState`, `UiEvent`)
+- `Harbor.Terminal.Abstractions`
 - `Microsoft.Extensions.Logging.Abstractions`
 
 ## Public API
 
-- `AnsiTuiRenderer` — implements `ITuiRenderer` from Harbor.Tui.Abstractions
-- `AnsiCodes` — ANSI escape sequence constants
-- `AnsiTuiRendererOptions` — color toggle, UTF-8 enforcement
+- `AnsiTuiRenderer : BaseTuiRenderer` — implements `ITuiRenderer`; intentionally unsealed for subclassing (`AnsiTuiRenderer.cs:26`)
+- `AnsiRenderContext : ITuiRenderContext` — writes through the shared render pipeline (`AnsiTuiRenderer.cs:166`)
+- `Ansi` — static ANSI escape-sequence constants (`Ansi.cs`)
+- `TerminalQrRenderer` — renders QR codes as ANSI blocks (used by daemon pairing output)
 
 ## Usage
 
-Registered via DI in the composition root:
-
-```csharp
-services.AddSingleton<ITuiRenderer, AnsiTuiRenderer>();
-```
-
-Then `AgentLoop` emits `AgentEvent`s; the active `ITuiReducer` folds them into a `UiState`; the renderer is called once per state change.
+Selected with `HARBOR_TUI=ansi`; registered by the host's renderer resolution (`TuiMode`). Events arrive from the agent via the event bus; each is folded into the render context by `RenderAsync`.
 
 ## Terminal detection
 
-Detects `NO_COLOR`, `TERM=dumb`, and piped stdout. Falls back to `PlainTuiRenderer` behavior (no colors, no cursor movement) when colors are disabled.
+Detects `NO_COLOR` / `TERM=dumb` conditions; on legacy conhost some escapes degrade gracefully — use Windows Terminal for full fidelity.
 
 ## See also
 
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
 - [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)

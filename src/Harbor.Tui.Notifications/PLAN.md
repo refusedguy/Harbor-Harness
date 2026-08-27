@@ -4,27 +4,18 @@
 
 ## Done
 
-- [x] Implements ITuiRenderer contract
-- [x] Streams assistant text deltas to console
-- [x] Renders tool-call borders (start/end events)
-- [x] Error rendering (red text)
-- [x] Linux notify-send integration
-- [x] macOS osascript integration
-- [x] Graceful fallback when no notifier present
+- [x] Implements `ITuiRenderer` (`NotificationTuiRenderer : BaseTuiRenderer`)
+- [x] Desktop OS notifications on agent events: errors, completion, compaction, tool failures
+- [x] Linux notify-send integration (`LinuxNotifySendBackend`)
+- [x] macOS osascript integration (`MacOsascriptBackend`)
+- [x] Windows msg.exe backend + null fallback when no notifier present (`WindowsToastBackend`, `NullNotificationBackend`)
 
 ## TODO
 
-- [ ] Inline image rendering (where supported)
-- [ ] Token-usage footer
-- [ ] Permission-prompt interactivity
-- [ ] Windows BurntToast integration
-- [ ] Action buttons (View Log, Retry)
+- [ ] Native Windows Action Center toasts (WinRT `ToastNotificationManager` / snoretoast)
+- [ ] Notification deduplication — debounce window per category
+- [ ] Click-through action buttons (View Log, Retry)
 
 ## Known issues
 
-- No Windows native toast support yet (planned).
-
-## Next priorities
-
-1. **P1**: Polish rendering for long tool outputs (truncation + expand)
-2. **P2**: Theme/color customization via appsettings
+- No Windows native toast support yet (`msg.exe` modal dialog is used as a stopgap).

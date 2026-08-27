@@ -82,9 +82,10 @@ GNOME Terminal, Windows Terminal*). Деградация явная: без 256 
 
 ```bash
 dotnet test tests/Harbor.Tui.ConsoleEx.Tests          # 370+ unit/golden тестов
+dotnet test tests/Harbor.Tui.ConsoleEx.PtyTests       # L2: реальный процесс в псевдотерминале (CE-5)
 dotnet test tests/Harbor.App.Cli.Tests                # E2E-smoke полного REPL-цикла
 HARBOR_UPDATE_GOLDENS=1 dotnet exec <test.dll>        # пересев golden-фикстур
 ```
 
 Golden-фикстуры: `tests/fixtures/celldiff/*.golden.txt`. Спецификации:
-`.kilo-docs/consoleex-{design,celldiff,widgets}.md`.
+`.kilo-docs/consoleex-{design,celldiff,widgets,perf}.md`.

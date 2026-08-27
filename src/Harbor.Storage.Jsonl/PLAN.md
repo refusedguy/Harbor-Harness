@@ -4,23 +4,25 @@
 
 ## Done
 
-- [x] Append-only JSONL writer (one event per line)
-- [x] Concurrent reader/writer with file lock
-- [x] Compaction (anchored-summary fold)
-- [x] Round-trip equality tests
+- [x] Append-only JSONL writer (one message per line)
+- [x] Full `ISessionStore` contract (create/get/list/append/update/delete/stats)
+- [x] AOT-compatible codec: `JsonlCodecContext : JsonSerializerContext` source-gen, no reflection serialization (`JsonlCodecContext.cs`)
+- [x] Wired as CLI default backend via `StorageModule` (`HARBOR_STORAGE=jsonl`)
+- [x] Round-trip equality tests (see `tests/Harbor.Storage.*.Tests`)
 
 ## TODO
 
-- [ ] Atomic file replace on compaction (currently in-place rewrite, fsync gap)
+- [ ] Atomic file replace on compaction (crash mid-compact risk)
 - [ ] Per-session size cap with auto-compact threshold
 - [ ] Async stream-flush tuning
+- [ ] Light index / footer to avoid full-file scan on load
 
 ## Known issues
 
-- Compaction is not atomic; a crash mid-compact can corrupt the session file.
+- Compaction rewrites are not atomic; a crash mid-rewrite can corrupt the session file.
 - No indexing — loading a session requires full-file scan.
 
 ## Next priorities
 
-1. **P1**: Concurrency stress tests under high write load
-2. **P2**: Snapshot + WAL for crash recovery (long-running sessions)
+1. **P1**: Atomic compaction (temp + rename)
+2. **P2**: Snapshot + WAL-style recovery for long-running sessions
