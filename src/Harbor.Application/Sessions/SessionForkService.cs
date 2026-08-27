@@ -3,6 +3,14 @@ using Harbor.Abstractions.Sessions;
 namespace Harbor.Application.Sessions;
 
 /// <summary>
+///     Outcome of a completed fork: the materialized child session plus how many
+///     messages were copied into it.
+/// </summary>
+/// <param name="Session">The freshly created child session record.</param>
+/// <param name="Copied">Number of history messages appended to the child.</param>
+public sealed record SessionFork(Session Session, int Copied);
+
+/// <summary>
 ///     Session fork (v0.8): branch an existing session into a NEW child session,
 ///     copying the parent's history up to — and including — a boundary message.
 ///     The parent session is never modified.
@@ -35,8 +43,8 @@ public sealed class SessionForkService
     /// </param>
     /// <param name="title">Child title; defaults to "Fork of {parent title}".</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The newly created child session record.</returns>
-    public async Task<Result<Session>> ForkAsync(
+    /// <returns>The newly created child session record and the copy count.</returns>
+    public async Task<Result<SessionFork>> ForkAsync(
         ISessionStore store,
         string sessionId,
         string? upToMessageId = null,
@@ -45,11 +53,11 @@ public sealed class SessionForkService
     {
         Result<Session> parentRes = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (parentRes.IsFailure)
-            return Result.Failure<Session>(parentRes.Error);
+            return Result.Failure<SessionFork>(parentRes.Error);
 
         Result<IReadOnlyList<AgentMessage>> msgsRes = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (msgsRes.IsFailure)
-            return Result.Failure<Session>(msgsRes.Error);
+            return Result.Failure<SessionFork>(msgsRes.Error);
 
         int count;
         if (upToMessageId is null)
@@ -71,7 +79,7 @@ public sealed class SessionForkService
             }
 
             if (boundary < 0)
-                return Result.Failure<Session>(
+                return Result.Failure<SessionFork>(
                     $"Message '{upToMessageId}' not found in session '{sessionId}'.");
 
             count = boundary + 1;
@@ -81,7 +89,7 @@ public sealed class SessionForkService
         Result<Session> created = await store.CreateAsync(
             parent.Directory, parent.Agent, parent.ProviderId, parent.Model, ct).ConfigureAwait(false);
         if (created.IsFailure)
-            return Result.Failure<Session>(created.Error);
+            return Result.Failure<SessionFork>(created.Error);
 
         Session child = created.Value;
 
@@ -97,7 +105,7 @@ public sealed class SessionForkService
         if (stamped.IsFailure)
         {
             await store.DeleteAsync(child.Id, CancellationToken.None).ConfigureAwait(false);
-            return Result.Failure<Session>(stamped.Error);
+            return Result.Failure<SessionFork>(stamped.Error);
         }
 
         for (int i = 0; i < count; i++)
@@ -105,9 +113,9 @@ public sealed class SessionForkService
             AgentMessage copy = msgsRes.Value[i] with { SessionId = child.Id };
             Result appended = await store.AppendMessageAsync(child.Id, copy, ct).ConfigureAwait(false);
             if (appended.IsFailure)
-                return Result.Failure<Session>(appended.Error);
+                return Result.Failure<SessionFork>(appended.Error);
         }
 
-        return Result.Success(stampedChild);
+        return Result.Success(new SessionFork(stampedChild, count));
     }
 }

@@ -92,11 +92,12 @@ public class SessionForkServiceTests
         var result = await fork.ForkAsync(store, parent.Id);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        var child = result.Value;
+        var child = result.Value.Session;
         await Assert.That(child.ParentSessionId).IsEqualTo(parent.Id);
         await Assert.That(child.Metadata.MessageCount).IsEqualTo(0);
         var copied = store.Messages[child.Id];
         await Assert.That(copied.Count).IsEqualTo(4);
+        await Assert.That(result.Value.Copied).IsEqualTo(4);
         for (int i = 0; i < 4; i++)
         {
             await Assert.That(copied[i].Id).IsEqualTo(msgIds[i]);
@@ -119,7 +120,7 @@ public class SessionForkServiceTests
         var result = await fork.ForkAsync(store, parent.Id, upToMessageId: msgIds[1]);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        var copied = store.Messages[result.Value.Id];
+        var copied = store.Messages[result.Value.Session.Id];
         await Assert.That(copied.Count).IsEqualTo(2);
         await Assert.That(copied[^1].Id).IsEqualTo(msgIds[1]);
         await Assert.That(store.Messages[parent.Id].Count).IsEqualTo(3);
