@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -559,13 +560,16 @@ public static class Program
                 return await RunExportSessionAsync(args.Skip(1).ToArray());
             case "import":
                 return await RunImportSessionAsync(args.Skip(1).ToArray());
+            case "search":
+                return await RunSearchSessionsAsync(args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import]
+                                        Usage: harbor sessions [list|rename|export|import|search]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
+                                          sessions search <query> [--session <id>]   find messages by substring
                                         """);
                 return 2;
         }
@@ -666,6 +670,44 @@ public static class Program
         string title = created.IsSuccess ? created.Value.Title : "?";
         Console.WriteLine($"Imported {Path.GetFileName(path)} → new session {newId} \"{title}\"");
         return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions search &lt;query&gt; [--session &lt;id&gt;]</c> —
+    ///     case-insensitive substring scan over persisted messages; the core
+    ///     lives in <see cref="SessionSearchRunner" /> (read-only).
+    /// </summary>
+    private static async Task<int> RunSearchSessionsAsync(string[] args)
+    {
+        string? sessionFilter = null;
+        List<string> rest = [];
+        int i = 0;
+        while (i < args.Length)
+        {
+            if (args[i] is "--session" or "-s" && i + 1 < args.Length)
+            {
+                sessionFilter = args[i + 1];
+                i += 2;
+                continue;
+            }
+
+            rest.Add(args[i]);
+            i++;
+        }
+
+        if (rest.Count == 0)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions search <query> [--session <id>]
+                                      Search all persisted messages (case-insensitive substring).
+                                    """);
+            return 2;
+        }
+
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        return await SessionSearchRunner.RunAsync(Console.Out, Console.Error, store, string.Join(' ', rest), sessionFilter)
+            .ConfigureAwait(false);
     }
 
     private static int PrintTuiOptions()
