@@ -10,10 +10,4 @@ sprint|NAME|MODEL|PROMPT_PATH
 - MODEL — полный ID с провайдером, без этого кило не стартует
 - PROMPT_PATH — путь к файлу с промптом относительно репо
 
-sprint|AGENTLOOP-DECOMP|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-agentloop-decomp.md
-
-# дальше новые спринты добавятся строками сверху вниз
-
-sprint|PROD-UI-POLISH|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-prod-ui-polish-v2.md
-
-sprint|DOCS-SYNC|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-docs-sync.md
+sprint|UI-FINAL|openrouter/z-ai/glm-5.3-flash|.kilo-docs/agent-prompts/kilo-prompt-ui-final.md

@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.Abstractions.DesignSystem;
+namespace Harbor.DesignSystem;
 /// <summary>
 ///     Font-family constants. Platforms resolve these via font fallback chains
 ///     (e.g. Avalonia picks the first available font from the comma-separated

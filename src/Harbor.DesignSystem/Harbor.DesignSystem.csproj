@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.DesignSystem</PackageId>
+    <Description>Harbor design system — shared color palettes, design tokens, animation primitives for terminal/desktop/web.</Description>
+    <PackageTags>harbor;design-system;tokens;colors;animations</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+  </ItemGroup>
+
+</Project>
