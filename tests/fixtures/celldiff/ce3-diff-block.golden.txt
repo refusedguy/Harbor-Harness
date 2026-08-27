@@ -176,12 +176,10 @@
 16,5: 'v' i1/d/- w1
 17,5: 'e' i1/d/- w1
 18,5: 'd' i1/d/- w1
-19,5: ' ' i1/d/- w1
-20,5: 'l' i1/d/- w1
-21,5: 'i' i1/d/- w1
-22,5: 'n' i1/d/- w1
-23,5: 'e' i1/d/- w1
-24,5: ' ' i1/d/- w1
+20,5: 'l' i8/d/- w1
+21,5: 'i' i8/d/- w1
+22,5: 'n' i8/d/- w1
+23,5: 'e' i8/d/- w1
 25,5: 't' i1/d/- w1
 26,5: 'w' i1/d/- w1
 27,5: 'o' i1/d/- w1
@@ -202,11 +200,10 @@
 14,6: 'd' i2/d/- w1
 15,6: 'e' i2/d/- w1
 16,6: 'd' i2/d/- w1
-17,6: ' ' i2/d/- w1
-18,6: 'l' i2/d/- w1
-19,6: 'i' i2/d/- w1
-20,6: 'n' i2/d/- w1
-21,6: 'e' i2/d/- w1
+18,6: 'l' i8/d/- w1
+19,6: 'i' i8/d/- w1
+20,6: 'n' i8/d/- w1
+21,6: 'e' i8/d/- w1
 0,7: ' ' d/d/D w1
 1,7: ' ' d/d/D w1
 2,7: '1' d/d/D w1
@@ -230,5 +227,5 @@
 22,7: 'x' d/d/- w1
 23,7: 't' d/d/- w1
 ## frames
-## frame 1 (459 bytes)
-\e[?2026h\e[1;1H\e[0m\e[2m           \e[22;1;1m--- a/src/app.cs\e[2;1H\e[22;2;2m           \e[22;1;1m+++ b/src/app.cs\e[3;1H\e[22;2;2m           \e[22m\e[38;5;6m@@ -10,7 +10,8 @@ namespace App;\e[4;1H\e[2m\e[39m  11   11  \e[4;13H\e[0mcontext\e[4;21Hline\e[5;1H\e[2m  12       \e[22m\e[38;5;1m-removed line one\e[6;1H\e[2m\e[39m  13       \e[22m\e[38;5;1m-removed line two\e[7;1H\e[2m\e[39m       12  \e[22m\e[38;5;2m+added line\e[8;1H\e[2m\e[39m  14   13  \e[8;13H\e[0mmore\e[8;18Hcontext\e[?2026l
+## frame 1 (504 bytes)
+\e[?2026h\e[1;1H\e[0m\e[2m           \e[22;1;1m--- a/src/app.cs\e[2;1H\e[22;2;2m           \e[22;1;1m+++ b/src/app.cs\e[3;1H\e[22;2;2m           \e[22m\e[38;5;6m@@ -10,7 +10,8 @@ namespace App;\e[4;1H\e[2m\e[39m  11   11  \e[4;13H\e[0mcontext\e[4;21Hline\e[5;1H\e[2m  12       \e[22m\e[38;5;1m-removed line one\e[6;1H\e[2m\e[39m  13       \e[22m\e[38;5;1m-removed\e[6;21H\e[38;5;8mline\e[6;26H\e[38;5;1mtwo\e[7;1H\e[2m\e[39m       12  \e[22m\e[38;5;2m+added\e[7;19H\e[38;5;8mline\e[8;1H\e[2m\e[39m  14   13  \e[8;13H\e[0mmore\e[8;18Hcontext\e[?2026l

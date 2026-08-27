@@ -132,15 +132,19 @@ public static class UnifiedDiffParser
 }
 
 /// <summary>
-/// Diff chat block (widgets §3.10, simplified CE-3 build): right-aligned
-/// gutter numbers + sign + per-kind color, hard-truncated at rect width. No
-/// syntax overlay, no stitcher yet.
+/// Diff chat block (widgets §3.10): right-aligned gutter numbers + sign +
+/// per-kind color, hard-truncated at rect width. Consecutive delete→add row
+/// pairs additionally get word-level emphasis: context tokens render dim,
+/// changed tokens take the full add/delete accent (git --word-diff view).
 /// </summary>
 public sealed class DiffBlock : IChatBlock
 {
     private readonly string _diffText;
     private IReadOnlyList<DiffLine> _lines = [];
     private bool _parsed;
+
+    /// <summary>Pair start row index → intraline segments; built once at parse.</summary>
+    private readonly Dictionary<int, WordDiffSides> _pairSegs = [];
 
     public DiffBlock(string diffText, string? path = null)
     {
@@ -186,15 +190,6 @@ public sealed class DiffBlock : IChatBlock
 
             buffer.SetText(ctx.Rect.X, y, Gutter(dl), ChatPalette.Dim);
 
-            var bodyStyle = dl.Kind switch
-            {
-                DiffLineKind.Add => ChatPalette.ToolOk,
-                DiffLineKind.Delete => ChatPalette.ToolError,
-                DiffLineKind.HunkHeader => new CellStyle(PackedColor.Indexed(6)),
-                DiffLineKind.FileHeader => new CellStyle(attrs: StyleAttr.Bold),
-                _ => CellStyle.Plain,
-            };
-
             int x = ctx.Rect.X + GutterWidth;
             int avail = Math.Max(0, ctx.Rect.Right - x);
             if (avail == 0)
@@ -205,7 +200,7 @@ public sealed class DiffBlock : IChatBlock
             if (dl.Kind is DiffLineKind.HunkHeader or DiffLineKind.FileHeader)
             {
                 // Headers carry their own markers — no sign column.
-                buffer.SetText(x, y, dl.Text.AsSpan(0, Math.Min(avail, dl.Text.Length)), bodyStyle);
+                buffer.SetText(x, y, dl.Text.AsSpan(0, Math.Min(avail, dl.Text.Length)), BodyStyle(dl.Kind));
                 continue;
             }
 
@@ -216,14 +211,63 @@ public sealed class DiffBlock : IChatBlock
                 _ => ' ',
             };
 
-            buffer.SetText(x, y, [sign], bodyStyle);
-            if (avail > 1)
+            buffer.SetText(x, y, [sign], BodyStyle(dl.Kind));
+            if (avail <= 1)
             {
-                var body = dl.Text.AsSpan(0, Math.Min(avail - 1, dl.Text.Length));
-                buffer.SetText(x + 1, y, body, bodyStyle);
+                continue;
+            }
+
+            if (_pairSegs.TryGetValue(i, out var sides))
+            {
+                bool addSide = dl.Kind == DiffLineKind.Add;
+                IReadOnlyList<WordSeg> segs = addSide ? sides.Inserted : sides.Removed;
+                PaintSegmented(buffer, x + 1, y, avail - 1, addSide, segs);
+                continue;
+            }
+
+            var body = dl.Text.AsSpan(0, Math.Min(avail - 1, dl.Text.Length));
+            buffer.SetText(x + 1, y, body, BodyStyle(dl.Kind));
+        }
+    }
+
+    /// <summary>
+    /// Word-level paint of one side of a paired change: context dim, the
+    /// changed tokens in the row's full accent color.
+    /// </summary>
+    private static void PaintSegmented(ScreenBuffer buffer, int x, int y, int width, bool addSide, IReadOnlyList<WordSeg> segs)
+    {
+        var plainStyle = ChatPalette.ToolBody;
+        var markStyle = addSide ? ChatPalette.ToolOk : ChatPalette.ToolError;
+
+        int cursor = x;
+        for (int s = 0; s < segs.Count; s++)
+        {
+            var seg = segs[s];
+            bool changed = seg.Kind != WordSegKind.Equal;
+            int take = Math.Min(seg.Text.Length, Math.Max(0, x + width - cursor));
+            if (take <= 0)
+            {
+                return;
+            }
+
+            string view = seg.Text.Length > take ? seg.Text[..take] : seg.Text;
+            buffer.SetText(cursor, y, view, changed ? markStyle : plainStyle);
+            cursor += view.Length + 1; // single-space visual separator between runs
+            if (cursor >= x + width)
+            {
+                return;
             }
         }
     }
+
+    private static CellStyle BodyStyle(DiffLineKind kind) => kind switch
+    {
+        DiffLineKind.Add => ChatPalette.ToolOk,
+        DiffLineKind.Delete => ChatPalette.ToolError,
+        DiffLineKind.HunkHeader => new CellStyle(PackedColor.Indexed(6)),
+        DiffLineKind.FileHeader => new CellStyle(attrs: StyleAttr.Bold),
+        _ => CellStyle.Plain,
+    };
 
     public const int GutterWidth = 11; // "1234 5678  "
 
@@ -241,7 +285,32 @@ public sealed class DiffBlock : IChatBlock
         if (!_parsed)
         {
             _lines = UnifiedDiffParser.Parse(_diffText);
+            BuildPairSegments();
             _parsed = true;
+        }
+    }
+
+    /// <summary>
+    /// One intraline segment set per consecutive delete→add pair, computed at
+    /// parse time — Paint stays allocation-free across frames.
+    /// </summary>
+    private void BuildPairSegments()
+    {
+        _pairSegs.Clear();
+        int idx = 0;
+        while (idx + 1 < _lines.Count)
+        {
+            bool isPair = _lines[idx].Kind == DiffLineKind.Delete && _lines[idx + 1].Kind == DiffLineKind.Add;
+            if (!isPair)
+            {
+                idx++;
+                continue;
+            }
+
+            var sides = WordDiff.Segment(_lines[idx].Text, _lines[idx + 1].Text);
+            _pairSegs[idx] = sides;
+            _pairSegs[idx + 1] = sides;
+            idx += 2;
         }
     }
 }
