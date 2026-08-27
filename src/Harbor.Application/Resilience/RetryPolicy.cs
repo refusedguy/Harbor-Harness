@@ -8,7 +8,10 @@ namespace Harbor.Application.Resilience;
 /// <summary>
 ///     Default retry policy. Retries only <b>transient</b> failures; fatal
 ///     failures (auth/quota rejections, caller cancellation) propagate
-///     immediately.
+///     immediately. Between attempts the policy sleeps an exponentially
+///     growing backoff — <c>BaseDelay · 2^(attempt − 1)</c>, capped at
+///     <see cref="MaxBackoff" /> — optionally flattened by jitter so
+///     synchronized callers do not form retry waves.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -32,6 +35,12 @@ namespace Harbor.Application.Resilience;
 /// </remarks>
 public sealed class RetryPolicy : IRetryPolicy
 {
+    /// <summary>
+    ///     Upper bound for the scaled exponential backoff: late attempts stop
+    ///     growing past this ceiling regardless of the attempt counter.
+    /// </summary>
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
+
     public Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, RetryOptions options, CancellationToken ct)
     {
         return ExecuteAsync(operation, options, onRetry: null, ct);
@@ -65,18 +74,30 @@ public sealed class RetryPolicy : IRetryPolicy
                 onRetry?.Invoke(ex, attempt);
 
                 // Prefer the server-provided retry hint when the classifier
-                // surfaced one; otherwise use the configured backoff delay.
-                TimeSpan delay = retryAfter ?? ComputeDelay(options);
+                // surfaced one; otherwise use the exponentially scaled backoff.
+                TimeSpan delay = retryAfter ?? ComputeDelay(options, attempt);
                 await Task.Delay(delay, ct).ConfigureAwait(false);
             }
         }
     }
 
-    private static TimeSpan ComputeDelay(RetryOptions options)
+    /// <summary>
+    ///     Exponential backoff for the retry that follows the failure of
+    ///     attempt <paramref name="failedAttempt" />:
+    ///     <c>BaseDelay · 2^(attempt − 1)</c>, capped at <see cref="MaxBackoff" />.
+    ///     With jitter enabled the delay is drawn uniformly from
+    ///     <c>[0, target)</c> — full jitter — so concurrent callers that fail
+    ///     together de-synchronize instead of forming retry waves.
+    /// </summary>
+    private static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
     {
+        double target = Math.Min(
+            options.BaseDelay.TotalMilliseconds * Math.Pow(2, failedAttempt - 1),
+            MaxBackoff.TotalMilliseconds);
+
         return options.UseJitter
-            ? TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * options.BaseDelay.TotalMilliseconds)
-            : options.BaseDelay;
+            ? TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * target)
+            : TimeSpan.FromMilliseconds(target);
     }
 
     /// <summary>

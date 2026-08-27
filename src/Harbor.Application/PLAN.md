@@ -21,6 +21,14 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 - [x] `IProviderHealthCheck` contract implementation (`Providers/ProviderHealthCheck.cs`)
 - [x] Central retry policy helpers for 429/5xx (`Resilience/RetryPolicyExtensions.cs:17`)
 - [x] `TokenTracker` / `WorkspaceContextSource` session helpers (`Sessions/`)
+- [x] AGENTLOOP-DECOMP: `ToolDispatcher` extracted from the loop — parallel dispatch,
+      sequential fan-out for `ExecutionMode.Sequential` tools, permission gating, per-call
+      timeouts (`Agents/ToolDispatcher.cs`, seam `Agents/IToolDispatcher.cs`, DI in CoreModule)
+- [x] AGENTLOOP-DECOMP: `StreamingCoalescer` extracted — text/thinking/tool-call delta
+      buffering out of the turn loop (`Agents/StreamingCoalescer.cs`)
+- [x] AGENTLOOP-DECOMP: `RetryPolicy` in place with capped **exponential backoff**
+      (`BaseDelay · 2^(attempt−1)`) and optional full jitter for transient LLM failures;
+      wired into `AgentLoop`'s stream call site (`Resilience/RetryPolicy.cs`)
 - [x] Pure Application layer - no Infrastructure references (no HTTP, no file I/O)
 
 ## TODO
@@ -29,12 +37,14 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 - [ ] Formalize the SystemPromptBuilder sections as plug-in (SkillProvider interface)
 - [ ] Streaming tool-call output (currently buffered per tool invocation)
 - [ ] Concurrent agent runs on the same session (session-level AsyncLock)
-- [ ] Wire the centralized `RetryPolicyExtensions` into provider call paths
+- [ ] Extend RetryPolicy coverage to direct `ILlmClient` call sites outside the loop's
+      wrapped stream (e.g. a retrying decorator around `ILlmClient`)
 
 ## Known issues
 
 - SystemPromptBuilder is monolithic - should be split into section providers.
-- Retry helpers exist but are not yet applied by default to provider calls.
+- `AgentLoop` retries its own LLM stream; provider calls made directly against an
+  `ILlmClient` elsewhere are not retried by default.
 
 ## Next priorities
 
