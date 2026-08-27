@@ -59,7 +59,12 @@ public sealed class ImageBlock : IChatBlock
         IsImage = MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
         int w = 0, h = 0;
         HasPngHeader = IsImage && data is { Length: >= 24 } && PngProbe.TryReadDimensions(data, out w, out h);
-        Dimensions = HasPngHeader ? $"{w}×{h}" : null;
+        if (!HasPngHeader)
+        {
+            HasJpegHeader = IsImage && data is { Length: > 0 } && JpegProbe.TryReadDimensions(data, out w, out h);
+        }
+
+        Dimensions = w > 0 ? $"{w}×{h}" : null;
     }
 
     /// <summary>Имя файла без директорий.</summary>
@@ -74,6 +79,9 @@ public sealed class ImageBlock : IChatBlock
 
     /// <summary>Байт-данные прошли проверку PNG IHDR.</summary>
     public bool HasPngHeader { get; }
+
+    /// <summary>Байт-данные прошли проверку JPEG SOI+SOF (PNG-проба молчит).</summary>
+    public bool HasJpegHeader { get; }
 
     /// <summary>Строка «W×H», когда заголовок распознан.</summary>
     public string? Dimensions { get; }

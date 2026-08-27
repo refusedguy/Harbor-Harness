@@ -57,6 +57,22 @@ public class ImageBlockTests
     }
 
     [Test]
+    public async Task Jpeg_Data_YieldsDimensions_ViaFallbackProbe()
+    {
+        byte[] jpeg = JpegProbeTests.Jpeg(1280, 720);
+        var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg);
+        await Assert.That(block.HasPngHeader).IsFalse();
+        await Assert.That(block.HasJpegHeader).IsTrue();
+        await Assert.That(block.Dimensions).IsEqualTo("1280×720");
+
+        // MIME image/* без узнаваемого заголовка держится на строке формата.
+        var opaque = new ImageBlock("f.webp", "image/webp", 512, [0x52, 0x49, 0x46, 0x46, 0x24, 0x00]);
+        await Assert.That(opaque.HasJpegHeader).IsFalse();
+        await Assert.That(opaque.Dimensions).IsNull();
+        await Assert.That(opaque.SummaryLine()).IsEqualTo("image/webp · 512 B");
+    }
+
+    [Test]
     public async Task NonImage_DataWithoutPng_FallsBackToMimeLine()
     {
         var pdf = new ImageBlock("report.pdf", "application/pdf", 64 * 1024, null);
@@ -75,7 +91,7 @@ public class ImageBlockTests
 public class JpegProbeTests
 {
     /// <summary>FFD8 + APP0-заглушка + SOF-сегмент с указанными размерами.</summary>
-    private static byte[] Jpeg(ushort width, ushort height, byte sofMarker = 0xC0, bool padBeforeSof = false)
+    internal static byte[] Jpeg(ushort width, ushort height, byte sofMarker = 0xC0, bool padBeforeSof = false)
     {
         var data = new List<byte>(24) { 0xFF, 0xD8 };
         if (padBeforeSof)
