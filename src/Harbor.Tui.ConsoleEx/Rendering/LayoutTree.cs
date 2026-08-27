@@ -96,6 +96,7 @@ internal sealed class SplitNode
 public sealed class LayoutTree
 {
     private readonly Dictionary<string, Panel> _panels = [];
+    private readonly Dictionary<string, SpringFx> _ratioSprings = [];
     private SplitNode? _root;
     private uint _capsVer = 1;
 
@@ -128,6 +129,7 @@ public sealed class LayoutTree
 
     public void Remove(string panelId)
     {
+        _ratioSprings.Remove(panelId);
         if (_root?.Leaf?.Id == panelId)
         {
             _panels.Remove(panelId);
@@ -140,13 +142,37 @@ public sealed class LayoutTree
         _capsVer++;
     }
 
+    /// <summary>
+    /// Springs the split ratio of the split created by
+    /// <see cref="Split" /> for <paramref name="panelId" /> toward
+    /// <paramref name="target" /> using <see cref="SpringFx" /> physics
+    /// (HDS v1 panel-resize motion). Each <see cref="Solve" /> advances the
+    /// spring one frame while it is unsettled — the cache is bypassed for
+    /// that window so rects track the animation.
+    /// </summary>
+    public void AnimateRatio(string panelId, float target)
+    {
+        // The ratio belongs to the split whose A-side leaf is panelId — the
+        // same node Split() configured when the panel was wrapped.
+        var node = FindSplitWithAChild(_root, panelId) ?? throw new KeyNotFoundException($"panel '{panelId}' has no owning split");
+        if (!_ratioSprings.TryGetValue(panelId, out var spring))
+        {
+            spring = new SpringFx(node.Ratio);
+            _ratioSprings[panelId] = spring;
+        }
+
+        spring.Retarget(target);
+        _capsVer++;
+    }
+
     /// <summary>Resolves every panel rect for the given viewport. Cached.</summary>
     public void Solve(int width, int height)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         ArgumentOutOfRangeException.ThrowIfNegative(height);
 
-        if (_cacheKey == (width, height, _capsVer))
+        bool animating = AdvanceRatioSprings();
+        if (!animating && _cacheKey == (width, height, _capsVer))
         {
             ApplyCached();
             return;
@@ -216,6 +242,43 @@ public sealed class LayoutTree
         {
             focused.Focused = true;
         }
+    }
+
+    private bool AdvanceRatioSprings()
+    {
+        if (_ratioSprings.Count == 0)
+        {
+            return false;
+        }
+
+        bool anyUnsettled = false;
+        foreach (var (panelId, spring) in _ratioSprings)
+        {
+            double position = spring.Step();
+            var node = FindSplitWithAChild(_root, panelId);
+            if (node is not null)
+            {
+                node.Ratio = (float)position;
+                anyUnsettled |= !spring.Settled;
+            }
+        }
+
+        return anyUnsettled;
+    }
+
+    private static SplitNode? FindSplitWithAChild(SplitNode? node, string id)
+    {
+        if (node is null || node.Leaf is not null)
+        {
+            return null;
+        }
+
+        if (node.A?.Leaf?.Id == id)
+        {
+            return node;
+        }
+
+        return FindSplitWithAChild(node.A, id) ?? FindSplitWithAChild(node.B, id);
     }
 
     private Rect SolveNode(SplitNode node, Rect avail)
