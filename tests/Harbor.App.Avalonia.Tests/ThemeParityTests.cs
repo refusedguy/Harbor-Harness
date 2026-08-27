@@ -33,7 +33,8 @@ public class ThemeParityTests
         "Vapor.axaml",
         "Mono.axaml",
         "Paper.axaml",
-        "Lumen.axaml"
+        "Lumen.axaml",
+        "HarborDesignTokens.axaml"
     };
 
     [Test]
