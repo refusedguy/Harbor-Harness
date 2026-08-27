@@ -564,15 +564,18 @@ public static class Program
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
             case "revert":
                 return await RunRevertSessionAsync(args.Skip(1).ToArray());
+            case "fork":
+                return await RunForkSessionAsync(args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search|revert]
+                                        Usage: harbor sessions [list|rename|export|import|search|revert|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
+                                          sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
                                         """);
                 return 2;
         }
@@ -745,6 +748,41 @@ public static class Program
         var messages = await store.GetMessagesAsync(sessionId).ConfigureAwait(false);
         int remaining = messages.IsSuccess ? messages.Value.Count : -1;
         Console.WriteLine($"Reverted session {sessionId}: deleted {reverted.Value} message(s), {remaining} remain.");
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions fork &lt;session-id&gt; &lt;message-id&gt;</c> —
+    ///     branch a NEW session that copies every message up to and including the
+    ///     given one (the source session is left untouched). The fork records its
+    ///     lineage via <c>ParentSessionId</c> and a "(fork)" title suffix.
+    /// </summary>
+    private static async Task<int> RunForkSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions fork <session-id> <message-id>
+                                      Create a NEW session with all messages up to AND INCLUDING the given one.
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string messageId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        var runner = new Harbor.App.Cli.Commands.SessionForkRunner(store);
+
+        var forked = await runner.ForkAsync(sessionId, messageId).ConfigureAwait(false);
+        if (forked.IsFailure)
+        {
+            _logger.LogError("Fork failed: {Error}", forked.Error);
+            Console.Error.WriteLine(forked.Error);
+            return 1;
+        }
+
+        Console.WriteLine($"Forked session {sessionId} → {forked.Value.ForkId}: copied {forked.Value.Copied} message(s) up to '{messageId}'.");
         return 0;
     }
 
