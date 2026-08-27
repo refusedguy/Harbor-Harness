@@ -148,3 +148,119 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
 }
+
+/* ============== Spring physics (web UI polish §P5.3) ============== */
+
+@keyframes springIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    60% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+    80% {
+        transform: scale(0.99);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes springPress {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.96);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Spring entrance — apply to elements that pop into view. */
+.spring-in {
+    animation: springIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Spring press — tactile press feedback on any clickable. */
+.spring-press,
+.btn-primary,
+.btn-secondary,
+.sidebar-toggle {
+    transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        opacity var(--transition-fast);
+}
+
+.spring-press:active,
+.btn-primary:active,
+.btn-secondary:active,
+.sidebar-toggle:active {
+    animation: springPress 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spring-in,
+    .spring-press:active,
+    .btn-primary:active,
+    .btn-secondary:active,
+    .sidebar-toggle:active {
+        animation: none;
+        transition: none;
+    }
+}
+
+/* ============== Floating pill composer (§P5.1) ============== */
+
+@keyframes composerIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ChatGPT-style floating pill composer: detached rounded slab above the
+   page edge, soft shadow, focus ring glow. */
+.chat-composer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2);
+    align-items: end;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-2) var(--space-3);
+    animation: composerIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.chat-composer:focus-within {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg), 0 0 0 3px rgba(57, 186, 230, 0.15);
+}
+
+.chat-composer .chat-input {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-3);
+}
+
+.chat-composer .chat-input:focus {
+    outline: none;
+    border: none;
+}
+
+.chat-composer .btn-primary {
+    border-radius: var(--radius-full);
+}
