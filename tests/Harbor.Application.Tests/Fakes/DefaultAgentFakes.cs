@@ -14,6 +14,9 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
 
     public int Appends => Volatile.Read(ref _appends);
 
+    /// <summary>Working directory last passed to <see cref="CreateAsync" /> (null = never called).</summary>
+    public string? LastCreatedDirectory { get; private set; }
+
     public void GateNextAppend(TaskCompletionSource gate)
     {
         _gatedAppend = gate;
@@ -21,7 +24,10 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
 
     public Task<Result<Session>> CreateAsync(
         string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
-        => Task.FromResult(Result.Success(session));
+    {
+        LastCreatedDirectory = directory;
+        return Task.FromResult(Result.Success(session));
+    }
 
     public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
         => Task.FromResult(sessionId == session.Id

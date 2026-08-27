@@ -60,12 +60,14 @@ public class SubAgentRunnerTests
 
         public ISessionContext? LastContext { get; private set; }
         public AgentDefinition? LastAgent { get; private set; }
+        public CancellationToken LastCt { get; private set; }
         public Func<Task>? MidRun { get; set; }
 
         public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             LastContext = session;
             LastAgent = agent;
+            LastCt = ct;
             foreach (AgentMessage message in _replies)
                 await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
 
@@ -246,5 +248,115 @@ public class SubAgentRunnerTests
         var result = await deferred.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("hi from real");
+    }
+
+    // ---- Edge cases (MVP-DELIVERY T3): output extraction and plumbing details ----
+
+    private static AssistantMessage ThinkingOnlyAssistant(string text) => new(
+        Guid.NewGuid().ToString("N"),
+        "session-1",
+        DateTimeOffset.UtcNow,
+        [new ThinkingPart(text)],
+        StopReason.Stop,
+        new Usage(0, 0),
+        "test-model");
+
+    private static AssistantMessage MultiPartAssistant(params string[] texts) => new(
+        Guid.NewGuid().ToString("N"),
+        "session-1",
+        DateTimeOffset.UtcNow,
+        [.. texts.Select(t => (ContentPart)new TextPart(t))],
+        StopReason.Stop,
+        new Usage(0, 0),
+        "test-model");
+
+    [Test]
+    public async Task RunAsync_ThinkingOnlyLastAssistant_FallsBackToEarlierProse()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies:
+        [
+            Assistant("the real answer"),
+            ThinkingOnlyAssistant("let me think")
+        ]);
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.FinalOutput).IsEqualTo("the real answer");
+    }
+
+    [Test]
+    public async Task RunAsync_MultipleTextParts_AreJoinedWithNewline()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: MultiPartAssistant("part one", "part two"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.FinalOutput).IsEqualTo($"part one\npart two");
+    }
+
+    [Test]
+    public async Task RunAsync_NonAssistantTailMessages_StillResolveFinalText()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var session1 = "session-1";
+        var loop = new ScriptedLoop(replies:
+        [
+            Assistant("final prose"),
+            new UserMessage(Guid.NewGuid().ToString("N"), session1, DateTimeOffset.UtcNow, "follow-up", "explore", "test-model"),
+            new ToolResultMessage(
+                Guid.NewGuid().ToString("N"),
+                session1,
+                DateTimeOffset.UtcNow,
+                [])
+        ]);
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.FinalOutput).IsEqualTo("final prose");
+    }
+
+    [Test]
+    public async Task RunAsync_CancellationToken_IsForwardedToLoop()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("ok"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+        using var cts = new CancellationTokenSource();
+
+        await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"), cts.Token);
+
+        await Assert.That(loop.LastCt.Equals(cts.Token)).IsTrue();
+    }
+
+    [Test]
+    public async Task RunAsync_WorkingDirectoryOverride_IsPassedToStoreCreation()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("ok"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: "/tmp/harbor-workdir"));
+
+        await Assert.That(store.LastCreatedDirectory).IsEqualTo("/tmp/harbor-workdir");
+    }
+
+    [Test]
+    public async Task RunAsync_EmptyWorkingDirectory_FallsBackToProcessCwd()
+    {
+        var store = new FakeSessionStore(NewSession());
+        var loop = new ScriptedLoop(replies: Assistant("ok"));
+        var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
+
+        await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", WorkingDirectory: " "));
+
+        await Assert.That(store.LastCreatedDirectory).IsEqualTo(Environment.CurrentDirectory);
     }
 }
