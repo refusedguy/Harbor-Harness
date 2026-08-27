@@ -4,6 +4,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Tools;
 using Harbor.Telemetry;
 #if HARBOR_WITH_PLUGINS
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
@@ -114,9 +115,7 @@ internal static class RegistriesModule
             ctx.LoggerFactory.CreateLogger<PluginAssemblyReferences>());
 
         var pluginRuntime = new PluginHostBuilder()
-            .WithSource(new FileSystemPluginSource(
-                new[] { globalPluginsDir, projectPluginsDir },
-                ctx.LoggerFactory.CreateLogger<FileSystemPluginSource>()))
+            .WithSource(BuildTrustedPluginSource(harborDir, globalPluginsDir, projectPluginsDir, ctx))
             .WithCompiler(new CachingCompiler(
                 new RoslynPluginCompiler(pluginReferences),
                 pluginsCacheDir,
@@ -142,6 +141,58 @@ internal static class RegistriesModule
         {
             ctx.Logger.LogWarning("CS plugin loading failed: {Error}", pluginResult.Error);
         }
+    }
+
+    /// <summary>
+    ///     Trust-gated plugin discovery: the user-managed global scope is trusted
+    ///     implicitly, project-local scripts (<c>&lt;cwd&gt;/.harbor/plugins</c>) go
+    ///     through <see cref="FileTrustPolicy" /> — a persisted per path+hash decision,
+    ///     with an interactive console prompt on first sight. Non-interactive hosts fail
+    ///     closed and skip unreviewed project plugins (ROADMAP v0.5 trust prompt).
+    /// </summary>
+    private static IPluginSource BuildTrustedPluginSource(
+        string harborDir,
+        string globalPluginsDir,
+        string projectPluginsDir,
+        HarborCompositionContext ctx)
+    {
+        var fsLogger = ctx.LoggerFactory.CreateLogger<FileSystemPluginSource>();
+        var inner = new FileSystemPluginSource(
+            new[] { globalPluginsDir, projectPluginsDir },
+            fsLogger);
+
+        var policy = new FileTrustPolicy(
+            new[] { globalPluginsDir, harborDir },
+            Path.Combine(globalPluginsDir, "trust.json"),
+            ctx.LoggerFactory.CreateLogger<FileTrustPolicy>(),
+            trustPrompt: script => PromptForProjectPluginTrustAsync(script, ctx.Logger));
+
+        return new TrustingPluginSource(inner, policy, ctx.LoggerFactory.CreateLogger<TrustingPluginSource>());
+    }
+
+    private static async Task<bool> PromptForProjectPluginTrustAsync(PluginScript script, ILogger log)
+    {
+        if (Console.IsInputRedirected || Console.IsOutputRedirected)
+        {
+            log.LogWarning(
+                "Non-interactive run: project-local plugin {Path} skipped. Run interactively to review it, or remove it from .harbor/plugins",
+                script.Path);
+            return false;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Harbor found a new or changed project-local plugin:");
+        Console.WriteLine($"  path : {script.Path}");
+        Console.WriteLine($"  sha256: {script.Hash[..Math.Min(12, script.Hash.Length)]}…");
+        Console.WriteLine("Project plugins execute in-process with full trust — only approve code you reviewed.");
+        Console.Write("Trust and load this plugin? [y/N] ");
+
+        string answer = await Console.In.ReadLineAsync().ConfigureAwait(false) ?? string.Empty;
+        bool trusted = answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+                       || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
+        if (!trusted)
+            log.LogInformation("Project-local plugin {Path} not approved by the user", script.Path);
+        return trusted;
     }
 #endif
 }
