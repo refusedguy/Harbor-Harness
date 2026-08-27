@@ -121,7 +121,11 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.Model,
                     session.ProviderId,
                     session.CreatedAt,
-                    session.CreatedAt);
+                    session.CreatedAt,
+                    session.ParentSessionId,
+                    session.Status,
+                    session.GitBranch,
+                    session.GitIsDirty);
 
                 File.AppendAllText(sessionFile, JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry) + "\n");
             }
@@ -168,7 +172,13 @@ public sealed class JsonlSessionStore : ISessionStore
                 header.ProviderId,
                 header.CreatedAt,
                 ResolveUpdatedAt(header, sessionFile),
-                metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty);
+                metadata.IsSuccess ? metadata.Value : SessionMetadata.Empty)
+            {
+                ParentSessionId = header.ParentSessionId,
+                Status = header.Status,
+                GitBranch = header.GitBranch,
+                GitIsDirty = header.GitIsDirty
+            };
         }, ResultErrors.Message).ConfigureAwait(false);
 
         return loaded.TapError(e => _logger.LogError("Failed to read session {SessionId}: {Error}", sessionId, e));
@@ -510,7 +520,11 @@ public sealed class JsonlSessionStore : ISessionStore
                     session.Model,
                     session.ProviderId,
                     session.CreatedAt,
-                    DateTimeOffset.UtcNow);
+                    DateTimeOffset.UtcNow,
+                    session.ParentSessionId,
+                    session.Status,
+                    session.GitBranch,
+                    session.GitIsDirty);
 
                 lines[0] = JsonSerializer.Serialize(header, JsonlCodecContext.Default.SessionHeaderEntry);
                 File.WriteAllLines(sessionFile, lines);
@@ -942,6 +956,13 @@ internal sealed record SessionCacheEntry(
     DateTimeOffset FileLastWriteUtc,
     IReadOnlyList<AgentMessage> Messages);
 
+/// <summary>
+///     Line-1 header of a session file. Optional trailing fields carry the
+///     newer <see cref="Harbor.Abstractions.Models.Session"/> attributes — before they
+///     existed, UpdateAsync rewrote the header WITHOUT parent linkage/status/git
+///     fields and silently dropped them on first rename/rebind (V4-bugfix).
+///     Defaults keep legacy files parseable.
+/// </summary>
 internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("version")] int Version,
@@ -953,7 +974,11 @@ internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("model")] string Model,
     [property: JsonPropertyName("providerId")] string ProviderId,
     [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
-    [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt = default);
+    [property: JsonPropertyName("updatedAt")] DateTimeOffset UpdatedAt = default,
+    [property: JsonPropertyName("parentSessionId")] string? ParentSessionId = null,
+    [property: JsonPropertyName("status")] SessionStatus Status = SessionStatus.Idle,
+    [property: JsonPropertyName("gitBranch")] string? GitBranch = null,
+    [property: JsonPropertyName("gitIsDirty")] bool GitIsDirty = false);
 
 /*
  * DDD-audit 25.08 (ROP-C Z3): <see cref="JsonlSessionStore.GetAsync" /> used to

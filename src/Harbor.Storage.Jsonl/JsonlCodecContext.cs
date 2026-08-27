@@ -18,9 +18,23 @@ namespace Harbor.Storage.Jsonl;
 ///     <c>JsonSerializer.Serialize&lt;T&gt;</c> / <c>JsonSerializer.Deserialize&lt;T&gt;</c>
 ///     calls with the <c>JsonTypeInfo</c>-based overloads from this context.
 /// </summary>
+/// <remarks>
+///     Naming policy (V4-bugfix): <b>camelCase at context level</b>. Before this policy,
+///     types WITHOUT explicit <see cref="System.Text.Json.Serialization.JsonPropertyAttribute" />
+///     (domain <c>Usage</c>, <c>ToolResultEntry</c>) were WRITTEN PascalCase through
+///     <c>JsonlCodecContext.Default.*</c> but READ back by the hand-rolled camelCase
+///     extractors in <see cref="JsonlMessageCodec" /> — every persisted tool_result
+///     message silently vanished on reload and usage numbers could be dropped. With a
+///     context-level policy both paths emit/expect identical camelCase; explicit
+///     attribute names keep priority over the policy.
+/// </remarks>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(SessionHeaderEntry))]
 [JsonSerializable(typeof(MessageEntry))]
 [JsonSerializable(typeof(Usage))]
+[JsonSerializable(typeof(Session))]
+[JsonSerializable(typeof(SessionMetadata))]
+[JsonSerializable(typeof(ExportEnvelope))]
 [JsonSerializable(typeof(ToolResultEntry))]
 [JsonSerializable(typeof(TextPartPayload))]
 [JsonSerializable(typeof(ThinkingPartPayload))]

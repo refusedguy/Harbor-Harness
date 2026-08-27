@@ -130,7 +130,7 @@ public static class Program
             "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
             "providers" => await RunListProvidersAsync(),
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
-            "sessions" => await RunListSessionsAsync(),
+            "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
             "tui" => PrintTuiOptions(),
             "storage" => PrintStorageOptions(),
             "setup" => await RunSetupAsync(),
@@ -536,6 +536,134 @@ public static class Program
             foreach (var s in result.Value)
                 Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
         }
+        return 0;
+    }
+
+    /// <summary>
+    ///     `harbor sessions` family: list (default), rename, export, import.
+    ///     Rename persists a new title via ISessionStore.UpdateAsync; export/import
+    ///     round-trip one session through the portable line payload built by
+    ///     <c>ISessionPorter</c> (see StorageModule for the backend wiring).
+    /// </summary>
+    private static async Task<int> RunSessionsAsync(string[] args)
+    {
+        string sub = args.Length > 0 ? args[0].ToLowerInvariant() : "list";
+        switch (sub)
+        {
+            case "list":
+                return await RunListSessionsAsync();
+            case "rename":
+                return await RunRenameSessionAsync(args.Skip(1).ToArray());
+            case "export":
+                return await RunExportSessionAsync(args.Skip(1).ToArray());
+            case "import":
+                return await RunImportSessionAsync(args.Skip(1).ToArray());
+            default:
+                Console.Error.WriteLine("""
+                                        Usage: harbor sessions [list|rename|export|import]
+                                          sessions                        list all sessions
+                                          sessions rename <id> <title>    rename a session
+                                          sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
+                                          sessions import <file>          import an exported file as a NEW session
+                                        """);
+                return 2;
+        }
+    }
+
+    private static async Task<int> RunRenameSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions rename <session-id> <new-title>");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string title = string.Join(' ', args.Skip(1));
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var loaded = await store.GetAsync(sessionId).ConfigureAwait(false);
+        if (loaded.IsFailure)
+        {
+            _logger.LogError("Rename failed: {Error}", loaded.Error);
+            Console.Error.WriteLine($"Cannot rename '{sessionId}': {loaded.Error}");
+            return 1;
+        }
+
+        var renamed = loaded.Value with { Title = title, UpdatedAt = DateTimeOffset.UtcNow };
+        var saved = await store.UpdateAsync(renamed).ConfigureAwait(false);
+        if (saved.IsFailure)
+        {
+            _logger.LogError("Rename persist failed: {Error}", saved.Error);
+            Console.Error.WriteLine($"Cannot persist rename: {saved.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Renamed {sessionId} → \"{title}\"");
+        return 0;
+    }
+
+    private static async Task<int> RunExportSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions export <session-id> [file]");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.jsonl";
+        using var host = HostBuilder.Build();
+        var porter = host.Services.GetRequiredService<ISessionPorter>();
+        await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+
+        var exported = await porter.ExportAsync(host.Services.GetRequiredService<ISessionStore>(), sessionId, output)
+            .ConfigureAwait(false);
+        if (exported.IsFailure)
+        {
+            _logger.LogError("Export failed: {Error}", exported.Error);
+            Console.Error.WriteLine($"Export failed: {exported.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Exported session {sessionId} → {path}");
+        return 0;
+    }
+
+    private static async Task<int> RunImportSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions import <file>");
+            return 2;
+        }
+
+        string path = args[0];
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"File not found: {path}");
+            return 1;
+        }
+
+        using var host = HostBuilder.Build();
+        var porter = host.Services.GetRequiredService<ISessionPorter>();
+        await using var stream = File.OpenRead(path);
+        using var reader = new StreamReader(stream);
+
+        var imported = await porter.ImportAsync(host.Services.GetRequiredService<ISessionStore>(), reader)
+            .ConfigureAwait(false);
+        if (imported.IsFailure)
+        {
+            _logger.LogError("Import failed: {Error}", imported.Error);
+            Console.Error.WriteLine($"Import failed: {imported.Error}");
+            return 1;
+        }
+
+        string newId = imported.Value;
+        var created = await host.Services.GetRequiredService<ISessionStore>().GetAsync(newId).ConfigureAwait(false);
+        string title = created.IsSuccess ? created.Value.Title : "?";
+        Console.WriteLine($"Imported {Path.GetFileName(path)} → new session {newId} \"{title}\"");
         return 0;
     }
 

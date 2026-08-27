@@ -9,3 +9,4 @@ global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Models;
 global using Harbor.Abstractions.Results;
 global using Harbor.Abstractions.Sessions;
+global using Microsoft.Extensions.Logging;

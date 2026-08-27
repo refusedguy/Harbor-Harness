@@ -171,10 +171,32 @@ internal static class JsonlMessageCodec
                 summaryFirstKeptId)));
     }
 
-    private static Usage ParseUsage(JsonElement payload) =>
-        payload.TryGetProperty("usage", out var u)
-            ? JsonSerializer.Deserialize<Usage>(u.GetRawText(), JsonlCodecContext.Default.Usage) ?? new Usage(0, 0)
-            : new Usage(0, 0);
+    /// <summary>
+    ///     Legacy-tolerant usage reader: pre-V4 files stored Usage PascalCase
+    ///     (no naming policy), post-fix files are camelCase. Read both, prefer
+    ///     whichever field exists.
+    /// </summary>
+    private static Usage ParseUsage(JsonElement payload)
+    {
+        if (!payload.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object)
+            return new Usage(0, 0);
+
+        static int? Num(JsonElement el, string camel, string pascal)
+            => el.TryGetProperty(camel, out var c) && c.ValueKind == JsonValueKind.Number
+                ? c.GetInt32()
+                : el.TryGetProperty(pascal, out var p) && p.ValueKind == JsonValueKind.Number
+                    ? p.GetInt32()
+                    : null;
+
+        int input = Num(u, "inputTokens", "InputTokens") ?? 0;
+        int output = Num(u, "outputTokens", "OutputTokens") ?? 0;
+        return new Usage(
+            input,
+            output,
+            ReasoningTokens: Num(u, "reasoningTokens", "ReasoningTokens"),
+            CacheReadTokens: Num(u, "cacheReadTokens", "CacheReadTokens"),
+            CacheWriteTokens: Num(u, "cacheWriteTokens", "CacheWriteTokens"));
+    }
 
     private static Result<string> RequiredModel(JsonElement payload, string id)
     {
@@ -193,10 +215,13 @@ internal static class JsonlMessageCodec
         var results = new List<ToolResultEntry>();
         foreach (var rEl in resultsEl.EnumerateArray())
         {
-            string? tcId = rEl.TryGetProperty("toolCallId", out var tci) ? tci.GetString() : null;
-            string? tn = rEl.TryGetProperty("toolName", out var tnEl) ? tnEl.GetString() : null;
-            string? output = rEl.TryGetProperty("output", out var o) ? o.GetString() : null;
-            bool isError = rEl.TryGetProperty("isError", out var ie) && ie.GetBoolean();
+            // Field names tolerate legacy PascalCase (pre-V4 files written without
+            // a naming policy) and post-fix camelCase.
+            string? tcId = FirstString(rEl, "toolCallId", "ToolCallId");
+            string? tn = FirstString(rEl, "toolName", "ToolName");
+            string? output = FirstString(rEl, "output", "Output");
+            bool isError = rEl.TryGetProperty("isError", out var ie) && ie.GetBoolean()
+                           || rEl.TryGetProperty("IsError", out var ie2) && ie2.GetBoolean();
             if (tcId is null || tn is null || output is null)
                 return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
 
@@ -205,6 +230,17 @@ internal static class JsonlMessageCodec
 
         return Result.Success<AgentMessage>(new ToolResultMessage(
             id, sessionId, createdAt, results, parentId));
+    }
+
+    /// <summary>First non-null string among alias property names (legacy + current casing).</summary>
+    private static string? FirstString(JsonElement element, params string[] names)
+    {
+        foreach (string name in names)
+        {
+            if (element.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString();
+        }
+        return null;
     }
 
     /// <summary>

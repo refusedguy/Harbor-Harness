@@ -34,6 +34,9 @@ internal static class StorageModule
 #endif
             _ => new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>())
         });
+        // Session import/export works over ANY registered backend: the porter reads via
+        // ISessionStore and encodes through the shared JSONL message codec (V4-slice).
+        services.AddSingleton<ISessionPorter, JsonlSessionPorter>();
         return services;
     }
 }
