@@ -249,6 +249,16 @@ internal sealed class ConsoleExReplRunner(
                 screenSession.Resize(Math.Max(1, evt.Resize.Width), Math.Max(1, evt.Resize.Height));
                 break;
 
+            case InputEventKind.Mouse when evt.Mouse.Type is MouseEventType.Press or MouseEventType.Click:
+                // Click-to-decide: pending approval gates get first claim on a
+                // left press; otherwise presses are inert (wheel handles scroll).
+                if (bridge.TryRouteApprovalClick(evt.Mouse))
+                {
+                    _wake.Writer.TryWrite(null);
+                }
+
+                break;
+
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelUp:
                 _timeline.ScrollBy(-WheelScrollLines);
                 break;

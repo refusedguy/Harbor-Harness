@@ -497,5 +497,39 @@ public sealed class ChatScreenBridge : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Routes a left-button press/click to the newest pending gate's hint-row
+    /// buttons (see <see cref="Widgets.ApprovalGateView.TryHitDecision" />).
+    /// Returns false when no gate is armed or the click lands outside its
+    /// decision zones — callers keep normal scroll/routing behavior.
+    /// </summary>
+    public bool TryRouteApprovalClick(in Input.MouseEvent mouse)
+    {
+        if (_pendingApproval is null)
+        {
+            return false;
+        }
+
+        if (mouse.Type is not (Input.MouseEventType.Press or Input.MouseEventType.Click)
+            || mouse.Button != Input.MouseButton.Left)
+        {
+            return false;
+        }
+
+        if (_pendingApproval.TryHitDecision(mouse.Column, mouse.Row) is not { } choice
+            || !_pendingApproval.TryDecide(choice))
+        {
+            return false;
+        }
+
+        if (!_pendingApproval.IsPending)
+        {
+            _pendingApproval = null;
+        }
+
+        _panel.Timeline.MarkLastDirty();
+        return true;
+    }
+
     public void Dispose() => Subscription.Dispose();
 }
