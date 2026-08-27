@@ -261,6 +261,14 @@ internal sealed class ConsoleExReplRunner(
 
     private async Task HandleKeyAsync(KeyEvent key, CancellationToken ct)
     {
+        // Permission gate outranks the composer while one is pending: y/n/a/
+        // Enter/Esc resolve the card and never leak into prompt editing.
+        if (bridge.TryRouteApprovalKey(key))
+        {
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
         var action = _composer.HandleKey(key);
         switch (action)
         {
