@@ -3,24 +3,52 @@ namespace Harbor.DesignSystem;
 /// <summary>
 /// Terminal-specific design tokens matching the HTML design-system report.
 /// These are the exact colors specified for ConsoleEx and TUI rendering.
+///
+/// Token reads resolve against the active <see cref="HarborTheme" /> —
+/// <see cref="Apply" /> swaps it atomically (volatile reference) and fires
+/// <see cref="ThemeChanged" /> so derived palettes (ChatPalette and friends)
+/// can re-project their styles. Default theme: <see cref="HarborTheme.HarborDark" />.
 /// </summary>
 public static class TerminalColorPalette
 {
-    public static readonly RgbColor Accent = new(0x39, 0xBA, 0xE6);
-    public static readonly RgbColor Success = new(0x7F, 0xD9, 0x62);
-    public static readonly RgbColor Warning = new(0xFF, 0xB4, 0x54);
-    public static readonly RgbColor Error   = new(0xFF, 0x6B, 0x6B);
-    public static readonly RgbColor Tool    = new(0xD2, 0xA6, 0xFF);
-    public static readonly RgbColor System  = new(0xF2, 0x96, 0x68);
-    public static readonly RgbColor User    = new(0xB3, 0xB9, 0xC5);
+    private static volatile HarborTheme _current = HarborTheme.HarborDark;
 
-    public static readonly RgbColor Background = new(0x0A, 0x0E, 0x14);
-    public static readonly RgbColor Panel      = new(0x0D, 0x11, 0x17);
-    public static readonly RgbColor Surface    = new(0x13, 0x18, 0x20);
-    public static readonly RgbColor Surface2   = new(0x1A, 0x1F, 0x2B);
-    public static readonly RgbColor Border     = new(0x1F, 0x24, 0x30);
-    public static readonly RgbColor Muted      = new(0x5C, 0x67, 0x73);
+    /// <summary>The active theme instance.</summary>
+    public static HarborTheme Current => _current;
 
-    public static readonly RgbColor Text      = new(0xB3, 0xB9, 0xC5);
-    public static readonly RgbColor TextDim   = Muted;
+    /// <summary>Fired after <see cref="Apply" /> installed a new theme.</summary>
+    public static event EventHandler? ThemeChanged;
+
+    /// <summary>Installs <paramref name="theme" /> and raises <see cref="ThemeChanged" />. Re-applying the same instance is a no-op.</summary>
+    public static void Apply(HarborTheme theme)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        if (ReferenceEquals(_current, theme))
+        {
+            return;
+        }
+
+        _current = theme;
+        ThemeChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    // ── Accent tokens ──────────────────────────────────────────────────────
+    public static RgbColor Accent => _current.Accent;
+    public static RgbColor Success => _current.Success;
+    public static RgbColor Warning => _current.Warning;
+    public static RgbColor Error => _current.Error;
+    public static RgbColor Tool => _current.Tool;
+    public static RgbColor System => _current.System;
+    public static RgbColor User => _current.User;
+
+    // ── Surface tokens ─────────────────────────────────────────────────────
+    public static RgbColor Background => _current.Background;
+    public static RgbColor Panel => _current.Panel;
+    public static RgbColor Surface => _current.Surface;
+    public static RgbColor Surface2 => _current.Surface2;
+    public static RgbColor Border => _current.Border;
+    public static RgbColor Muted => _current.Muted;
+
+    public static RgbColor Text => _current.Text;
+    public static RgbColor TextDim => _current.Muted;
 }
