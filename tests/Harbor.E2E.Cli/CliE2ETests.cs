@@ -167,4 +167,64 @@ public class CliE2ETests : E2eTestBase
         string captured = await File.ReadAllTextAsync(screenshotPath).ConfigureAwait(false);
         await Assert.That(captured).Contains("Harbor");
     }
+
+    /// <summary>
+    ///     Recording-replay through the REAL pipeline: run 1 answers from a scripted
+    ///     mock while <see cref="MockLlmServer.StartRecording" /> captures what was
+    ///     served; run 2 points <c>mock.json</c> at a FRESH server switched to
+    ///     <see cref="MockLlmServer.ReplayFrom" /> and must reproduce the identical
+    ///     answer without any scripted responses. Proves an offline recorded session
+    ///     can drive the full HostBuilder → AgentLoop → LlmClient stack.
+    /// </summary>
+    [Test]
+    [Category("E2E")]
+    public async Task AskCommand_ReplayMode_ReproducesRecordedAnswer()
+    {
+        const string answer = "Recorded offline answer #42";
+        this.Server.SetResponse("test-model", answer);
+        string recordingPath = Path.Combine(Path.GetTempPath(), $"harbor-e2e-rec-{Guid.NewGuid():N}.jsonl");
+
+        try
+        {
+            // ── Run 1: live scripted serve + record ──
+            this.Server.StartRecording(recordingPath);
+            await using (var driver = new CliDriver(CliProjectPath))
+            {
+                var env = this.GetEnv();
+                env["HARBOR_TUI"] = "plain";
+                await driver.StartAsync(["ask", "Give me the answer"], env).ConfigureAwait(false);
+                int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+                string output = await driver.ReadScreenAsync().ConfigureAwait(false);
+                await Assert.That(exit).IsEqualTo(0);
+                await Assert.That(output).Contains(answer);
+            }
+
+            await this.Server.StopAsync().ConfigureAwait(false);
+
+            // ── Fresh replay server + repoint the installed provider config ──
+            await using var replayer = new MockLlmServer();
+            await replayer.StartAsync().ConfigureAwait(false);
+            replayer.ReplayFrom(recordingPath);
+            string mockConfigPath = Path.Combine(this.TempHome, ".harbor", "providers", "mock.json");
+            string rewritten = (await File.ReadAllTextAsync(mockConfigPath).ConfigureAwait(false))
+                .Replace(this.Server.BaseUri.ToString(), replayer.BaseUri.ToString(), StringComparison.Ordinal);
+            await File.WriteAllTextAsync(mockConfigPath, rewritten).ConfigureAwait(false);
+
+            // ── Run 2: same pipeline, zero scripted state — only the recording ──
+            await using (var driver = new CliDriver(CliProjectPath))
+            {
+                var env = this.GetEnv();
+                env["HARBOR_TUI"] = "plain";
+                await driver.StartAsync(["ask", "Give me the answer"], env).ConfigureAwait(false);
+                int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+                string output = await driver.ReadScreenAsync().ConfigureAwait(false);
+                await Assert.That(exit).IsEqualTo(0);
+                await Assert.That(output).Contains(answer);
+            }
+        }
+        finally
+        {
+            File.Delete(recordingPath);
+        }
+    }
 }
