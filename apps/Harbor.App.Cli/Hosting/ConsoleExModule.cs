@@ -1,5 +1,8 @@
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
+using Harbor.Application.Permissions;
+using Harbor.App.Cli.Repl;
 using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Tui.ConsoleEx.Rendering;
 using Harbor.Tui.ConsoleEx.Streaming;
@@ -82,6 +85,20 @@ internal static class ConsoleExModule
             sp.GetRequiredService<ChatScreen>().Timeline,
             sp.GetRequiredService<StatusViewModel>(),
             autoSubscribe: false)); // events pumped through the frame loop thread
+
+        // Permission asks вместо молчаливого fail-closed deny: карточка
+        // ApprovalGateView в таймлайне + ожидание y/n/a. Ленивое замыкание на
+        // мост — резолв в момент первого запроса разрешений, не при сборке DI.
+        // Последняя регистрация IPermissionService выигрывает (AddHarbor уже отработал),
+        // поэтому оверрайд виден и ToolDispatcher'у внутри агента.
+        services.AddSingleton(sp => new ConsoleExPermissionAsker(
+            () => sp.GetRequiredService<ChatScreenBridge>()));
+        services.AddSingleton<IPermissionService>(sp => new PermissionService(
+            sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<
+                Harbor.Application.Permissions.PermissionService>>(),
+            sp.GetRequiredService<Repl.ConsoleExPermissionAsker>().AskAsync,
+            workspaceRoot: Directory.GetCurrentDirectory()));
 
         return services;
     }
