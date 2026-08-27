@@ -49,14 +49,21 @@ public sealed class PluginReloadService
 
     /// <summary>
     ///     Construct the service. Registered by <see cref="RegistriesModule" /> with the
-    ///     resolved harbor directory.
+    ///     resolved harbor directory and host configuration snapshot.
     /// </summary>
-    public PluginReloadService(IServiceProvider sp, string harborDir, ILogger<PluginReloadService> logger)
+    public PluginReloadService(
+        IServiceProvider sp,
+        string harborDir,
+        IConfiguration configuration,
+        ILogger<PluginReloadService> logger)
     {
         _sp = sp ?? throw new ArgumentNullException(nameof(sp));
         _harborDir = harborDir ?? throw new ArgumentNullException(nameof(harborDir));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    private readonly IConfiguration _configuration;
 
     /// <summary>
     ///     Run one full load pass over both plugin scopes. Serialized — concurrent
@@ -82,7 +89,6 @@ public sealed class PluginReloadService
         var agents = _sp.GetRequiredService<IAgentRegistry>();
         var panels = _sp.GetRequiredService<PanelRegistry>();
         var eventBus = _sp.GetRequiredService<IEventBus>();
-        var configuration = _sp.GetRequiredService<IConfiguration>();
         var loggerFactory = _sp.GetRequiredService<ILoggerFactory>();
 
         string globalPluginsDir = Path.Combine(_harborDir, "plugins");
@@ -92,7 +98,7 @@ public sealed class PluginReloadService
         // collection keeps that contract explicit instead of pretending otherwise.
         var (loadHost, runtime) = PluginRuntimeComposer.Compose(
             new ServiceCollection(),
-            configuration,
+            _configuration,
             loggerFactory,
             eventBus,
             tools,

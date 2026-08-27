@@ -88,6 +88,7 @@ internal static class RegistriesModule
         services.AddSingleton(sp => new PluginReloadService(
             sp,
             ctx.Options.HarborDir,
+            ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>()));
 #endif
 
