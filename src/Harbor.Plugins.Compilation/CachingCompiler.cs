@@ -99,7 +99,8 @@ public sealed class CachingCompiler : IPluginCompiler
 
     private static void TryDelete(string path)
     {
-        try { File.Delete(path); }
+        try
+        { File.Delete(path); }
         catch (IOException)
         { /* ignore — best-effort */
         }
