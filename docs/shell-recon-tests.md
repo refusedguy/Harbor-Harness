@@ -4,6 +4,7 @@
 > Scope: tests/ directory analysis for UiReducer, UiState, ViewModels, reducers, panels, overlays, projectors, and E2E shell tests.
 
 > **Note:** snapshot generated 2026-08-12, before sprint-2. `Harbor.Tui.{Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel}` now live in `contrib/tui/`, `Harbor.App.{Wpf,Maui,Blazor}` in `contrib/apps/`, their tests in `contrib/tests/`. Paths below are not updated.
+> **Status (2026-08-27):** АРХИВНАЯ разведка тестового покрытия UI-шелла; добавшиеся с тех пор наборы — `tests/Harbor.Tui.ConsoleEx.{Tests,PtyTests}` (CE-3…CE-5).
 
 ---
 

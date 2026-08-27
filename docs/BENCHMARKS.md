@@ -1,7 +1,7 @@
 # Benchmarks — Harbor
 
 > **Latest rerun: 2026-08-22** (i5-8250U, 4C/8T, .NET 10.0.10, Release). Full data: `/tmp/benchmark-report.md`.
-> Suite: `tests/Harbor.Benchmarks` — 23 classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
+> Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
 > Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
 
 ## Bottlenecks (P0→P3, measured)
@@ -70,11 +70,14 @@
 
 | Category | Count |
 |---|---:|
-| App projects (`apps/`) | 5 |
-| Source projects (`src/`) | 38 |
-| Test projects (`tests/`) | 13 |
+| App projects (`apps/`) | 2 (`Harbor.App.Cli`, `Harbor.App.Avalonia`; WPF/MAUI/Blazor переехали в `contrib/apps/`) |
+| Source projects (`src/`) | 51 |
+| Test projects (`tests/`, csproj dirs) | 27 |
 | Sample plugins (`samples/`) | 4 |
-| **Total in `Harbor.slnx`** | **60** |
+| **Total in `Harbor.slnx`** | **~84** (без contrib; по данным текущего `Harbor.slnx`: src+tests+apps+samples+build-проект) |
+
+> Составы ниже соответствуют состоянию на дату замера (2026-07-18) — тогда в слюнксе
+> было ~60 проектов; сегодня счётчик выше приведён к актуальной структуре.
 
 ### 2.2 Build time
 
@@ -104,9 +107,9 @@ App DLL only — not counting dependencies.
 |---|---|---:|
 | `Harbor.App.Cli` | net10.0 | 101 KB |
 | `Harbor.App.Avalonia` | net10.0 | 207 KB |
-| `Harbor.App.Wpf` | net10.0-windows10.0.19041 | 125 KB |
-| `Harbor.App.Blazor` | net10.0 | 132 KB |
-| `Harbor.App.Maui` | net10.0-windows | (skeleton — TBD) |
+| `contrib/apps/Harbor.App.Wpf` | net10.0-windows10.0.19041 | 125 KB |
+| `contrib/apps/Harbor.App.Blazor` | net10.0 | 132 KB |
+| `contrib/apps/Harbor.App.Maui` | net10.0-windows | (skeleton — TBD) |
 
 ### 3.2 Publish folder size (JIT, framework-dependent)
 
@@ -116,20 +119,20 @@ Includes the app DLL + all NuGet deps + runtime deps. **This is what `dotnet pub
 |---|---:|
 | `Harbor.App.Cli` | **109 MB** |
 | `Harbor.App.Avalonia` | ~140 MB (estimated; Avalonia + Skia + AvaloniaEdit) |
-| `Harbor.App.Wpf` | ~120 MB (estimated; Windows-only) |
-| `Harbor.App.Blazor` | ~115 MB (estimated; ASP.NET Core runtime) |
-| `Harbor.App.Maui` | ~150 MB (estimated; MAUI workload) |
+| `contrib/apps/Harbor.App.Wpf` | ~120 MB (estimated; Windows-only) |
+| `contrib/apps/Harbor.App.Blazor` | ~115 MB (estimated; ASP.NET Core runtime) |
+| `contrib/apps/Harbor.App.Maui` | ~150 MB (estimated; MAUI workload) |
 
 > The 109 MB CLI publish folder is dominated by `Microsoft.Extensions.*`, `Spectre.Console`, `Spectre.Tui`, `Microsoft.CodeAnalysis.CSharp` (Roslyn — 30+ MB alone for plugin compilation), and `MemoryPack` source-gen assemblies.
 
 ### 3.3 NativeAOT
 
 **Status: not yet supported.** Harbor CLI cannot be NativeAOT-published today because of:
-- `Spectre.Console` reflection usage (JSON serialization, ANSI detection)
+- `Spectre.Console` reflection usage (optional Spectre renderers referenced via the `HARBOR_WITH_SPECTRE_TUI` build flag; contrib projects)
 - `Microsoft.CodeAnalysis.CSharp` (Roslyn) — not AOT-compatible
-- `Harbor.Plugins.Compilation/RoslynPluginCompiler` — dynamically compiles .cs plugins at runtime
+- In-process CS-source plugin compilation: `src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs`
 
-**Roadmap:** Once `RoslynPluginCompiler` is moved to an out-of-process plugin host (planned v0.7), and Spectre.Console is replaced with Spectre.TUI source-gen, the CLI can be AOT-published. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
+**Roadmap:** out-of-process plugin host skeleton already exists (`Harbor.Plugins.Host` exe, MCP stdio); finishing the split (planned v0.9 two-process milestone) plus dropping in-process Roslyn and Spectre reflection unlocks AOT for the main process. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
 
 If you still want to try AOT today:
 ```bash
@@ -290,7 +293,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Binary | 207 KB DLL | + ~140 MB publish folder (estimated) |
 | Features | code editor, sessions, command palette, diff, charts, toasts, themes | Production-ready |
 
-### 8.3 WPF (`apps/Harbor.App.Wpf`)
+### 8.3 WPF (`contrib/apps/Harbor.App.Wpf`)
 
 | Aspect | Status | Notes |
 |---|---|---|
@@ -298,7 +301,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Run | ❌ Windows only | Cannot run on Linux |
 | Binary | 125 KB DLL | + ~120 MB publish (estimated) |
 
-### 8.4 MAUI (`apps/Harbor.App.Maui`)
+### 8.4 MAUI (`contrib/apps/Harbor.App.Maui`)
 
 | Aspect | Status | Notes |
 |---|---|---|
@@ -306,7 +309,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Run | ❌ untested | Skeleton only — no real UI |
 | Status | Draft | Needs CollectionView + Entry + chat page |
 
-### 8.5 Blazor (`apps/Harbor.App.Blazor`)
+### 8.5 Blazor (`contrib/apps/Harbor.App.Blazor`)
 
 | Aspect | Status | Notes |
 |---|---|---|

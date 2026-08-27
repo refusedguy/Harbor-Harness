@@ -3,6 +3,7 @@
 > Generated: 2026-08-12
 > Scope: Complete UI shell architecture reconnaissance for Harbor
 > **Note:** snapshot generated 2026-08-12, before sprint-2. `Harbor.Tui.{Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel}` now live in `contrib/tui/`, `Harbor.App.{Wpf,Maui,Blazor}` in `contrib/apps/`, their tests in `contrib/tests/`. Paths below are not updated.
+> **Status (2026-08-27):** АРХИВНАЯ разведка (вход для прошлых спринтов, см. §6 «Key Findings»). За снапшотом появились ConsoleEx CE-0…CE-5 (`src/Harbor.Tui.ConsoleEx/`), PROD-UI-0 и декомпозиция плагинов; актуальное состояние UI-шелла — `docs/PROJECT_STATUS.md` + `docs/SPECTRE_TUI_DEEP_DIVE.md`.
 
 > Sources: desktop analysis, TUI analysis, tests coverage, specs vs code
 

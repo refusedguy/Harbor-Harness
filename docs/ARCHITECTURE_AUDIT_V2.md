@@ -6,6 +6,13 @@
 > architectural improvements (4 already implemented in this sprint) with
 > concrete file:line references and implementation sketches.
 
+> **Historical snapshot (2026-07-19).** Числа и пути отражают состояние на дату аудита:
+> тогда было ~38 src-проектов, `Harbor.Domain.dll`, Scripting/`contrib` ещё не вынесены.
+> Сейчас (2026-08-27): 51 src-проект, `Harbor.Domain` → `Harbor.Abstractions.Contracts`
+> (F1 decoupling, ADR-007), plugin pipeline decomposed into `Harbor.Plugins.*`,
+> появился ConsoleEx; часть renderers/apps/scripting — в `contrib/`. Пути ниже не
+> переписывались — сверяйтесь с [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md).
+
 **Date:** 2026-07-19 (revised)
 **Auditor:** Subagent A2 (`arch-audit-v2`)
 **Scope:** all `src/` projects (~38 projects, 5 apps, 13 test projects, ~25 000 LoC)

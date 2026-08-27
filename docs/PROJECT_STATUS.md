@@ -3,11 +3,13 @@
 > Quick-reference card: what's done, what's broken, what's next.
 > For the full plan see [ROADMAP.md](./ROADMAP.md). For change history see [CHANGELOG.md](../CHANGELOG.md).
 >
-> **Last updated:** 2026-08-22 — full bench+test sweep (см. /tmp/test-report.md, /tmp/benchmark-report.md)
+> **Last updated:** 2026-08-27 (после спринтов F1-decoupling, PROD-UI-0, ConsoleEx CE-3…CE-5; HEAD 8f3d93b). Последний полный bench+test sweep — 2026-08-22.
 
 ## Build & test status (полный прогон 2026-08-22)
 
 Итог: **1349 выполнено → 1333 passed / 15 known-fail / 1 skipped**; 6 проектов пропущены (причины ниже). Полный clean-ребилд решения: 0 ошибок (WIP-барьер снят).
+
+После свипа добавлены тестовые наборы ConsoleEx (`Harbor.Tui.ConsoleEx.Tests`, `Harbor.Tui.ConsoleEx.PtyTests` — CE-3…CE-5, включая golden-фикстуры и 8 PTY-сценариев) и тесты PROD-UI-0 — текущий суммарный счёт выше см. в [ROADMAP.md § Metrics](./ROADMAP.md#-metrics).
 
 | Check | Status |
 |---|---|
@@ -37,6 +39,9 @@ EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P
 
 ## Recent milestones
 
+- **ConsoleEx CE-3…CE-5** (26.08) — второй рендер REPL: virtualized timeline, streaming markdown, DiffBlock, StatusSegmentBar/SpinnerStrip, perf-бюджеты (0 alloc steady-state), живой REPL c `ui.consoleEx{enabled,syncUpdates}`, PTY e2e (`PtyHarness`), фикс Termios struct 49→60 байт
+- **PROD-UI-0** (25–26.08) — единый каталог провайдеров из `ProviderPresets`, `IProviderHealthCheck` («Test connection»), `/model` перепривязывает сессию без рестарта REPL, живые списки моделей в onboarding-визардах
+- **F1 decoupling** (24.08) — `Harbor.Domain.dll` → `Harbor.Abstractions.Contracts`; ADR-007; замеры rebuild-set в docs/BUILD.md (commit 7449cd0)
 - **R31** — God-object decomposition: MarkdownRenderer (487→110+4 classes), JsonlSessionStore (688→528+codec), SessionManager (495→492+IChatViewBinder)
 - **R30** — Plugin system bug fix (24/24 tests pass), business-logic extraction (6 files moved from Avalonia to Ui.Framework)
 - **R29** — Blazor + WPF ports of reusable components (StatusBadge, ChatBubble, SessionRow)
@@ -47,15 +52,15 @@ EventBus fixed alloc (8.1 KB/publish). Полная таблица и план P
 
 1. **CLI**: `dotnet run --project apps/Harbor.App.Cli -- ask "..."` — Kilocode free model verified
 2. **Avalonia desktop GUI**: full chat + tool-call cards + sidebar + onboarding wizard + provider picker
-3. **Blazor Server**: chat + sidebar + sessions list (uses shared StatusMappers)
-4. **Plugin compilation**: Roslyn-based CS-source plugins compile + load (4 sample plugins)
-5. **Concurrent sessions**: multiple sessions can run agents in parallel, each routed to its own UiStore
+3. **ConsoleEx REPL** (opt-in): `HARBOR_TUI=consoleex` или `tui: "consoleex"` в `~/.harbor/config.json` — alt-screen cell-diff рендер, kitty keyboard/mouse/paste, Ctrl+C = abort → повтор = выход (CE-4)
+4. **Blazor Server** (`contrib/apps/`): chat + sidebar + sessions list (uses shared StatusMappers)
+5. **Plugin compilation**: Roslyn CS-source plugins compile + load (CS-samples; 8 проектов `Harbor.Plugins.*`)
+6. **Concurrent sessions**: multiple sessions can run agents in parallel, each routed to its own UiStore
 
 ## Known broken / pre-existing
 
-- **3 Avalonia 12 headless test failures**: `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — all fail with `InvalidOperationException: Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Likely an Avalonia.Headless package bug, NOT a Harbor code issue.
+- **3 Avalonia 12 headless test failures** (на момент свипа 22.08): `MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — fail with `InvalidOperationException: Stack empty` in `AvaloniaPropertyDictionaryPool.Get()`. Похоже на баг пакета Avalonia.Headless, не Harbor-кода; re-check ROP-D (25.08) фиксировал красными только пару флакующих `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (introduced 61ee126).
 - **8 IPC timing-test failures** on Linux: named-pipe disposal race in `Harbor.Ipc.Tests`. Tests pass on Windows.
-- **`Harbor.Desktop.Abstractions` namespace drift**: 4 files declare `namespace Harbor.App.Avalonia.ViewModels` while living in `src/Harbor.Desktop.Abstractions/ViewModels/`. Cosmetic — works at runtime but breaks IDE navigation.
 
 ## Top 3 next steps (recommended priority)
 
@@ -71,35 +76,34 @@ full backlog. Highlights:
 - `HarborConfig.cs` (492 lines) — split into per-section records
 - `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (644 lines) — decompose into per-concern registrars (mirror Avalonia `Hosting/`)
 - Move `SessionManager` to `Ui.Framework` once `TokenUsageViewModel` dependency abstracted
-- Fix `Harbor.Desktop.Abstractions` namespace drift
 - E2E test coverage: 12 → 33+ component tests with VLM content verification
 
 ## Where to find things
 
 | What | Where |
 |---|---|
-| Domain contracts | `src/Harbor.Abstractions/`, `src/Harbor.Domain/` |
-| UI framework (TEA, VMs, components) | `src/Harbor.Ui.Framework/` |
-| Application layer (AgentLoop, registries) | `src/Harbor.Core/`, `src/Harbor.Application/` |
-| Plugin system | `src/Harbor.Plugins.{Abstractions,Storage,Compilation,Instantiation,Registration,Hosting,Runtime}/` |
-| Scripting (SharpTS + Jint) | `src/Harbor.Scripting.*/` |
-| IPC (MessagePack over pipe/UDS) | `src/Harbor.Ipc.*/` |
+| Domain contracts | `src/Harbor.Abstractions/`, `src/Harbor.Abstractions.Contracts/` (бывший Harbor.Domain, F1 decoupling) |
+| UI framework (TEA, VMs, components) | `src/Harbor.Ui.Framework.*` (9 проектов: State, ViewModels, Services, Sessions, Projection…) |
+| Application layer (AgentLoop, registries) | `src/Harbor.Core/`, `src/Harbor.Application/`, `src/Harbor.Registries/` |
+| Plugin system | `src/Harbor.Plugins.{Abstractions,Storage,Compilation,Instantiation,Registration,Hosting,Runtime}/` + out-of-process `Harbor.Plugins.Host/` (exe) |
+| Scripting (SharpTS + Jint) | `contrib/scripting/Harbor.Scripting.*/` (moved to contrib) |
+| IPC (MessagePack over pipe/UDS) | `src/Harbor.Ipc.{Abstractions,Client,Server,InProcess}/` + `src/Harbor.Transport.Remote/` |
 | Storage backends | `src/Harbor.Storage.{Jsonl,Memory,Sqlite}/` |
-| LLM providers | `src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/` |
-| Builtin tools | `src/Harbor.Tools.{Read,Write,Edit,Bash,Grep,Glob,Ls,Task,WebFetch,Patch,Notebook,RipGrep,Tree,Mcp,Builtin}/` |
-| Terminal TUI renderers | `src/Harbor.Tui.{Ansi,Plain,Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel,Notifications}/` |
-| Platform apps (composition roots) | `apps/Harbor.App.{Cli,Avalonia,Wpf,Maui,Blazor}/` |
-| Reusable UI components | `apps/Harbor.App.Avalonia/Views/Components/`, `apps/Harbor.App.Blazor/Components/Shared/`, `apps/Harbor.App.Wpf/Controls/` |
-| Tests | `tests/Harbor.*.Tests/`, `tests/Harbor.E2E.*/`, `tests/Harbor.Benchmarks/` |
+| LLM providers | `src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/` |
+| Builtin tools (14) | `src/Harbor.Tools.Builtin/Tools/` (read/write/edit/bash/glob/grep/ls/task/web_fetch/patch/notebook/ripgrep/tree/mcp и др.) |
+| Terminal TUI renderers | in-solution: `src/Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}/`; optional (`contrib/tui/`): Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel |
+| Platform apps (composition roots) | `apps/Harbor.App.{Cli,Avalonia}/`; WPF / MAUI / Blazor — `contrib/apps/` |
+| Reusable UI components | `apps/Harbor.App.Avalonia/Views/Components/`, `contrib/apps/Harbor.App.Blazor/Components/Shared/`, `contrib/apps/Harbor.App.Wpf/Controls/` |
+| Tests | `tests/Harbor.*.Tests/`, `tests/Harbor.E2E.*/`, `tests/Harbor.Benchmarks/` (+ contrib-наборы в `contrib/tests/`) |
 | Specs (formal design) | `specs/00-overview.md` … `specs/15-providers-dynamic.md` |
 | Docs (arch, dev, plugin) | `docs/` |
-| Sample plugins | `samples/plugins/`, `samples/plugins-cs/` |
+| Sample plugins | `samples/plugins/` (DLL legacy), `samples/plugins-cs/` (Roslyn CS-source) |
 | Provider JSON configs | `providers/*.json` |
 
 ## How to run things
 
 ```bash
-# Build everything
+# Build everything (main solution = .slnx; .sln не существует)
 dotnet build
 
 # Run CLI
@@ -108,15 +112,17 @@ dotnet run --project apps/Harbor.App.Cli -- ask "What is 2+2?"
 # Run Avalonia desktop
 dotnet run --project apps/Harbor.App.Avalonia
 
-# Run Blazor web
-dotnet run --project apps/Harbor.App.Blazor
+# Run Blazor web (contributes component moved out of main solution)
+dotnet run --project contrib/apps/Harbor.App.Blazor
 # → open http://localhost:5000
 
-# Run only the Avalonia unit tests
-dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release
+# Запуск тестов ВАЖНО: целиком Harbor.slnx под MTP-host не прогоняется — известное
+# ограничение хоста. Прогоняйте per-project:
+dotnet test tests/Harbor.Core.Tests
+dotnet test tests/Harbor.Tui.ConsoleEx.PtyTests   # CE-5 PTY e2e
 
 # Run plugin tests (the ones that were broken in R29 and fixed in R30)
-dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release
+dotnet test tests/Harbor.Plugins.Runtime.Tests
 
 # Enforce layer-dep rules
 dotnet test tests/Harbor.Architecture.Tests
@@ -131,5 +137,5 @@ dotnet test tests/Harbor.Architecture.Tests
 | `OPENAI_API_KEY` | OpenAI native provider | `sk-...` |
 | `OPENROUTER_API_KEY` | OpenRouter (200+ models) | `sk-or-...` |
 | `HARBOR_MODEL` | Override active model | `kilocode/tencent/hy3:free` |
-| `HARBOR_TUI` | Pick TUI renderer (`ansi`/`plain`/`spectre`/...) | `plain` |
+| `HARBOR_TUI` | Pick TUI renderer (`ansi`/`plain`/`consoleex`; `spectre-tui` по умолчанию, семейство Spectre живёт в `contrib/tui`) | `plain` |
 | `HARBOR_SHELL` | `orca` for experimental Orca shell | `orca` |

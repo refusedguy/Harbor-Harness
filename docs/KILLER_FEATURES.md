@@ -25,7 +25,7 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 |----|----------------------------------------------------|--------|--------|---------------|--------|
 | 1  | Animated streaming text with typewriter cursor     | 5      | S      | Orca, OpenAI  | ✅ R28 |
 | 2  | Collapsible tool-call cards with status + duration | 5      | M      | Orca, Opencode | ✅ R28 |
-| 3  | Command palette with recent items + fuzzy + kbd    | 5      | M      | Orca (cmdk)   | ⚠️ partial (basic, no fuzzy) |
+| 3  | Command palette with recent items + fuzzy + kbd    | 5      | M      | Orca (cmdk)   | ✅ R28+ (fuzzy filter: `CommandPaletteViewModelBase.FuzzyScore`; re-verified 2026-08-27) |
 | 4  | Token-usage sparkline in status bar (live)         | 4      | S      | Opencode, Kilo | ✅ R28 |
 | 5  | Intra-line word-diff highlighting (not just line)  | 5      | M      | Pi (diff lib) | ⚠️ partial (line-level only) |
 | 6  | Toast notifications with slide-in + auto-dismiss   | 4      | S      | Orca (sonner) | ✅ R28 |
@@ -47,6 +47,13 @@ The list below is the **ruthless, ship-first** ranking. Each entry has:
 **Top 3 to implement now (P0):** #1 (typewriter), #2 (tool-call cards), #4 (sparkline) —
 they have the highest impact/effort ratio and ship in 1 sprint. Detailed
 implementation sketches in §2.7 and §8.
+
+> **Status-provenance note (2026-08-27, docs-zero sweep):** every ✅ in the table above
+> was re-verified against code — `TypewriterStreamingText.axaml.cs`, `ToolCallCardView`,
+> `Sparkline`, `ToastNotificationsView` + `AppStyles.axaml:110` ("Toast slide-in"),
+> `OnboardingWindow.axaml` (5-dot stepper), `CommandPaletteViewModelBase.FuzzyScore`
+> (all under `apps/Harbor.App.Avalonia/`). Items marked ❌ remain unimplemented
+> (no matching types found).
 
 ---
 
@@ -2368,9 +2375,9 @@ edited prompt, discarding the old future.
 | 1 | Animated streaming text with typewriter cursor| S      | R1 (done)|
 | 2 | Collapsible tool-call cards                   | M      | R1 (done)|
 | 3 | Token-usage sparkline in status bar           | S      | R1 (done)|
-| 4 | Fuzzy search in command palette               | S      | next     |
+| 4 | Fuzzy search in command palette               | S      | ✅ done (`CommandPaletteViewModelBase.FuzzyScore`) |
 | 5 | Recent items in command palette               | S      | next     |
-| 6 | Toast slide-in animation                      | S      | next     |
+| 6 | Toast slide-in animation                      | S      | ✅ done (`AppStyles.axaml:110` "Toast slide-in") |
 | 7 | Free-text fallback in command palette         | S      | next     |
 
 **Total:** ~3.5 days. **Deliverable:** Avalonia app that feels alive
