@@ -271,10 +271,10 @@ public class PromptBufferTests
         await Assert.That(b.LastKill).IsEqualTo("world");
 
         // A fresh successful kill replaces the ring slot entirely.
-        _ = b.InsertText("two");
+        _ = b.InsertText("tail");
         _ = b.MoveToStart();
-        _ = b.DeleteToLineEnd();
-        await Assert.That(b.LastKill).IsEqualTo("hello ");
+        _ = b.DeleteWordForward();
+        await Assert.That(b.LastKill).IsEqualTo("hello");
     }
 
     [Test]
@@ -595,8 +595,10 @@ public class ComposerControllerTests
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one two");
         await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
 
-        // Repeated yank without a fresh kill re-pastes the same slot.
-        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Backspace));
+        // C-k/C-y cycle: a fresh line-end kill becomes the slot and yanks back.
+        _ = composer.HandleKey(CharKey('k', KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one");
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.End));
         await Assert.That(composer.HandleKey(CharKey('y', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Edited);
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one two");
     }
