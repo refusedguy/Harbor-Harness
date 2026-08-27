@@ -25,7 +25,8 @@ public enum ComposerAction : byte
 /// reason CE-0 pushed disambiguate flags), navigation/editing keys into
 /// <see cref="PromptBuffer"/>, prompt-history recall (<see cref="History"/>:
 /// Up from the first line walks back, Down from the last line forward),
-/// Ctrl+C semantics, everything else ignored.
+/// kill/yank chords (Ctrl+K/U/W + Ctrl+Y), Ctrl+C semantics, everything else
+/// ignored.
 /// </summary>
 public sealed class ComposerController
 {
@@ -95,6 +96,17 @@ public sealed class ComposerController
 
             case KeyCode.Char when key.Character == new Rune('k') && mods == KeyModifiers.Ctrl:
                 _ = Buffer.DeleteToLineEnd();
+                return ComposerAction.Edited;
+
+            // Readline yank: Ctrl+Y pastes the last kill recorded on the
+            // buffer (Ctrl+U/W/K, Alt+D) at the caret; nothing killed ⇒ ignored.
+            case KeyCode.Char when key.Character == new Rune('y') && mods == KeyModifiers.Ctrl:
+                if (Buffer.LastKill is not { Length: > 0 } kill)
+                {
+                    return ComposerAction.Ignored;
+                }
+
+                _ = Buffer.InsertText(kill);
                 return ComposerAction.Edited;
 
             case KeyCode.Char when key.Character == new Rune('b') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:

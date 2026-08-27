@@ -576,6 +576,54 @@ public class ComposerControllerTests
         await Assert.That(fresh.Buffer.SnapshotText()).IsEqualTo("- ");
         await Assert.That(fresh.HandleKey(KeyEvent.Simple(KeyCode.Enter))).IsEqualTo(ComposerAction.Submitted); // chords keep submit path intact
     }
+
+    [Test]
+    public async Task AltD_KillsWord_CtrlY_YanksItBackAtCaret()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "one two")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        // Kill the first word, then yank it right back in front of " two".
+        _ = composer.HandleKey(CharKey('a', KeyModifiers.Ctrl));
+        await Assert.That(composer.HandleKey(CharKey('d', KeyModifiers.Alt))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo(" two");
+
+        await Assert.That(composer.HandleKey(CharKey('y', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one two");
+        await Assert.That(composer.Buffer.Cursor).IsEqualTo(3);
+
+        // Repeated yank without a fresh kill re-pastes the same slot.
+        _ = composer.HandleKey(KeyEvent.Simple(KeyCode.Backspace));
+        await Assert.That(composer.HandleKey(CharKey('y', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("one two");
+    }
+
+    [Test]
+    public async Task CtrlY_WithoutPriorKill_IsIgnored()
+    {
+        var composer = new ComposerController();
+        await Assert.That(composer.HandleKey(CharKey('y', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Ignored);
+        await Assert.That(composer.Buffer.IsEmpty).IsTrue();
+    }
+
+    [Test]
+    public async Task CtrlU_Then_CtrlY_RestoresDraftLinePrefix()
+    {
+        var composer = new ComposerController();
+        foreach (var c in "keep\ndrop-me")
+        {
+            _ = composer.HandleKey(CharKey(c));
+        }
+
+        _ = composer.HandleKey(CharKey('u', KeyModifiers.Ctrl));
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("keep\n");
+
+        await Assert.That(composer.HandleKey(CharKey('y', KeyModifiers.Ctrl))).IsEqualTo(ComposerAction.Edited);
+        await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("keep\ndrop-me");
+    }
 }
 
 public class ComposerHistoryRecallTests
