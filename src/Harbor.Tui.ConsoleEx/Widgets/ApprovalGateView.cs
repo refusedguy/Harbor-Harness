@@ -53,6 +53,19 @@ public sealed class ApprovalGateView : IChatBlock
 
     public ApprovalChoice Decision { get; private set; }
 
+    /// <summary>
+    /// Raised exactly once, on the render/input thread that called
+    /// <see cref="HandleKey" />, when a decision is recorded. Hosts use it
+    /// to wake awaiting prompt continuations (e.g. the permission asker).
+    /// </summary>
+    public event EventHandler? DecisionRecorded;
+
+    private void Decide(ApprovalChoice choice)
+    {
+        Decision = choice;
+        DecisionRecorded?.Invoke(this, EventArgs.Empty);
+    }
+
     public IReadOnlyList<string> WrappedDetail(int width)
     {
         EnsureWrapped(Math.Max(8, width));
@@ -157,13 +170,13 @@ public sealed class ApprovalGateView : IChatBlock
 
         if (key.Key == KeyCode.Enter)
         {
-            Decision = ApprovalChoice.Approve;
+            Decide(ApprovalChoice.Approve);
             return true;
         }
 
         if (key.Key == KeyCode.Escape)
         {
-            Decision = ApprovalChoice.Deny;
+            Decide(ApprovalChoice.Deny);
             return true;
         }
 
@@ -175,13 +188,13 @@ public sealed class ApprovalGateView : IChatBlock
         switch (Rune.ToUpperInvariant(key.Character).Value)
         {
             case 'Y':
-                Decision = ApprovalChoice.Approve;
+                Decide(ApprovalChoice.Approve);
                 return true;
             case 'N':
-                Decision = ApprovalChoice.Deny;
+                Decide(ApprovalChoice.Deny);
                 return true;
             case 'A':
-                Decision = ApprovalChoice.AlwaysAllow;
+                Decide(ApprovalChoice.AlwaysAllow);
                 return true;
             default:
                 return false;

@@ -98,4 +98,20 @@ public class ApprovalGateViewTests
         denied.Paint(new BlockPaintContext(bufNo, new Rect(0, 0, 30, 3), 0));
         await Assert.That(GridDump.Art(bufNo)).Contains("denied");
     }
+
+    [Test]
+    public async Task DecisionRecorded_Fires_Once_PerGate()
+    {
+        var gate = new ApprovalGateView("bash", "ls");
+        int fired = 0;
+        gate.DecisionRecorded += (_, _) => fired++;
+
+        await Assert.That(gate.HandleKey(Y)).IsTrue();
+        await Assert.That(fired).IsEqualTo(1);
+
+        // Decided gates swallow keys — no second signal, no stamp rewrite.
+        await Assert.That(gate.HandleKey(N)).IsFalse();
+        await Assert.That(fired).IsEqualTo(1);
+        await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.Approve);
+    }
 }
