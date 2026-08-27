@@ -200,9 +200,13 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // ConsoleEx owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) — no Terminal.Abstractions yet.
-        // DesignSystem supplies the HDS v1 token catalog for ChatPalette.
+        // DesignSystem supplies the HDS v1 token catalog for ChatPalette;
+        // Desktop.Animations supplies the motion tokens (PanelFx).
         ["Harbor.Tui.ConsoleEx"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.DesignSystem"]),
+            [
+                "Harbor.Abstractions", "Harbor.Ui.Framework.State",
+                "Harbor.DesignSystem", "Harbor.Desktop.Animations",
+            ]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
