@@ -53,4 +53,11 @@ public static class TerminalQueries
 
     public const string PasteEnable = "\u001B[?2004h";
     public const string PasteDisable = "\u001B[?2004l";
+
+    // ── OSC 11 background-color report (auto-theme) ───────────────────────
+
+    /// <summary>Query the terminal's background color: OSC 11 ; ? BEL.
+    /// Feed the raw response to Harbor.DesignSystem's
+    /// TerminalBackgroundProbe.Detect for theme auto-picking.</summary>
+    public const string Osc11BackgroundQuery = "\u001B]11;?\u0007";
 }
