@@ -63,7 +63,8 @@ public static class WireCodec
     /// <summary>
     ///     Wire options: standard resolver composed with the IPC formatters for
     ///     domain models (A1, sprint 5). Session/SessionMetadata are
-    ///     MemoryPack-annotated in Harbor.Domain — MessagePack has no built-in
+    ///     MemoryPack-annotated in Harbor.Abstractions.Contracts (formerly
+    ///     Harbor.Domain) — MessagePack has no built-in
     ///     formatter for them, so every "get sessions" response crashed with
     ///     FormatterNotRegisteredException before this composition existed.
     /// </summary>
