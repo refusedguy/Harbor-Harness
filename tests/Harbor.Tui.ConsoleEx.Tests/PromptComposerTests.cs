@@ -456,6 +456,37 @@ public class ComposerControllerTests
         _ = altD.HandleKey(CharKey('w', KeyModifiers.Ctrl));
         await Assert.That(altD.Buffer.SnapshotText()).IsEqualTo(" ");
     }
+
+    [Test]
+    public async Task AltS_AltI_AltC_MarkdownWrapChords()
+    {
+        var bold = new ComposerController();
+        foreach (var c in "pay")
+        {
+            _ = bold.HandleKey(CharKey(c));
+        }
+
+        _ = bold.HandleKey(CharKey('s', KeyModifiers.Alt));
+        await Assert.That(bold.Buffer.SnapshotText()).IsEqualTo("**pay**");
+        await Assert.That(bold.Buffer.Cursor).IsEqualTo(2);
+
+        _ = bold.HandleKey(CharKey('s', KeyModifiers.Alt)); // second toggle unwraps
+        await Assert.That(bold.Buffer.SnapshotText()).IsEqualTo("pay");
+
+        var italic = new ComposerController();
+        foreach (var c in "soft")
+        {
+            _ = italic.HandleKey(CharKey(c));
+        }
+
+        _ = italic.HandleKey(CharKey('i', KeyModifiers.Alt));
+        await Assert.That(italic.Buffer.SnapshotText()).IsEqualTo("*soft*");
+
+        var code = new ComposerController();
+        _ = code.HandleKey(CharKey('c', KeyModifiers.Alt)); // empty buffer: bare pair
+        await Assert.That(code.Buffer.SnapshotText()).IsEqualTo("``");
+        await Assert.That(code.Buffer.Cursor).IsEqualTo(1);
+    }
 }
 
 public class ComposerHistoryRecallTests

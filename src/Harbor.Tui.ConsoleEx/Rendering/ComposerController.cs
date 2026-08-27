@@ -109,6 +109,20 @@ public sealed class ComposerController
                 _ = Buffer.DeleteWordForward();
                 return ComposerAction.Edited;
 
+            // Markdown composer chords: M-s bold, M-i italic, M-c inline code —
+            // they toggle around the word at the caret via MarkdownEditOps.
+            case KeyCode.Char when key.Character == new Rune('s') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = MarkdownEditOps.ToggleWrap(Buffer, "**");
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('i') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = MarkdownEditOps.ToggleWrap(Buffer, "*");
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('c') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = MarkdownEditOps.ToggleWrap(Buffer, "`");
+                return ComposerAction.Edited;
+
             case KeyCode.Left when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (mods & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0:
                 _ = Buffer.MoveWordLeft();
                 return ComposerAction.Edited;
