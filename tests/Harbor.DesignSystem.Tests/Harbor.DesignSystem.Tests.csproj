@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="TUnit"/>
+    <!-- TUnit is injected by Directory.Build.targets for test projects. -->
   </ItemGroup>
 
   <ItemGroup>
