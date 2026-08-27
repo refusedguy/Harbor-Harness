@@ -77,6 +77,13 @@ public sealed class PromptBuffer
     /// <summary>Copies current content into a string (submit path).</summary>
     public string SnapshotText() => new(_buf, 0, _length);
 
+    /// <summary>
+    /// Text of the last completed readline kill (Ctrl+U/W/K, Alt+D).
+    /// Backspace/DeleteForward are not kills; a no-op kill never clobbers the
+    /// previous entry. Single-slot kill ring backing the composer's Ctrl+Y yank.
+    /// </summary>
+    public string? LastKill { get; private set; }
+
     /// <summary>Takes the content and resets the buffer (Enter-submit).</summary>
     public string TakeText()
     {
@@ -169,6 +176,7 @@ public sealed class PromptBuffer
         }
 
         int removed = _cursor - lineStart;
+        LastKill = new string(_buf, lineStart, removed);
         Array.Copy(_buf, _cursor, _buf, lineStart, _length - _cursor);
         _length -= removed;
         _cursor = lineStart;
@@ -200,6 +208,7 @@ public sealed class PromptBuffer
         }
 
         int removed = _cursor - i;
+        LastKill = new string(_buf, i, removed);
         Array.Copy(_buf, _cursor, _buf, i, _length - _cursor);
         _length -= removed;
         _cursor = i;
@@ -216,6 +225,7 @@ public sealed class PromptBuffer
         }
 
         int removed = lineEnd - _cursor;
+        LastKill = new string(_buf, _cursor, removed);
         Array.Copy(_buf, lineEnd, _buf, _cursor, _length - lineEnd);
         _length -= removed;
         return EditOutcome.Text(_cursor, _cursor, movedCursor: false);
@@ -246,6 +256,7 @@ public sealed class PromptBuffer
         }
 
         int removed = i - _cursor;
+        LastKill = new string(_buf, _cursor, removed);
         Array.Copy(_buf, i, _buf, _cursor, _length - i);
         _length -= removed;
         return EditOutcome.Text(_cursor, _cursor, movedCursor: false);

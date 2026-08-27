@@ -253,6 +253,66 @@ public class PromptBufferTests
         await Assert.That(b.IsEmpty).IsTrue();
         await Assert.That(b.Cursor).IsEqualTo(0);
     }
+
+    [Test]
+    public async Task Kills_RecordLastKill_NoOpKeepsPrevious()
+    {
+        var b = new PromptBuffer();
+        await Assert.That(b.LastKill).IsNull();
+
+        // Ctrl+W semantics: trailing whitespace run + word are one kill span.
+        _ = b.InsertText("hello world");
+        _ = b.DeleteWordBackward();
+        await Assert.That(b.SnapshotText()).IsEqualTo("hello ");
+        await Assert.That(b.LastKill).IsEqualTo("world");
+
+        // No-op kill (caret at line end) must not clobber the previous entry.
+        await Assert.That(b.DeleteToLineEnd().Kind).IsEqualTo(EditOutcomeKind.Unchanged);
+        await Assert.That(b.LastKill).IsEqualTo("world");
+
+        // A fresh successful kill replaces the ring slot entirely.
+        _ = b.InsertText("two");
+        _ = b.MoveToStart();
+        _ = b.DeleteToLineEnd();
+        await Assert.That(b.LastKill).IsEqualTo("hello ");
+    }
+
+    [Test]
+    public async Task MultilineKills_StayWithinCurrentLine()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("first\nsecond");
+        _ = b.MoveToStart();
+        _ = b.MoveRight();
+        _ = b.MoveRight();
+        _ = b.DeleteToLineEnd();
+        await Assert.That(b.LastKill).IsEqualTo("rst");
+
+        var back = new PromptBuffer();
+        _ = back.InsertText("keep\ndelete-me");
+        _ = back.MoveToEnd();
+        _ = back.DeleteToLineStart();
+        await Assert.That(back.LastKill).IsEqualTo("delete-me");
+
+        // Forward word kill from a word start spans only the word itself.
+        var fwd = new PromptBuffer();
+        _ = fwd.InsertText("alpha beta gamma");
+        _ = fwd.MoveWordLeft();
+        _ = fwd.MoveWordLeft();
+        _ = fwd.DeleteWordForward();
+        await Assert.That(fwd.LastKill).IsEqualTo("beta");
+    }
+
+    [Test]
+    public async Task BackspaceAndDeleteForward_AreNotKills()
+    {
+        var b = new PromptBuffer();
+        _ = b.InsertText("abc");
+        _ = b.Backspace();
+        _ = b.MoveToStart();
+        _ = b.DeleteForward();
+        await Assert.That(b.LastKill).IsNull();
+    }
 }
 
 public class PromptViewportTests
