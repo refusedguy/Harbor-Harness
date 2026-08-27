@@ -1,3 +1,5 @@
+using System.Text;
+using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Events;
 using Harbor.Tui.ConsoleEx.Rendering;
@@ -202,6 +204,27 @@ public class ChatScreenBridgeTests
 
         await Assert.That(status.Tokens).IsEqualTo("1.5k↑ 300↓");
         await Assert.That(status.Cost).IsEqualTo("$0.0123");
+    }
+
+    [Test]
+    public async Task BeginApprovalGate_AppendsBlock_AndRoutesKey()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var gate = bridge.BeginApprovalGate("bash", "rm -rf build/");
+        var tl = panel.Timeline;
+        await Assert.That(tl.BlockAt(tl.Count - 1)).IsSameReferenceAs(gate);
+
+        // Unrelated key falls through; y is consumed and resolves the gate.
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('q')))).IsFalse();
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsTrue();
+        await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.Approve);
+        await Assert.That(gate.IsPending).IsFalse();
+
+        // Gate resolved → routing disarms; further keys go back to the composer path.
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('n')))).IsFalse();
     }
 
     private static int VisibleChars(ChatTimelinePanel panel)

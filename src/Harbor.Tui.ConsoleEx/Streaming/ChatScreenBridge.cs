@@ -384,5 +384,52 @@ public sealed class ChatScreenBridge : IDisposable
     private void AppendSystem(string text) =>
         _panel.Timeline.Append(new SystemBlock(text));
 
+    // ── Approval gates ─────────────────────────────────────────────────────
+
+    /// <summary>Newest undecided <see cref="ApprovalGateView" /> — keys are routed here first.</summary>
+    private ApprovalGateView? _pendingApproval;
+
+    /// <summary>
+    /// Appends a permission gate to the timeline and arms it as the newest
+    /// pending decision point. One pending gate at a time: a newer call simply
+    /// supersedes the older card visually (the old one stays unresolved in the
+    /// history — the host resolves permissions sequentially by contract).
+    /// </summary>
+    public ApprovalGateView BeginApprovalGate(string toolName, string detail)
+    {
+        var gate = new ApprovalGateView(toolName, detail);
+        _pendingApproval = gate;
+        _panel.Timeline.Append(gate);
+        _panel.Timeline.MarkLastDirty();
+        return gate;
+    }
+
+    /// <summary>
+    /// Routes one key event to the newest pending gate BEFORE composer input.
+    /// Consumed keys always wake the frame pipeline (decision stamps repaint).
+    /// Returns false while no gate is armed or the key is not one of y/n/a/
+    /// Enter/Escape — callers fall through to normal routing.
+    /// </summary>
+    public bool TryRouteApprovalKey(in Input.KeyEvent key)
+    {
+        if (_pendingApproval is null)
+        {
+            return false;
+        }
+
+        if (!_pendingApproval.HandleKey(key))
+        {
+            return false;
+        }
+
+        if (!_pendingApproval.IsPending)
+        {
+            _pendingApproval = null;
+        }
+
+        _panel.Timeline.MarkLastDirty();
+        return true;
+    }
+
     public void Dispose() => Subscription.Dispose();
 }
