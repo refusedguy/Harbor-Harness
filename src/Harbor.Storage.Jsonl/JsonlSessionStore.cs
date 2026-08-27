@@ -341,6 +341,25 @@ public sealed class JsonlSessionStore : ISessionStore
         }
     }
 
+    /// <summary>True when the line is a <c>"message"</c> entry with any id.</summary>
+    private static bool IsAnyMessageEntry(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line) || !line.Contains("\"type\":\"message\"", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var entry = JsonSerializer.Deserialize(line, JsonlCodecContext.Default.MessageEntry);
+            return entry is { Type: "message" };
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     ///     Read all messages for a session in chronological order. Returns the
     ///     cached parse result when the file's last-write-time is unchanged
@@ -429,6 +448,86 @@ public sealed class JsonlSessionStore : ISessionStore
             }
         }, ResultErrors.Message)
             .TapError(e => _logger.LogError("Failed to delete session {SessionId}: {Error}", sessionId, e));
+    }
+
+    /// <summary>
+    ///     "Rewind to here": drop every <c>"message"</c> entry AFTER the target
+    ///     id in file order. File order IS insertion order for this store
+    ///     (append-only + rewrite-in-place), which is exactly the ordering the
+    ///     read path reconstructs. Header/session lines are never touched; the
+    ///     target message itself is kept. Rewrites the file in place — same
+    ///     semantics as <see cref="UpdateMessageAsync" />.
+    /// </summary>
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        return Result.Try(async () =>
+        {
+            ct.ThrowIfCancellationRequested();
+
+            int removed = 0;
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                string sessionFile = GetSessionFilePath(sessionId);
+                string[] lines = File.ReadAllLines(sessionFile);
+
+                int anchorLine = -1;
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    // The id matcher doubles as a "message entry" filter: only
+                    // message-kind lines with that exact id match, headers never do.
+                    if (IsMessageEntryWithId(lines[i], messageId))
+                    {
+                        anchorLine = i;
+                        break;
+                    }
+                }
+
+                if (anchorLine < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Message '{messageId}' not found in session '{sessionId}'.");
+                }
+
+                // Messages append chronologically and rewrites keep relative
+                // order, so file order IS insertion order — dropping every
+                // message-kind line strictly after the anchor is the rewind.
+                // Header/session lines are kept regardless of position.
+                var kept = new List<string>(lines.Length);
+                for (int i = 0; i <= anchorLine; i++)
+                {
+                    kept.Add(lines[i]);
+                }
+
+                for (int i = anchorLine + 1; i < lines.Length; i++)
+                {
+                    if (IsAnyMessageEntry(lines[i]))
+                    {
+                        removed++;
+                        continue;
+                    }
+
+                    kept.Add(lines[i]);
+                }
+
+                if (removed > 0)
+                {
+                    File.WriteAllLines(sessionFile, kept);
+                }
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+
+            // Always drop the parse cache — cheap and immune to mtime quirks.
+            _messageCache.TryRemove(sessionId, out _);
+
+            return removed;
+        }, ResultErrors.Message)
+            .TapError(e => _logger.LogError(
+                "Failed to truncate messages after {MessageId} in session {SessionId}: {Error}", messageId, sessionId, e));
     }
 
     /// <summary>

@@ -105,6 +105,17 @@ public interface ISessionStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success, or failure if the session does not exist.</returns>
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Delete every message after (insertion-order) the given message. The
+    ///     target message itself is KEPT — this is "rewind to here" semantics
+    ///     for session revert/branch-from-history.
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Id of the message to keep as the new tail.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of deleted messages, or failure if session/message not found.</returns>
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default);
 }
 
 /// <summary>

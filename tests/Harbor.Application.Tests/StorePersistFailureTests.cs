@@ -43,6 +43,9 @@ public class StorePersistFailureTests
         public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
             => Task.FromResult(Result.Success());
 
+        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+            => Task.FromResult(Result.Failure<int>("DeleteMessagesAfter is not supported by this test fake."));
+
         public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
             => Task.FromResult(Result.Success());
 

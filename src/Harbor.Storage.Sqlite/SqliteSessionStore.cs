@@ -256,6 +256,70 @@ public sealed class SqliteSessionStore : ISessionStore
         }, ResultErrors.Message));
     }
 
+    /// <summary>
+    ///     "Rewind to here": delete every message ordered after the target row.
+    ///     Ordering follows the same created_at ASC used by
+    ///     <see cref="GetMessagesAsync" /> (ISO-8601 text sorts chronologically),
+    ///     with rowid as the deterministic tie-breaker for equal timestamps.
+    /// </summary>
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        return Task.FromResult(Result.Try(() =>
+        {
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                int deleted;
+                using (var scope = conn.BeginTransaction())
+                {
+                    // Anchor: created_at of the kept message; ties broken by its rowid.
+                    cmd.Transaction = scope;
+                    cmd.CommandText = """
+                        SELECT created_at, rowid FROM messages
+                        WHERE session_id = @sid AND id = @mid LIMIT 1
+                        """;
+                    cmd.Parameters.AddWithValue("@sid", sessionId);
+                    cmd.Parameters.AddWithValue("@mid", messageId);
+
+                    string anchorCreatedAt;
+                    long anchorRowId;
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (!reader.Read())
+                        {
+                            throw new InvalidOperationException(
+                                $"Message '{messageId}' not found in session '{sessionId}'.");
+                        }
+
+                        anchorCreatedAt = reader.GetString(0);
+                        anchorRowId = reader.GetInt64(1);
+                    }
+
+                    cmd.CommandText = """
+                        DELETE FROM messages
+                        WHERE session_id = @sid
+                          AND (created_at > @anchor OR (created_at = @anchor AND rowid > @rid))
+                        """;
+                    cmd.Parameters.AddWithValue("@anchor", anchorCreatedAt);
+                    cmd.Parameters.AddWithValue("@rid", anchorRowId);
+                    deleted = cmd.ExecuteNonQuery();
+
+                    using var upd = conn.CreateCommand();
+                    upd.Transaction = scope;
+                    upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
+                    upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                    upd.Parameters.AddWithValue("@sid", sessionId);
+                    upd.ExecuteNonQuery();
+
+                    scope.Commit();
+                }
+
+                return deleted;
+            }
+        }, ResultErrors.Message));
+    }
+
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
         return await Result.Try(async () =>
