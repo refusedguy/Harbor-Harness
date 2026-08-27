@@ -72,7 +72,8 @@ internal static class ToolsCatalog
     }
 
     internal static ToolRegistry CreateToolRegistry(
-        HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry)
+        HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
+        Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -88,7 +89,7 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
         if (full)
         {
-            tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>()));
+            tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner));
             tb.AddTool(lf => new WebFetchTool(lf.CreateLogger<WebFetchTool>()));
         }
         tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));

@@ -37,7 +37,22 @@ internal static class RegistriesModule
 
         var agentRegistry = ToolsCatalog.CreateAgentRegistry(ctx);
         var mcpRegistry = ToolsCatalog.CreateMcpRegistry(ctx);
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry);
+        // Sub-agent runner: TaskTool is built EAGERLY here, but its real dependencies
+        // (ISessionStore — registered later in AddHarborStorage; IAgentLoop — DI-built)
+        // only exist inside the container. The deferred forwarder closes that gap: the
+        // tool holds it now, the real runner attaches on first resolution (F4-decouple).
+        var subAgents = new Harbor.Application.Agents.DeferredSubAgentRunner();
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents);
+        services.AddSingleton<Harbor.Abstractions.Agents.ISubAgentRunner>(sp =>
+        {
+            var real = new Harbor.Application.Agents.SubAgentRunner(
+                sp.GetRequiredService<Harbor.Abstractions.Sessions.ISessionStore>(),
+                sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentLoop>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                    .CreateLogger<Harbor.Application.Agents.SubAgentRunner>());
+            subAgents.Attach(real);
+            return real;
+        });
         var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
         var eventBus = ctx.EventBus;
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());

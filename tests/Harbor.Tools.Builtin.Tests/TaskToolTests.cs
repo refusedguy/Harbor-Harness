@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
@@ -134,7 +135,7 @@ public class TaskToolTests
     }
 
     [Test]
-    public async Task ExecuteAsync_ValidSubAgent_HonestNotImplementedError()
+    public async Task ExecuteAsync_ValidSubAgent_NoRunnerWired_FailsHonest()
     {
         var agents = new AgentRegistry();
         agents.Register(SubAgent("explore"));
@@ -143,11 +144,67 @@ public class TaskToolTests
         var args = Args(("agent", "explore"), ("prompt", "find all TODO comments in src/"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
-        // G4: the tool must never fabricate a "queued" success — no sub-agent
-        // runner exists. A valid agent still yields an explicit honest error.
+        // G4: with no runner wired the tool must fail explicitly — never fabricate
+        // a run that did not happen.
         await Assert.That(result.IsError).IsTrue();
-        await Assert.That(result.Output).Contains("not implemented");
-        await Assert.That(result.Output).Contains("explore");
+        await Assert.That(result.Output).Contains("unavailable");
+        await Assert.That(result.Output).Contains("no runner wired");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_ValidSubAgent_RunnerExecutesAndReturnsFinalOutput()
+    {
+        var agents = new AgentRegistry();
+        agents.Register(SubAgent("explore"));
+        var runner = new FakeRunner(Result.Success(new SubAgentRunResult(
+            SessionId: "sub-1",
+            AgentName: "explore",
+            FinalOutput: "found 3 TODO comments in src/",
+            NewMessages: 2)));
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
+
+        var args = Args(("agent", "explore"), ("prompt", "find all TODOs"));
+        var result = await tool.ExecuteAsync(args, CreateContext());
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result.Output).Contains("[sub-agent 'explore' finished");
+        await Assert.That(result.Output).Contains("session sub-1");
+        await Assert.That(result.Output).Contains("found 3 TODO comments in src/");
+        await Assert.That(runner.Calls.Count).IsEqualTo(1);
+        await Assert.That(runner.Calls[0].Request.Prompt).IsEqualTo("find all TODOs");
+        await Assert.That(runner.Calls[0].Request.ParentSessionId).IsEqualTo("session-1");
+        await Assert.That(runner.Calls[0].Agent.Name.Value).IsEqualTo("explore");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_RunnerFailure_PropagatesAsToolError()
+    {
+        var agents = new AgentRegistry();
+        agents.Register(SubAgent("explore"));
+        var runner = new FakeRunner(Result.Failure<SubAgentRunResult>("model exploded"));
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
+
+        var args = Args(("agent", "explore"), ("prompt", "hi"));
+        var result = await tool.ExecuteAsync(args, CreateContext());
+
+        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result.Output).Contains("model exploded");
+    }
+
+    [Test]
+    public async Task ExecuteAsync_NestingGuardActive_RefusesBeforeRunnerCall()
+    {
+        var agents = new AgentRegistry();
+        agents.Register(SubAgent("explore"));
+        var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "never", 0)), canSpawn: false);
+        var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
+
+        var args = Args(("agent", "explore"), ("prompt", "hi"));
+        var result = await tool.ExecuteAsync(args, CreateContext());
+
+        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result.Output).Contains("cannot invoke 'task'");
+        await Assert.That(runner.Calls.Count).IsEqualTo(0);
     }
 
     [Test]
@@ -194,15 +251,30 @@ public class TaskToolTests
     }
 
     [Test]
-    public async Task PromptGuidelines_WarnNotImplemented()
+    public async Task PromptGuidelines_DescribeDelegationContract()
     {
         var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
         await Assert.That(tool.PromptGuidelines.Count).IsGreaterThan(0);
-        // G4: guidelines must not advertise delegation the build cannot do —
-        // they must steer the model away from calling the tool.
-        bool warnsNotImplemented = tool.PromptGuidelines.Any(g =>
-            g.Contains("not functional", StringComparison.OrdinalIgnoreCase) ||
-            g.Contains("not implemented", StringComparison.OrdinalIgnoreCase));
-        await Assert.That(warnsNotImplemented).IsTrue();
+        // Guidelines must state the real contract: self-contained prompts and no
+        // further nesting — they previously steered AWAY from the tool entirely.
+        bool mentionsSelfContained = tool.PromptGuidelines.Any(g =>
+            g.Contains("self-contained", StringComparison.OrdinalIgnoreCase));
+        await Assert.That(mentionsSelfContained).IsTrue();
+    }
+
+    private sealed class FakeRunner(
+        Result<SubAgentRunResult> outcome,
+        bool canSpawn = true) : ISubAgentRunner
+    {
+        public List<(AgentDefinition Agent, SubAgentRunRequest Request)> Calls { get; } = [];
+
+        public bool CanSpawn => canSpawn;
+
+        public Task<Result<SubAgentRunResult>> RunAsync(
+            AgentDefinition agent, SubAgentRunRequest request, CancellationToken ct = default)
+        {
+            Calls.Add((agent, request));
+            return Task.FromResult(outcome);
+        }
     }
 }
