@@ -11,11 +11,22 @@ namespace Harbor.Tui.ConsoleEx.Widgets;
 public sealed class VirtualizedChatTimeline
 {
     private readonly TimelineLayoutCache _cache = new();
+    private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
     private int _lastWidth = -1;
     private bool _dirtyGeometry = true;
+    private bool _entranceFx;
 
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
+
+    /// <summary>
+    /// Enables HDS v1 entrance motion for blocks appended while the feed is
+    /// already visible: slide-up (<see cref="PanelFx.SlideMs" />) plus fade
+    /// (<see cref="PanelFx.FadeMs" />). Blocks present at the first frame
+    /// render settled, so initial screens stay pixel-stable. Off by default;
+    /// hosts opt in via <see cref="EnableEntranceFx" />.
+    /// </summary>
+    public void EnableEntranceFx() => _entranceFx = true;
 
     public int Count => _cache.Count;
 
@@ -30,6 +41,8 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Frame tick handed to block painters.</summary>
     public long CurrentTick { get; set; }
 
+    private bool _hasPaintedFrame;
+
     public IChatBlock BlockAt(int index) => _cache.BlockAt(index);
 
     public void Append(IChatBlock block)
@@ -37,6 +50,7 @@ public sealed class VirtualizedChatTimeline
         ArgumentNullException.ThrowIfNull(block);
 
         _cache.Append(block);
+        MarkEntrance(block);
         _dirtyGeometry = true;
 
         if (BudgetBytes > 0)
@@ -51,6 +65,7 @@ public sealed class VirtualizedChatTimeline
             {
                 var evicted = _cache.BlockAt(0);
                 _ = _cache.EvictFirst();
+                _ = _entranceStarts.Remove(evicted);
                 used -= Math.Max(0, evicted.BudgetBytes);
                 _dirtyGeometry = true;
             }
@@ -131,6 +146,25 @@ public sealed class VirtualizedChatTimeline
 
     private void SetScrollY(long y) => ScrollY = Math.Max(0, y);
 
+    /// <summary>
+    /// Registers an entrance start for eligible blocks appended after the
+    /// first painted frame. Pre-first-frame appends (initial populate) and
+    /// stream continuations render settled — no motion on cold screens.
+    /// </summary>
+    private void MarkEntrance(IChatBlock block)
+    {
+        if (!_entranceFx || !_hasPaintedFrame || block.IsStreamContinuation)
+        {
+            return;
+        }
+
+        _entranceStarts[block] = CurrentTick;
+        if (block is ApprovalGateView gate && gate.IsPending)
+        {
+            gate.BeginWarnPulse(CurrentTick);
+        }
+    }
+
     /// <summary>Runs layout for this frame; resolves follow-tail and anchors.</summary>
     public LayoutOutcome PrepareFrame(int width, int viewportH)
     {
@@ -166,10 +200,16 @@ public sealed class VirtualizedChatTimeline
 
     /// <summary>
     /// Paints only the visible range of blocks into <paramref name="rect"/>.
-    /// Cells outside the rect are never touched.
+    /// Cells outside the rect are never touched. With entrance FX enabled,
+    /// freshly appended blocks slide up (<see cref="PanelFx.SlideMaxRows" />)
+    /// and fade in over the HDS motion durations.
     /// </summary>
     public void Paint(ScreenBuffer buffer, Rect rect)
     {
+        // Any executed paint pass counts as a "visible" frame — appends made
+        // afterwards become eligible for entrance motion.
+        _hasPaintedFrame = true;
+
         if (_dirtyGeometry || _cache.Count == 0 || rect.Width <= 0 || rect.Height <= 0)
         {
             return;
@@ -190,8 +230,44 @@ public sealed class VirtualizedChatTimeline
                 continue;
             }
 
-            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, screenY, rect.Width, clipped), CurrentTick);
-            _cache.BlockAt(i).Paint(ctx);
+            double alpha = 1.0;
+            var block = _cache.BlockAt(i);
+            bool animating = _entranceStarts.TryGetValue(block, out long startTick);
+            if (animating)
+            {
+                alpha = PanelFx.Progress(startTick, CurrentTick, PanelFx.FadeFrames);
+                if (alpha >= 1.0)
+                {
+                    _ = _entranceStarts.Remove(block);
+                    animating = false;
+                }
+            }
+
+            int paintY = screenY;
+            int paintH = clipped;
+            if (animating && alpha < 1.0)
+            {
+                double slideP = PanelFx.Progress(startTick, CurrentTick, PanelFx.SlideFrames);
+                int offset = (int)Math.Round((1.0 - slideP) * PanelFx.SlideMaxRows); // slides up into place
+                if (offset > 0)
+                {
+                    paintY += Math.Min(offset, rect.Bottom - paintY - 1);
+                    if (paintY > rect.Y + rect.Height)
+                    {
+                        continue; // fully below the clip this frame
+                    }
+
+                    paintH = clipped - (paintY - screenY);
+                }
+            }
+
+            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick);
+            block.Paint(ctx);
+
+            if (animating && alpha < 1.0)
+            {
+                PanelFx.BlendRegion(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), alpha);
+            }
         }
     }
 

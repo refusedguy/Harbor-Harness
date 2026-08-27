@@ -62,6 +62,22 @@ public sealed class ApprovalGateView : IChatBlock
     public ApprovalChoice Decision { get; private set; }
 
     /// <summary>
+    /// Frame tick the pending-state warn glow started from, or -1 when no
+    /// pulse is active. Drives a silent soft blink of the header toward
+    /// <see cref="ChatPalette.Warning" /> — pure function of (birth, now).
+    /// </summary>
+    public long PulseBirthTick { get; private set; } = -1;
+
+    /// <summary>Starts the warn-glow pulse (first call wins); cleared on decision.</summary>
+    public void BeginWarnPulse(long birthTick)
+    {
+        if (PulseBirthTick < 0 && IsPending)
+        {
+            PulseBirthTick = birthTick;
+        }
+    }
+
+    /// <summary>
     /// Raised exactly once, on the render/input thread that called
     /// <see cref="HandleKey" />, when a decision is recorded. Hosts use it
     /// to wake awaiting prompt continuations (e.g. the permission asker).
@@ -71,6 +87,7 @@ public sealed class ApprovalGateView : IChatBlock
     private void Decide(ApprovalChoice choice)
     {
         Decision = choice;
+        PulseBirthTick = -1; // gate is stamped — glow off
         DecisionRecorded?.Invoke(this, EventArgs.Empty);
     }
 
@@ -125,10 +142,21 @@ public sealed class ApprovalGateView : IChatBlock
         // Registered for click-to-decide hit-testing (mouse routing is host-side).
         LastPaintRect = ctx.Rect;
 
-        // Header — warning accent until decided, dim once stamped.
-        var headerStyle = IsPending
-            ? new CellStyle(PackedColor.Indexed(3), attrs: StyleAttr.Bold)
-            : ChatPalette.Dim;
+        // Header — warning accent until decided, dim once stamped. While the
+        // pulse is active, glow amount oscillates the accent between full
+        // warning and a dimmed blend (HDS warn-glow), a pure function of tick.
+        CellStyle headerStyle;
+        if (!IsPending)
+        {
+            headerStyle = ChatPalette.Dim;
+        }
+        else
+        {
+            var warning = new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold);
+            double glow = PanelFx.WarnPulse(PulseBirthTick, ctx.Tick);
+            headerStyle = glow > 0 ? PanelFx.WithAlpha(warning, 0.55 + (0.45 * glow)) : warning;
+        }
+
         buffer.SetText(ctx.Rect.X, ctx.Rect.Y, Truncate(HeaderLabel + " · " + ToolName, ctx.Rect.Width), headerStyle);
 
         // Detail body, wrapped to the clip rect, plain tool-args tone.
