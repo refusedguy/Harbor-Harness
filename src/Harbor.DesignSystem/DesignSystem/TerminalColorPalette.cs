@@ -12,11 +12,12 @@ namespace Harbor.DesignSystem;
 public static class TerminalColorPalette
 {
     private static volatile HarborTheme _current = HarborTheme.HarborDark;
+    private static volatile ThemeOverrideSet? _overrides;
 
-    /// <summary>The active theme instance.</summary>
+    /// <summary>The active theme instance (unpatched).</summary>
     public static HarborTheme Current => _current;
 
-    /// <summary>Fired after <see cref="Apply" /> installed a new theme.</summary>
+    /// <summary>Fired after <see cref="Apply" /> or <see cref="SetOverrides" /> changed the effective catalog.</summary>
     public static event EventHandler? ThemeChanged;
 
     /// <summary>Installs <paramref name="theme" /> and raises <see cref="ThemeChanged" />. Re-applying the same instance is a no-op.</summary>
@@ -31,6 +32,23 @@ public static class TerminalColorPalette
         _current = theme;
         ThemeChanged?.Invoke(null, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Installs per-component theme overrides (null clears) and raises
+    /// <see cref="ThemeChanged" /> so scoped consumers re-project.
+    /// </summary>
+    public static void SetOverrides(ThemeOverrideSet? overrides)
+    {
+        _overrides = overrides;
+        ThemeChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Effective theme for a component scope: the scope's patch merged over
+    /// <see cref="Current" />; no scope / no patch → Current unchanged.
+    /// </summary>
+    public static HarborTheme EffectiveTheme(string? scope) =>
+        _overrides?.Merge(scope, _current) ?? _current;
 
     // ── Accent tokens ──────────────────────────────────────────────────────
     public static RgbColor Accent => _current.Accent;
