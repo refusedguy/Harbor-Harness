@@ -122,9 +122,10 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 **Plugin loading** *(выполнено, механизм отличается от исходного плана)*
 - [x] Plugin host: `Harbor.Plugins.Hosting` (`PluginHost`, `PluginHostBuilder`) + out-of-process host `Harbor.Plugins.Host` (exe, MCP stdio server). Исходный план «AssemblyLoadContext (JIT mode)» заменён Roslyn CS-source pipeline: `Harbor.Plugins.Runtime/CsPluginLoader.cs` компилирует `.cs` из `~/.harbor/plugins/` in-memory; DLL-based путь остался только у legacy сэмплов
 - [x] Plugin discovery from `~/.harbor/plugins/*.cs` (+ embedded-resource / in-memory / composite sources) — `Harbor.Plugins.Storage/FileSystemPluginSource.cs` et al.
-- [ ] Plugin trust prompt for project-local plugins
-- [ ] Hot-reload via `FileSystemWatcher`
-- [ ] `harbor plugin install/list/uninstall` CLI commands
+- [x] Plugin trust prompt for project-local plugins — `IPluginTrustPolicy` + `TrustingPluginSource` fail-closed gate, `FileTrustPolicy` persist store path+sha256 (`~/.harbor/plugins/trust.json`, re-approval after edit), interactive y/N at startup; global scope implicitly trusted
+- [x] Hot-reload via `FileSystemWatcher` — `DebouncedPluginWatcher` (generational debounce, last-event-wins) → `PluginReloadService` re-runs the startup pipeline into live registries; `/plugins reload` in REPL + auto-reload gated by `tooling.autoReloadPlugins`; edited/removed plugins still need a restart to fully rebind (unregister tracking is follow-up)
+- [x] `harbor plugin install/list/uninstall` CLI commands
+- [x] Build flag default: plain `dotnet build` now defines `HarborWithPlugins=true` (root `Directory.Build.props`) — previously the whole pipeline was dead code outside NUKE builds ("Feature flags: plugins=False")
 
 **Sub-agent execution** *(частично: TaskTool валидирует sub-agent, но не запускает его — `src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs`: «does NOT run it yet… execution fails with an explicit "not implemented" error»)*
 - [x] Wire `TaskTool` to agent registry — Tool внедряет `IAgentRegistry`, проверяет `IsSubAgent` (G4)
@@ -171,11 +172,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### v0.8.0 — Session Management Polish
 
-- [ ] Session branching (`harbor session fork <message-id>`)
+- [x] Session branching (`harbor sessions fork <message-id>`) — `SessionForkRunner` copies history inclusive of the cut point into a NEW session (lineage via `ParentSessionId`, `(fork)` title); source untouched
 - [ ] `/tree` slash-command for branch navigation
 - [ ] Branch summaries (LLM-generated on branch switch)
-- [ ] Snapshot/revert (`harbor session revert <message-id>`)
-- [ ] Session search (`harbor session search <query>`)
+- [x] Snapshot/revert (`harbor sessions revert <message-id>`)
+- [x] Session search (`harbor sessions search <query>`)
 - [ ] JSONL import/export
 - [ ] Session rename (ISessionStore metadata-update API)
 
