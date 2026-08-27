@@ -562,14 +562,17 @@ public static class Program
                 return await RunImportSessionAsync(args.Skip(1).ToArray());
             case "search":
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
+            case "revert":
+                return await RunRevertSessionAsync(args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search]
+                                        Usage: harbor sessions [list|rename|export|import|search|revert]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
+                                          sessions revert <id> <message-id>          rewind session to the given message
                                         """);
                 return 2;
         }
@@ -708,6 +711,41 @@ public static class Program
         var store = host.Services.GetRequiredService<ISessionStore>();
         return await SessionSearchRunner.RunAsync(Console.Out, Console.Error, store, string.Join(' ', rest), sessionFilter)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions revert &lt;session-id&gt; &lt;message-id&gt;</c> —
+    ///     rewind the session to the given message: it and everything before it
+    ///     stays, everything after is deleted (backend-level "rewind to here").
+    /// </summary>
+    private static async Task<int> RunRevertSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions revert <session-id> <message-id>
+                                      Delete every message AFTER the given one (the target itself is kept).
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string messageId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var reverted = await store.DeleteMessagesAfterAsync(sessionId, messageId).ConfigureAwait(false);
+        if (reverted.IsFailure)
+        {
+            _logger.LogError("Revert failed: {Error}", reverted.Error);
+            Console.Error.WriteLine($"Cannot revert '{sessionId}' to '{messageId}': {reverted.Error}");
+            return 1;
+        }
+
+        var messages = await store.GetMessagesAsync(sessionId).ConfigureAwait(false);
+        int remaining = messages.IsSuccess ? messages.Value.Count : -1;
+        Console.WriteLine($"Reverted session {sessionId}: deleted {reverted.Value} message(s), {remaining} remain.");
+        return 0;
     }
 
     private static int PrintTuiOptions()
