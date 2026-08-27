@@ -266,6 +266,8 @@ public class FullLayerMatrixTests
             "Harbor.Plugins.Runtime", "Harbor.Plugins.Storage",
             "Harbor.Plugins.Compilation", "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration", "Harbor.Plugins.Hosting",
+            // Trust gate (IPluginSource/PluginScript contract) composed in RegistriesModule:
+            "Harbor.Plugins.Abstractions",
             // contrib/tui renderer references live outside src/:
             "Harbor.Tui.Spectre", "Harbor.Tui.Spectre.Fullscreen",
             "Harbor.Tui.SpectreTui", "Harbor.Tui.TerminalGui",

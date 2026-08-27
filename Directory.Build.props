@@ -30,6 +30,21 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
 
+    <!--
+      Feature-flag defaults (see Harbor.Hosting.csproj F2.2 plumbing).
+
+      The HarborWith* properties used to be defined ONLY inside apps/*.csproj,
+      so plain `dotnet build` evaluated src/Harbor.Hosting with an empty value:
+      no plugin ProjectReferences, no DefineConstants, runtime log printed
+      "Feature flags: plugins=False" and the entire CS-plugin pipeline was dead
+      code outside NUKE-driven release builds. These defaults make a standard
+      `dotnet build` produce what actually ships. Env override:
+      HARBOR_MINIMAL=true keeps the stripped profile (matches Cli's mapping);
+      explicit /p:HarborWith*=false still wins when passed directly.
+    -->
+    <HarborWithPlugins Condition="'$(HarborWithPlugins)' == '' AND '$(HARBOR_MINIMAL)' != 'true'">true</HarborWithPlugins>
+    <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
+
     <!-- Debugging -->
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
