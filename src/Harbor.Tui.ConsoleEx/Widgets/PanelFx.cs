@@ -130,6 +130,23 @@ public static class PanelFx
     public static double AccentRamp(long flippedTick, long nowTick) =>
         Progress(flippedTick, nowTick, FadeFrames);
 
+    /// <summary>
+    /// Alpha-blends an already-painted buffer region toward the panel surface
+    /// (entrance fades / status crossfades). Bounded callers only — runs per
+    /// cell during transition frames and is skipped entirely once settled.
+    /// </summary>
+    public static void BlendRegion(ScreenBuffer buffer, Rect region, double alpha)
+    {
+        for (int y = region.Y; y < region.Bottom; y++)
+        {
+            for (int x = region.X; x < region.Right; x++)
+            {
+                var faded = WithAlpha(buffer.Get(x, y).Style, alpha);
+                buffer.SetStyleAt(x, y, in faded);
+            }
+        }
+    }
+
     private static (byte R, byte G, byte B) RgbChannelsOf(PackedColor color)
     {
         if (color.IsRgb)

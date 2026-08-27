@@ -75,6 +75,9 @@ public sealed class ComposerPanel : Panel
 public sealed class StatusPanel : Panel
 {
     private readonly StatusSeg[] _compose = new StatusSeg[12];
+    private byte _lastMode;
+    private bool _modeSeen;
+    private long _modeFlipTick = long.MinValue;
 
     public StatusPanel(string id, StatusViewModel status, int minWidth, int minHeight, int priority = int.MaxValue)
         : base(id, new Size(minWidth, minHeight), priority)
@@ -93,6 +96,20 @@ public sealed class StatusPanel : Panel
         if (Rect.Width <= 2 || Rect.Height <= 0)
         {
             return;
+        }
+
+        // Smooth state transition: on a mode flip (running ⇄ approval-wait ⇄
+        // compaction …) crossfade the whole row in over the HDS micro fade.
+        byte mode = (byte)Vm.Mode;
+        if (!_modeSeen)
+        {
+            _lastMode = mode;
+            _modeSeen = true;
+        }
+        else if (mode != _lastMode)
+        {
+            _lastMode = mode;
+            _modeFlipTick = Tick;
         }
 
         int n = Vm.BuildSegments(_compose.AsSpan(1));
@@ -118,6 +135,20 @@ public sealed class StatusPanel : Panel
         Span<StatusSeg> span = _compose;
         int kept = StatusBarLayout.Fit(span[..total], Rect.Width - 1);
         StatusBarWidget.Paint(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1), span[..kept]);
+
+        long flip = _modeFlipTick;
+        if (flip != long.MinValue)
+        {
+            double ramp = PanelFx.AccentRamp(flip, Tick);
+            if (ramp >= 1.0)
+            {
+                _modeFlipTick = long.MinValue;
+            }
+            else
+            {
+                PanelFx.BlendRegion(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1), ramp);
+            }
+        }
     }
 
     private void ShiftLeft(int count)
@@ -146,6 +177,7 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
         var timeline = new ChatTimelinePanel(TimelineId, minWidth: 20, minHeight: 4, priority: 10);
         var composerPanel = new ComposerPanel(ComposerId, composer, minWidth: 10, minHeight: minComposerRows, priority: 50);
         var statusRow = new StatusPanel(StatusId, status, minWidth: 10, minHeight: 1, priority: int.MaxValue);
+        timeline.Timeline.EnableEntranceFx();
 
         tree.AddRoot(timeline);
         tree.Split(TimelineId, SplitDir.Vertical, timelineRatio, composerPanel, gap: 0);

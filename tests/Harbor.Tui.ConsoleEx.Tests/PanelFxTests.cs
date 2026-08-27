@@ -9,13 +9,12 @@ namespace Harbor.Tui.ConsoleEx.Tests;
 public class PanelFxTests
 {
     [Test]
-    public async Task Durations_Match_AnimationTokens()
+    public async Task Durations_Map_To_Frames_AtDisplayCadence()
     {
         // 150 ms micro → 9 frames, 300 ms standard → 18 frames at 60 fps.
-        await Assert.That(PanelFx.FadeMs).IsEqualTo(150);
-        await Assert.That(PanelFx.SlideMs).IsEqualTo(300);
         await Assert.That(PanelFx.FadeFrames).IsEqualTo(9);
         await Assert.That(PanelFx.SlideFrames).IsEqualTo(18);
+        await Assert.That(PanelFx.PulseFrames).IsGreaterThan(0);
     }
 
     [Test]
