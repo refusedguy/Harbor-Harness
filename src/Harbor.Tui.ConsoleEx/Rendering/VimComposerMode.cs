@@ -18,6 +18,12 @@ public sealed class VimComposerMode
     /// <summary>True while in NORMAL mode (only meaningful when <see cref="Enabled" />).</summary>
     public bool NormalMode { get; private set; }
 
+    /// <summary>Mode toggle: turns the layer off and resets to insert semantics.</summary>
+    public void Reset()
+    {
+        NormalMode = false;
+    }
+
     /// <summary>Routes one key: normal-mode chords first, everything else reaches the composer.</summary>
     public ComposerAction HandleKey(in KeyEvent key, ComposerController composer)
     {

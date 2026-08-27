@@ -69,10 +69,15 @@ internal sealed class ConsoleExReplRunner(
     private readonly ComposerController _composer = screen.Composer.Composer;
     private readonly VirtualizedChatTimeline _timeline = screen.Timeline.Timeline;
     private readonly CommandPaletteView _palette = new();
+    private readonly LeaderKeyRouter _leader = new();
+    private readonly VimComposerMode _vim = new();
 
     /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
     /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
     private CommandItem? _paletteCommitted;
+
+    /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
+    private string? _leaderSlash;
 
     private int _timelineViewportH;
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
@@ -112,6 +117,7 @@ internal sealed class ConsoleExReplRunner(
         await PrintWelcomeAsync().ConfigureAwait(false);
 
         var inputTask = inputSource.RunAsync(ct);
+        BindLeaderKeys();
         using var busPump = services.GetRequiredService<IEventBus>()
             .Subscribe((evt, _) =>
             {
@@ -315,6 +321,20 @@ internal sealed class ConsoleExReplRunner(
             return;
         }
 
+        // Leader chords (ctrl+x …): armed router consumes the leader press and
+        // the chord; resolved sync actions run here, slash chords hand off.
+        if (_leader.HandleKey(key, Environment.TickCount64))
+        {
+            if (_leaderSlash is { } leaderSlash)
+            {
+                _leaderSlash = null;
+                await ExecutePaletteCommandAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
+            }
+
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
         // Permission gate outranks the composer while one is pending: y/n/a/
         // Enter/Esc resolve the card and never leak into prompt editing.
         if (bridge.TryRouteApprovalKey(key))
@@ -323,7 +343,7 @@ internal sealed class ConsoleExReplRunner(
             return;
         }
 
-        var action = _composer.HandleKey(key);
+        var action = _vim.HandleKey(key, _composer);
         switch (action)
         {
             case ComposerAction.Submitted:
@@ -385,12 +405,59 @@ internal sealed class ConsoleExReplRunner(
             new CommandItem("sessions", "Sessions", "list stored sessions", "/sessions"),
             new CommandItem("providers", "Providers", "list configured providers", "/providers"),
             new CommandItem("plugins", "Plugins", "reload CS-source plugins", "/plugins"),
+            new CommandItem("vim", "Toggle vim mode", "normal/insert editing layer", "<leader>v"),
             new CommandItem("exit", "Exit", "quit harbor", "ctrl+c ×2"),
         ]);
     }
 
+    /// <summary>Routes palette/leader ids that are NOT slash commands.</summary>
+    private bool TryRunLocalCommand(string id)
+    {
+        if (id == "vim")
+        {
+            ToggleVimMode();
+            return true;
+        }
+
+        return false;
+    }
+
+    private void ToggleVimMode()
+    {
+        if (_vim.Enabled)
+        {
+            _vim.Enabled = false;
+            _vim.Reset();
+        }
+        else
+        {
+            _vim.Enabled = true;
+        }
+
+        bridge.AppendSystemLine(_vim.Enabled
+            ? "vim: on — Esc = normal, i/a/A/I = insert"
+            : "vim: off");
+    }
+
+    /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash shortcuts.</summary>
+    private void BindLeaderKeys()
+    {
+        _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
+        _leader.Bind('e', () => { _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH)); _wake.Writer.TryWrite(null); });
+        _leader.Bind('p', () => { OpenCommandPalette(); _wake.Writer.TryWrite(null); });
+        _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
+        _leader.Bind('h', () => _leaderSlash = "help");
+        _leader.Bind('s', () => _leaderSlash = "sessions");
+    }
+
     private async Task ExecutePaletteCommandAsync(CommandItem item, CancellationToken ct)
     {
+        if (TryRunLocalCommand(item.Id))
+        {
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
         string slash = '/' + item.Id;
         var dispatcher = new SlashCommandDispatcher(services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
         try
