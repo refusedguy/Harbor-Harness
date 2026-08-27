@@ -88,7 +88,7 @@ internal sealed class SlashCommandDispatcher
             switch (cmd)
             {
                 case "help":
-                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /plugins /tui /storage /exit");
+                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /fork /plugins /tui /storage /exit");
                     break;
                 case "setup":
                     await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
@@ -109,6 +109,9 @@ internal sealed class SlashCommandDispatcher
                     break;
                 case "providers": await ListProviders(sp); break;
                 case "sessions": await ListSessions(sp); break;
+                case "fork":
+                    await ForkSession(sp, args, writer);
+                    break;
                 case "plugins":
                     // Hot-reload CS-source plugins into the live registries (add-only MVP).
                     if (sp.GetService<Harbor.Hosting.PluginReloadService>() is { } reload)
@@ -167,6 +170,26 @@ internal sealed class SlashCommandDispatcher
         if (result.IsSuccess)
             foreach (var s in result.Value)
                 Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
+    }
+
+    /// <summary>
+    ///     <c>/fork &lt;session-id&gt; &lt;message-id&gt;</c> — branch a NEW session
+    ///     copying history up to (and including) the given message through
+    ///     <see cref="SessionForkRunner" />.
+    /// </summary>
+    private static async Task ForkSession(IServiceProvider sp, string[] args, Action<string> writer)
+    {
+        if (args.Length < 2)
+        {
+            writer("Usage: /fork <session-id> <message-id>");
+            return;
+        }
+
+        var store = sp.GetRequiredService<ISessionStore>();
+        var result = await new SessionForkRunner(store).ForkAsync(args[0], args[1]).ConfigureAwait(false);
+        writer(result.IsSuccess
+            ? $"Forked → {result.Value.ForkId}: copied {result.Value.Copied} message(s)."
+            : $"Fork failed: {result.Error}");
     }
 
     private static void PrintTuiOptions() => Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen");
