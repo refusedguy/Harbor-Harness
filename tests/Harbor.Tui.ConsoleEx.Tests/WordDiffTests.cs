@@ -10,16 +10,16 @@ public class WordDiffTests
     private static int WordCount(IReadOnlyList<WordSeg> segs) =>
         segs.Sum(s => s.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length);
 
-    /// <summary>LCS invariant: shared+sides reconstruct both inputs.</summary>
-    private static async Task AssertReconstructs(string oldLine, string newLine, IReadOnlyList<WordSeg> segs)
+    /// <summary>LCS invariant: each side reconstructs its source line.</summary>
+    private static async Task AssertReconstructs(string oldLine, string newLine, WordDiffSides sides)
     {
         int oldTokens = oldLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
         int newTokens = newLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
 
-        await Assert.That(WordCount(segs.Where(s => s.Kind != WordSegKind.Added).ToList())).IsEqualTo(oldTokens);
-        await Assert.That(WordCount(segs.Where(s => s.Kind != WordSegKind.Deleted).ToList())).IsEqualTo(newTokens);
+        await Assert.That(WordCount(sides.Removed)).IsEqualTo(oldTokens);
+        await Assert.That(WordCount(sides.Inserted)).IsEqualTo(newTokens);
 
-        foreach (var seg in segs)
+        foreach (var seg in sides.Removed.Concat(sides.Inserted))
         {
             await Assert.That(seg.Text.Length > 0).IsTrue();
         }
@@ -28,55 +28,61 @@ public class WordDiffTests
     [Test]
     public async Task IdenticalLines_SingleEqualRun()
     {
-        var segs = WordDiff.Segment("harbor build release", "harbor build release");
+        var sides = WordDiff.Segment("harbor build release", "harbor build release");
 
-        await Assert.That(segs.Count).IsEqualTo(1);
-        await Assert.That(segs[0].Kind).IsEqualTo(WordSegKind.Equal);
-        await Assert.That(segs[0].Text).IsEqualTo("harbor build release");
+        await Assert.That(sides.Removed.Count).IsEqualTo(1);
+        await Assert.That(sides.Inserted.Count).IsEqualTo(1);
+        await Assert.That(sides.Removed[0].Kind).IsEqualTo(WordSegKind.Equal);
+        await Assert.That(sides.Removed[0].Text).IsEqualTo("harbor build release");
     }
 
     [Test]
-    public async Task SingleWordReplacement_SplitsAroundChangedToken()
+    public async Task SingleWordReplacement_ContextReadsNaturally()
     {
-        var segs = WordDiff.Segment("the quick brown fox", "the slow brown fox");
-        AssertReconstructs("the quick brown fox", "the slow brown fox", segs);
+        const string oldLine = "the quick brown fox";
+        const string newLine = "the slow brown fox";
+        var sides = WordDiff.Segment(oldLine, newLine);
+        await AssertReconstructs(oldLine, newLine, sides);
 
-        // The replacement itself is reported exactly once per side…
-        await Assert.That(Render(segs, WordSegKind.Deleted)).IsEqualTo("quick");
-        await Assert.That(Render(segs, WordSegKind.Added)).IsEqualTo("slow");
+        // The replacement is reported exactly once per side…
+        await Assert.That(Render(sides.Removed, WordSegKind.Deleted)).IsEqualTo("quick");
+        await Assert.That(Render(sides.Inserted, WordSegKind.Added)).IsEqualTo("slow");
 
-        // …and all context survives on the Equal side, in order.
-        string equal = Render(segs, WordSegKind.Equal);
-        await Assert.That(equal.IndexOf("the")).IsGreaterThanOrEqualTo(0);
-        await Assert.That(equal.IndexOf("brown")).IsGreaterThan(equal.IndexOf("the"));
-        await Assert.That(equal.IndexOf("fox")).IsGreaterThan(equal.IndexOf("brown"));
+        // …and the removed row keeps source order: the(quick)brown fox.
+        string removedAll = string.Join(' ', sides.Removed.Select(s => s.Text));
+        await Assert.That(removedAll).IsEqualTo("the quick brown fox");
+
+        string insertedAll = string.Join(' ', sides.Inserted.Select(s => s.Text));
+        await Assert.That(insertedAll).IsEqualTo("the slow brown fox");
     }
 
     [Test]
     public async Task PureAddition_PureDeletion()
     {
         var add = WordDiff.Segment(string.Empty, "new words");
-        await Assert.That(add.All(s => s.Kind == WordSegKind.Added)).IsTrue();
-        await Assert.That(Render(add, WordSegKind.Added)).IsEqualTo("new words");
+        await Assert.That(add.Removed.Count).IsEqualTo(0);
+        await Assert.That(add.Inserted.All(s => s.Kind == WordSegKind.Added)).IsTrue();
+        await Assert.That(Render(add.Inserted, WordSegKind.Added)).IsEqualTo("new words");
 
         var del = WordDiff.Segment("old words", string.Empty);
-        await Assert.That(del.All(s => s.Kind == WordSegKind.Deleted)).IsTrue();
-        await Assert.That(Render(del, WordSegKind.Deleted)).IsEqualTo("old words");
+        await Assert.That(del.Inserted.Count).IsEqualTo(0);
+        await Assert.That(del.Removed.All(s => s.Kind == WordSegKind.Deleted)).IsTrue();
 
         var nothing = WordDiff.Segment(string.Empty, string.Empty);
-        await Assert.That(nothing.Count).IsEqualTo(0);
+        await Assert.That(nothing.Removed.Count).IsEqualTo(0);
+        await Assert.That(nothing.Inserted.Count).IsEqualTo(0);
     }
 
     [Test]
     public async Task Reordering_ReportsMinimalChanges()
     {
-        var segs = WordDiff.Segment("b a", "a b");
+        var sides = WordDiff.Segment("b a", "a b");
 
-        int deletedWords = segs.Count(s => s.Kind == WordSegKind.Deleted);
-        int addedWords = segs.Count(s => s.Kind == WordSegKind.Added);
-        // Only ONE word can move net-per-side in a 2-token swap.
-        await Assert.That(deletedWords + addedWords).IsLessThanOrEqualTo(2);
-        await Assert.That(WordCount(segs.Where(s => s.Kind == WordSegKind.Equal).ToList())).IsGreaterThanOrEqualTo(1);
+        int gapRuns = sides.Removed.Count(s => s.Kind != WordSegKind.Equal)
+                    + sides.Inserted.Count(s => s.Kind != WordSegKind.Equal);
+        await Assert.That(gapRuns).IsLessThanOrEqualTo(2);
+        await Assert.That(WordCount(sides.Removed.Where(s => s.Kind == WordSegKind.Equal).ToList()))
+            .IsGreaterThanOrEqualTo(1);
     }
 
     [Test]
@@ -92,8 +98,8 @@ public class WordDiffTests
         await Assert.That(WordDiff.TryPair(del, ctx)!).IsNull();
 
         await AssertReconstructs("content old", "content new", pair!);
-        await Assert.That(Render(pair!, WordSegKind.Equal)).Contains("content");
-        await Assert.That(Render(pair!, WordSegKind.Deleted)).Contains("old");
-        await Assert.That(Render(pair!, WordSegKind.Added)).Contains("new");
+        await Assert.That(Render(pair!.Removed, WordSegKind.Equal)).Contains("content");
+        await Assert.That(Render(pair!.Removed, WordSegKind.Deleted)).Contains("old");
+        await Assert.That(Render(pair!.Inserted, WordSegKind.Added)).Contains("new");
     }
 }

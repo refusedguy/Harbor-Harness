@@ -14,123 +14,126 @@ public enum WordSegKind : byte
 public readonly record struct WordSeg(WordSegKind Kind, string Text);
 
 /// <summary>
+/// Per-row projections of an intraline (word-level) diff. Shared tokens keep
+/// their SOURCE ORDER in each projection, so both rows read naturally while
+/// anchoring on exactly the same matched words.
+/// </summary>
+/// <param name="Removed">Old-line view: Equal runs plus Deleted runs.</param>
+/// <param name="Inserted">New-line view: Equal runs plus Added runs.</param>
+public sealed record WordDiffSides(
+    IReadOnlyList<WordSeg> Removed,
+    IReadOnlyList<WordSeg> Inserted);
+
+/// <summary>
 /// Whitespace-token intraline diff between a removed and an added diff row
-/// (git --word-diff equivalent). LCS over tokens keeps runs stable instead of
-/// producing noisy single-character churn; pure functions, zero allocations
-/// beyond result lists.
+/// (git --word-diff equivalent). An LCS finds matched word pairs; each row is
+/// then projected independently around those matches. Pure functions; no
+/// allocation beyond result records.
 /// </summary>
 public static class WordDiff
 {
-    /// <summary>
-    /// Segment the old/new line into Equal/Deleted/Added runs in wire order
-    /// (all deletions precede their matched additions within one changed run).
-    /// Either side may be empty (pure add or pure delete line).
-    /// </summary>
-    public static IReadOnlyList<WordSeg> Segment(string oldLine, string newLine)
+    /// <summary>Either side may be empty (pure add or pure delete line).</summary>
+    public static WordDiffSides Segment(string oldLine, string newLine)
     {
         var oldTok = Tokenize(oldLine ?? string.Empty);
         var newTok = Tokenize(newLine ?? string.Empty);
-        int[,] lcs = LcsLengths(oldTok, newTok);
 
-        var reversed = new List<WordSeg>(Math.Max(oldTok.Length, newTok.Length));
-        WalkBackwards(oldTok, newTok, lcs, reversed);
-
-        // Reversed backtrack walked right→left; folding while iterating that
-        // list from its tail rebuilds wire order runs directly.
-        var merged = new List<WordSeg>(reversed.Count);
-        foreach (var seg in FoldRunsReversed(reversed))
-        {
-            merged.Add(seg);
-        }
-
-        return merged;
+        // Matched pair indices collected from the classic backtrack.
+        var (matchOld, matchNew) = Matches(oldTok, newTok);
+        return new WordDiffSides(
+            Project(oldTok, matchOld, WordSegKind.Deleted),
+            Project(newTok, matchNew, WordSegKind.Added));
     }
 
-    /// <summary>Splits on whitespace, keeping separators invisible.</summary>
     private static string[] Tokenize(string text) => text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
-    private static int[,] LcsLengths(string[] a, string[] b)
+    private static (int[] OldMatch, int[] NewMatch) Matches(string[] a, string[] b)
     {
-        var table = new int[a.Length + 1, b.Length + 1];
+        int[,] lcs = new int[a.Length + 1, b.Length + 1];
         for (int i = 1; i <= a.Length; i++)
         {
             for (int j = 1; j <= b.Length; j++)
             {
-                table[i, j] = StringComparer.Ordinal.Equals(a[i - 1], b[j - 1])
-                    ? table[i - 1, j - 1] + 1
-                    : Math.Max(table[i - 1, j], table[i, j - 1]);
+                lcs[i, j] = StringComparer.Ordinal.Equals(a[i - 1], b[j - 1])
+                    ? lcs[i - 1, j - 1] + 1
+                    : Math.Max(lcs[i - 1, j], lcs[i, j - 1]);
             }
         }
 
-        return table;
-    }
+        var oldMatch = new int[a.Length];
+        Array.Fill(oldMatch, -1);
+        var newMatch = new int[b.Length];
+        Array.Fill(newMatch, -1);
 
-    private static void WalkBackwards(string[] a, string[] b, int[,] lcs, List<WordSeg> outReversed)
-    {
-        int i = a.Length;
-        int j = b.Length;
-        while (i > 0 || j > 0)
+        int x = a.Length;
+        int y = b.Length;
+        while (x > 0 && y > 0)
         {
-            if (i > 0 && j > 0 && StringComparer.Ordinal.Equals(a[i - 1], b[j - 1]))
+            if (StringComparer.Ordinal.Equals(a[x - 1], b[y - 1]))
             {
-                outReversed.Add(new WordSeg(WordSegKind.Equal, a[i - 1]));
-                i--;
-                j--;
+                oldMatch[x - 1] = y - 1;
+                newMatch[y - 1] = x - 1;
+                x--;
+                y--;
                 continue;
             }
 
-            // Deletions first so edits read «old → new» once re-reversed.
-            if (j == 0 || (i > 0 && lcs[i - 1, j] >= lcs[i, j - 1]))
+            if (lcs[x - 1, y] >= lcs[x, y - 1])
             {
-                outReversed.Add(new WordSeg(WordSegKind.Deleted, a[i - 1]));
-                i--;
+                x--;
             }
             else
             {
-                outReversed.Add(new WordSeg(WordSegKind.Added, b[j - 1]));
-                j--;
+                y--;
             }
         }
+
+        return (oldMatch, newMatch);
     }
 
-    /// <summary>
-    /// Folds same-kind neighbours into space-joined runs. <paramref name="reversedTokens"/>
-    /// is in right→left discovery order; iterating from its tail emits wire order.
-    /// </summary>
-    private static IEnumerable<WordSeg> FoldRunsReversed(List<WordSeg> reversedTokens)
+    /// <summary>Projects one token array around its matches into ordered runs.</summary>
+    private static List<WordSeg> Project(string[] tokens, int[] match, WordSegKind gapKind)
     {
-        WordSegKind runKind = WordSegKind.Equal;
+        var runs = new List<WordSeg>(tokens.Length);
         var buffer = new System.Text.StringBuilder();
+        WordSegKind current = WordSegKind.Equal;
 
-        for (int idx = reversedTokens.Count - 1; idx >= 0; idx--)
+        void Flush()
         {
-            var tok = reversedTokens[idx];
-            if (tok.Kind != runKind && buffer.Length > 0)
+            if (buffer.Length > 0)
             {
-                yield return new WordSeg(runKind, buffer.ToString());
+                runs.Add(new WordSeg(current, buffer.ToString()));
                 buffer.Clear();
             }
+        }
 
-            runKind = tok.Kind;
+        for (int t = 0; t < tokens.Length; t++)
+        {
+            WordSegKind kind = match[t] >= 0 ? WordSegKind.Equal : gapKind;
+            if (kind != current && buffer.Length > 0)
+            {
+                Flush();
+            }
+
+            current = kind;
             if (buffer.Length > 0)
             {
                 buffer.Append(' ');
             }
 
-            buffer.Append(tok.Text);
+            buffer.Append(tokens[t]);
         }
 
-        if (buffer.Length > 0)
-        {
-            yield return new WordSeg(runKind, buffer.ToString());
-        }
+        Flush();
+        return runs;
     }
 
     /// <summary>
-    /// Pair a Delete row with its following Add row (widget §3.10 integration):
-    /// returns the segmented view painted as one logical changed line.
+    /// Pair a Delete row with its following Add row (widgets §3.10): both
+    /// sides share the same matched anchors; callers pick the side matching
+    /// their row kind.
     /// </summary>
-    public static IReadOnlyList<WordSeg>? TryPair(DiffLine delete, DiffLine add) =>
+    public static WordDiffSides? TryPair(DiffLine delete, DiffLine add) =>
         delete.Kind == DiffLineKind.Delete && add.Kind == DiffLineKind.Add
             ? Segment(delete.Text, add.Text)
             : null;
