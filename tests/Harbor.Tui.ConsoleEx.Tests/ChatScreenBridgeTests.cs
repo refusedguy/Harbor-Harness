@@ -282,9 +282,18 @@ public class ChatScreenBridgeTests
         internal static byte[] Header(uint w, uint h)
         {
             var d = new byte[24];
-            d[0] = 0x89; d[1] = 0x50; d[2] = 0x4E; d[3] = 0x47;
-            d[4] = 0x0D; d[5] = 0x0A; d[6] = 0x1A; d[7] = 0x0A;
-            d[12] = (byte)'I'; d[13] = (byte)'H'; d[14] = (byte)'D'; d[15] = (byte)'R';
+            d[0] = 0x89;
+            d[1] = 0x50;
+            d[2] = 0x4E;
+            d[3] = 0x47;
+            d[4] = 0x0D;
+            d[5] = 0x0A;
+            d[6] = 0x1A;
+            d[7] = 0x0A;
+            d[12] = (byte)'I';
+            d[13] = (byte)'H';
+            d[14] = (byte)'D';
+            d[15] = (byte)'R';
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(d.AsSpan(16), w);
             System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(d.AsSpan(20), h);
             return d;
