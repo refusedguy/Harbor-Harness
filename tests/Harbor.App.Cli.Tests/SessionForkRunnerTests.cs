@@ -56,7 +56,7 @@ public class SessionForkRunnerTests
         // Fork carries prefix [q1, a1] in order, correct lineage and title suffix.
         var forkHeader = (await _store.GetAsync(forked.Value.ForkId)).Value;
         await Assert.That(forkHeader.ParentSessionId).IsEqualTo(source.Id);
-        await Assert.That(forkHeader.Title).Contains("(fork)");
+        await Assert.That(forkHeader.Title).Contains("Fork of");
         await Assert.That(forkHeader.Agent).IsEqualTo("code");
         await Assert.That(forkHeader.ProviderId).IsEqualTo("test");
         await Assert.That(forkHeader.Model).IsEqualTo("test-model");
@@ -99,6 +99,6 @@ public class SessionForkRunnerTests
         var forked = await new SessionForkRunner(_store).ForkAsync("missing-session", Guid.NewGuid().ToString("N"));
 
         await Assert.That(forked.IsFailure).IsTrue();
-        await Assert.That(forked.Error).Contains("Cannot load session");
+        await Assert.That(forked.Error).Contains("missing-session"); // store error surfaces verbatim through the service
     }
 }
