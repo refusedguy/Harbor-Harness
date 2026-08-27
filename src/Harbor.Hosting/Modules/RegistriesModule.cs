@@ -90,6 +90,11 @@ internal static class RegistriesModule
             ctx.Options.HarborDir,
             ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
             sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>()));
+        services.AddSingleton(sp => new PluginAutoReloader(
+            sp.GetRequiredService<PluginReloadService>(),
+            ctx.Options.HarborDir,
+            autoReloadEnabled: ctx.Harbor.Tooling.AutoReloadPlugins,
+            sp.GetRequiredService<ILoggerFactory>()));
 #endif
 
         return services;

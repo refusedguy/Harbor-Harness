@@ -39,13 +39,18 @@ public sealed record IdentityConfig(
 /// <summary>
 ///     Plugin + builtin-tool toggles.
 /// </summary>
+/// <summary>
+///     Plugin + builtin-tool toggles.
+/// </summary>
 public sealed record ToolingConfig(
     IReadOnlyList<string> EnabledPlugins,
-    IReadOnlyList<string> DisabledTools)
+    IReadOnlyList<string> DisabledTools,
+    [property: JsonPropertyName("autoReloadPlugins")] bool AutoReloadPlugins = true)
 {
     public static readonly ToolingConfig Default = new(
         Array.Empty<string>(),
-        Array.Empty<string>());
+        Array.Empty<string>(),
+        AutoReloadPlugins: true);
 
     public Result<ToolingConfig> Validate()
     {

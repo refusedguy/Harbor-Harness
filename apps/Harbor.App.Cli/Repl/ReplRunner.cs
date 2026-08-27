@@ -31,6 +31,10 @@ internal sealed class ReplRunner
 
     public async Task<int> RunInteractiveAsync(IServiceProvider sp, CancellationToken ct = default)
     {
+        // Plugin hot-reload: resolve (and thereby start) the FS watcher glue for the
+        // interactive session; disposal rides on the host container teardown.
+        _ = sp.GetService<Harbor.Hosting.PluginAutoReloader>();
+
         // ── CE-4: ConsoleEx gate (второй путь рендера) ────────────────────
         // Режим включается значением consoleex у переменной окружения HARBOR_TUI
         // или поля tui в config.json. Kill-switch — секция ui.consoleEx.enabled.

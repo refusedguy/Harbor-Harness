@@ -196,6 +196,7 @@ public sealed class HarborConfig
         Providers = Providers,
         EnabledPlugins = Tooling.EnabledPlugins.ToList(),
         DisabledTools = Tooling.DisabledTools.ToList(),
+        AutoReloadPlugins = !Tooling.AutoReloadPlugins, // null when default — keep config.json free of knob noise
         MaxSteps = Run.MaxSteps,
         CostLimit = Cost.Limit,
         Compaction = Compaction,
@@ -268,6 +269,7 @@ public sealed class RawConfigDto
     [JsonPropertyName("providers")] public Dictionary<string, ProviderConfigEntry>? Providers { get; set; }
     [JsonPropertyName("enabledPlugins")] public List<string>? EnabledPlugins { get; set; }
     [JsonPropertyName("disabledTools")] public List<string>? DisabledTools { get; set; }
+    [JsonPropertyName("autoReloadPlugins")] public bool? AutoReloadPlugins { get; set; }
     [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
@@ -403,7 +405,8 @@ public static class ConfigNormalizer
         // ── Tooling ──
         config.Tooling = new ToolingConfig(
             (raw.EnabledPlugins ?? new List<string>()).AsReadOnly(),
-            (raw.DisabledTools ?? new List<string>()).AsReadOnly());
+            (raw.DisabledTools ?? new List<string>()).AsReadOnly(),
+            raw.AutoReloadPlugins ?? true);
     }
 
     private static void ApplyLimits(HarborConfig config, RawConfigDto raw)
