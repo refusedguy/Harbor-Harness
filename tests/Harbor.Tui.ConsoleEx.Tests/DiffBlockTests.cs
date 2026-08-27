@@ -99,6 +99,37 @@ public class DiffBlockTests
             }
         }
     }
+
+    [Test]
+    public async Task PairedDeleteAdd_WordDiff_AccentsChangedTokensOnly()
+    {
+        const string sample = """
+            @@ -1,2 +1,2 @@
+            -old line alpha
+            +new line beta
+             context tail
+            """;
+
+        var block = new DiffBlock(sample);
+        var buffer = new ScreenBuffer(40, 4);
+        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 4), 0));
+
+        int signCol = DiffBlock.GutterWidth;
+        // Row layout: 0 hunk header, 1 delete, 2 add, 3 context.
+        CellStyle delChanged = buffer.Get(signCol + 2, 1).Style;
+        CellStyle addChanged = buffer.Get(signCol + 2, 2).Style;
+        CellStyle addContext = buffer.Get(signCol + 6, 2).Style;
+        CellStyle addMark = buffer.Get(signCol + 10, 2).Style;
+
+        await Assert.That(delChanged.Fg).IsEqualTo(PackedColor.Indexed(1)); // ToolError
+        await Assert.That(addChanged.Fg).IsEqualTo(PackedColor.Indexed(2)); // ToolOk
+        await Assert.That(addContext.Fg).IsEqualTo(PackedColor.Indexed(8)); // ToolBody
+        await Assert.That(addMark.Fg).IsEqualTo(PackedColor.Indexed(2));
+
+        // Unpaired context row keeps plain styling.
+        await Assert.That(buffer.Get(signCol + 2, 3).Style.Fg)
+            .IsEqualTo(CellStyle.Plain.Fg);
+    }
 }
 
 /// <summary>Golden grid-dump of the diff block painted through the real pipeline.</summary>
