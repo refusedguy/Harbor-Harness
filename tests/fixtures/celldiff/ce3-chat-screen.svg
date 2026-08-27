@@ -1,7 +1,7 @@
 <svg xmlns='http://www.w3.org/2000/svg' width='768' height='280' font-family='monospace' font-size='15'>
 <rect width='100%' height='100%' fill='#101018'/>
-<text x='0' y='14' fill='hsl(188,70%,70%)' xml:space='preserve' font-weight='bold'>›</text>
-<text x='12' y='14' fill='hsl(188,70%,70%)' xml:space='preserve' font-weight='bold'> </text>
+<text x='0' y='14' fill='rgb(57,186,230)' xml:space='preserve' font-weight='bold'>›</text>
+<text x='12' y='14' fill='rgb(57,186,230)' xml:space='preserve' font-weight='bold'> </text>
 <text x='24' y='14' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>p</text>
 <text x='36' y='14' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>l</text>
 <text x='48' y='14' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>e</text>

@@ -130,23 +130,23 @@
 <text x='96' y='94' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='108' y='94' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='120' y='94' fill='#CCCCCC' xml:space='preserve'> </text>
-<text x='132' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>-</text>
-<text x='144' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>r</text>
-<text x='156' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
-<text x='168' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>m</text>
-<text x='180' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>o</text>
-<text x='192' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>v</text>
-<text x='204' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
-<text x='216' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>d</text>
-<text x='228' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'> </text>
-<text x='240' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>l</text>
-<text x='252' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>i</text>
-<text x='264' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>n</text>
-<text x='276' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
-<text x='288' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'> </text>
-<text x='300' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>o</text>
-<text x='312' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>n</text>
-<text x='324' y='94' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
+<text x='132' y='94' fill='rgb(255,107,107)' xml:space='preserve'>-</text>
+<text x='144' y='94' fill='rgb(255,107,107)' xml:space='preserve'>r</text>
+<text x='156' y='94' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
+<text x='168' y='94' fill='rgb(255,107,107)' xml:space='preserve'>m</text>
+<text x='180' y='94' fill='rgb(255,107,107)' xml:space='preserve'>o</text>
+<text x='192' y='94' fill='rgb(255,107,107)' xml:space='preserve'>v</text>
+<text x='204' y='94' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
+<text x='216' y='94' fill='rgb(255,107,107)' xml:space='preserve'>d</text>
+<text x='228' y='94' fill='rgb(255,107,107)' xml:space='preserve'> </text>
+<text x='240' y='94' fill='rgb(255,107,107)' xml:space='preserve'>l</text>
+<text x='252' y='94' fill='rgb(255,107,107)' xml:space='preserve'>i</text>
+<text x='264' y='94' fill='rgb(255,107,107)' xml:space='preserve'>n</text>
+<text x='276' y='94' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
+<text x='288' y='94' fill='rgb(255,107,107)' xml:space='preserve'> </text>
+<text x='300' y='94' fill='rgb(255,107,107)' xml:space='preserve'>o</text>
+<text x='312' y='94' fill='rgb(255,107,107)' xml:space='preserve'>n</text>
+<text x='324' y='94' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
 <text x='0' y='114' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='12' y='114' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='24' y='114' fill='#CCCCCC' xml:space='preserve'>1</text>
@@ -158,21 +158,21 @@
 <text x='96' y='114' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='108' y='114' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='120' y='114' fill='#CCCCCC' xml:space='preserve'> </text>
-<text x='132' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>-</text>
-<text x='144' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>r</text>
-<text x='156' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
-<text x='168' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>m</text>
-<text x='180' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>o</text>
-<text x='192' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>v</text>
-<text x='204' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>e</text>
-<text x='216' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>d</text>
-<text x='240' y='114' fill='hsl(16,70%,70%)' xml:space='preserve'>l</text>
-<text x='252' y='114' fill='hsl(16,70%,70%)' xml:space='preserve'>i</text>
-<text x='264' y='114' fill='hsl(16,70%,70%)' xml:space='preserve'>n</text>
-<text x='276' y='114' fill='hsl(16,70%,70%)' xml:space='preserve'>e</text>
-<text x='300' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>t</text>
-<text x='312' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>w</text>
-<text x='324' y='114' fill='hsl(47,70%,70%)' xml:space='preserve'>o</text>
+<text x='132' y='114' fill='rgb(255,107,107)' xml:space='preserve'>-</text>
+<text x='144' y='114' fill='rgb(255,107,107)' xml:space='preserve'>r</text>
+<text x='156' y='114' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
+<text x='168' y='114' fill='rgb(255,107,107)' xml:space='preserve'>m</text>
+<text x='180' y='114' fill='rgb(255,107,107)' xml:space='preserve'>o</text>
+<text x='192' y='114' fill='rgb(255,107,107)' xml:space='preserve'>v</text>
+<text x='204' y='114' fill='rgb(255,107,107)' xml:space='preserve'>e</text>
+<text x='216' y='114' fill='rgb(255,107,107)' xml:space='preserve'>d</text>
+<text x='240' y='114' fill='rgb(179,185,197)' xml:space='preserve'>l</text>
+<text x='252' y='114' fill='rgb(179,185,197)' xml:space='preserve'>i</text>
+<text x='264' y='114' fill='rgb(179,185,197)' xml:space='preserve'>n</text>
+<text x='276' y='114' fill='rgb(179,185,197)' xml:space='preserve'>e</text>
+<text x='300' y='114' fill='rgb(255,107,107)' xml:space='preserve'>t</text>
+<text x='312' y='114' fill='rgb(255,107,107)' xml:space='preserve'>w</text>
+<text x='324' y='114' fill='rgb(255,107,107)' xml:space='preserve'>o</text>
 <text x='0' y='134' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='12' y='134' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='24' y='134' fill='#CCCCCC' xml:space='preserve'> </text>
@@ -184,16 +184,16 @@
 <text x='96' y='134' fill='#CCCCCC' xml:space='preserve'>2</text>
 <text x='108' y='134' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='120' y='134' fill='#CCCCCC' xml:space='preserve'> </text>
-<text x='132' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>+</text>
-<text x='144' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>a</text>
-<text x='156' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>d</text>
-<text x='168' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>d</text>
-<text x='180' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>e</text>
-<text x='192' y='134' fill='hsl(94,70%,70%)' xml:space='preserve'>d</text>
-<text x='216' y='134' fill='hsl(16,70%,70%)' xml:space='preserve'>l</text>
-<text x='228' y='134' fill='hsl(16,70%,70%)' xml:space='preserve'>i</text>
-<text x='240' y='134' fill='hsl(16,70%,70%)' xml:space='preserve'>n</text>
-<text x='252' y='134' fill='hsl(16,70%,70%)' xml:space='preserve'>e</text>
+<text x='132' y='134' fill='rgb(127,217,98)' xml:space='preserve'>+</text>
+<text x='144' y='134' fill='rgb(127,217,98)' xml:space='preserve'>a</text>
+<text x='156' y='134' fill='rgb(127,217,98)' xml:space='preserve'>d</text>
+<text x='168' y='134' fill='rgb(127,217,98)' xml:space='preserve'>d</text>
+<text x='180' y='134' fill='rgb(127,217,98)' xml:space='preserve'>e</text>
+<text x='192' y='134' fill='rgb(127,217,98)' xml:space='preserve'>d</text>
+<text x='216' y='134' fill='rgb(179,185,197)' xml:space='preserve'>l</text>
+<text x='228' y='134' fill='rgb(179,185,197)' xml:space='preserve'>i</text>
+<text x='240' y='134' fill='rgb(179,185,197)' xml:space='preserve'>n</text>
+<text x='252' y='134' fill='rgb(179,185,197)' xml:space='preserve'>e</text>
 <text x='0' y='154' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='12' y='154' fill='#CCCCCC' xml:space='preserve'> </text>
 <text x='24' y='154' fill='#CCCCCC' xml:space='preserve'>1</text>

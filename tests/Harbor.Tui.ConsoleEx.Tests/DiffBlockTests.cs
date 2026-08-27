@@ -67,15 +67,17 @@ public class DiffBlockTests
         await Assert.That(art).Contains(" context line");
         await Assert.That(art).Contains("@@ -10,7 +10,8 @@");
 
-        // Delete rows carry the error accent.
+        // Delete rows carry the error accent, add rows the success accent —
+        // compared against ChatPalette semantics, not raw palette indices,
+        // so future truecolor/index token changes stay transparent.
         bool sawRed = false, sawGreen = false;
         for (int y = 0; y < buffer.Rows; y++)
         {
             for (int x = 0; x < buffer.Cols; x++)
             {
                 var fg = buffer.Get(x, y).Style.Fg;
-                sawRed |= fg == PackedColor.Indexed(1);
-                sawGreen |= fg == PackedColor.Indexed(2);
+                sawRed |= fg == ChatPalette.ToolError.Fg;
+                sawGreen |= fg == ChatPalette.ToolOk.Fg;
             }
         }
 
@@ -121,10 +123,10 @@ public class DiffBlockTests
         CellStyle addContext = buffer.Get(signCol + 6, 2).Style;
         CellStyle addMark = buffer.Get(signCol + 10, 2).Style;
 
-        await Assert.That(delChanged.Fg).IsEqualTo(PackedColor.Indexed(1)); // ToolError
-        await Assert.That(addChanged.Fg).IsEqualTo(PackedColor.Indexed(2)); // ToolOk
-        await Assert.That(addContext.Fg).IsEqualTo(PackedColor.Indexed(8)); // ToolBody
-        await Assert.That(addMark.Fg).IsEqualTo(PackedColor.Indexed(2));
+        await Assert.That(delChanged.Fg).IsEqualTo(ChatPalette.ToolError.Fg); // changed delete token
+        await Assert.That(addChanged.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);    // changed add token
+        await Assert.That(addContext.Fg).IsEqualTo(ChatPalette.ToolBody.Fg);  // unchanged context
+        await Assert.That(addMark.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);       // '+' gutter sign
 
         // Unpaired context row keeps plain styling.
         await Assert.That(buffer.Get(signCol + 2, 3).Style.Fg)

@@ -15,8 +15,8 @@ fix the bug in |
                                                                 
 ⠙ kilocode/hy3 ▰▰▰▱▱▱ 12.4k↑ 5.2k↓ $0.0021                      
 ## cells (x,y: rune fg/bg/attrs width)
-0,0: '›' i4/d/B w1
-1,0: ' ' i4/d/B w1
+0,0: '›' rgb(57,186,230)/d/B w1
+1,0: ' ' rgb(57,186,230)/d/B w1
 2,0: 'p' d/d/B w1
 3,0: 'l' d/d/B w1
 4,0: 'e' d/d/B w1
@@ -111,5 +111,5 @@ fix the bug in |
 40,13: '2' d/d/D w1
 41,13: '1' d/d/D w1
 ## frames
-## frame 1 (333 bytes)
-\e[?2026h\e[1;1H\e[0m\e[1m\e[38;5;4m› \e[39mplease fix the parser\e[2;1H\e[0mLooking\e[2;9H\e[1mat\e[2;12H\e[0mit.\e[3;1H\e[38;5;4m- \e[0mstep\e[3;8Hone\e[11;1Hfix\e[11;5Hthe\e[11;9Hbug\e[11;13Hin\e[11;16H|\e[7m \e[14;1H\e[27;1m\e[38;5;4m⠙\e[14;3Hkilocode/hy3\e[14;16H\e[22m\e[38;5;2m▰▰▰▱▱▱\e[14;23H\e[2m\e[39m12.4k↑ 5.2k↓\e[14;36H$0.0021\e[?2026l
+## frame 1 (342 bytes)
+\e[?2026h\e[1;1H\e[0m\e[1m\e[38;2;57;186;230m› \e[39mplease fix the parser\e[2;1H\e[0mLooking\e[2;9H\e[1mat\e[2;12H\e[0mit.\e[3;1H\e[38;5;4m- \e[0mstep\e[3;8Hone\e[11;1Hfix\e[11;5Hthe\e[11;9Hbug\e[11;13Hin\e[11;16H|\e[7m \e[14;1H\e[27;1m\e[38;5;4m⠙\e[14;3Hkilocode/hy3\e[14;16H\e[22m\e[38;5;2m▰▰▰▱▱▱\e[14;23H\e[2m\e[39m12.4k↑ 5.2k↓\e[14;36H$0.0021\e[?2026l
