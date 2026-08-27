@@ -36,6 +36,9 @@ public class ConsoleExReplSmokeTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "mock/mock-model" };
         var screen = ChatScreen.Build(composer, status);
+        // Golden frames must be phase-stable: entrance slide/fade is
+        // frame-count dependent, so the smoke run renders settled blocks.
+        screen.Timeline.Timeline.DisableEntranceFx();
 
         var bus = new InMemoryEventBus();
         var agentDef = new AgentDefinition(

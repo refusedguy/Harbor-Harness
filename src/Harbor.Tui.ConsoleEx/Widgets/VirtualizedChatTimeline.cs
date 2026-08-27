@@ -35,6 +35,16 @@ public sealed class VirtualizedChatTimeline
     public void EnableEntranceFx() => _entranceFx = true;
 
     /// <summary>
+    /// Turns entrance motion back off — newly appended blocks render settled.
+    /// Symmetric opt-out for hosts/tests that need phase-stable frames.
+    /// </summary>
+    public void DisableEntranceFx()
+    {
+        _entranceFx = false;
+        _entranceStarts.Clear();
+    }
+
+    /// <summary>
     /// Enables smooth scrolling (HDS v1): user-initiated scroll deltas ease
     /// toward their target over the micro fade (ease-out, 150 ms) instead of
     /// jumping. Follow-tail motion and <see cref="ScrollToEnd" /> stay exact
