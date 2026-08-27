@@ -88,7 +88,7 @@ internal sealed class SlashCommandDispatcher
             switch (cmd)
             {
                 case "help":
-                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /tui /storage /exit");
+                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /plugins /tui /storage /exit");
                     break;
                 case "setup":
                     await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
@@ -109,6 +109,23 @@ internal sealed class SlashCommandDispatcher
                     break;
                 case "providers": await ListProviders(sp); break;
                 case "sessions": await ListSessions(sp); break;
+                case "plugins":
+                    // Hot-reload CS-source plugins into the live registries (add-only MVP).
+                    if (sp.GetService<Harbor.Hosting.PluginReloadService>() is { } reload)
+                    {
+                        var summary = await reload.ReloadAsync().ConfigureAwait(false);
+                        writer(summary.Loaded == 0
+                            ? "Plugins: no new plugin(s) loaded."
+                            : $"Plugins: {summary.Loaded} loaded.");
+                        foreach (var note in summary.Notes)
+                            writer($"  - {note}");
+                        writer("Hint: edited/removed plugins need a restart to fully rebind.");
+                    }
+                    else
+                    {
+                        writer("Plugins: not available in this build (HARBOR_MINIMAL).");
+                    }
+                    break;
                 case "tui": PrintTuiOptions(); break;
                 case "storage": PrintStorageOptions(); break;
                 default:
