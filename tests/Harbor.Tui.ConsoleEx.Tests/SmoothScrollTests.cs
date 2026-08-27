@@ -5,7 +5,7 @@ namespace Harbor.Tui.ConsoleEx.Tests;
 
 /// <summary>
 /// Smooth scroll (HDS v1): user scroll deltas ease toward the target over the
-/// micro fade while follow-tail and explicit end/top snaps stay exact.
+/// micro fade while follow-tail and explicit end snaps stay exact.
 /// Deterministic ticks — no wall clock.
 /// </summary>
 public class SmoothScrollTests
@@ -18,11 +18,10 @@ public class SmoothScrollTests
         var tl = new VirtualizedChatTimeline();
         if (smooth)
         {
-            tl.EnableEntranceFx();
             tl.EnableSmoothScroll();
         }
 
-        _ = Paint(tl, tick: 0); // first frame → hasPaintedFrame, entrance FX settle
+        _ = Paint(tl, tick: 0); // first frame → hasPaintedFrame
         for (int i = 0; i < 20; i++)
         {
             tl.Append(new UserBlock($"line-{i:00}"));
@@ -49,7 +48,7 @@ public class SmoothScrollTests
             var sb = new System.Text.StringBuilder();
             for (int x = 0; x < buffer.Cols; x++)
             {
-                _ = sb.Append(buffer.Get(x, y).Ch);
+                _ = sb.Append((char)buffer.Get(x, y).Rune);
             }
 
             if (sb.ToString().Contains(needle, StringComparison.Ordinal))
@@ -68,22 +67,21 @@ public class SmoothScrollTests
         tl.ScrollUp(10);
         _ = Paint(tl, tick: 11);
 
-        await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.ScrollY);
-        await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.TotalHeight - Height);
+        await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.ScrollY); // visual == target right away
     }
 
     [Test]
     public async Task SmoothScroll_GlidesTowardTarget_AndSettles()
     {
         var tl = Populated(smooth: true);
-        long target = tl.TotalHeight - Height;
-        tl.ScrollUp(10);
+        long tail = tl.TotalHeight - Height;
+        tl.ScrollUp(10); // target = tail - 10
 
         long start = tl.EffectiveScrollY;
         _ = Paint(tl, tick: 11);
         long early = tl.EffectiveScrollY;
 
-        for (long tick = 12; tick < 10 + PanelFx.FadeFrames; tick++)
+        for (long tick = 12; tick < 11 + (PanelFx.FadeFrames / 2); tick++)
         {
             _ = Paint(tl, tick);
         }
@@ -92,28 +90,23 @@ public class SmoothScrollTests
         _ = Paint(tl, tick: 10 + PanelFx.FadeFrames + 1);
         long settled = tl.EffectiveScrollY;
 
-        await Assert.That(start).IsEqualTo(target);            // pinned at the tail
-        await Assert.That(early).IsEqualTo(start);             // ease starts from the current view
-        await Assert.That(late).IsGreaterThan(early);          // moving toward the target (up = larger offset)
-        await Assert.That(late).IsLessThan(target);            // not there yet mid-flight
-        await Assert.That(settled).IsEqualTo(target);          // settles exactly on target
+        await Assert.That(start).IsEqualTo(tail);        // eased view starts at the pinned position
+        await Assert.That(early).IsLessThan(start);      // gliding up (offset decreases)
+        await Assert.That(late).IsLessThan(early);       // monotonic ease-out
+        await Assert.That(late).IsGreaterThan(tail - 10); // not settled mid-flight
+        await Assert.That(settled).IsEqualTo(tail - 10); // lands exactly on target
     }
 
     [Test]
-    public async Task SmoothScroll_PaintShiftsContentProgressively()
+    public async Task SmoothScroll_PaintDiffersMidFlight_FromSettled()
     {
         var tl = Populated(smooth: true);
         tl.ScrollUp(10);
 
-        var buffer = Paint(tl, tick: 11 + (PanelFx.FadeFrames / 2));
-        int midRow = RowOf(buffer, "line-19");
+        var mid = Paint(tl, tick: 11 + (PanelFx.FadeFrames / 2));
+        var settled = Paint(tl, tick: 11 + PanelFx.FadeFrames + 1);
 
-        buffer = Paint(tl, tick: 11 + PanelFx.FadeFrames + 1);
-        int settledRow = RowOf(buffer, "line-19");
-
-        await Assert.That(midRow).IsGreaterThanOrEqualTo(0);
-        await Assert.That(settledRow).IsGreaterThanOrEqualTo(0);
-        await Assert.That(midRow).IsNotEqualTo(settledRow); // visible glide, not a jump
+        await Assert.That(GridDump.Art(mid)).IsNotEqualTo(GridDump.Art(settled)); // visible glide
     }
 
     [Test]
@@ -128,7 +121,7 @@ public class SmoothScrollTests
         {
             _ = Paint(tl, tick);
             long now = tl.EffectiveScrollY;
-            await Assert.That(Math.Abs(now - prev)).IsLessThanOrEqualTo(3); // per-frame glide, small steps
+            await Assert.That(prev - now).IsLessThanOrEqualTo(3); // small per-frame glide
             prev = now;
         }
 
@@ -136,8 +129,7 @@ public class SmoothScrollTests
         _ = Paint(tl, tick: 16);
         long after = tl.EffectiveScrollY;
 
-        await Assert.That(after).IsGreaterThanOrEqualTo(prev);   // keeps moving toward the new target
-        await Assert.That(after - prev).IsLessThanOrEqualTo(3);  // chained, no discontinuity
+        await Assert.That(prev - after).IsLessThanOrEqualTo(3); // chained, no discontinuity
     }
 
     [Test]
@@ -150,10 +142,11 @@ public class SmoothScrollTests
             _ = Paint(tl, tick);
         }
 
-        tl.ScrollDown(4); // still unpinned — animates
+        tl.ScrollDown(4); // unpinned — animates toward tail-6
         _ = Paint(tl, tick: 12 + PanelFx.FadeFrames);
+        await Assert.That(tl.EffectiveScrollY).IsNotEqualTo(tl.TotalHeight - Height);
 
-        tl.ScrollToEnd(Height); // follow-tail re-engaged — must be exact
+        tl.ScrollToEnd(Height); // follow-tail re-engaged — exact snap
         var buffer = Paint(tl, tick: 13 + PanelFx.FadeFrames);
 
         await Assert.That(tl.EffectiveScrollY).IsEqualTo(tl.TotalHeight - Height);

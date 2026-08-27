@@ -137,8 +137,9 @@ public sealed class VirtualizedChatTimeline
             FollowTail = false;
         }
 
+        long fromVisual = _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
         SetScrollY(ScrollY + lines);
-        BeginScrollAnimation();
+        BeginScrollAnimation(fromVisual);
     }
 
     public void PageUp(int viewportHeight) => ScrollBy(-Math.Max(1, viewportHeight - 1));
@@ -179,17 +180,19 @@ public sealed class VirtualizedChatTimeline
 
     /// <summary>
     /// Starts (or retargets) the eased scroll toward the current
-    /// <see cref="ScrollY" />, chaining from the on-screen position so
-    /// consecutive wheel events glide instead of restarting.
+    /// <see cref="ScrollY" /> from <paramref name="fromVisual" /> — the
+    /// on-screen offset captured before the target moved — so consecutive
+    /// wheel events glide instead of restarting or jumping.
     /// </summary>
-    private void BeginScrollAnimation()
+    private void BeginScrollAnimation(long fromVisual)
     {
-        if (!_smoothScroll || FollowTail || ScrollY == (long)Math.Round(_visualScrollY))
+        if (!_smoothScroll || FollowTail || ScrollY == fromVisual)
         {
             return;
         }
 
-        _scrollFrom = _visualScrollY;
+        _scrollFrom = fromVisual;
+        _visualScrollY = fromVisual;
         _scrollTarget = ScrollY;
         _scrollStartTick = CurrentTick;
         _scrollAnimating = true;
