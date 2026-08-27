@@ -90,8 +90,13 @@ while IFS= read -r line; do
   STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
   if [[ -f "$STATUS_FILE" ]]; then
     STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "")
-    if [[ "$STATE" == "done" || "$STATE" == "failed" ]]; then
+    RETRIES=$(jq -r '.retries // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
+    if [[ "$STATE" == "done" ]]; then
       log "SKIP: $SPRINT (state=$STATE)"
+      continue
+    fi
+    if [[ "$STATE" == "failed" && "$RETRIES" -ge 2 ]]; then
+      log "SKIP: $SPRINT (state=$STATE, retries=$RETRIES)"
       continue
     fi
   fi

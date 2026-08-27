@@ -1,0 +1,16 @@
+{
+  "name": "Renderer Unification",
+  "state": "queued",
+  "head": "66423ef084a0de2288427bf9fb310f68a452ff17",
+  "base": "66423ef084a0de2288427bf9fb310f68a452ff17",
+  "commits": 0,
+  "started_at": null,
+  "finished_at": null,
+  "kilo_pid": null,
+  "kilo_session": null,
+  "findings": ".kilo-docs/sprints/renderer-unification/findings.json",
+  "report": ".kilo-docs/sprints/renderer-unification/report.html",
+  "failures": 0,
+  "retries": 0,
+  "last_activity": null
+}

@@ -12,6 +12,7 @@ sprint|NAME|MODEL|PROMPT_PATH
 
 sprint|UI-FINAL|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-final/prompt.md
 sprint|UI-V2|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-v2/prompt.md
+sprint|Renderer Unification|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-unification/prompt.md
 sprint|Multi-Agent|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/multi-agent/prompt.md
 sprint|Performance|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/performance/prompt.md
 sprint|IDE Integration|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ide-integration/prompt.md

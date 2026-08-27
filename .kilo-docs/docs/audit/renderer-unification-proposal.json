@@ -1,0 +1,290 @@
+{
+  "executive_summary": "Two parallel renderer stacks exist: (1) the new BaseTuiRenderer/ITuiRenderContext MVVM architecture in Harbor.Terminal.Abstractions, and (2) the high-performance ConsoleEx stack in Harbor.Tui.ConsoleEx which lives entirely outside that ecosystem. Ansi and Plain extend BaseTuiRenderer but duplicate ~80% of their event-to-output logic. The minimal-change path is to (a) wrap ConsoleEx in an ITuiRenderContext adapter so it participates in the MVVM ecosystem without rewriting its cell-diff engine or AnsiWriter, and (b) extract the duplicated event formatting shared by Ansi/Plain/ConsoleEx into a single helper.",
+  "current_architecture": {
+    "abstraction_layers": [
+      {
+        "name": "Harbor.Abstractions.Tui (legacy)",
+        "files": ["src/Harbor.Abstractions/Tui/ITuiRenderer.cs"],
+        "status": "Coexists with newer layer; simpler input/slash-command contracts. Not used by ConsoleEx or the BaseTuiRenderer family."
+      },
+      {
+        "name": "Harbor.Terminal.Abstractions (canonical)",
+        "files": [
+          "src/Harbor.Terminal.Abstractions/ITuiRenderer.cs",
+          "src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs",
+          "src/Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs",
+          "src/Harbor.Terminal.Abstractions/Views/ITuiView.cs",
+          "src/Harbor.Terminal.Abstractions/ViewModels/ITuiViewModel.cs",
+          "src/Harbor.Terminal.Abstractions/ViewRegistry.cs",
+          "src/Harbor.Terminal.Abstractions/ViewModels/TuiViewModels.cs"
+        ],
+        "status": "The preferred target for unification. Provides view/viewmodel fan-out, placement-driven rendering, and plugin registration."
+      }
+    ],
+    "in_repo_renderers": [
+      {
+        "name": "Harbor.Tui.Ansi",
+        "base": "BaseTuiRenderer",
+        "context": "AnsiRenderContext (internal, writes ANSI escape codes directly to Console)",
+        "notes": "Simple streaming renderer. Live tokens written directly; status bar/diff via builtin views."
+      },
+      {
+        "name": "Harbor.Tui.Plain",
+        "base": "BaseTuiRenderer",
+        "context": "PlainRenderContext (internal, writes plain text to TextWriter)",
+        "notes": "Near-identical structure to AnsiTuiRenderer; same event switch duplicated."
+      },
+      {
+        "name": "Harbor.Tui.Notifications",
+        "base": "BaseTuiRenderer",
+        "context": "NotificationRenderContext (internal, no-op)",
+        "notes": "Non-interactive; fires OS desktop notifications. All Write* methods are no-ops."
+      },
+      {
+        "name": "Harbor.Tui.ConsoleEx",
+        "base": "None — completely separate stack",
+        "context": "Owns AnsiWriter, ScreenBuffer, DiffEngine, Cell/CellStyle, PromptBuffer, ComposerController, StreamingMarkdownRenderer, ChatScreenBridge, InlineAgentStreamBridge, ScreenSession",
+        "notes": "High-performance cell-diff renderer. Must NOT be rewritten. Lives outside BaseTuiRenderer ecosystem."
+      }
+    ],
+    "external_renderers_source_not_in_repo": [
+      "Harbor.Tui.Spectre (SpectreTuiRenderer)",
+      "Harbor.Tui.SpectreTui",
+      "Harbor.Tui.Spectre.Fullscreen (FullscreenTuiRenderer)",
+      "Harbor.Tui.TerminalGui (TerminalGuiRenderer)",
+      "Harbor.Tui.Termina (TerminaRenderer)",
+      "Harbor.Tui.RazorConsole (RazorConsoleRenderer)"
+    ]
+  },
+  "duplication_inventory": [
+    {
+      "pattern": "Event-to-live-output mapping",
+      "locations": ["Harbor.Tui.Ansi/AnsiTuiRenderer.cs:58-109", "Harbor.Tui.Plain/PlainTuiRenderer.cs:35-68"],
+      "impact": "Same switch on MessageStartEvent, MessageUpdateEvent, MessageEndEvent, ToolExecutionStartEvent, CompactionStartedEvent, CompactionCompletedEvent, AgentErrorEvent duplicated with only cosmetic differences (ANSI colors vs plain text).",
+      "severity": "HIGH"
+    },
+    {
+      "pattern": "ShouldRenderPlacement override",
+      "locations": ["Harbor.Tui.Ansi/AnsiTuiRenderer.cs:35-42", "Harbor.Tui.Plain/PlainTuiRenderer.cs:26-33"],
+      "impact": "Identical override suppressing ChatHistory and Input placements.",
+      "severity": "LOW"
+    },
+    {
+      "pattern": "Trivial ITuiRenderer method delegation",
+      "locations": [
+        "Harbor.Tui.Ansi/AnsiTuiRenderer.cs:129-161",
+        "Harbor.Tui.Plain/PlainTuiRenderer.cs:86-117"
+      ],
+      "impact": "ReadLineAsync, WriteAsync, WriteLineAsync, ClearAsync, Dispose are one-liners delegating to Context. Can be lifted to BaseTuiRenderer once context supports the needed operations.",
+      "severity": "MEDIUM"
+    },
+    {
+      "pattern": "Render context color/style no-ops",
+      "locations": [
+        "Harbor.Tui.Plain/PlainRenderContext.cs:134-135",
+        "Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs:38-43"
+      ],
+      "impact": "Plain and Capture render contexts silently drop colors/styles. Shared base could handle the no-op semantics.",
+      "severity": "LOW"
+    },
+    {
+      "pattern": "UnicodeWidth and text wrapping",
+      "locations": [
+        "Harbor.Tui.ConsoleEx/Rendering/UnicodeWidth.cs",
+        "Harbor.Tui.ConsoleEx/Rendering/TextWrap.cs",
+        "Harbor.Tui.ConsoleEx/Widgets/Markdown/StreamingMarkdownRenderer.cs"
+      ],
+      "impact": "Wide-rune aware width and wrapping exist only in ConsoleEx. The markdown renderer in Terminal.Abstractions (GfmTableFormatter) has its own simpler approach. Shared utilities would benefit all renderers.",
+      "severity": "MEDIUM"
+    },
+    {
+      "pattern": "StreamingMarkdownRenderer",
+      "locations": [
+        "Harbor.Tui.ConsoleEx/Widgets/Markdown/StreamingMarkdownRenderer.cs",
+        "Harbor.Tui.ConsoleEx/Widgets/Markdown/MarkdownBlockParser.cs"
+      ],
+      "impact": "High-performance frozen-tail markdown renderer is locked inside ConsoleEx. The simpler GfmTableFormatter in Terminal.Abstractions cannot match its streaming performance.",
+      "severity": "MEDIUM"
+    },
+    {
+      "pattern": "Color type divergence",
+      "locations": [
+        "Harbor.Tui.ConsoleEx/Rendering/CellStyle.cs (PackedColor, StyleAttr)",
+        "Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs (TuiColor, TuiStyle)",
+        "Harbor.DesignSystem/DesignSystem/TerminalColorPalette.cs"
+      ],
+      "impact": "ConsoleEx uses PackedColor (bit-packed RGB/palette) and StyleAttr (flags). Terminal.Abstractions uses TuiColor (RGB record) and TuiStyle (flags). Conversion helpers needed for adapter.",
+      "severity": "LOW"
+    }
+  ],
+  "underutilized_abstractions": [
+    {
+      "name": "BaseTuiRenderer",
+      "file": "src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs",
+      "why_underutilized": "ConsoleEx does not inherit from it. Ansi/Plain use it but duplicate event formatting instead of delegating to a shared helper.",
+      "leverage": "Make BaseTuiRenderer the single entry point for all non-ConsoleEx renderers; add a virtual FormatLiveEvent hook that ConsoleEx can override."
+    },
+    {
+      "name": "ITuiRenderContext",
+      "file": "src/Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs",
+      "why_underutilized": "ConsoleEx cannot implement it because its output model is cell-buffer-based, not stream-based.",
+      "leverage": "Add a Flush() overload accepting a byte span (or a FrameBuffer abstraction) so high-performance renderers can batch output without losing the context contract."
+    },
+    {
+      "name": "CaptureRenderContext",
+      "file": "src/Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs",
+      "why_underutilized": "Only used in tests. Can serve as the model for a SharedNoOpRenderContext base.",
+      "leverage": "Extract a SharedNoOpRenderContext that Capture, Plain, and Notification can all inherit from, reducing per-project context code."
+    },
+    {
+      "name": "TerminalColorPalette",
+      "file": "src/Harbor.DesignSystem/DesignSystem/TerminalColorPalette.cs",
+      "why_underutilized": "ConsoleEx has its own ChatPalette that projects these tokens into PackedColor. Ansi/Plain hardcode TuiColor values inline.",
+      "leverage": "Make TerminalColorPalette the single source of truth; add PackedColor projection helpers so ConsoleEx can reference tokens without re-declaring them."
+    },
+    {
+      "name": "ViewRegistry / ViewModelRegistry",
+      "file": "src/Harbor.Terminal.Abstractions/ViewRegistry.cs",
+      "why_underutilized": "ConsoleEx has its own panel/widget system (ChatTimelinePanel, StatusViewModel) that does not register with ViewRegistry.",
+      "leverage": "ConsoleEx can register its native widgets as ITuiView adapters, or the adapter can bridge events to the existing view models."
+    }
+  ],
+  "proposal": {
+    "strategy": "Adapter-based unification: wrap existing renderers rather than rewrite them. Extract shared behavior into BaseTuiRenderer and Terminal.Abstractions. ConsoleEx keeps its entire optimized stack intact.",
+    "steps": [
+      {
+        "step": 1,
+        "title": "Extract StreamingEventFormatter into Harbor.Terminal.Abstractions",
+        "description": "Move the event-to-live-output switch from AnsiTuiRenderer and PlainTuiRenderer into a single static helper: StreamingEventFormatter.FormatAsync(AgentEvent, ITuiRenderContext, bool supportsColor). This eliminates the ~80% code duplication between Ansi and Plain. Both renderers call this helper from their RenderAsync overrides.",
+        "files_to_create": [
+          "src/Harbor.Terminal.Abstractions/Rendering/StreamingEventFormatter.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.Ansi/AnsiTuiRenderer.cs",
+          "src/Harbor.Tui.Plain/PlainTuiRenderer.cs"
+        ],
+        "risk": "LOW — pure extraction, no behavior change."
+      },
+      {
+        "step": 2,
+        "title": "Lift trivial ITuiRenderer methods to BaseTuiRenderer",
+        "description": "Move ReadLineAsync, WriteAsync, WriteLineAsync, ClearAsync into BaseTuiRenderer as virtual methods that delegate to Context (when Context is non-null). Renderers that need custom behavior (ConsoleEx, Notification) override; Ansi/Plain inherit the defaults.",
+        "files_to_modify": [
+          "src/Harbor.Terminal.Abstractions/BaseTuiRenderer.cs",
+          "src/Harbor.Tui.Ansi/AnsiTuiRenderer.cs",
+          "src/Harbor.Tui.Plain/PlainTuiRenderer.cs"
+        ],
+        "risk": "LOW — additive virtual methods with default implementations."
+      },
+      {
+        "step": 3,
+        "title": "Create SharedNoOpRenderContext base in Terminal.Abstractions",
+        "description": "Extract a base class that implements ITuiRenderContext with no-op cursor/screen methods and Write/WriteLine that delegate to an optional TextWriter. PlainRenderContext and NotificationRenderContext inherit from it, overriding only WriteColored/WriteStyled when needed.",
+        "files_to_create": [
+          "src/Harbor.Terminal.Abstractions/Renderers/SharedNoOpRenderContext.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.Plain/PlainRenderContext.cs",
+          "src/Harbor.Tui.Notifications/NotificationRenderContext.cs"
+        ],
+        "risk": "LOW — reduces boilerplate, no behavioral change."
+      },
+      {
+        "step": 4,
+        "title": "Create color conversion helpers between PackedColor and TuiColor",
+        "description": "Add TuiColor ToTuiColor(this PackedColor) and PackedColor ToPackedColor(this TuiColor) extension methods in Terminal.Abstractions. This lets ConsoleEx consume TuiColor-based APIs without changing its internal PackedColor representation.",
+        "files_to_create": [
+          "src/Harbor.Terminal.Abstractions/Rendering/ColorConversions.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.ConsoleEx/Harbor.Tui.ConsoleEx.csproj"
+        ],
+        "risk": "LOW — additive extensions."
+      },
+      {
+        "step": 5,
+        "title": "Create ConsoleExRenderContext adapter implementing ITuiRenderContext",
+        "description": "Build an adapter that wraps ConsoleEx's native AnsiWriter + ScreenSession (or the higher-level InlineAgentStreamBridge / ChatScreenBridge) and presents an ITuiRenderContext surface. Key design: Write/WriteLine/WriteColored/WriteStyled feed into the AnsiWriter; SetCursorPosition/ClearLine/Clear are no-ops or thin wrappers; Flush triggers EndFrameAsync. This is the critical bridge that lets ConsoleEx participate in BaseTuiRenderer's view/viewmodel fan-out WITHOUT rewriting AnsiWriter, ScreenBuffer, or DiffEngine.",
+        "files_to_create": [
+          "src/Harbor.Tui.ConsoleEx/Rendering/ConsoleExRenderContext.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.ConsoleEx/Harbor.Tui.ConsoleEx.csproj"
+        ],
+        "risk": "MEDIUM — adapter must faithfully map ITuiRenderContext semantics to ConsoleEx's frame-pipeline model. Needs tests."
+      },
+      {
+        "step": 6,
+        "title": "Create ConsoleExTuiRenderer that extends BaseTuiRenderer",
+        "description": "Build a ConsoleExTuiRenderer that owns the existing ConsoleEx stack (AnsiWriter, ScreenSession, ChatScreenBridge, etc.) and presents an ITuiRenderContext via the new adapter. It overrides RenderAsync to route events through the existing ChatScreenBridge / InlineAgentStreamBridge, while still participating in BaseTuiRenderer's view registration and placement logic for status-bar and diff-overlay views.",
+        "files_to_create": [
+          "src/Harbor.Tui.ConsoleEx/ConsoleExTuiRenderer.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.ConsoleEx/Harbor.Tui.ConsoleEx.csproj",
+          "src/Harbor.Hosting/Modules/TuiModule.cs"
+        ],
+        "risk": "MEDIUM — must ensure the adapter and renderer do not break ConsoleEx's existing frame pacing or cell-diff invariants."
+      },
+      {
+        "step": 7,
+        "title": "Move UnicodeWidth and TextWrap to Terminal.Abstractions",
+        "description": "Relocate Harbor.Tui.ConsoleEx/Rendering/UnicodeWidth.cs and TextWrap.cs into Harbor.Terminal.Abstractions/Rendering/. Update ConsoleEx to reference them from the new location. This lets all renderers share the same wide-rune-aware wrapping and width calculations.",
+        "files_to_create": [
+          "src/Harbor.Terminal.Abstractions/Rendering/UnicodeWidth.cs",
+          "src/Harbor.Terminal.Abstractions/Rendering/TextWrap.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.ConsoleEx/Rendering/UnicodeWidth.cs (remove)",
+          "src/Harbor.Tui.ConsoleEx/Rendering/TextWrap.cs (remove)",
+          "src/Harbor.Tui.ConsoleEx/Widgets/Markdown/StreamingMarkdownRenderer.cs (update using)"
+        ],
+        "risk": "LOW — pure relocation with namespace aliases if needed."
+      },
+      {
+        "step": 8,
+        "title": "Add TerminalColorPalette-backed TuiColor constants to Terminal.Abstractions",
+        "description": "Add a TerminalColorPaletteAdapter or extend TuiColor with named constants (Accent, Success, Warning, Error, Tool, System, User) sourced from Harbor.DesignSystem.TerminalColorPalette. This lets Ansi/Plain/ConsoleEx all render with the same design-token colors without each project re-declaring hex values.",
+        "files_to_create": [
+          "src/Harbor.Terminal.Abstractions/Rendering/TerminalColorTokens.cs"
+        ],
+        "files_to_modify": [
+          "src/Harbor.Tui.Ansi/AnsiTuiRenderer.cs",
+          "src/Harbor.Tui.Plain/PlainTuiRenderer.cs",
+          "src/Harbor.Tui.ConsoleEx/Widgets/ChatPalette.cs"
+        ],
+        "risk": "LOW — additive constants."
+      },
+      {
+        "step": 9,
+        "title": "Register ConsoleEx in TuiModule and add feature-flag wiring",
+        "description": "Update TuiModule.AddHarborTui to include a 'consoleex' case (guarded by HARBOR_WITH_CONSOLE_EX if needed). The switch returns ConsoleExTuiRenderer when selected. Default remains 'spectre-tui' or 'ansi' depending on feature flags.",
+        "files_to_modify": [
+          "src/Harbor.Hosting/Modules/TuiModule.cs"
+        ],
+        "risk": "LOW — registration wiring only."
+      },
+      {
+        "step": 10,
+        "title": "Add adapter compliance tests",
+        "description": "Write tests verifying that ConsoleExRenderContext correctly implements ITuiRenderContext semantics (Write/WriteLine/WriteColored/WriteStyled produce expected AnsiWriter output, Flush calls EndFrameAsync, cursor methods are safe no-ops). Add tests for StreamingEventFormatter to guarantee Ansi/Plain output parity.",
+        "files_to_create": [
+          "tests/Harbor.Tui.Tests/ConsoleExRenderContextTests.cs",
+          "tests/Harbor.Tui.Tests/StreamingEventFormatterTests.cs"
+        ],
+        "risk": "LOW — test-only change."
+      }
+    ],
+    "out_of_scope": [
+      "Rewriting ConsoleEx optimizations (AnsiWriter SGR automaton, cell-diff ScreenBuffer/DiffEngine, StreamingMarkdownRenderer frozen-tail algorithm). These are explicitly preserved.",
+      "Bringing Spectre/TerminalGui/Termina/RazorConsole source in-tree. They remain external packages implementing ITuiRenderContext.",
+      "Merging Harbor.Abstractions.Tui into Harbor.Terminal.Abstractions. The legacy layer can be deprecated separately."
+    ],
+    "success_criteria": [
+      "AnsiTuiRenderer and PlainTuiRenderer share 100% of event-to-output logic via StreamingEventFormatter.",
+      "ConsoleEx can be selected via HARBOR_TUI=consoleex and participates in BaseTuiRenderer view registration without touching AnsiWriter or DiffEngine.",
+      "All existing tests pass; new adapter tests verify ITuiRenderContext contract compliance.",
+      "No renderer-specific code leaks into Harbor.Abstractions or Harbor.Terminal.Abstractions beyond the shared formatter, color tokens, and UnicodeWidth/TextWrap."
+    ]
+  }
+}
