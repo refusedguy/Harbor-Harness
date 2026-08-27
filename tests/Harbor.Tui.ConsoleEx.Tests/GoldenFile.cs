@@ -15,7 +15,7 @@ namespace Harbor.Tui.ConsoleEx.Tests;
 /// </summary>
 internal static class Golden
 {
-    private static readonly Lazy<string> FixtureDir = new(ResolveFixtureDir);
+    private static readonly Lazy<string> _fixtureDir = new(ResolveFixtureDir);
 
     /// <summary>
     /// Verifies the named golden against <paramref name="actualContent"/>.
@@ -25,14 +25,14 @@ internal static class Golden
     /// </summary>
     public static string Verify(string name, string actualContent, string? svgContent = null)
     {
-        string path = Path.Combine(FixtureDir.Value, name + ".golden.txt");
+        string path = Path.Combine(_fixtureDir.Value, name + ".golden.txt");
         if (IsUpdateMode())
         {
-            Directory.CreateDirectory(FixtureDir.Value);
+            Directory.CreateDirectory(_fixtureDir.Value);
             File.WriteAllText(path, actualContent);
             if (svgContent is not null)
             {
-                File.WriteAllText(Path.Combine(FixtureDir.Value, name + ".svg"), svgContent);
+                File.WriteAllText(Path.Combine(_fixtureDir.Value, name + ".svg"), svgContent);
             }
 
             return actualContent;
@@ -49,6 +49,9 @@ internal static class Golden
 
     public static bool IsUpdateMode() =>
         Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1";
+
+    /// <summary>Shared fixture directory (celldiff goldens + baselines manifest).</summary>
+    internal static string FixtureDir => _fixtureDir.Value;
 
     private static string ResolveFixtureDir()
     {
