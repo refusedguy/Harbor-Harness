@@ -487,6 +487,35 @@ public class ComposerControllerTests
         await Assert.That(code.Buffer.SnapshotText()).IsEqualTo("``");
         await Assert.That(code.Buffer.Cursor).IsEqualTo(1);
     }
+
+    [Test]
+    public async Task AltH_AltL_LinePrefixChords()
+    {
+        var heading = new ComposerController();
+        foreach (var c in "notes")
+        {
+            _ = heading.HandleKey(CharKey(c));
+        }
+
+        _ = heading.HandleKey(CharKey('h', KeyModifiers.Alt));
+        await Assert.That(heading.Buffer.SnapshotText()).IsEqualTo("# notes");
+
+        var list = new ComposerController();
+        foreach (var c in "notes")
+        {
+            _ = list.HandleKey(CharKey(c));
+        }
+
+        _ = list.HandleKey(CharKey('l', KeyModifiers.Alt));
+        await Assert.That(list.Buffer.SnapshotText()).IsEqualTo("- notes");
+        _ = list.HandleKey(CharKey('l', KeyModifiers.Alt)); // second toggle removes
+        await Assert.That(list.Buffer.SnapshotText()).IsEqualTo("notes");
+
+        var fresh = new ComposerController();
+        _ = fresh.HandleKey(CharKey('l', KeyModifiers.Alt)); // empty prompt starts a list
+        await Assert.That(fresh.Buffer.SnapshotText()).IsEqualTo("- ");
+        await Assert.That(fresh.HandleKey(KeyEvent.Simple(KeyCode.Enter))).IsEqualTo(ComposerAction.Submitted); // chords keep submit path intact
+    }
 }
 
 public class ComposerHistoryRecallTests

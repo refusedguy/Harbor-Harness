@@ -123,6 +123,14 @@ public sealed class ComposerController
                 _ = MarkdownEditOps.ToggleWrap(Buffer, "`");
                 return ComposerAction.Edited;
 
+            case KeyCode.Char when key.Character == new Rune('h') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = MarkdownEditOps.ToggleHeading(Buffer);
+                return ComposerAction.Edited;
+
+            case KeyCode.Char when key.Character == new Rune('l') && (mods & (KeyModifiers.Meta | KeyModifiers.Alt)) != 0 && (mods & KeyModifiers.Ctrl) == 0:
+                _ = MarkdownEditOps.ToggleListItem(Buffer);
+                return ComposerAction.Edited;
+
             case KeyCode.Left when (mods & (KeyModifiers.Ctrl | KeyModifiers.Meta)) != 0 && (mods & (KeyModifiers.Shift | KeyModifiers.Alt)) == 0:
                 _ = Buffer.MoveWordLeft();
                 return ComposerAction.Edited;
