@@ -90,6 +90,7 @@ public sealed class PromptBuffer
         var text = SnapshotText();
         _length = 0;
         _cursor = 0;
+        PurgeHistory();
         return text;
     }
 
@@ -97,12 +98,14 @@ public sealed class PromptBuffer
     {
         _length = 0;
         _cursor = 0;
+        PurgeHistory();
     }
 
     // ── Edits ──────────────────────────────────────────────────────────────
 
     public EditOutcome Insert(Rune rune)
     {
+        Checkpoint();
         int size = rune.Utf16SequenceLength;
         EnsureCapacity(_length + size);
         Array.Copy(_buf, _cursor, _buf, _cursor + size, _length - _cursor);
@@ -129,6 +132,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         EnsureCapacity(_length + text.Length);
         Array.Copy(_buf, _cursor, _buf, _cursor + text.Length, _length - _cursor);
         text.CopyTo(0, _buf, _cursor, text.Length);
@@ -144,6 +148,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int start = PrevRuneBoundary(_cursor);
         int removed = _cursor - start;
         Array.Copy(_buf, _cursor, _buf, start, _length - _cursor);
@@ -159,6 +164,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int end = NextRuneBoundary(_cursor);
         int removed = end - _cursor;
         Array.Copy(_buf, end, _buf, _cursor, _length - end);
@@ -175,6 +181,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int removed = _cursor - lineStart;
         LastKill = new string(_buf, lineStart, removed);
         Array.Copy(_buf, _cursor, _buf, lineStart, _length - _cursor);
@@ -207,6 +214,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int removed = _cursor - i;
         LastKill = new string(_buf, i, removed);
         Array.Copy(_buf, _cursor, _buf, i, _length - _cursor);
@@ -224,6 +232,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int removed = lineEnd - _cursor;
         LastKill = new string(_buf, _cursor, removed);
         Array.Copy(_buf, lineEnd, _buf, _cursor, _length - lineEnd);
@@ -244,6 +253,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         int i = _cursor;
         while (i < _length && char.IsWhiteSpace(_buf[i]))
         {
@@ -286,6 +296,7 @@ public sealed class PromptBuffer
             return EditOutcome.Unchanged;
         }
 
+        Checkpoint();
         count = Math.Min(count, _length - start);
         Array.Copy(_buf, start + count, _buf, start, _length - start - count);
         _length -= count;
@@ -297,7 +308,80 @@ public sealed class PromptBuffer
         return EditOutcome.Text(start, start, movedCursor: true);
     }
 
-    // ── Movement ───────────────────────────────────────────────────────────
+    // ── Undo/redo ──────────────────────────────────────────────────────────
+
+    /// <summary>Upper bound on remembered edit steps (bounded memory for long drafts).</summary>
+    public const int MaxUndoSteps = 128;
+
+    private readonly List<UndoPoint> _undo = [];
+    private readonly List<UndoPoint> _redo = [];
+
+    private readonly record struct UndoPoint(string Text, int Cursor);
+
+    /// <summary>Steps back one effective text change; no-op when no checkpoints exist.</summary>
+    public EditOutcome Undo()
+    {
+        if (_undo.Count == 0)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        PushCurrent(_redo);
+        var target = _undo[^1];
+        _undo.RemoveAt(_undo.Count - 1);
+        Restore(target);
+        return EditOutcome.Text(0, _length, movedCursor: true);
+    }
+
+    /// <summary>Re-applies the most recent undone change; no-op when the redo stack is empty.</summary>
+    public EditOutcome Redo()
+    {
+        if (_redo.Count == 0)
+        {
+            return EditOutcome.Unchanged;
+        }
+
+        PushCurrent(_undo);
+        var target = _redo[^1];
+        _redo.RemoveAt(_redo.Count - 1);
+        Restore(target);
+        return EditOutcome.Text(0, _length, movedCursor: true);
+    }
+
+    /// <summary>
+    ///     Pre-mutation snapshot hook for every effective text edit. Records the
+    ///     pre-edit state on the undo stack and invalidates redo history — any
+    ///     new edit forks a fresh timeline.
+    /// </summary>
+    private void Checkpoint()
+    {
+        PushCurrent(_undo);
+        _redo.Clear();
+    }
+
+    private void PushCurrent(List<UndoPoint> stack)
+    {
+        if (stack.Count == MaxUndoSteps)
+        {
+            stack.RemoveAt(0);
+        }
+
+        stack.Add(new UndoPoint(SnapshotText(), _cursor));
+    }
+
+    private void Restore(UndoPoint point)
+    {
+        EnsureCapacity(point.Text.Length);
+        point.Text.AsSpan().CopyTo(_buf);
+        _length = point.Text.Length;
+        _cursor = Math.Clamp(point.Cursor, 0, _length);
+    }
+
+    private void PurgeHistory()
+    {
+        _undo.Clear();
+        _redo.Clear();
+    }
 
     public EditOutcome MoveLeft()
     {
