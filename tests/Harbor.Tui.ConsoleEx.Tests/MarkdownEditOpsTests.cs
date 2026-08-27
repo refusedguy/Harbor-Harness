@@ -74,4 +74,47 @@ public class MarkdownEditOpsTests
         await Assert.That(b.SnapshotText()).IsEqualTo("done **todo** ");
         await Assert.That(b.Cursor).IsEqualTo(7);
     }
+
+    [Test]
+    public async Task ToggleHeading_PlainLine_Prepends_And_TogglesOff()
+    {
+        var b = NewAt("title body", 3);
+        _ = MarkdownEditOps.ToggleHeading(b);
+
+        await Assert.That(b.SnapshotText()).IsEqualTo("# title body");
+        await Assert.That(b.Cursor).IsEqualTo(2);
+
+        _ = MarkdownEditOps.ToggleHeading(b);
+        await Assert.That(b.SnapshotText()).IsEqualTo("title body");
+    }
+
+    [Test]
+    public async Task ToggleHeading_OnLevelTwo_CollapsesWholeHashRun()
+    {
+        var b = NewAt("## deep", 0);
+        _ = MarkdownEditOps.ToggleHeading(b);
+
+        await Assert.That(b.SnapshotText()).IsEqualTo("deep");
+    }
+
+    [Test]
+    public async Task ToggleListItem_TogglesDashPrefix()
+    {
+        var b = NewAt("item", 1);
+        _ = MarkdownEditOps.ToggleListItem(b);
+        await Assert.That(b.SnapshotText()).IsEqualTo("- item");
+
+        _ = MarkdownEditOps.ToggleListItem(b);
+        await Assert.That(b.SnapshotText()).IsEqualTo("item");
+    }
+
+    [Test]
+    public async Task LinePrefixOps_OnlyTouchCaretLine()
+    {
+        var b = NewAt("one\ntwo\nthree", 6); // caret on "two"
+        _ = MarkdownEditOps.ToggleListItem(b);
+
+        await Assert.That(b.SnapshotText()).IsEqualTo("one\n- two\nthree");
+        await Assert.That(b.Cursor).IsEqualTo(6);
+    }
 }

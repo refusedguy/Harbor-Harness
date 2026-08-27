@@ -44,6 +44,66 @@ public static class MarkdownEditOps
     }
 
     /// <summary>
+    ///     ATX heading toggle on the caret line: plain lines gain <c># </c>,
+    ///     <c>#+ </c>-prefixed ones lose the whole run (any level collapses).
+    /// </summary>
+    public static EditOutcome ToggleHeading(PromptBuffer buffer)
+    {
+        return ToggleLinePrefix(buffer, "# ", stripHashRunToo: true);
+    }
+
+    /// <summary>Unordered list toggle on the caret line (<c>- </c> on/off).</summary>
+    public static EditOutcome ToggleListItem(PromptBuffer buffer)
+    {
+        return ToggleLinePrefix(buffer, "- ", stripHashRunToo: false);
+    }
+
+    private static EditOutcome ToggleLinePrefix(PromptBuffer buffer, string prefix, bool stripHashRunToo)
+    {
+        int lineStart = buffer.LineStartOf(buffer.Cursor);
+        string text = buffer.SnapshotText();
+        if (HasPrefix(text, lineStart, prefix))
+        {
+            _ = buffer.RemoveRange(lineStart, prefix.Length);
+            return new EditOutcome(EditOutcomeKind.TextAndCursor, lineStart, lineStart);
+        }
+
+        if (stripHashRunToo && HashRunLength(text, lineStart) > 0)
+        {
+            int cut = HashRunLength(text, lineStart) + 1; // run plus one separator space
+            _ = buffer.RemoveRange(lineStart, cut);
+            return new EditOutcome(EditOutcomeKind.TextAndCursor, lineStart, lineStart);
+        }
+
+        _ = buffer.MoveTo(lineStart);
+        return buffer.InsertText(prefix);
+    }
+
+    private static bool HasPrefix(string text, int lineStart, string prefix)
+    {
+        return text.Length - lineStart >= prefix.Length &&
+               text.AsSpan(lineStart, prefix.Length).SequenceEqual(prefix.AsSpan());
+    }
+
+    /// <summary>Leading <c>#</c> count at the caret line (0 when the first non-hash char is not a space).</summary>
+    private static int HashRunLength(string text, int lineStart)
+    {
+        int hashes = 0;
+        while (lineStart + hashes < text.Length && text[lineStart + hashes] == '#')
+        {
+            hashes++;
+        }
+
+        if (hashes == 0 || hashes > 6 ||
+            (lineStart + hashes < text.Length && text[lineStart + hashes] != ' '))
+        {
+            return 0;
+        }
+
+        return hashes;
+    }
+
+    /// <summary>
     ///     Nearest contiguous non-whitespace run: the one containing the caret,
     ///     else the next one after the gap, else (caret past the last run) the
     ///     preceding one before trailing whitespace. Markers glue to words, so
