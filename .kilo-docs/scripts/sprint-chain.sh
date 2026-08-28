@@ -57,10 +57,14 @@ update_status() {
   if [[ -f "$status_file" ]]; then
     local tmp
     tmp=$(mktemp)
-    jq --arg state "$state" --arg head "$(git rev-parse --short HEAD)" \
-       --arg last "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+    if jq --arg state "$state" --arg head "$(git rev-parse --short HEAD)" \
+       --arg last "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
        '.state = $state | .head = $head | .last_activity = $last' \
-       "$status_file" > "$tmp" && mv "$tmp" "$status_file"
+       "$status_file" > "$tmp" 2>/dev/null; then
+      mv -f "$tmp" "$status_file" 2>/dev/null || true
+    else
+      rm -f "$tmp" 2>/dev/null || true
+    fi
   fi
 }
 
@@ -258,7 +262,8 @@ while IFS= read -r line; do
     if [[ $EST_RC -eq 2 ]]; then
       log "STOP: confidence too low, human review required"
       update_status "$SPRINT" "failed"
-      exit 2
+      FAILURES=$((FAILURES+1))
+      continue
     fi
 
     update_status "$SPRINT" "done"
@@ -270,6 +275,7 @@ while IFS= read -r line; do
   else
     log "⚠ $SPRINT did not finish cleanly (RC=$RC, head_changed=$([ "$NEW_SHA" != "$SPRINT_BASE" ] && echo yes || echo no), dirty=$DIRTY, kilo_alive=$KILO_ALIVE)"
     update_status "$SPRINT" "failed"
+    FAILURES=$((FAILURES+1))
   fi
 
   log "current HEAD: $(git rev-parse --short HEAD)"
