@@ -1,6 +1,6 @@
 using System.Text;
 using Harbor.Abstractions.Events;
-using Harbor.Tui.Ansi;
+using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Sixel;
