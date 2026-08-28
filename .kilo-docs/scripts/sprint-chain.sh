@@ -103,21 +103,29 @@ while IFS= read -r line; do
   log "=== starting sprint: $SPRINT (model=$MODEL, prompt=$PROMPT) ==="
   update_status "$SPRINT" "running"
 
+  # use sprint-local base from status.json, not stale global
+  SPRINT_BASE="$(jq -r '.base // empty' ".kilo-docs/sprints/$SPRINT/status.json" 2>/dev/null || true)"
+  if [[ -z "$SPRINT_BASE" ]]; then
+    SPRINT_BASE="$(git rev-parse --short HEAD)"
+    tmp=$(mktemp)
+    jq --arg base "$SPRINT_BASE" '.base = $base' ".kilo-docs/sprints/$SPRINT/status.json" > "$tmp" && mv "$tmp" ".kilo-docs/sprints/$SPRINT/status.json"
+  fi
+
   # run dispatch, capture output
-  DISPATCH_OUT=$(bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$BASE_SHA" -M 360 -i 300 2>&1) || true
+  DISPATCH_OUT=$(bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$SPRINT_BASE" -M 360 -i 300 2>&1) || true
   RC=${PIPESTATUS[0]:-$?}
 
   # log dispatch output
   echo "$DISPATCH_OUT" | tail -30 | while read -r line; do log "  [kilo] $line"; done
 
   # verify finish
-  NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo "$BASE_SHA")"
+  NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo "$SPRINT_BASE")"
   DIRTY=$(dirty_count)
   LAST_MSG=$(git log -1 --format="%s" 2>/dev/null || echo "")
   KILO_ALIVE=$(pgrep -af '\.kilo run' 2>/dev/null | wc -l || echo 0)
 
-  if [[ "$NEW_SHA" != "$BASE_SHA" ]] && [[ "$DIRTY" -eq 0 ]] && [[ "$KILO_ALIVE" -eq 0 ]]; then
-    log "✓ $SPRINT finished: $(git rev-list --count "$BASE_SHA"..HEAD) new commits"
+  if [[ "$NEW_SHA" != "$SPRINT_BASE" ]] && [[ "$DIRTY" -eq 0 ]] && [[ "$KILO_ALIVE" -eq 0 ]]; then
+    log "✓ $SPRINT finished: $(git rev-list --count "$SPRINT_BASE"..HEAD) new commits"
     update_status "$SPRINT" "done"
     BASE_SHA="$NEW_SHA"
     
