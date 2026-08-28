@@ -1,0 +1,17 @@
+{
+  "name": "harbor-warm",
+  "accent": "#F0A35E",
+  "success": "#A3C76D",
+  "warning": "#FFC868",
+  "error": "#FF7A6B",
+  "tool": "#D9A9E6",
+  "system": "#F29668",
+  "user": "#E8DCC8",
+  "background": "#14100C",
+  "panel": "#1A1410",
+  "surface": "#221A14",
+  "surface2": "#2B211A",
+  "border": "#3A2D22",
+  "muted": "#8A7B6C",
+  "text": "#E8DCC8"
+}

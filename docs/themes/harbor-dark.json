@@ -1,0 +1,17 @@
+{
+  "name": "harbor-dark",
+  "accent": "#39BAE6",
+  "success": "#7FD962",
+  "warning": "#FFB454",
+  "error": "#FF6B6B",
+  "tool": "#D2A6FF",
+  "system": "#F29668",
+  "user": "#B3B9C5",
+  "background": "#0A0E14",
+  "panel": "#0D1117",
+  "surface": "#131820",
+  "surface2": "#1A1F2B",
+  "border": "#1F2430",
+  "muted": "#5C6773",
+  "text": "#B3B9C5"
+}

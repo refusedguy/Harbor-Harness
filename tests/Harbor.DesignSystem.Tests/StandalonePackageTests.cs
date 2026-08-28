@@ -29,7 +29,8 @@ public class StandalonePackageTests
     public async Task TokenSurface_IsReachableFromSingleReference()
     {
         // Smoke the shipped API surface that the package promises.
-        await Assert.That(DesignTokens.Space8).IsEqualTo(8);
+        int space8 = DesignTokens.Space8;
+        await Assert.That(space8).IsEqualTo(8);
         await Assert.That(HarborTheme.BuiltIn).Count().IsGreaterThanOrEqualTo(3);
         await Assert.That(TerminalColorPalette.Current).IsEqualTo(HarborTheme.HarborDark);
     }

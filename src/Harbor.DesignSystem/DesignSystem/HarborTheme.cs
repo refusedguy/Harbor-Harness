@@ -1,7 +1,8 @@
 namespace Harbor.DesignSystem;
 
 /// <summary>
-/// One named terminal theme — the complete HDS v1 color token set (13 slots).
+/// One named terminal theme — the complete HDS v1 color token set
+/// (14 color slots plus <paramref name="Name" />).
 /// Immutable; <see cref="TerminalColorPalette.Apply" /> swaps the active
 /// instance and notifies renderers via <see cref="TerminalColorPalette.ThemeChanged" />.
 /// </summary>
