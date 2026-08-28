@@ -1,16 +1,30 @@
 {
   "name": "Renderer Unification",
-  "state": "queued",
-  "head": "66423ef084a0de2288427bf9fb310f68a452ff17",
+  "state": "done",
+  "head": "4c9d3e77219fa04bb3b8fc508600cf601f846fd1",
   "base": "66423ef084a0de2288427bf9fb310f68a452ff17",
-  "commits": 0,
-  "started_at": null,
-  "finished_at": null,
+  "commits": 71,
+  "started_at": "2026-08-28T10:30:00Z",
+  "finished_at": "2026-08-28T14:35:00Z",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": ".kilo-docs/sprints/renderer-unification/findings.json",
   "report": ".kilo-docs/sprints/renderer-unification/report.html",
   "failures": 0,
   "retries": 0,
-  "last_activity": null
+  "last_activity": "2026-08-28T14:35:00Z",
+  "verification": {
+    "build": "Harbor.slnx -c Release: exit 0, 0 new warnings",
+    "suites": {
+      "Harbor.Tui.RendererTests": "5 passed (golden frames: cellforge/nickconsoleex/ansiplain)",
+      "Harbor.Tui.PerfTests": "6 passed (throughput/latency/memory + markdown contracts)",
+      "Harbor.Tui.Tests": "118 passed (incl. RendererPipeline hot-swap)",
+      "Harbor.Tui.CellForge.Tests": "669 passed",
+      "Harbor.Tui.CellForge.PtyTests": "39 passed",
+      "Harbor.Ui.Framework.Tests": "66 passed (protocol v1/v2, frozen-tail cache)",
+      "Harbor.Hosting.Tests": "10 passed",
+      "Harbor.App.Cli.Tests": "78 passed (incl. /renderer slash command)",
+      "Harbor.Architecture.Tests": "47 passed"
+    }
+  }
 }
