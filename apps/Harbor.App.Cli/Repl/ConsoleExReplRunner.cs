@@ -932,7 +932,8 @@ internal sealed class ConsoleExReplRunner(
         error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     private async Task PrintWelcomeAsync()
-    {        var configResult = await services.GetRequiredService<IConfigStore>()
+    {
+        var configResult = await services.GetRequiredService<IConfigStore>()
             .LoadAsync().ConfigureAwait(false);
         string model = configResult.IsSuccess ? configResult.Value.EffectiveModel : "?";
         bridge.AppendSystemLine("Harbor — modular AI coding agent [consoleex]");
