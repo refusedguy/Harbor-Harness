@@ -14,14 +14,14 @@
   "retries": 0,
   "last_activity": "2026-08-28T23:40:00+05:00",
   "verification": {
-    "verified_at": "2026-08-28T23:58:00+05:00",
+    "verified_at": "2026-08-29T00:30:00+05:00",
     "build": "dotnet build Harbor.slnx -c Release — 0 errors (warnings pre-existing in test projects only; src/Harbor.DesignSystem + samples/designsystem-consumer clean-build with 0 warnings)",
-    "tests_head": "re-verified fresh at head 38f3d37: Harbor.DesignSystem.Tests 48/0/0, Harbor.Tui.CellForge.Tests 669/0/0, Harbor.Architecture.Tests 47/0/0 (Release, per-project MTP); out-of-repo nupkg consume 7/7 PASS; docgen regen zero git drift; nuspec MIT + empty dependencies group",
+    "tests_head": "re-verified fresh at head 7846615 (incl. comment-tolerance fix): Harbor.DesignSystem.Tests 49/0/0 (49th = Parse_JsonComments_Accepted), Harbor.Tui.CellForge.Tests 669/0/0, Harbor.Architecture.Tests 47/0/0 (Release, per-project MTP); full solution build 0 errors; in-repo samples/designsystem-consumer run: standalone OK; docgen regen zero git drift",
     "per_commit": {
       "7100f90": "worktree build DesignSystem 0 err; samples/designsystem-consumer run -> 'standalone OK: zero Harbor.* assembly references'; DesignSystem.Tests 26/0/0; Architecture.Tests 47/0/0",
       "88a923e": "worktree build DesignSystem 0 err; DesignSystem.Tests 48/0/0 (ThemeJson/ThemeStore/watcher tests incl.); Harbor.Tui.CellForge.Tests 669/0/0 (JsonThemeLoaderTests, ThemeFileWatcherTests incl.)",
       "405db82": "worktree docgen run -> regenerated docs/DESIGN_SYSTEM_API.md + docs/themes/harbor-{dark,light,warm}.json with zero git drift vs commit"
     },
-    "pack_dry_run": "dotnet pack src/Harbor.DesignSystem -c Release -> Harbor.DesignSystem.0.4.0-alpha.nupkg; nuspec: license expression MIT, dependencies group empty, README packed; fresh consumer in /tmp restored+built+run from the nupkg via local source: 0 errors, valid theme parses, invalid theme -> 'invalid hex for accent' error entry without crash, broken file in themes dir scans as error entry, Resolve+Apply switches to user theme"
+    "pack_dry_run": "dotnet pack src/Harbor.DesignSystem -c Release -> Harbor.DesignSystem.0.4.0-alpha.nupkg (42 KB); nuspec: license expression MIT, no dependencies group, README packed; fresh consumer in /tmp/kilo/hds-consume restored+built+run from the nupkg via local source: 7/7 PASS — zero Harbor.* assembly refs, valid partial theme parses (comments+trailing comma), invalid hex -> structured error no crash, ThemeStore scan lists broken file as invalid entry, Resolve+Apply live-switches theme"
   }
 }
