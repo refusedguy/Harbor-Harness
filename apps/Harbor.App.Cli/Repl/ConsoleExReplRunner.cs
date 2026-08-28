@@ -4,6 +4,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
@@ -72,6 +73,7 @@ internal sealed class ConsoleExReplRunner(
     private readonly CommandPaletteView _palette = new();
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
+    private readonly QuickSwitchSlots _quickSwitch = new();
 
     /// <summary>Token-usage source (null when the host has no tracker —
     /// feed no-ops, the status bar just stays without token segments).</summary>
@@ -88,6 +90,10 @@ internal sealed class ConsoleExReplRunner(
 
     /// <summary>Leader chord hand-off for async slash commands (same pattern).</summary>
     private string? _leaderSlash;
+
+    /// <summary>Leader digit hand-off: the quick-switch chord resolves into a
+    /// session switch on the frame loop (async work can't run inside Bind actions).</summary>
+    private char? _quickSwitchChord;
 
     private int _timelineViewportH;
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
@@ -338,13 +344,20 @@ internal sealed class ConsoleExReplRunner(
         }
 
         // Leader chords (ctrl+x …): armed router consumes the leader press and
-        // the chord; resolved sync actions run here, slash chords hand off.
+        // the chord; resolved sync actions run here, slash chords and quick-
+        // switch digits hand off to the frame loop for async execution.
         if (_leader.HandleKey(key, Environment.TickCount64))
         {
             if (_leaderSlash is { } leaderSlash)
             {
                 _leaderSlash = null;
                 await ExecutePaletteCommandAsync(new CommandItem(leaderSlash, leaderSlash), ct).ConfigureAwait(false);
+            }
+
+            if (_quickSwitchChord is { } chord)
+            {
+                _quickSwitchChord = null;
+                await SwitchToSlotAsync(chord, ct).ConfigureAwait(false);
             }
 
             _wake.Writer.TryWrite(null);
@@ -455,7 +468,8 @@ internal sealed class ConsoleExReplRunner(
             : "vim: off");
     }
 
-    /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash shortcuts.</summary>
+    /// <summary>Leader-chord bindings: scroll anchors, palette, vim, slash
+    /// shortcuts, and quick-switch digits 1..9 (recent sessions, sprint UI-V2 P2.2).</summary>
     private void BindLeaderKeys()
     {
         _leader.Bind('g', () => { _timeline.ScrollToTop(); _wake.Writer.TryWrite(null); });
@@ -464,6 +478,67 @@ internal sealed class ConsoleExReplRunner(
         _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
         _leader.Bind('h', () => _leaderSlash = "help");
         _leader.Bind('s', () => _leaderSlash = "sessions");
+        foreach (char d in "123456789")
+        {
+            _leader.Bind(d, () => _quickSwitchChord = d);
+        }
+    }
+
+    /// <summary>
+    ///     Quick-switch slot resolution (<c>&lt;leader&gt;1..9</c>, sprint UI-V2
+    ///     P2.2): loads the bound session from the store and rebinds the idle
+    ///     agent to it. The timeline shows only new traffic from the switch on.
+    /// </summary>
+    private async Task SwitchToSlotAsync(char chord, CancellationToken ct)
+    {
+        if (_quickSwitch.Resolve(chord) is not { } sessionId)
+        {
+            bridge.AppendSystemLine($"⇄ slot {chord}: пусто");
+            return;
+        }
+
+        if (sessionId == sessionModel.Id)
+        {
+            bridge.AppendSystemLine("⇄ уже в этой сессии");
+            return;
+        }
+
+        if (agent.State.IsRunning)
+        {
+            bridge.AppendSystemLine("⇄ агент занят — сессия не переключена");
+            return;
+        }
+
+        var loaded = await services.GetRequiredService<ISessionStore>()
+            .GetAsync(sessionId, ct).ConfigureAwait(false);
+        if (loaded.IsFailure)
+        {
+            bridge.AppendSystemLine("! " + loaded.Error);
+            return;
+        }
+
+        var definition = services.GetRequiredService<IAgentRegistry>()
+            .GetAgent(AgentName.Create(loaded.Value.Agent));
+        if (definition.IsFailure)
+        {
+            bridge.AppendSystemLine("! " + definition.Error);
+            return;
+        }
+
+        agent.Initialize(loaded.Value, definition.Value);
+        sessionModel = loaded.Value;
+        _quickSwitch.Push(loaded.Value.Id);
+        if (screen.Sidebar is { } sidebar)
+        {
+            sidebar.State = sidebar.State with
+            {
+                SessionTitle = loaded.Value.Title,
+                SessionId = loaded.Value.Id,
+            };
+        }
+
+        bridge.AppendSystemLine($"⇄ сессия → {loaded.Value.Title} ({loaded.Value.Id[..Math.Min(8, loaded.Value.Id.Length)]})");
+        _wake.Writer.TryWrite(null);
     }
 
     private async Task ExecutePaletteCommandAsync(CommandItem item, CancellationToken ct)
@@ -633,6 +708,19 @@ internal sealed class ConsoleExReplRunner(
                 SessionId = sessionModel.Id,
                 Model = model,
             };
+        }
+
+        // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
+        // first, so slot 1 gets the hottest session — the current one first.
+        var recent = await services.GetRequiredService<ISessionStore>()
+            .ListAsync(ct: CancellationToken.None).ConfigureAwait(false);
+        if (recent.IsSuccess)
+        {
+            var list = recent.Value;
+            for (int i = 0; i < list.Count && i < QuickSwitchSlots.Count; i++)
+            {
+                _quickSwitch.Assign(i + 1, list[i].Id);
+            }
         }
 
         _wake.Writer.TryWrite(null);
