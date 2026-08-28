@@ -1,0 +1,8 @@
+<Project>
+
+  <!--
+    Stops NuGet Central Package Management from leaking into vendored
+    third-party trees (upstream declares its own PackageReference versions).
+  -->
+
+</Project>
