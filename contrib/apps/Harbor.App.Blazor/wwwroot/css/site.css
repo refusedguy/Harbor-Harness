@@ -1189,7 +1189,14 @@ body.dyslexic,
 body.dyslexic button,
 body.dyslexic input,
 body.dyslexic textarea,
-body.dyslexic select {
+body.dyslexic select,
+/* JS-free toggle: the Settings accessibility checkbox drives the same mode
+   via :has() — static SSR needs no interactivity for this. */
+body:has(#dyslexic-toggle:checked),
+body:has(#dyslexic-toggle:checked) button,
+body:has(#dyslexic-toggle:checked) input,
+body:has(#dyslexic-toggle:checked) textarea,
+body:has(#dyslexic-toggle:checked) select {
     font-family: var(--font-dyslexic) !important;
 }
 

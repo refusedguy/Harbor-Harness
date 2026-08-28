@@ -16,6 +16,16 @@
 </div>
 
 <div class="settings-section">
+    <h3>Accessibility</h3>
+    <div class="settings-row">
+        <label for="dyslexic-toggle">Dyslexia-friendly font (OpenDyslexic / Atkinson Hyperlegible)</label>
+        @* JS-free toggle: site.css keys the dyslexic mode off :has(#dyslexic-toggle:checked),
+           so static SSR is enough — no interactivity, no JS interop. *@
+        <input id="dyslexic-toggle" type="checkbox"/>
+    </div>
+</div>
+
+<div class="settings-section">
     <h3>Sessions Directory</h3>
     <div class="settings-row">
         <label>Path</label>
