@@ -24,6 +24,7 @@ CHAIN_FILE=".kilo-docs/sprint-chain.md"
 DISPATCH="$HOME/.hermes/skills/autonomous-ai-agents/kilo-dispatch/scripts/kilo-dispatch.sh"
 BASE_SHA="$(git rev-parse HEAD)"
 LOG_FILE=".kilo-docs/scripts/sprint-chain.log"
+FAILURES=0
 
 log() { echo "[chain] $(date '+%d.%m %H:%M:%S') $*" | tee -a "$LOG_FILE"; }
 
