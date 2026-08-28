@@ -35,7 +35,13 @@ public sealed record AgentStartEvent(
 /// <summary>
 ///     Emitted at the start of each turn inside a run. <see cref="TurnIndex" /> is 1-based.
 /// </summary>
-public sealed record TurnStartEvent(int TurnIndex) : AgentEvent;
+/// <param name="TurnIndex">1-based index of the turn within its run.</param>
+/// <param name="SessionId">
+///     Owning session of the turn. Null on legacy emitters — consumers that track
+///     turn state per session (e.g. the IPC broadcaster) then fall back to the
+///     active-run session.
+/// </param>
+public sealed record TurnStartEvent(int TurnIndex, string? SessionId = null) : AgentEvent;
 
 /// <summary>
 ///     Emitted when the assistant starts streaming a new message.
@@ -78,9 +84,17 @@ public sealed record ToolExecutionEndEvent(
 /// <summary>
 ///     Emitted at the end of a turn, with the assistant message and any tool results produced.
 /// </summary>
+/// <param name="AssistantMessage">The finalized assistant message for the turn.</param>
+/// <param name="ToolResults">Tool results produced during the turn (may be empty).</param>
+/// <param name="SessionId">
+///     Owning session of the turn. Null on legacy emitters — consumers that track
+///     turn state per session (e.g. the IPC broadcaster) then fall back to the
+///     active-run session.
+/// </param>
 public sealed record TurnEndEvent(
     AssistantMessage AssistantMessage,
-    IReadOnlyList<ToolResultMessage> ToolResults) : AgentEvent;
+    IReadOnlyList<ToolResultMessage> ToolResults,
+    string? SessionId = null) : AgentEvent;
 
 /// <summary>
 ///     Emitted when the entire agent run completes.
