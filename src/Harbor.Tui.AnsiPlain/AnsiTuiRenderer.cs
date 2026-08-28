@@ -28,6 +28,15 @@ public class AnsiTuiRenderer : AnsiPlainTuiRenderer
     {
     }
 
+    /// <summary>
+    ///     ANSI mode over a caller-supplied writer (golden-frame tests, string
+    ///     capture). Production code keeps using <see cref="Console.Out"/>.
+    /// </summary>
+    public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger, TextWriter writer)
+        : base(writer, ownsWriter: false, AnsiEscapeStrategy.Instance, logger)
+    {
+    }
+
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
         try
