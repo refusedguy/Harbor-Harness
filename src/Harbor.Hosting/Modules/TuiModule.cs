@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Tui;
-using Harbor.Tui.Plain;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -101,7 +100,7 @@ internal static class TuiModule
                 "terminal-gui" => new Harbor.Tui.TerminalGui.TerminalGuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.TerminalGui.TerminalGuiRenderer>>()),
                 "termina" => new Harbor.Tui.Termina.TerminaRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Termina.TerminaRenderer>>()),
                 "razor" => new Harbor.Tui.RazorConsole.RazorConsoleRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.RazorConsole.RazorConsoleRenderer>>()),
-                _ => new Harbor.Tui.Ansi.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Ansi.AnsiTuiRenderer>>())
+                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>())
             };
 #else
             return tui.ToLowerInvariant() switch
@@ -109,7 +108,7 @@ internal static class TuiModule
                 "plain" => new PlainTuiRenderer(),
                 "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                     sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()),
-                _ => new Harbor.Tui.Ansi.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Ansi.AnsiTuiRenderer>>())
+                _ => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>())
             };
 #endif
         });
