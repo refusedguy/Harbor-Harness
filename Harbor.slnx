@@ -76,8 +76,7 @@
     </Folder>
 
     <Folder Name="/src/TUI/">
-        <Project Path="src/Harbor.Tui.Plain/Harbor.Tui.Plain.csproj"/>
-        <Project Path="src/Harbor.Tui.Ansi/Harbor.Tui.Ansi.csproj"/>
+        <Project Path="src/Harbor.Tui.AnsiPlain/Harbor.Tui.AnsiPlain.csproj"/>
         <Project Path="src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj"/>
         <Project Path="src/Harbor.Tui.NickConsoleEx/Harbor.Tui.NickConsoleEx.csproj"/>
         <Project Path="src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj"/>
