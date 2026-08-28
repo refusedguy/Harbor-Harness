@@ -45,8 +45,9 @@
   база <span class="sha">1919af7</span> → голова спринта <span class="sha">b985328</span> (dev) ·
   18 атомарных коммитов · 28.08.2026 ·
   re-verified на <span class="sha">eaba85e</span>, <span class="sha">d61c5f0</span>,
-  <span class="sha">b43ad82</span>, <span class="sha">10c5b7a</span> и <span class="sha">4376cf9</span> ·
-  свежий полный прогон 28.08.2026 20:17 UTC на 4376cf9
+  <span class="sha">b43ad82</span>, <span class="sha">10c5b7a</span>,
+  <span class="sha">4376cf9</span> и <span class="sha">9da02ca</span> ·
+  свежий полный прогон 28.08.2026 21:03 UTC на 9da02ca
 </div>
 
 <div class="cards">
@@ -169,13 +170,16 @@
   <tr><td><b>Итого</b></td><td class="ok"><b>882</b></td><td class="ok"><b>0</b></td><td class="warn"><b>6</b></td></tr>
 </table>
 <p class="sub">
-  Свежий полный прогон 10 suites на head <span class="sha">4376cf9</span>
-  (Release, per-project MTP, 28.08.2026 20:17 UTC): 882/0/6 — тот же счёт,
-  что и на d61c5f0/b43ad82/10c5b7a; независимая пере-проверка кода свежей
+  Свежий полный прогон 10 suites на head <span class="sha">9da02ca</span>
+  (Release, per-project MTP, 28.08.2026 21:03 UTC): 882/0/6 — тот же счёт,
+  что и на d61c5f0/b43ad82/10c5b7a/4376cf9; независимая пере-проверка кода свежей
   сессией подтвердила все 4 задачи (wiring, приватный Transition, session-scoped
-  turn tracking, 5 behaviors + изолированные тесты).
-  Пропуски — исторически self-skipping: IPC named-pipe event-stream на Linux
-  (требует <code>HARBOR_IPC_EVENTSTREAM=1</code>) и легаси-путь TaskTool без runner.
+  turn tracking, 5 behaviors + изолированные тесты). Холодная сборка
+  <code>--no-incremental</code>: 0 errors; 192 analyzer-предупреждения —
+  исторический шум в tests/samples/bench, в тронутом спринтом <code>src/</code>-коде — 0.
+  Пропуски — self-skipping: IPC named-pipe event-stream на Linux
+  (требует <code>HARBOR_IPC_EVENTSTREAM=1</code>) и env-зависимые fail-closed тесты
+  Tools.Builtin (нет <code>rg</code> / неразрешимый хост).
   Whole-solution <code>dotnet test</code> не использовался (MTP). Архитектурные тесты
   (47, включая NetArchTest-матрицу слоёв) — зелёные.
 </p>
@@ -219,7 +223,7 @@
 <footer>
   Сгенерировано агентом Kilo (multi-agent sprint) ·
   статус: <code>.kilo-docs/sprints/multi-agent/status.json</code> ·
-  head <span class="sha">4376cf9</span> · 28.08.2026 · re-verified: build 0 errors, 882/0/6 тестов на 10 проектах (свежий полный прогон на 4376cf9)
+  head <span class="sha">9da02ca</span> · 28.08.2026 · re-verified: cold build 0 errors (0 warnings в src/), 882/0/6 тестов на 10 проектах (свежий полный прогон на 9da02ca)
 </footer>
 
 </div>
