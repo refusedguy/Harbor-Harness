@@ -88,7 +88,7 @@ internal sealed class SlashCommandDispatcher
             switch (cmd)
             {
                 case "help":
-                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /fork /plugins /tui /storage /exit");
+                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /fork /plugins /tui /renderer /storage /exit");
                     break;
                 case "setup":
                     await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
@@ -131,6 +131,41 @@ internal sealed class SlashCommandDispatcher
                     break;
                 case "tui": PrintTuiOptions(); break;
                 case "storage": PrintStorageOptions(); break;
+                case "renderer":
+                    // Phase 6.3: hot-swap the renderer backend mid-session.
+                    // No args → list available backends; with an arg → swap.
+                    if (sp.GetService<Harbor.Hosting.Rendering.IRendererPipeline>() is not { } pipeline)
+                    {
+                        writer("Renderer pipeline: not available in this build.");
+                        break;
+                    }
+
+                    if (args.Length == 0)
+                    {
+                        writer($"Renderer: {pipeline.CurrentBackendId} | available: {string.Join(", ", pipeline.AvailableBackends)}");
+                        writer("Usage: /renderer <backend>");
+                        break;
+                    }
+
+                    string backendId;
+                    string? resolveError = null;
+                    if (sp.GetService<Harbor.Hosting.RuntimeRendererSwapMiddleware>() is not { } swap)
+                    {
+                        writer("Renderer swap: middleware unavailable.");
+                        break;
+                    }
+
+                    if (!swap.TryResolve(args[0], out backendId, out resolveError))
+                    {
+                        writer($"Renderer swap: {resolveError ?? "unavailable"}");
+                        break;
+                    }
+
+                    bool swapped = await pipeline.SwapRendererAsync(backendId).ConfigureAwait(false);
+                    writer(swapped
+                        ? $"Renderer swapped → {backendId} ({pipeline.CurrentBackendId})"
+                        : $"Renderer swap → {backendId} failed (see logs).");
+                    break;
                 default:
                     _logger.LogWarning("Unknown command: /{Command}", cmd);
                     writer($"Unknown: /{cmd}. /help for commands.");
