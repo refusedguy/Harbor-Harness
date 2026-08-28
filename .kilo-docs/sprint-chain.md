@@ -12,8 +12,6 @@ sprint|NAME|MODEL|PROMPT_PATH
 - NAME — без пробелов (lowercase-hyphen): из NAME строится путь .kilo-docs/sprints/<name>/status.json,
   иначе диспетчер не находит status.json и не может пропустить выполненный спринт (re-dispatch loop)
 
-sprint|UI-V2|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-v2/prompt.md
-sprint|UI-V2-HOTFIX|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-v2-hotfix/prompt.md
 sprint|renderer-unification|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-unification/prompt.md
 sprint|Multi-Agent|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/multi-agent/prompt.md
 sprint|Performance|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/performance/prompt.md
