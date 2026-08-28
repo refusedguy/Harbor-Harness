@@ -35,6 +35,7 @@ public sealed class EscapeSequenceParser
     private int _csiIntermediateStart = -1;
     private byte _csiPrivatePrefix;
     private Utf8IncrementalDecoder _utf8 = new();
+    private KeyModifiers _utf8PendingMods;
 
     // OSC / DCS / APC / PM string consumption guard.
     private int _stringLength;
@@ -134,6 +135,7 @@ public sealed class EscapeSequenceParser
     {
         ResetSequenceBuffers();
         _utf8.Reset();
+        _utf8PendingMods = KeyModifiers.None;
         IsAwaitingPasteClose = false;
         _pasteLength = 0;
         _pasteTruncated = false;
@@ -207,7 +209,12 @@ public sealed class EscapeSequenceParser
 
         // Printable bytes and all high bytes go through the incremental
         // decoder — it passes ASCII through untouched when nothing is pending.
-        if (_utf8.HasPending || b >= 0x80)
+        if (_utf8.HasPending)
+        {
+            FeedUtf8(b, _utf8PendingMods);
+            return;
+        }
+        if (b >= 0x80)
         {
             FeedUtf8(b, KeyModifiers.None);
             return;
@@ -235,8 +242,10 @@ public sealed class EscapeSequenceParser
             return;
         }
 
+        var mods = _utf8PendingMods;
         _utf8.Reset();
-        EnqueueChar(Rune.ReplacementChar, KeyModifiers.None);
+        _utf8PendingMods = KeyModifiers.None;
+        EnqueueChar(Rune.ReplacementChar, mods);
     }
 
     /// <summary>C0 control byte → logical key (raw-mode legacy encoding).</summary>
@@ -276,20 +285,34 @@ public sealed class EscapeSequenceParser
 
     private void FeedUtf8(byte b, KeyModifiers mods)
     {
+        bool isContinuation = _utf8.HasPending;
+        // Remember Alt for the continuation bytes so Ground() can recover it.
+        if (!isContinuation && b >= 0x80)
+        {
+            _utf8PendingMods = mods;
+        }
         while (true)
         {
             var status = _utf8.DecodeStep(b, out var rune);
             switch (status)
             {
                 case Utf8DecodeStatus.NeedMoreData:
+                    // keep pending mods for next continuation byte
+                    if (!isContinuation)
+                    {
+                        _utf8PendingMods = mods;
+                    }
                     return;
                 case Utf8DecodeStatus.Decoded:
+                    _utf8PendingMods = KeyModifiers.None;
                     EnqueueChar(rune, mods);
                     return;
                 case Utf8DecodeStatus.ReplacementEmitted:
+                    _utf8PendingMods = KeyModifiers.None;
                     EnqueueChar(Rune.ReplacementChar, mods);
                     return;
                 case Utf8DecodeStatus.ReplacementPendingRetry:
+                    _utf8PendingMods = KeyModifiers.None;
                     EnqueueChar(Rune.ReplacementChar, mods);
                     continue; // reprocess current byte from scratch
             }

@@ -71,6 +71,9 @@ internal static class TuiMode
     ///     when neither is set or when the value is <c>"auto"</c>. Returns
     ///     <c>"plain"</c> when Spectre is excluded at build time
     ///     (<c>HARBOR_WITH_SPECTRE_TUI=false</c>).
+    ///     ConsoleEx (<c>tui: "consoleex"</c> / <c>HARBOR_TUI=consoleex</c>) is
+    ///     always honored regardless of the Spectre flag — it lives in
+    ///     <c>src/Harbor.Tui.ConsoleEx</c> and is not part of <c>contrib/tui</c>.
     /// </summary>
     public static string ResolveTuiId()
     {
@@ -96,6 +99,19 @@ internal static class TuiMode
 
         return "spectre-tui";
 #else
+        // Spectre excluded — still honor an explicit ConsoleEx selection (it is
+        // always compiled in src/Harbor.Tui.ConsoleEx), otherwise plain.
+        string envPlain = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(envPlain))
+            return envPlain.Trim();
+
+        if (string.Equals(TryReadHarborConfigTui(), ConsoleExId, StringComparison.OrdinalIgnoreCase))
+            return ConsoleExId;
+
+        string? cfgPlain = TryReadDefaultTuiFromConfig();
+        if (!string.IsNullOrWhiteSpace(cfgPlain) && !string.Equals(cfgPlain, "auto", StringComparison.OrdinalIgnoreCase))
+            return cfgPlain!;
+
         return "plain";
 #endif
     }
@@ -162,10 +178,11 @@ internal static class TuiMode
     ///     <c>HARBOR_TUI=consoleex</c>, then <c>tui: "consoleex"</c> in
     ///     <c>~/.harbor/config.json</c>. The caller additionally gates on
     ///     <c>consoleEx.enabled</c>.
+    ///     ConsoleEx is not gated by <c>HARBOR_WITH_SPECTRE_TUI</c> — it lives
+    ///     in <c>src/Harbor.Tui.ConsoleEx</c> and is always compiled in.
     /// </summary>
     public static bool IsConsoleExSelected()
     {
-#if HARBOR_WITH_SPECTRE_TUI
         string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
         if (envTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase))
             return true;
@@ -175,9 +192,6 @@ internal static class TuiMode
 
         string configTui = ResolveTuiId();
         return configTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase);
-#else
-        return false;
-#endif
     }
 
     /// <summary>
