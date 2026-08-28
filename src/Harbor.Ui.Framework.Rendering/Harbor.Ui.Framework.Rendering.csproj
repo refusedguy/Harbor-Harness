@@ -20,8 +20,8 @@
     <!-- CellForge-class renderers consume the zero-alloc fast paths
          (ScreenBuffer row-hash internals, BlockMath, StreamingMarkdownRenderer
          .RenderRange) across the assembly boundary by design. -->
-    <InternalsVisibleTo Include="Harbor.Tui.ConsoleEx"/>
-    <InternalsVisibleTo Include="Harbor.Tui.ConsoleEx.Tests"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 
 </Project>

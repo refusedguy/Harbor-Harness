@@ -183,10 +183,10 @@ public sealed class HarborConfig
         Tui = Ui.Tui,
         Storage = Ui.Storage,
         Onboarded = Ui.Onboarded,
-        // Persist the ConsoleEx section (nested under `ui`) only when it
+        // Persist the CellForge section (nested under `ui`) only when it
         // diverges from defaults — keeps config.json free of knob noise for
         // users who never touched it.
-        Ui = Ui.ConsoleEx == ConsoleExUiConfig.Default ? null : new UiRawDto { ConsoleEx = Ui.ConsoleEx },
+        Ui = Ui.CellForge == CellForgeUiConfig.Default ? null : new UiRawDto { CellForge = Ui.CellForge },
         DefaultProvider = Identity.Provider?.Value,
         DefaultModel = Identity.Model?.ToString(),
         OnboardingCompleted = Ui.Onboarded,
@@ -257,7 +257,7 @@ public sealed class RawConfigDto
     /// <summary>Legacy root-level alias for <c>ui.consoleEx</c> — still read, no longer written.</summary>
     [JsonPropertyName("consoleEx")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ConsoleExUiConfig? ConsoleEx { get; set; }
+    public CellForgeUiConfig? CellForge { get; set; }
 
     [JsonPropertyName("defaultProvider")] public string? DefaultProvider { get; set; }
     [JsonPropertyName("defaultModel")] public string? DefaultModel { get; set; }
@@ -278,12 +278,12 @@ public sealed class RawConfigDto
 
 /// <summary>
 ///     Nested <c>ui</c> section of config.json. Currently carries only the
-///     ConsoleEx renderer knobs; future UI preferences land here instead of
+///     CellForge renderer knobs; future UI preferences land here instead of
 ///     growing new root-level keys.
 /// </summary>
 public sealed class UiRawDto
 {
-    [JsonPropertyName("consoleEx")] public ConsoleExUiConfig? ConsoleEx { get; set; }
+    [JsonPropertyName("consoleEx")] public CellForgeUiConfig? CellForge { get; set; }
 }
 
 /// <summary>
@@ -389,14 +389,14 @@ public static class ConfigNormalizer
     private static void ApplyPresentation(HarborConfig config, RawConfigDto raw)
     {
         // ── Presentation ──
-        // ConsoleEx knobs: canonical `ui.consoleEx` wins; the legacy root-level
+        // CellForge knobs: canonical `ui.consoleEx` wins; the legacy root-level
         // `consoleEx` key is still honored so pre-CE-4-final configs keep working.
         config.Ui = new PresentationConfig(
             raw.Tui ?? PresentationConfig.Default.Tui,
             raw.Storage ?? raw.StorageBackend ?? PresentationConfig.Default.Storage,
             raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded)
         {
-            ConsoleEx = raw.Ui?.ConsoleEx ?? raw.ConsoleEx ?? ConsoleExUiConfig.Default,
+            CellForge = raw.Ui?.CellForge ?? raw.CellForge ?? CellForgeUiConfig.Default,
         };
     }
 

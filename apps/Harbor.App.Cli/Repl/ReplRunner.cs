@@ -9,10 +9,10 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
-using Harbor.Tui.ConsoleEx.Input;
-using Harbor.Tui.ConsoleEx.Rendering;
-using Harbor.Tui.ConsoleEx.Streaming;
-using Harbor.Tui.ConsoleEx.Widgets;
+using Harbor.Tui.CellForge.Input;
+using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Streaming;
+using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Cli.Repl;
@@ -35,31 +35,31 @@ internal sealed class ReplRunner
         // interactive session; disposal rides on the host container teardown.
         _ = sp.GetService<Harbor.Hosting.PluginAutoReloader>();
 
-        // ── CE-4: ConsoleEx gate (второй путь рендера) ────────────────────
+        // ── CE-4: CellForge gate (второй путь рендера) ────────────────────
         // Режим включается значением consoleex у переменной окружения HARBOR_TUI
         // или поля tui в config.json. Kill-switch — секция ui.consoleEx.enabled.
         // При отказе raw-режима — прозрачный откат на legacy-путь ниже.
         var earlyConfigResult = await sp.GetRequiredService<IConfigStore>().LoadAsync().ConfigureAwait(false);
         var earlyConfig = earlyConfigResult.IsSuccess ? earlyConfigResult.Value : HarborConfig.Default;
-        if (TuiMode.IsConsoleExSelected())
+        if (TuiMode.IsCellForgeSelected())
         {
-            if (!earlyConfig.Ui.ConsoleEx.Enabled)
+            if (!earlyConfig.Ui.CellForge.Enabled)
             {
-                _logger.LogWarning("ConsoleEx выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
+                _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
             }
             else if (!earlyConfig.Onboarded)
             {
-                _logger.LogInformation("ConsoleEx отложен: onboarding не завершён — мастер требует legacy-рендер");
+                _logger.LogInformation("CellForge отложен: onboarding не завершён — мастер требует legacy-рендер");
             }
             else
             {
-                var consoleResult = await RunConsoleExAsync(sp, ct).ConfigureAwait(false);
+                var consoleResult = await RunCellForgeAsync(sp, ct).ConfigureAwait(false);
                 if (consoleResult.IsSuccess)
                 {
                     return consoleResult.Value;
                 }
 
-                _logger.LogWarning("ConsoleEx недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
+                _logger.LogWarning("CellForge недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
             }
         }
 
@@ -163,11 +163,11 @@ internal sealed class ReplRunner
     }
 
     /// <summary>
-    ///     CE-4: сборка и запуск ConsoleEx-REPL. Сессия создаётся только после
+    ///     CE-4: сборка и запуск CellForge-REPL. Сессия создаётся только после
     ///     успешного входа в raw-режим, чтобы откат на legacy не оставлял
     ///     осиротевших сессий.
     /// </summary>
-    private async Task<Result<int>> RunConsoleExAsync(IServiceProvider sp, CancellationToken ct)
+    private async Task<Result<int>> RunCellForgeAsync(IServiceProvider sp, CancellationToken ct)
     {
         var modeController = CreateModeController();
         var agentRegistry = sp.GetRequiredService<IAgentRegistry>();
@@ -189,7 +189,7 @@ internal sealed class ReplRunner
         var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
                            ?? agentRegistry.GetAllAgents()[0];
         string[] parts = config.EffectiveModel.Split('/', 2);
-        _logger.LogInformation("ConsoleEx: creating session agent={Agent}, provider={Provider}, model={Model}",
+        _logger.LogInformation("CellForge: creating session agent={Agent}, provider={Provider}, model={Model}",
             defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
         var sessionResult = await sessionStore.CreateAsync(
             Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
@@ -202,7 +202,7 @@ internal sealed class ReplRunner
         var agent = sp.GetRequiredService<IAgent>();
         agent.Initialize(sessionResult.Value, defaultAgent);
 
-        var runner = new ConsoleExReplRunner(
+        var runner = new CellForgeReplRunner(
             sp,
             agent,
             sessionResult.Value,
@@ -212,7 +212,7 @@ internal sealed class ReplRunner
             sp.GetRequiredService<TerminalInputSource>(),
             modeController,
             sp.GetRequiredService<ITerminalBackend>(),
-            sp.GetRequiredService<ILogger<ConsoleExReplRunner>>());
+            sp.GetRequiredService<ILogger<CellForgeReplRunner>>());
         int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
         return Result.Success(exitCode);
     }

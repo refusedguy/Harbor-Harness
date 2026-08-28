@@ -42,8 +42,8 @@ internal static partial class HostBuilder
         builder.Services.AddCliCompositeConfig();
 
         // CE-4: второй путь рендера. Регистрации ленивые — резолв только
-        // когда интерактивный REPL выбрал ConsoleEx; legacy-путь не меняется.
-        builder.Services.AddConsoleEx(TryReadConsoleExUi());
+        // когда интерактивный REPL выбрал CellForge; legacy-путь не меняется.
+        builder.Services.AddCellForge(TryReadCellForgeUi());
 
         return builder.Build();
     }
@@ -56,32 +56,32 @@ internal static partial class HostBuilder
     ///     unreadable file ⇒ defaults, never a throw. Manual field extraction —
     ///     no JsonSerializer reflection on the AOT path.
     /// </summary>
-    private static ConsoleExUiConfig TryReadConsoleExUi()
+    private static CellForgeUiConfig TryReadCellForgeUi()
     {
         try
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string path = Path.Combine(home, ".harbor", "config.json");
             if (!File.Exists(path))
-                return ConsoleExUiConfig.Default;
+                return CellForgeUiConfig.Default;
             using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
             if (!doc.RootElement.TryGetProperty("consoleEx", out var el)
                 || el.ValueKind != System.Text.Json.JsonValueKind.Object)
             {
-                return ConsoleExUiConfig.Default;
+                return CellForgeUiConfig.Default;
             }
 
             bool enabled = !el.TryGetProperty("enabled", out var enabledEl)
                            || enabledEl.ValueKind != System.Text.Json.JsonValueKind.False;
             bool syncUpdates = el.TryGetProperty("syncUpdates", out var syncEl)
                 ? syncEl.ValueKind != System.Text.Json.JsonValueKind.False
-                : ConsoleExUiConfig.Default.SyncUpdates;
-            return new ConsoleExUiConfig(enabled, syncUpdates);
+                : CellForgeUiConfig.Default.SyncUpdates;
+            return new CellForgeUiConfig(enabled, syncUpdates);
         }
         catch
         {
             // Best-effort — defaults win over any config-read failure.
-            return ConsoleExUiConfig.Default;
+            return CellForgeUiConfig.Default;
         }
     }
 

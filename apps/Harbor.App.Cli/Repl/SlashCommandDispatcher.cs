@@ -44,7 +44,7 @@ internal sealed class SlashCommandDispatcher
     }
 
     /// <summary>
-    ///     CE-4: renderer-free overload for the ConsoleEx REPL — output goes to
+    ///     CE-4: renderer-free overload for the CellForge REPL — output goes to
     ///     the chat timeline and input comes from the composer instead of an
     ///     <see cref="ITuiRenderer" />.
     /// </summary>

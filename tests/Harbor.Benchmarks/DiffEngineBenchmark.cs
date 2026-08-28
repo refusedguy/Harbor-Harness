@@ -1,7 +1,7 @@
 using System.Text;
 using BenchmarkDotNet.Attributes;
-using Harbor.Tui.ConsoleEx.Rendering;
-using Harbor.Tui.ConsoleEx.Widgets;
+using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;

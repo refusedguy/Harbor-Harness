@@ -11,7 +11,7 @@ namespace Harbor.Ui.Framework.Rendering.Widgets;
 /// <see cref="TerminalColorPalette" /> in Harbor.DesignSystem — this file is
 /// the PackedColor projection of the token catalog, not a second source of
 /// truth. HDS §7.1 names ChatPalette as the single source of truth for block
-/// colors inside the ConsoleEx renderer: widget code must reference these
+/// colors inside the CellForge renderer: widget code must reference these
 /// styles and never hardcode hex values.
 ///
 /// Theme switching: the projection is a cached per-theme catalog, rebuilt

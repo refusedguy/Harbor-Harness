@@ -40,7 +40,7 @@
 
   <ItemGroup>
     <!-- CE-5 Зона 1: PtySession/AnsiTerminalBuffer internals for the PTY scenario suite. -->
-    <InternalsVisibleTo Include="Harbor.Tui.ConsoleEx.PtyTests"/>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.PtyTests"/>
   </ItemGroup>
 
   <ItemGroup>

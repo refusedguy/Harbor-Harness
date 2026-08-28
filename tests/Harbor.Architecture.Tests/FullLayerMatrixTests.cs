@@ -77,7 +77,7 @@ public class FullLayerMatrixTests
         "Harbor.Tui.Notifications",
         "Harbor.Tui.Plain",
         "Harbor.Tui.Ansi",
-        "Harbor.Tui.ConsoleEx",
+        "Harbor.Tui.CellForge",
         // Application
         "Harbor.Application",
         "Harbor.Registries",
@@ -182,7 +182,7 @@ public class FullLayerMatrixTests
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
             ["Harbor.Ui.Framework.Projection", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
         // HDS v1 token catalog — leaf Presentation library over the projection
-        // primitives (RgbColor); consumed by Desktop.Animations / ConsoleEx / apps.
+        // primitives (RgbColor); consumed by Desktop.Animations / CellForge / apps.
         ["Harbor.DesignSystem"] = new(Layer.Presentation,
             ["Harbor.Ui.Framework.Projection"]),
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
@@ -206,14 +206,17 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         ["Harbor.Tui.Ansi"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
-        // ConsoleEx owns its own input+render stack; reuses Presentation-state
-        // streaming buffers (StreamingSync/ChunkedBuffer) — no Terminal.Abstractions yet.
+        // CellForge owns its own input+render stack; reuses Presentation-state
+        // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
+        // renderer-agnostic layer. Terminal.Abstractions supplies the
+        // ITuiRenderer/BaseTuiRenderer adapter surface (Phase 2).
         // DesignSystem supplies the HDS v1 token catalog for ChatPalette;
         // Desktop.Animations supplies the motion tokens (PanelFx); the
         // projection edge is RgbColor's AssemblyRef via that same bridge.
-        ["Harbor.Tui.ConsoleEx"] = new(Layer.Presentation,
+        ["Harbor.Tui.CellForge"] = new(Layer.Presentation,
             [
-                "Harbor.Abstractions", "Harbor.Ui.Framework.State",
+                "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
+                "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Projection",
                 "Harbor.Ui.Framework.Rendering",
                 "Harbor.DesignSystem", "Harbor.Desktop.Animations",
@@ -283,6 +286,7 @@ public class FullLayerMatrixTests
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
             "Harbor.Tui.Plain", "Harbor.Tui.Ansi",
+            "Harbor.Tui.CellForge",
             "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic", "Harbor.Providers.OpenAI",
             "Harbor.Tools.Builtin", "Harbor.Ipc.Abstractions",

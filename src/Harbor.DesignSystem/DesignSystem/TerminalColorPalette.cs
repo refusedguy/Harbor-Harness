@@ -2,7 +2,7 @@ namespace Harbor.DesignSystem;
 
 /// <summary>
 /// Terminal-specific design tokens matching the HTML design-system report.
-/// These are the exact colors specified for ConsoleEx and TUI rendering.
+/// These are the exact colors specified for CellForge and TUI rendering.
 ///
 /// Token reads resolve against the active <see cref="HarborTheme" /> —
 /// <see cref="Apply" /> swaps it atomically (volatile reference) and fires

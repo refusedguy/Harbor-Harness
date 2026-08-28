@@ -39,8 +39,21 @@ internal static class TuiMode
         "consoleex",
     };
 
-    /// <summary>The ConsoleEx renderer id (<c>HARBOR_TUI=consoleex</c>, <c>tui: "consoleex"</c>).</summary>
-    public const string ConsoleExId = "consoleex";
+    /// <summary>The canonical CellForge renderer id (<c>HARBOR_TUI=cellforge</c>, <c>tui: "cellforge"</c>).</summary>
+    public const string CellForgeId = "cellforge";
+
+    /// <summary>
+    ///     Legacy renderer id kept as an alias: <c>HARBOR_TUI=consoleex</c> /
+    ///     <c>tui: "consoleex"</c> keep selecting CellForge after the
+    ///     renderer-unification rename (project is now Harbor.Tui.CellForge).
+    /// </summary>
+    public const string LegacyConsoleExId = "consoleex";
+
+    /// <summary>True for both the canonical <c>cellforge</c> id and the legacy <c>consoleex</c> alias.</summary>
+    public static bool IsCellForgeId(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && (value.Equals(CellForgeId, StringComparison.OrdinalIgnoreCase)
+            || value.Equals(LegacyConsoleExId, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     ///     Returns <see langword="true" /> when the CLI is going to enter an
@@ -71,9 +84,9 @@ internal static class TuiMode
     ///     when neither is set or when the value is <c>"auto"</c>. Returns
     ///     <c>"plain"</c> when Spectre is excluded at build time
     ///     (<c>HARBOR_WITH_SPECTRE_TUI=false</c>).
-    ///     ConsoleEx (<c>tui: "consoleex"</c> / <c>HARBOR_TUI=consoleex</c>) is
+    ///     CellForge (<c>tui: "consoleex"</c> / <c>HARBOR_TUI=consoleex</c>) is
     ///     always honored regardless of the Spectre flag — it lives in
-    ///     <c>src/Harbor.Tui.ConsoleEx</c> and is not part of <c>contrib/tui</c>.
+    ///     <c>src/Harbor.Tui.CellForge</c> and is not part of <c>contrib/tui</c>.
     /// </summary>
     public static string ResolveTuiId()
     {
@@ -90,23 +103,23 @@ internal static class TuiMode
         if (!string.IsNullOrWhiteSpace(configTui) && !string.Equals(configTui, "auto", StringComparison.OrdinalIgnoreCase))
             return configTui!;
 
-        // CE-4: HarborConfig (~/.harbor/config.json) may opt into ConsoleEx via
+        // CE-4: HarborConfig (~/.harbor/config.json) may opt into CellForge via
         // `tui: "consoleex"`. Only the consoleex value is honored here — legacy
         // values keep their historical "cli.json wins / config.tui ignored"
         // semantics so nobody's existing setup changes behavior.
-        if (string.Equals(TryReadHarborConfigTui(), ConsoleExId, StringComparison.OrdinalIgnoreCase))
-            return ConsoleExId;
+        if (IsCellForgeId(TryReadHarborConfigTui()))
+            return CellForgeId;
 
         return "spectre-tui";
 #else
-        // Spectre excluded — still honor an explicit ConsoleEx selection (it is
-        // always compiled in src/Harbor.Tui.ConsoleEx), otherwise plain.
+        // Spectre excluded — still honor an explicit CellForge selection (it is
+        // always compiled in src/Harbor.Tui.CellForge), otherwise plain.
         string envPlain = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(envPlain))
             return envPlain.Trim();
 
-        if (string.Equals(TryReadHarborConfigTui(), ConsoleExId, StringComparison.OrdinalIgnoreCase))
-            return ConsoleExId;
+        if (IsCellForgeId(TryReadHarborConfigTui()))
+            return CellForgeId;
 
         string? cfgPlain = TryReadDefaultTuiFromConfig();
         if (!string.IsNullOrWhiteSpace(cfgPlain) && !string.Equals(cfgPlain, "auto", StringComparison.OrdinalIgnoreCase))
@@ -173,25 +186,25 @@ internal static class TuiMode
     }
 
     /// <summary>
-    ///     Returns <see langword="true" /> when the ConsoleEx renderer should
+    ///     Returns <see langword="true" /> when the CellForge renderer should
     ///     serve the interactive REPL. Selection sources (first match wins):
-    ///     <c>HARBOR_TUI=consoleex</c>, then <c>tui: "consoleex"</c> in
+    ///     <c>HARBOR_TUI=cellforge|consoleex</c>, then <c>tui: "cellforge|consoleex"</c> in
     ///     <c>~/.harbor/config.json</c>. The caller additionally gates on
-    ///     <c>consoleEx.enabled</c>.
-    ///     ConsoleEx is not gated by <c>HARBOR_WITH_SPECTRE_TUI</c> — it lives
-    ///     in <c>src/Harbor.Tui.ConsoleEx</c> and is always compiled in.
+    ///     <c>ui.consoleEx.enabled</c> (legacy JSON key kept for compatibility).
+    ///     CellForge is not gated by <c>HARBOR_WITH_SPECTRE_TUI</c> — it lives
+    ///     in <c>src/Harbor.Tui.CellForge</c> and is always compiled in.
     /// </summary>
-    public static bool IsConsoleExSelected()
+    public static bool IsCellForgeSelected()
     {
         string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
-        if (envTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase))
+        if (IsCellForgeId(envTui))
             return true;
 
         if (!string.IsNullOrWhiteSpace(envTui))
-            return false; // an explicit non-consoleex renderer always wins
+            return false; // an explicit non-CellForge renderer always wins
 
         string configTui = ResolveTuiId();
-        return configTui.Equals(ConsoleExId, StringComparison.OrdinalIgnoreCase);
+        return IsCellForgeId(configTui);
     }
 
     /// <summary>

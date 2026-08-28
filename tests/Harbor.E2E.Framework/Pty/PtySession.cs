@@ -228,7 +228,7 @@ public sealed class PtySession : IAsyncDisposable
     ///     ⚠ Matches the RAW master-byte stream, where the app emits
     ///     cursor-positioned runs — streamed timeline text never forms a
     ///     contiguous phrase byte-wise. Assert screen CONTENT on an ANSI
-    ///     screen emulation (ConsoleExPtyScenarioBase.WaitForScreenAsync)
+    ///     screen emulation (CellForgePtyScenarioBase.WaitForScreenAsync)
     ///     instead; raw needles are valid only for atomic control sequences
     ///     (alt-screen enter/leave) and short single-run fragments.
     /// </summary>

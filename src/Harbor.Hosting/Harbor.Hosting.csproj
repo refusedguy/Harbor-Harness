@@ -61,6 +61,7 @@
     <!-- Baseline renderers -->
     <ProjectReference Include="..\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
     <ProjectReference Include="..\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
 
     <!-- Baseline providers -->
     <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>

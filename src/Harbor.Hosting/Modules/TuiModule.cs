@@ -19,13 +19,14 @@ internal static class TuiModule
         string defaultTui = string.IsNullOrEmpty(ctx.Options.DefaultTuiRenderer) || ctx.Options.DefaultTuiRenderer == "auto"
             ? "spectre-tui"
             : ctx.Options.DefaultTuiRenderer;
-        // ConsoleEx lives in src/Harbor.Tui.ConsoleEx (always compiled in) and is not gated by
-        // HARBOR_WITH_SPECTRE_TUI — honor it even when the flag is off.
+        // CellForge lives in src/Harbor.Tui.CellForge (always compiled in) and is not gated by
+        // HARBOR_WITH_SPECTRE_TUI — honor it even when the flag is off. Both the
+        // canonical `cellforge` id and the legacy `consoleex` alias select it.
         string envTui = Environment.GetEnvironmentVariable("HARBOR_TUI") ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim().Equals("consoleex", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex")
         {
-            string consoleTui = envTui.Trim();
-            ctx.Logger.LogInformation("TUI renderer: {Tui} (ConsoleEx always enabled)", consoleTui);
+            string consoleTui = "cellforge"; // canonical id, alias normalized for logging
+            ctx.Logger.LogInformation("TUI renderer: {Tui} (CellForge always enabled)", consoleTui);
             defaultTui = consoleTui; // fall through to ITuiRenderer switch below
         }
 #if HARBOR_WITH_SPECTRE_TUI
@@ -35,24 +36,24 @@ internal static class TuiModule
             tui = defaultTui;
         ctx.Logger.LogInformation("TUI renderer: {Tui}", tui);
 #else
-        string tui = !string.IsNullOrWhiteSpace(envTui) && envTui.Trim().Equals("consoleex", StringComparison.OrdinalIgnoreCase)
-            ? envTui.Trim()
-            : !string.IsNullOrWhiteSpace(defaultTui) && defaultTui.Equals("consoleex", StringComparison.OrdinalIgnoreCase)
-                ? defaultTui
+        string tui = !string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex"
+            ? "cellforge"
+            : !string.IsNullOrWhiteSpace(defaultTui) && defaultTui is "cellforge" or "consoleex"
+                ? "cellforge"
                 : "plain";
-        ctx.Logger.LogInformation("TUI renderer: {Tui} (ConsoleEx always enabled, Spectre off)", tui);
+        ctx.Logger.LogInformation("TUI renderer: {Tui} (CellForge always enabled, Spectre off)", tui);
 #endif
         services.AddSingleton<ITuiRenderer>(sp =>
         {
-            // ConsoleEx is always available — handle before Spectre fallback.
-            if (tui.Equals("consoleex", StringComparison.OrdinalIgnoreCase))
+            // CellForge is always available — handle before Spectre fallback.
+            if (tui is "cellforge" or "consoleex")
             {
-                // Re-use the Ansi path's success type — the actual ConsoleEx
-                // interactive entry is via ReplRunner (raw mode + ScreenSession),
-                // but a non-interactive renderer still needs an ITuiRenderer.
-                // Returning Ansi keeps one-shot commands working; interactive
-                // ConsoleEx is entered through ReplRunner, not through ITuiRenderer.
-                return new Harbor.Tui.Ansi.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Ansi.AnsiTuiRenderer>>());
+                // Phase 2 adapter: CellForgeTuiRenderer serves the event-driven
+                // path through the AnsiWriter SGR automaton. The interactive
+                // raw-mode entry remains ReplRunner (ScreenSession), which
+                // bypasses ITuiRenderer entirely.
+                return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
+                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>());
             }
 
 #if HARBOR_WITH_SPECTRE_TUI
@@ -73,7 +74,8 @@ internal static class TuiModule
             return tui.ToLowerInvariant() switch
             {
                 "plain" => new PlainTuiRenderer(),
-                "consoleex" => new Harbor.Tui.Ansi.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Ansi.AnsiTuiRenderer>>()),
+                "consoleex" or "cellforge" => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
+                    sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()),
                 _ => new Harbor.Tui.Ansi.AnsiTuiRenderer(sp.GetRequiredService<ILogger<Harbor.Tui.Ansi.AnsiTuiRenderer>>())
             };
 #endif

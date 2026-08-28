@@ -51,7 +51,7 @@
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.ConsoleEx\Harbor.Tui.ConsoleEx.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
 
     <!-- ROP-D Z2: every remaining main-solution src project joins enforcement
          (previously ~28 projects had zero layer rules). Harbor.CodeGen is a

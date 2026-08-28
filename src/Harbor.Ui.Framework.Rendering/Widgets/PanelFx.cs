@@ -4,7 +4,7 @@ using Harbor.Ui.Framework.Rendering;
 namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
-/// HDS v1 motion primitives for the ConsoleEx renderer (widgets §3.x):
+/// HDS v1 motion primitives for the CellForge renderer (widgets §3.x):
 /// entrance fades/slides, the approval warn-glow pulse, and status-accent
 /// crossfades. Every helper is a pure function of monotonic frame ticks —
 /// no timers, no allocations (same contract as <see cref="SpinnerStrip" />).

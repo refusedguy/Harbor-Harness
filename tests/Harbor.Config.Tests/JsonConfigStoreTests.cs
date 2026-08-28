@@ -121,7 +121,7 @@ public class JsonConfigStoreTests
     }
 
     [Test]
-    public async Task LoadAsync_ConsoleExSection_ParsesKillSwitchAndSyncUpdates()
+    public async Task LoadAsync_CellForgeSection_ParsesKillSwitchAndSyncUpdates()
     {
         string json = """
                       {
@@ -142,8 +142,8 @@ public class JsonConfigStoreTests
 
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value.Tui).IsEqualTo("consoleex");
-            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsFalse();
-            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsFalse();
         }
         finally
         {
@@ -161,7 +161,7 @@ public class JsonConfigStoreTests
     }
 
     [Test]
-    public async Task LoadAsync_LegacyRootConsoleEx_StillHonored()
+    public async Task LoadAsync_LegacyRootCellForge_StillHonored()
     {
         string json = """
                       {
@@ -178,8 +178,8 @@ public class JsonConfigStoreTests
             var result = await store.LoadAsync();
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsFalse();
-            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsFalse();
         }
         finally
         {
@@ -197,7 +197,7 @@ public class JsonConfigStoreTests
     }
 
     [Test]
-    public async Task LoadAsync_MissingConsoleExSection_AppliesDefaults()
+    public async Task LoadAsync_MissingCellForgeSection_AppliesDefaults()
     {
         string json = """
                       {
@@ -213,8 +213,8 @@ public class JsonConfigStoreTests
             var result = await store.LoadAsync();
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value.Ui.ConsoleEx.Enabled).IsTrue();
-            await Assert.That(result.Value.Ui.ConsoleEx.SyncUpdates).IsTrue();
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsTrue();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsTrue();
         }
         finally
         {
@@ -232,7 +232,7 @@ public class JsonConfigStoreTests
     }
 
     [Test]
-    public async Task SaveAsync_LoadAsync_Roundtrip_ConsoleExSectionSurvives()
+    public async Task SaveAsync_LoadAsync_Roundtrip_CellForgeSectionSurvives()
     {
         string path = NewTempConfigPath();
         try
@@ -245,7 +245,7 @@ public class JsonConfigStoreTests
                 Tui = "consoleex",
                 Onboarded = true
             };
-            config.Ui = config.Ui with { ConsoleEx = new ConsoleExUiConfig(Enabled: false, SyncUpdates: false) };
+            config.Ui = config.Ui with { CellForge = new CellForgeUiConfig(Enabled: false, SyncUpdates: false) };
 
             var saveResult = await store.SaveAsync(config);
             await Assert.That(saveResult.IsSuccess).IsTrue();
@@ -253,8 +253,8 @@ public class JsonConfigStoreTests
             var loaded = await store.LoadAsync();
             await Assert.That(loaded.IsSuccess).IsTrue();
             await Assert.That(loaded.Value.Tui).IsEqualTo("consoleex");
-            await Assert.That(loaded.Value.Ui.ConsoleEx.Enabled).IsFalse();
-            await Assert.That(loaded.Value.Ui.ConsoleEx.SyncUpdates).IsFalse();
+            await Assert.That(loaded.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(loaded.Value.Ui.CellForge.SyncUpdates).IsFalse();
 
             // Defaults are omitted from the persisted JSON (no config drift for legacy users),
             // and the non-default section is written in the canonical nested `ui` shape

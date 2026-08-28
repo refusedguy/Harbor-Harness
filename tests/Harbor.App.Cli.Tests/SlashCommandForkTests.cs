@@ -94,7 +94,7 @@ public class SlashCommandForkTests
             l.Contains("Forked →") && l.EndsWith(": copied 2 message(s)."))).IsTrue();
     }
 
-    /// <summary>Dispatch through the ConsoleEx renderer-free overload, capturing writer lines.</summary>
+    /// <summary>Dispatch through the CellForge renderer-free overload, capturing writer lines.</summary>
     private static async Task<List<string>> DispatchAsync(string input, FakeStore store)
     {
         using var sp = new ServiceCollection()

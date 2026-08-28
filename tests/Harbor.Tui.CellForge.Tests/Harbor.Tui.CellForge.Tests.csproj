@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true);
+         Test.Sdk is the dotnet-test host adapter. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>
