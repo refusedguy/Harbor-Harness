@@ -131,7 +131,7 @@ public sealed class AgentLoop : IAgentLoop
             {
                 turn++;
                 _logger.LogDebug("Turn {Turn} start: agent={Agent} model={Model}", turn, agent.Name.Value, agent.Model);
-                await _eventBus.PublishAsync(new TurnStartEvent(turn), ct).ConfigureAwait(false);
+                await _eventBus.PublishAsync(new TurnStartEvent(turn, session.Session.Id), ct).ConfigureAwait(false);
 
                 // The compacted view of the history, not the raw append-only
                 // list: after a summary was produced, ShouldCompact and the
@@ -297,7 +297,7 @@ public sealed class AgentLoop : IAgentLoop
                 {
                     _logger.LogDebug("Turn {Turn} end (no tool calls)", turn);
                     await _eventBus.PublishAsync(
-                        new TurnEndEvent(partial, Array.Empty<ToolResultMessage>()), ct).ConfigureAwait(false);
+                        new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
                     break;
                 }
 
@@ -327,7 +327,7 @@ public sealed class AgentLoop : IAgentLoop
 
                 _logger.LogDebug("Turn {Turn} end (with tool results)", turn);
                 await _eventBus.PublishAsync(
-                    new TurnEndEvent(partial, new[] { toolResults }), ct).ConfigureAwait(false);
+                    new TurnEndEvent(partial, new[] { toolResults }, session.Session.Id), ct).ConfigureAwait(false);
 
                 // 9. Boundary steering drain — kept for runs that reach max
                 // steps or a terminal stop reason right after execution; on
