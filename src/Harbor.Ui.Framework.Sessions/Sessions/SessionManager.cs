@@ -271,7 +271,7 @@ public sealed class SessionManager : ISessionManager
                 foreach (var msg in messages.Value)
                 {
                     (var role, string text) = SessionFactory.MessageToChatLine(msg);
-                    ctx.Store.Transition(s => s.AddLine(role, text));
+                    ctx.Store.Dispatch(new UiMsg.AppendLine(role, text));
                 }
             }
         }

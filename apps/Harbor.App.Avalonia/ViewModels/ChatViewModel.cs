@@ -168,7 +168,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         }
         else
         {
-            _store.Transition(s => s.AddLine(ChatRole.User, text));
+            _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, text));
             effect = new TuiEffect.PromptAgent(trimmed);
         }
 
@@ -209,7 +209,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void SendSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 
@@ -291,7 +291,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void ExecuteSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 
