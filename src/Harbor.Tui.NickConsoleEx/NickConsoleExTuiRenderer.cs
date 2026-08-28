@@ -40,11 +40,17 @@ public sealed class NickConsoleExTuiRenderer : BaseTuiRenderer
     private MarkupControl? _log;
     private StringBuilder? _pendingTokenLine;
 
-    public NickConsoleExTuiRenderer(ILogger<NickConsoleExTuiRenderer> logger, int maxLines = 500)
+    public NickConsoleExTuiRenderer(
+        ILogger<NickConsoleExTuiRenderer> logger,
+        int maxLines = 500,
+        IConsoleDriver? driverOverride = null)
         : base(logger)
     {
         _maxLines = maxLines;
+        _driverOverride = driverOverride;
     }
+
+    private readonly IConsoleDriver? _driverOverride;
 
     public override ITuiRenderContext Context { get; } = new NickConsoleExRenderContext();
 
@@ -271,11 +277,20 @@ public sealed class NickConsoleExTuiRenderer : BaseTuiRenderer
             return;
         }
 
-        IConsoleDriver driver = Console.IsOutputRedirected
-            ? new HeadlessConsoleDriver(120, 40)
-            : new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer });
+        IConsoleDriver driver = _driverOverride
+            ?? (Console.IsOutputRedirected
+                ? new HeadlessConsoleDriver(120, 40)
+                : new NetConsoleDriver(new NetConsoleDriverOptions { RenderMode = RenderMode.Buffer }));
 
-        var system = new ConsoleWindowSystem(driver);
+        // Harbor provides its own status surface; the SharpConsoleUI default
+        // desktop panels (app-name + live clock top bar, task bar bottom bar)
+        // are disabled — the clock would also make golden-frame tests
+        // inherently nondeterministic (renderer-unification Phase 5).
+        var options = new ConsoleWindowSystemOptions(
+            ShowTopPanel: false,
+            ShowBottomPanel: false);
+
+        var system = new ConsoleWindowSystem(driver, options: options);
         _log = new MarkupControl([]);
         var window = new WindowBuilder(system)
             .WithTitle("Harbor — nickprotop/ConsoleEx backend")
