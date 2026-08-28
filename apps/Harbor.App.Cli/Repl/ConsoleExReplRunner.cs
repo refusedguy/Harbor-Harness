@@ -110,6 +110,16 @@ internal sealed class ConsoleExReplRunner(
 
     private int _timelineViewportH;
 
+    /// <summary>Width the sidebar spring policy was last applied for (P1.6
+    /// spring resize): 0 until the first frame so cold start snaps instead
+    /// of replaying the static geometry as motion.</summary>
+    private int _sidebarPolicyCols;
+
+    /// <summary>False until the first policy application — cold start snaps
+    /// (static solve already matches the targets), only real width changes
+    /// afterwards are animated.</summary>
+    private bool _sidebarPolicyWasApplied;
+
     /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
     /// the actual retry; the UI mirrors only the expected backoff window —
     /// attempt counter, wall-clock start of the latest transient error, and
@@ -277,6 +287,50 @@ internal sealed class ConsoleExReplRunner(
         }
     }
 
+    /// <summary>
+    /// Spring-driven sidebar resize policy (P1.6, Bubble Tea harmonica):
+    /// re-pins the 42-column sidebar with spring physics on every width
+    /// change, and on a crossing of the auto-show threshold glides the
+    /// show/hide transition over frames — min-width spring to/from 0 plus
+    /// the timeline/sidebar ratio — instead of the solver's binary collapse.
+    /// Idempotent per width: settled springs make repeat calls no-ops.
+    /// </summary>
+    private void ApplySidebarResizePolicy(int cols)
+    {
+        if (screen.Sidebar is null || cols == _sidebarPolicyCols)
+        {
+            return;
+        }
+
+        _sidebarPolicyCols = cols;
+        if (_sidebarPolicyWasApplied)
+        {
+            AnimateSidebarPolicy(cols);
+        }
+
+        _sidebarPolicyWasApplied = true;
+    }
+
+    /// <summary>Drives the springs toward the policy targets for
+    /// <paramref name="cols" />. Cold start skips this: the static solve
+    /// already produces the target geometry (collapse below the threshold,
+    /// clamp-pinned 42 columns above), so springs would only replay it.</summary>
+    private void AnimateSidebarPolicy(int cols)
+    {
+        bool shown = cols >= SideBarLayout.AutoShowMinWidth;
+        int usable = Math.Max(1, cols - 1); // split gap 1
+        if (shown)
+        {
+            screen.Tree.AnimateMinWidth(ChatScreen.SidebarId, SideBarLayout.DefaultWidth);
+            screen.Tree.AnimateRatio(ChatScreen.TimelineId, (usable - SideBarLayout.DefaultWidth) / (float)usable);
+        }
+        else
+        {
+            screen.Tree.AnimateMinWidth(ChatScreen.SidebarId, 0);
+            screen.Tree.AnimateRatio(ChatScreen.TimelineId, 1f);
+        }
+    }
+
     /// <summary>Drains pending wakeup signals — one repaint coalesces them all.</summary>
     private void DrainWake()
     {
@@ -301,7 +355,15 @@ internal sealed class ConsoleExReplRunner(
         screenSession.CheckAutoSize();
         int cols = screenSession.CurrentCols;
         int rows = screenSession.CurrentRows;
+        ApplySidebarResizePolicy(cols);
         screen.Tree.Solve(cols, rows);
+
+        // Spring resize (P1.6): while a layout spring is in flight the rects
+        // move every frame — self-wake keeps frames flowing until it settles.
+        if (screen.Tree.IsAnimating)
+        {
+            _wake.Writer.TryWrite(null);
+        }
 
         Rect tlRect = screen.Timeline.Rect;
         _timelineViewportH = Math.Max(0, tlRect.Height);
@@ -395,7 +457,9 @@ internal sealed class ConsoleExReplRunner(
 
             case InputEventKind.Resize:
                 // Policy lives in ScreenSession: shrink ⇒ erase-in-display next frame.
-                screenSession.Resize(Math.Max(1, evt.Resize.Width), Math.Max(1, evt.Resize.Height));
+                int resizeW = Math.Max(1, evt.Resize.Width);
+                screenSession.Resize(resizeW, Math.Max(1, evt.Resize.Height));
+                ApplySidebarResizePolicy(resizeW);
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type is MouseEventType.Press or MouseEventType.Click:
