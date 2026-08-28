@@ -114,6 +114,7 @@
         <Project Path="tests/Harbor.Tools.Builtin.Tests/Harbor.Tools.Builtin.Tests.csproj"/>
         <Project Path="tests/Harbor.Tui.CellForge.Tests/Harbor.Tui.CellForge.Tests.csproj"/>
         <Project Path="tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj"/>
+        <Project Path="tests/Harbor.Tui.RendererTests/Harbor.Tui.RendererTests.csproj"/>
         <Project Path="tests/Harbor.Telemetry.Tests/Harbor.Telemetry.Tests.csproj"/>
         <Project Path="tests/Harbor.Ui.Framework.Tests/Harbor.Ui.Framework.Tests.csproj"/>
     </Folder>
