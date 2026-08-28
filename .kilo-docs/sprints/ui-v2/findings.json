@@ -46,7 +46,9 @@
   "verification": {
     "independent_recheck": "All three commits re-verified post-hoc: full Harbor.slnx Release build 0 errors / 180 warnings (pre-existing, none in the five touched files); Harbor.Tui.ConsoleEx.Tests 661/661, Harbor.Tui.ConsoleEx.PtyTests 39/39 (×2 after one transient flake), Harbor.App.Cli.Tests 78/78.",
     "pty_flake": "PtyTests first invocation had 1/39 failure with no reproduction on two full re-runs — treat as environment-flaky, not a regression from 734a003.",
-    "fresh_rerun": "2026-08-28 post-hoc re-verification on dev: Harbor.slnx Release build 0 errors; Harbor.Tui.ConsoleEx.Tests 664/664 (661 + 3 permanent acceptance tests from d8f1198), Harbor.App.Cli.Tests 78/78, Harbor.Tui.ConsoleEx.PtyTests 39/39 — no PTY flake observed."
+    "fresh_rerun": "2026-08-28 post-hoc re-verification on dev: Harbor.slnx Release build 0 errors; Harbor.Tui.ConsoleEx.Tests 664/664 (661 + 3 permanent acceptance tests from d8f1198), Harbor.App.Cli.Tests 78/78, Harbor.Tui.ConsoleEx.PtyTests 39/39 — no PTY flake observed.",
+    "fresh_rerun_2": "2026-08-28 second independent re-verification on dev @ 3ffb869: Harbor.slnx Release build 0 errors / 180 warnings (none in the five touched files); Harbor.Tui.ConsoleEx.Tests 664/664 (first run hit the PanelFx flake below at 663/664, passed clean on re-run and in isolation), Harbor.Tui.ConsoleEx.PtyTests 39/39, Harbor.App.Cli.Tests 78/78.",
+    "panelfx_flake": "Harbor.Tui.ConsoleEx.Tests first full run: PanelFxTests.WithAlpha_ZeroAlpha_FadesTowardPanelSurface failed with expected rgb(13,18,25) vs received rgb(13,17,23) — the two Panel colors of different built-in themes. Root cause is a pre-existing test-isolation race, not a sprint regression: WithAlpha captures ChatPalette.Panel (a process-global volatile Catalog, ChatPalette.cs:66) at arrange time while the assert re-reads it, and theme tests (ThemeSwitchTests / JsonThemeLoaderTests / ThemeFileWatcherTests) apply TerminalColorPalette.Apply in parallel. Untouched by all sprint commits; not reproducible in isolation nor on suite re-run. A theme-pinning fixture for palette-dependent tests would eliminate it — out of hotfix scope."
   },
   "notes": [
     "Hard rule '1-2 files per commit' held: 2/2/1 files; three atomic commits (task 2's named files both fit in one).",
@@ -54,6 +56,7 @@
     "Eviction Array.Copy inside TimelineLayoutCache.EvictFirst remains O(n) per single eviction; low-water batching amortizes it in practice (rare pass, memmove-speed). A bulk prefix-remove EvictFirst(count) in the cache would make it strictly O(1) amortized per append — deferred as future work to keep this commit within the file budget.",
     "Full Harbor.slnx build after all commits: 0 errors, 180 warnings (all pre-existing, none from touched files).",
     "Whole-solution dotnet test not run per AGENTS.md MTP warning; verification was per focused project.",
+    "Second verification pass (2026-08-28) confirms all three fixes still hold and adds the PanelFx flake finding above — sprint remains complete, no code changes needed.",
     "Sprint-chain heartbeat in .kilo-docs/sprints/ui-v2-hotfix/status.json is tool-managed and left uncommitted — not a deliverable."
   ]
 }
