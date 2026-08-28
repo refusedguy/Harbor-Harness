@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.NickConsoleEx</PackageId>
+    <Description>Harbor TUI — wrapper backend over nickprotop/ConsoleEx (SharpConsoleUI): an ITuiRenderer adapter that hosts a Harbor chat window on SharpConsoleUI's window system. ADDITIVE backend — does not replace Harbor.Tui.CellForge.</Description>
+    <PackageTags>harbor;tui;sharpconsoleui;wrapper</PackageTags>
+    <!--
+      SharpConsoleUI (vendored submodule external/ConsoleEx) requires
+      Spectre.Console >= 0.55.0, while the Harbor root pins 0.54.0 for
+      RazorConsole compat (see Directory.Packages.props). This project carries
+      the vendored graph's own Spectre resolution: transitive pinning to the
+      root's 0.54.0 would trigger NU1109 here. Consumers (Harbor.Hosting) must
+      reference this project conditionally (HarborWithNickConsoleEx=true) and
+      the flag is mutually exclusive with HarborWithSpectreTui for the same
+      reason — enforced at restore time by NuGet with a loud NU1109.
+    -->
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>
