@@ -2,16 +2,6 @@
 set -uo pipefail
 
 LOCK_FILE="/tmp/harbor-sprint-chain.lock"
-if [[ -f "$LOCK_FILE" ]]; then
-  LOCK_PID=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-  if [[ -n "$LOCK_PID" ]] && kill -0 "$LOCK_PID" 2>/dev/null; then
-    echo "[chain] $(date '+%d.%m %H:%M:%S') SKIP: another instance running (pid=$LOCK_PID)" >> "$LOG_FILE"
-    exit 0
-  fi
-fi
-echo $$ > "$LOCK_FILE"
-trap 'rm -f "$LOCK_FILE"' EXIT
-set -m
 
 REPO="${1:-.}"
 cd "$REPO"
