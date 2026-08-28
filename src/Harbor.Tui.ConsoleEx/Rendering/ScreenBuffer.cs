@@ -243,7 +243,9 @@ public sealed class ScreenBuffer
         }
     }
 
-    /// <summary>Recolors one narrow cell without touching its rune.</summary>
+    /// <summary>Recolors one cell without touching its rune. Wide clusters are
+    /// restyled as a whole — lead plus tail — so animation blends never leave
+    /// half-colored glyphs; a write landing on a tail is routed to its lead.</summary>
     public bool SetStyleAt(int x, int y, in CellStyle style)
     {
         if ((uint)x >= (uint)Cols || (uint)y >= (uint)Rows)
@@ -252,14 +254,20 @@ public sealed class ScreenBuffer
         }
 
         ref Cell cell = ref At(x, y);
-        if (cell.Width != Cell.Wide)
+        if (cell.Width == Cell.WSkip)
         {
-            cell = Cell.From(new Rune(cell.Rune), style);
-            _rowHashValid[y] = false;
-            return true;
+            return x > 0 && SetStyleAt(x - 1, y, in style);
         }
 
-        return false;
+        cell = Cell.From(new Rune(cell.Rune), style);
+        if (cell.Width == Cell.Wide && x + 1 < Cols)
+        {
+            // Styled tail: rune 0 resolves to width 0 (WSkip) via Cell.From.
+            At(x + 1, y) = Cell.From(new Rune(0), style);
+        }
+
+        _rowHashValid[y] = false;
+        return true;
     }
 
     // ── Row hashes (§2.3) ──────────────────────────────────────────────────

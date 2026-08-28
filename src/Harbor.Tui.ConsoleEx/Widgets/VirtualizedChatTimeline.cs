@@ -25,6 +25,10 @@ public sealed class VirtualizedChatTimeline
     /// <summary>Byte budget for resident history; oldest blocks evict first.</summary>
     public long BudgetBytes { get; set; } = TimelineRing.DefaultBudgetBytes;
 
+    /// <summary>Running sum of resident block budgets — O(1) append bookkeeping
+    /// instead of a per-append O(n) rescan; kept exact on append/replace/evict.</summary>
+    private long _budgetUsed;
+
     /// <summary>
     /// Enables HDS v1 entrance motion for blocks appended while the feed is
     /// already visible: slide-up (<see cref="PanelFx.SlideMs" />) plus fade
@@ -76,27 +80,34 @@ public sealed class VirtualizedChatTimeline
 
         _cache.Append(block);
         MarkEntrance(block);
+        _budgetUsed += Math.Max(0, block.BudgetBytes);
         _dirtyGeometry = true;
 
-        if (BudgetBytes > 0)
-        {
-            long used = 0;
-            for (int i = 0; i < _cache.Count; i++)
-            {
-                used += Math.Max(0, _cache.BlockAt(i).BudgetBytes);
-            }
+        EvictOverBudget();
+        MarkLastDirty();
+    }
 
-            while (_cache.Count > 1 && used > BudgetBytes)
-            {
-                var evicted = _cache.BlockAt(0);
-                _ = _cache.EvictFirst();
-                _ = _entranceStarts.Remove(evicted);
-                used -= Math.Max(0, evicted.BudgetBytes);
-                _dirtyGeometry = true;
-            }
+    /// <summary>Amortized eviction: triggered only when the running total
+    /// crosses the budget, then evicts down to the 75 % low-water mark in one
+    /// pass — streaming pays the pass once per ~¼ budget of new bytes instead
+    /// of rescanning and evicting on every append (O(n²) during token storms).</summary>
+    private void EvictOverBudget()
+    {
+        long budget = BudgetBytes;
+        if (budget <= 0 || _budgetUsed <= budget)
+        {
+            return;
         }
 
-        MarkLastDirty();
+        long lowWater = budget - (budget >> 2);
+        while (_cache.Count > 1 && _budgetUsed > lowWater)
+        {
+            var evicted = _cache.BlockAt(0);
+            _budgetUsed -= Math.Min(_budgetUsed, Math.Max(0, evicted.BudgetBytes));
+            _ = _cache.EvictFirst();
+            _ = _entranceStarts.Remove(evicted);
+            _dirtyGeometry = true;
+        }
     }
 
     /// <summary>Swaps the live-stream placeholder for its committed form.</summary>
@@ -108,6 +119,8 @@ public sealed class VirtualizedChatTimeline
             return;
         }
 
+        var old = _cache.BlockAt(_cache.Count - 1);
+        _budgetUsed += Math.Max(0, block.BudgetBytes) - Math.Max(0, old.BudgetBytes);
         _cache.Replace(_cache.Count - 1, block);
         _dirtyGeometry = true;
         MarkLastDirty();
@@ -125,6 +138,7 @@ public sealed class VirtualizedChatTimeline
         {
             if (ReferenceEquals(_cache.BlockAt(i), existing))
             {
+                _budgetUsed += Math.Max(0, replacement.BudgetBytes) - Math.Max(0, existing.BudgetBytes);
                 _cache.Replace(i, replacement);
                 _dirtyGeometry = true;
                 _cache.MarkHeightsDirty(i);
