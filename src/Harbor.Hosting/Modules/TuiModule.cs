@@ -1,5 +1,7 @@
 using Harbor.Abstractions.Tui;
+using Harbor.Hosting.Rendering;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -78,7 +80,6 @@ internal static class TuiModule
                 return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                     sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>());
             }
-
 #if HARBOR_WITH_NICK_CONSOLE_EX
             // Phase 3: ADDITIVE backend — nickprotop/ConsoleEx window system.
             if (tui == "nickconsoleex")
@@ -112,6 +113,37 @@ internal static class TuiModule
             };
 #endif
         });
+
+        // Phase 6.3: hot-swappable renderer runtime. The pipeline owns the
+        // published renderer (CAS-gated swaps), restores the UiState snapshot
+        // into the new backend, and disposes the old one exactly once. The
+        // ITuiRenderer registration above stays the startup backend; the
+        // pipeline publishes it as the initial slot.
+        services.AddSingleton<IRendererPipeline>(sp =>
+        {
+            var pipeline = new RendererPipeline(
+                sp.GetRequiredService<ITuiRenderer>(),
+                tui.ToLowerInvariant(),
+                sp.GetService<UiStore>(),
+                sp.GetRequiredService<ILogger<RendererPipeline>>());
+
+            pipeline.Register("cellforge", () => new Harbor.Tui.CellForge.CellForgeTuiRenderer(
+                sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>()));
+            pipeline.Register("ansi", () => new Harbor.Tui.AnsiPlain.AnsiTuiRenderer(
+                sp.GetRequiredService<ILogger<Harbor.Tui.AnsiPlain.AnsiTuiRenderer>>()));
+            pipeline.Register("plain", () => new Harbor.Tui.AnsiPlain.PlainTuiRenderer());
+#if HARBOR_WITH_NICK_CONSOLE_EX
+            pipeline.Register("nickconsoleex", () => new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
+                sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>()));
+#endif
+            return pipeline;
+        });
+
+        services.AddSingleton<RuntimeRendererSwapMiddleware>(sp => new RuntimeRendererSwapMiddleware(
+            sp.GetRequiredService<IRendererPipeline>(),
+            ctx.Options.RuntimeSwappable,
+            sp.GetRequiredService<ILogger<RuntimeRendererSwapMiddleware>>()));
+
         return services;
     }
 }
