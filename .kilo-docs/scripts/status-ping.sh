@@ -21,4 +21,4 @@ for status_file in "$SPRINTS_DIR"/*/status.json; do
 done
 
 # output single line for cron job
-echo "sprint=$STATUS_LINE head=$(git rev-parse --short HEAD) dirty=$(git status --porcelain | grep -vc '.nuke/' )"
+echo "sprint=$STATUS_LINE head=$(git rev-parse --short HEAD) dirty=$(git status --porcelain | grep -c -v -E "^\.nuke/" || true )"
