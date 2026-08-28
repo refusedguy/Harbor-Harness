@@ -1,0 +1,3 @@
+[submodule "external/ConsoleEx"]
+	path = external/ConsoleEx
+	url = https://github.com/nickprotop/ConsoleEx
