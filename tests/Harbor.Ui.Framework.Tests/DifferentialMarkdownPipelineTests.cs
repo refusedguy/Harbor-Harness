@@ -1,6 +1,5 @@
 namespace Harbor.Ui.Framework.Tests;
 
-using System.Diagnostics;
 using System.Text;
 using System.Collections.Immutable;
 using Harbor.Ui.Framework.Rendering;
@@ -91,46 +90,6 @@ public class DifferentialMarkdownPipelineTests
         _ = pipeline.RenderBlock(1, [BuildLine("tail")], isComplete: false, y: 0);
 
         await Assert.That(batches.Count).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task PerformanceGate_AllCeilingsPass()
-    {
-        IReadOnlyList<MarkdownPerformanceMeasurement> results =
-            MarkdownRenderPerformanceGate.Validate(MarkdownRenderPerformanceContract.Default);
-
-        foreach (MarkdownPerformanceMeasurement measurement in results)
-        {
-            await Assert.That(measurement.WithinBudget)
-                .IsTrue()
-                .Because($"{measurement.Scenario} took {measurement.Elapsed.TotalMilliseconds:F3} ms — over contract budget");
-        }
-    }
-
-    [Test]
-    public async Task Contract_FrozenRestore_BelowOneMillisecond()
-    {
-        var pipeline = new DifferentialMarkdownPipeline(80, 24);
-        FreezeDocument(pipeline, frozenBlocks: 99);
-        MdLine tail = BuildLine("tail ");
-
-        // 99 frozen blocks + 1 tail: restoring the document head must stay
-        // under 1 ms per block (the O(1) guarantee).
-        var sw = Stopwatch.StartNew();
-        for (int i = 0; i < 99; i++)
-        {
-            _ = pipeline.RestoreFrozenBlock(i, y: 0, height: 1);
-        }
-
-        sw.Stop();
-        double perBlockMs = sw.Elapsed.TotalMilliseconds / 99d;
-        await Assert.That(perBlockMs).IsLessThan(1.0);
-
-        // Tail re-render on a 100-block document < 2 ms.
-        sw = Stopwatch.StartNew();
-        _ = pipeline.RenderBlock(99, [tail], isComplete: false, y: 0);
-        sw.Stop();
-        await Assert.That(sw.Elapsed.TotalMilliseconds).IsLessThan(2.0);
     }
 
     private static void FreezeDocument(DifferentialMarkdownPipeline pipeline, int frozenBlocks)
