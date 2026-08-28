@@ -243,6 +243,12 @@ public static class UiReducer
     public static (UiState State, TuiEffect Effect) Update(UiState state, UiMsg msg) => msg switch
     {
         UiMsg.Agent a => (Reduce(state, a.Event), new TuiEffect.None()),
+        UiMsg.AgentStarted => (state with { Status = "running", IsAgentRunning = true }, new TuiEffect.None()),
+        UiMsg.AgentEnded ae => (OnAgentEnded(state, ae), new TuiEffect.None()),
+        UiMsg.StatusChanged sc => (state with { Status = sc.Status }, new TuiEffect.None()),
+        UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
+        UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
+        UiMsg.Quit => (state with { ShouldQuit = true }, new TuiEffect.None()),
         UiMsg.KeyInput k => UpdateKey(state, k),
         UiMsg.Viewport v => (state with { ViewportLines = v.HistoryHeight }, new TuiEffect.None()),
         UiMsg.HistoryMeasured t => (state with { TotalLines = t.TotalLines }, new TuiEffect.None()),
@@ -263,6 +269,24 @@ public static class UiReducer
         }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
+
+    /// <summary>
+    ///     Run-end fold for the effect host. A null <see cref="UiMsg.AgentEnded.Status" />
+    ///     keeps a previously set <c>"error"</c> status (so a failed run does not get
+    ///     repainted as a clean finish by the host's finally block) and otherwise
+    ///     falls back to <c>"idle"</c>.
+    /// </summary>
+    private static UiState OnAgentEnded(UiState state, UiMsg.AgentEnded msg)
+    {
+        var next = state with
+        {
+            IsAgentRunning = false,
+            IsStreaming = false,
+            Active = ActiveMessage.Empty,
+            Status = msg.Status ?? (state.Status == "error" ? "error" : "idle")
+        };
+        return msg.Error is null ? next : next.AddLine(ChatRole.Error, msg.Error);
+    }
 
     // ── panel transitions (pure; no IPanelRegistry dependency) ────────────
 

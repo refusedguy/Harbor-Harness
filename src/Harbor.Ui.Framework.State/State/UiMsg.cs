@@ -14,6 +14,38 @@ public abstract record UiMsg
     /// <param name="Event">The agent event to reduce.</param>
     public sealed record Agent(AgentEvent Event) : UiMsg;
 
+    /// <summary>
+    ///     Effect-host bookkeeping: a prompt run is starting (the loop's own
+    ///     <see cref="AgentStartEvent" /> may not have arrived yet). Marks the store
+    ///     running so user input is suppressed during the run.
+    /// </summary>
+    public sealed record AgentStarted : UiMsg;
+
+    /// <summary>
+    ///     Effect-host bookkeeping: the prompt run ended. <paramref name="Status" />
+    ///     overrides the status bar explicitly; when null, an existing
+    ///     <c>"error"</c> status is preserved and everything else falls back to
+    ///     <c>"idle"</c>. <paramref name="Error" /> appends an error transcript line.
+    /// </summary>
+    public sealed record AgentEnded(string? Status = null, string? Error = null) : UiMsg;
+
+    /// <summary>Direct status-bar text update (e.g. <c>"idle"</c> after an abort).</summary>
+    /// <param name="Status">The new status-bar text.</param>
+    public sealed record StatusChanged(string Status) : UiMsg;
+
+    /// <summary>
+    ///     Host-side transcript line (slash handler errors, session-switch notes).
+    ///     The TEA replacement for ad-hoc <c>Transition(s => s.AddLine(...))</c> folds.
+    /// </summary>
+    public sealed record AppendLine(ChatRole Role, string Text, string? ToolCallId = null) : UiMsg;
+
+    /// <summary>Replace the input box text programmatically (e.g. renderer prefill).</summary>
+    /// <param name="Text">The new input text.</param>
+    public sealed record InputText(string Text) : UiMsg;
+
+    /// <summary>Host asks the app to quit (<see cref="UiState.ShouldQuit" />).</summary>
+    public sealed record Quit : UiMsg;
+
     /// <summary>A resolved UI action with the originating key (key-input path).</summary>
     /// <param name="Action">The abstract action (already mapped from a key by the renderer).</param>
     /// <param name="Pressed">The original key, for any action that needs the character/modifiers.</param>
