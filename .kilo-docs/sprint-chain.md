@@ -25,3 +25,4 @@ sprint|Renderer Moat|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-m
 sprint|OSC Expansion|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/osc-expansion/prompt.md
 sprint|Design System Product|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/design-system-product/prompt.md
 sprint|Mascot as Brand|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/mascot-brand/prompt.md
+sprint|Demo GIF|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/demo-gif/prompt.md

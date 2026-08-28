@@ -1,0 +1,9 @@
+{
+  "state": "queued",
+  "sprint": "demo-gif",
+  "model": "openrouter/z-ai/glm-5.3-flash",
+  "prompt": ".kilo-docs/sprints/demo-gif/prompt.md",
+  "head": "",
+  "commits": 0,
+  "created_at": "2026-08-28T19:00:00Z"
+}
