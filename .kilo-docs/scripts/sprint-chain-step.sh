@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
-set +m
+set -m
 
 REPO="${1:-.}"
 cd "$REPO"
