@@ -48,6 +48,14 @@ public sealed class StatusViewModel
         Cost = costUsd is null ? null : "$" + costUsd.Value.ToString("0.####", CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Token-only pull feed (host polling <c>ITokenTracker.GetStats()</c>):
+    /// refreshes the token segment and PRESERVES any cost a richer source
+    /// already reported — pull feeds must never erase event-pushed cost.</summary>
+    public void SetUsage(long inputTokens, long outputTokens)
+    {
+        Tokens = FormatCount(inputTokens) + "↑ " + FormatCount(outputTokens) + "↓";
+    }
+
     /// <summary>Fills <paramref name="workspace"/> left-to-right; returns segment count.</summary>
     public int BuildSegments(Span<StatusSeg> workspace)
     {

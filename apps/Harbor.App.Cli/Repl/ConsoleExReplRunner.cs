@@ -5,6 +5,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Tui.ConsoleEx.Rendering;
@@ -71,6 +72,15 @@ internal sealed class ConsoleExReplRunner(
     private readonly CommandPaletteView _palette = new();
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
+
+    /// <summary>Token-usage source (null when the host has no tracker —
+    /// feed no-ops, the status bar just stays without token segments).</summary>
+    private readonly ITokenTracker? _tokens = services.GetService<ITokenTracker>();
+
+    /// <summary>Render-thread pull latch: <see cref="RunPromptAsync"/> flags it
+    /// after a turn, the frame loop drains it before painting so all status /
+    /// sidebar mutation stays on one thread.</summary>
+    private volatile bool _usageDirty;
 
     /// <summary>Palette commit hand-off: OnCommit is sync (inside HandleKey),
     /// execution happens on the frame loop in <see cref="HandleKeyAsync" />.</summary>
@@ -190,6 +200,12 @@ internal sealed class ConsoleExReplRunner(
             }
 
             bridge.Tick(Environment.TickCount64);
+            if (_usageDirty)
+            {
+                _usageDirty = false;
+                RefreshUsage();
+            }
+
             await RenderFrameAsync(ct).ConfigureAwait(false);
             ArmSpinner(spinnerTimer);
 
@@ -567,7 +583,29 @@ internal sealed class ConsoleExReplRunner(
                 _status.Mode = StatusBarMode.Idle;
             }
 
+            _usageDirty = true;
             _wake.Writer.TryWrite(null);
+        }
+    }
+
+    /// <summary>Token/cost footer + sidebar mirror (sprint UI-V2 P6.2/P4):
+    /// pulls cumulative usage from the tracker on the render thread. Cost is
+    /// preserved when a richer source already reported it.</summary>
+    private void RefreshUsage()
+    {
+        if (_tokens?.GetStats() is not { } stats)
+        {
+            return;
+        }
+
+        _status.SetUsage(stats.TotalInputTokens, stats.TotalOutputTokens);
+        if (screen.Sidebar is { } sidebar)
+        {
+            sidebar.State = sidebar.State with
+            {
+                TokensIn = stats.TotalInputTokens,
+                TokensOut = stats.TotalOutputTokens,
+            };
         }
     }
 
@@ -584,6 +622,19 @@ internal sealed class ConsoleExReplRunner(
         string model = configResult.IsSuccess ? configResult.Value.EffectiveModel : "?";
         bridge.AppendSystemLine("Harbor — modular AI coding agent [consoleex]");
         bridge.AppendSystemLine($"model: {model} | ввод — текст, /help — команды, Ctrl+C×2 — выход");
+
+        // Sidebar context (sprint UI-V2 P4): session identity + model before
+        // the first frame paints; tokens arrive via RefreshUsage per turn.
+        if (screen.Sidebar is { } sidebar)
+        {
+            sidebar.State = sidebar.State with
+            {
+                SessionTitle = sessionModel.Title,
+                SessionId = sessionModel.Id,
+                Model = model,
+            };
+        }
+
         _wake.Writer.TryWrite(null);
     }
 
