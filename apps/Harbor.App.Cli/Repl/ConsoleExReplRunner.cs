@@ -188,7 +188,18 @@ internal sealed class ConsoleExReplRunner(
         finally
         {
             _themeWatcher?.Dispose();
-            await backend.WriteAsync(Utf8(SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                await backend.WriteAsync(Utf8(SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // Terminal may already be gone (kill, closed pipe). The mode
+                // restore below must still run — a skipped Restore() leaves
+                // Windows consoles stuck in raw/VT mode after exit.
+                logger.LogWarning(ex, "Leave-alt-screen write failed — restoring console mode anyway");
+            }
+
             modeController.Restore();
             inputSource.Dispose();
         }
