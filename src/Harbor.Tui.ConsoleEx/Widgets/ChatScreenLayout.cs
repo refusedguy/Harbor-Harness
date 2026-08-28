@@ -70,14 +70,26 @@ public sealed class ComposerPanel : Panel
 
 /// <summary>
 /// Status footer leaf: spinner glyph (mode-driven rhythm) + fitted
-/// <see cref="StatusViewModel"/> segments on one row.
+/// <see cref="StatusViewModel"/> segments on one row, with an ambient
+/// <see cref="AmbientMascot"/> framed at the trailing edge on wide terminals
+/// (sprint UI-V2 P6.1 — the mascot is ambient, so it never competes with
+/// status segments on narrow rows).
 /// </summary>
 public sealed class StatusPanel : Panel
 {
+    private const int MascotGap = 2;
+
+    /// <summary>Minimum row width for the mascot (frame + gap + usable segments).</summary>
+    public const int MascotMinWidth = 100;
+
+    /// <summary>Idle uptime (ms) before the mascot dozes off.</summary>
+    public const int MascotSleepAfterMs = 60_000;
+
     private readonly StatusSeg[] _compose = new StatusSeg[12];
     private byte _lastMode;
     private bool _modeSeen;
     private long _modeFlipTick = long.MinValue;
+    private long _lastActiveMs = Environment.TickCount64;
 
     public StatusPanel(string id, StatusViewModel status, int minWidth, int minHeight, int priority = int.MaxValue)
         : base(id, new Size(minWidth, minHeight), priority)
@@ -112,6 +124,11 @@ public sealed class StatusPanel : Panel
             _modeFlipTick = Tick;
         }
 
+        if (Vm.Mode != StatusBarMode.Idle)
+        {
+            _lastActiveMs = Environment.TickCount64;
+        }
+
         int n = Vm.BuildSegments(_compose.AsSpan(1));
         int total = n + 1;
 
@@ -132,9 +149,19 @@ public sealed class StatusPanel : Panel
             _compose[0] = new StatusSeg(SpinnerStrip.FrameString(Tick, rhythm.Value), StatusAccent.Accent, FixedPriority: true);
         }
 
+        string? mascot = Rect.Width >= MascotMinWidth
+            ? AmbientMascot.Frame(Tick, MascotFor(Vm.Mode))
+            : null;
+
         Span<StatusSeg> span = _compose;
-        int kept = StatusBarLayout.Fit(span[..total], Rect.Width - 1);
+        int budget = Rect.Width - 1 - (mascot is null ? 0 : AmbientMascot.Width(mascot) + MascotGap);
+        int kept = StatusBarLayout.Fit(span[..total], budget);
         StatusBarWidget.Paint(buffer, new Rect(Rect.X, Rect.Y, Rect.Width, 1), span[..kept]);
+
+        if (mascot is not null)
+        {
+            buffer.SetText(Rect.Right - mascot.Length, Rect.Y, mascot, ChatPalette.Dim);
+        }
 
         long flip = _modeFlipTick;
         if (flip != long.MinValue)
@@ -158,6 +185,16 @@ public sealed class StatusPanel : Panel
             _compose[i] = _compose[i + 1];
         }
     }
+
+    /// <summary>Mascot mood mirrors the status mode; long idle dozes off to sleep.</summary>
+    private MascotMood MascotFor(StatusBarMode mode) => mode switch
+    {
+        StatusBarMode.Running or StatusBarMode.Compacting => MascotMood.Working,
+        StatusBarMode.AwaitingApproval => MascotMood.Awaiting,
+        _ => Environment.TickCount64 - _lastActiveMs > MascotSleepAfterMs
+            ? MascotMood.Sleeping
+            : MascotMood.Idle,
+    };
 }
 
 /// <summary>
