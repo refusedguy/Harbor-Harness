@@ -12,10 +12,10 @@
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T17:36:56Z"
+    "last_heartbeat": "2026-08-28T17:43:00Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T17:40:00Z",
+    "verified_at": "2026-08-28T17:43:00Z",
     "build": "dotnet build Harbor.slnx — 0 errors (warnings only in pre-existing E2E/UI test projects)",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — sub-agent executed in own session (3 messages), final answer returned to parent output",
     "note": "Re-verified at final head 689789c (dev): build 0 errors / 0 warnings; sprint-critical suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Ipc.Tests 81/0/4, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Tools.Builtin.Tests 171/0/2, Harbor.Architecture.Tests 47/0/0 — counts match the table below exactly. Pre-existing source-gen gap (anonymous session Metadata type in JsonlSessionStore) logs a non-fatal failure during sub-run metadata persist; storage is out of sprint scope."
