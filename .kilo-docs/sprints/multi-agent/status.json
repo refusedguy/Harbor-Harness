@@ -3,22 +3,22 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "c8ffd6c",
+  "head": "12da510",
   "commits": 18,
   "created_at": "2026-08-28T14:38:08Z",
-  "last_activity": "2026-08-28T17:44:56Z",
+  "last_activity": "2026-08-28T19:42:00Z",
   "progress": {
     "current_task": "",
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T19:27:00Z"
+    "last_heartbeat": "2026-08-28T19:42:00Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T23:20:00Z",
-    "build": "dotnet build Harbor.slnx -c Release — 0 errors (192 warnings, all pre-existing in test projects)",
+    "verified_at": "2026-08-28T19:42:00Z",
+    "build": "dotnet build Harbor.slnx -c Release at head 12da510 — 0 errors (31 warnings, all pre-existing in test projects)",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — live re-run with provider key: sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context",
-    "note": "Full fresh 10-suite re-run at head c8ffd6c (Release, per-project MTP): 876/0/6 — Application 150/0/0, Core 92/0/0, Ipc 81/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 171/0/2 (legacy no-runner path), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Code-state spot checks at c8ffd6c: TaskTool wired via ToolsCatalog.cs:92 + RegistriesModule.cs:45 (DeferredSubAgentRunner→SubAgentRunner), UiStore.Transition private (UiStore.cs:125), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:83), 5 behaviors in Agents/Pipeline/, regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + PipelineBehaviorTests present."
+    "note": "Full fresh 10-suite re-run at head 12da510 (Release, per-project MTP): 876/0/6 — Application 150/0/0, Core 92/0/0, Ipc 81/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 171/0/2 (legacy no-runner path), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Code-state spot checks at 12da510: TaskTool wired via ToolsCatalog.cs + RegistriesModule.cs:45 (DeferredSubAgentRunner→SubAgentRunner), UiStore.Transition private (UiStore.cs:125), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:83), 5 behaviors in Agents/Pipeline/, regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + PipelineBehaviorTests present."
   },
   "base": "1919af7",
   "tests": {
