@@ -35,7 +35,7 @@ kill_duplicates() {
   done
 }
 
-dirty_count() { git status --porcelain | grep -vc '.nuke/' ; }
+dirty_count() { git status --porcelain | grep -vc '^\(M \.\kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)' ; }
 
 update_status() {
   local sprint="$1" state="$2"
@@ -114,7 +114,7 @@ while IFS= read -r line; do
   NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo "$BASE_SHA")"
   DIRTY=$(dirty_count)
   LAST_MSG=$(git log -1 --format="%s" 2>/dev/null || echo "")
-  KILO_ALIVE=$(pgrep -fc '[k]ilo run' 2>/dev/null || echo 0)
+  KILO_ALIVE=$(pgrep -af '\.kilo run' 2>/dev/null | wc -l || echo 0)
 
   if [[ "$NEW_SHA" != "$BASE_SHA" ]] && [[ "$DIRTY" -eq 0 ]] && [[ "$KILO_ALIVE" -eq 0 ]]; then
     log "✓ $SPRINT finished: $(git rev-list --count "$BASE_SHA"..HEAD) new commits"
