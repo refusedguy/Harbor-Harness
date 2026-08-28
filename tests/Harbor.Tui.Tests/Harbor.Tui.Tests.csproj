@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
