@@ -3,7 +3,7 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "b985328",
+  "head": "c8ffd6c",
   "commits": 18,
   "created_at": "2026-08-28T14:38:08Z",
   "last_activity": "2026-08-28T17:44:56Z",
@@ -12,13 +12,13 @@
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T18:12:57Z"
+    "last_heartbeat": "2026-08-28T18:17:58Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T23:07:00Z",
-    "build": "dotnet build Harbor.slnx — 0 errors (warnings only in pre-existing E2E/UI test projects)",
+    "verified_at": "2026-08-28T23:20:00Z",
+    "build": "dotnet build Harbor.slnx -c Release — 0 errors (192 warnings, all pre-existing in test projects)",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — live re-run with provider key: sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context",
-    "note": "Re-verified at head cae081d (dev; code identical to b985328, docs-only commits after): Release build 0 errors; sprint-critical suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Ipc.Tests 81/0/4 (4 known self-skips). Prior full 10-suite run: 876/0/6 at b985328. Live E2E confirmed earlier (real provider call, sub-agent tool execution). Code-state spot checks: UiStore.Transition private (UiStore.cs:125), EventBroadcaster/InProcessHarborClient use ConcurrentDictionary _turnsBySession, 5 behaviors + AgentPipeline present, regression tests present (TuiEffectHostConcurrencyTests, PipelineBehaviorTests)."
+    "note": "Full fresh 10-suite re-run at head c8ffd6c (Release, per-project MTP): 876/0/6 — Application 150/0/0, Core 92/0/0, Ipc 81/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 171/0/2 (legacy no-runner path), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Code-state spot checks at c8ffd6c: TaskTool wired via ToolsCatalog.cs:92 + RegistriesModule.cs:45 (DeferredSubAgentRunner→SubAgentRunner), UiStore.Transition private (UiStore.cs:125), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:83), 5 behaviors in Agents/Pipeline/, regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + PipelineBehaviorTests present."
   },
   "base": "1919af7",
   "tests": {
