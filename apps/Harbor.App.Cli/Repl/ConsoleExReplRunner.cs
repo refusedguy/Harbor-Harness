@@ -96,6 +96,19 @@ internal sealed class ConsoleExReplRunner(
     private char? _quickSwitchChord;
 
     private int _timelineViewportH;
+
+    /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
+    /// the actual retry; the UI mirrors only the expected backoff window —
+    /// attempt counter, wall-clock start of the latest transient error, and
+    /// the exponential window it should burn down over.</summary>
+    private int _retryAttempt;
+    private long _retryErrorMs = -1;
+    private int _retryTotalSec;
+
+    /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
+    /// kept in sync for the countdown's «n/3» display only.</summary>
+    private const int MaxStreamRetries = 3;
+
     // -1, NOT long.MinValue: TickCount64 is non-negative uptime ms, so
     // `now − long.MinValue` overflows to a NEGATIVE value and the first idle
     // Ctrl+C would satisfy the quit-window check immediately (CE-5 PTY-suite
@@ -202,10 +215,12 @@ internal sealed class ConsoleExReplRunner(
             // Agent events replay onto the render thread in arrival order.
             while (_events.Reader.TryRead(out var agentEvt))
             {
+                ObserveRetrySignal(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
             }
 
             bridge.Tick(Environment.TickCount64);
+            UpdateRetryCountdown();
             if (_usageDirty)
             {
                 _usageDirty = false;
@@ -509,8 +524,14 @@ internal sealed class ConsoleExReplRunner(
             return;
         }
 
-        var loaded = await services.GetRequiredService<ISessionStore>()
-            .GetAsync(sessionId, ct).ConfigureAwait(false);
+        var store = services.GetService<ISessionStore>();
+        if (store is null)
+        {
+            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
+            return;
+        }
+
+        var loaded = await store.GetAsync(sessionId, ct).ConfigureAwait(false);
         if (loaded.IsFailure)
         {
             bridge.AppendSystemLine("! " + loaded.Error);
@@ -615,6 +636,7 @@ internal sealed class ConsoleExReplRunner(
 
         // Fresh abort token per prompt (no-op guard while a run is active).
         agent.ResetAbortSource();
+        ResetRetryCountdown();
         bridge.NotifyLocalUserMessage();
         screen.Timeline.Timeline.Append(new UserBlock(text));
         _status.Mode = StatusBarMode.Running;
@@ -656,6 +678,7 @@ internal sealed class ConsoleExReplRunner(
             if (!agent.State.IsRunning)
             {
                 _status.Mode = StatusBarMode.Idle;
+                ResetRetryCountdown();
             }
 
             _usageDirty = true;
@@ -682,6 +705,51 @@ internal sealed class ConsoleExReplRunner(
                 TokensOut = stats.TotalOutputTokens,
             };
         }
+    }
+
+    /// <summary>Retry countdown feed (sprint UI-V2 P6.3): a transient provider
+    /// error while the agent runs starts the UI-side backoff clock. The agent
+    /// loop retries on its own policy; the status bar only mirrors the window.</summary>
+    private void ObserveRetrySignal(AgentEvent evt)
+    {
+        if (evt is MessageUpdateEvent { LlmEvent: ErrorEvent { Kind: var kind } }
+            && ProviderErrors.IsTransient(kind)
+            && agent.State.IsRunning)
+        {
+            _retryAttempt++;
+            _retryErrorMs = Environment.TickCount64;
+            _retryTotalSec = RetryCountdown.BackoffSeconds(Math.Min(_retryAttempt, MaxStreamRetries));
+            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, _retryTotalSec);
+        }
+    }
+
+    /// <summary>Recomputes the countdown from wall clock each frame; expires
+    /// silently at zero (no timer — frames already fire on the 80 ms heartbeat).</summary>
+    private void UpdateRetryCountdown()
+    {
+        if (_retryErrorMs < 0)
+        {
+            return;
+        }
+
+        int remaining = _retryTotalSec - (int)((Environment.TickCount64 - _retryErrorMs) / 1000);
+        if (remaining > 0)
+        {
+            _status.Retry = RetryCountdown.Line(_retryAttempt, MaxStreamRetries, remaining);
+        }
+        else
+        {
+            _retryErrorMs = -1;
+            _status.Retry = null;
+        }
+    }
+
+    /// <summary>Clears the retry window — new prompt or finished turn.</summary>
+    private void ResetRetryCountdown()
+    {
+        _retryAttempt = 0;
+        _retryErrorMs = -1;
+        _status.Retry = null;
     }
 
     /// <summary>True when the failure text represents a cancelled/aborted run
@@ -711,15 +779,15 @@ internal sealed class ConsoleExReplRunner(
         }
 
         // Quick-switch slots (sprint UI-V2 P2.2): the store lists most-recent-
-        // first, so slot 1 gets the hottest session — the current one first.
-        var recent = await services.GetRequiredService<ISessionStore>()
-            .ListAsync(ct: CancellationToken.None).ConfigureAwait(false);
-        if (recent.IsSuccess)
+        // first, so slot 1 gets the hottest session. Best-effort — hosts
+        // without a session store (smoke tests) just skip slot seeding.
+        if (services.GetService<ISessionStore>() is { } store
+            && await store.ListAsync(ct: CancellationToken.None).ConfigureAwait(false) is { IsSuccess: true } listed)
         {
-            var list = recent.Value;
-            for (int i = 0; i < list.Count && i < QuickSwitchSlots.Count; i++)
+            var recent = listed.Value;
+            for (int i = 0; i < recent.Count && i < QuickSwitchSlots.Count; i++)
             {
-                _quickSwitch.Assign(i + 1, list[i].Id);
+                _quickSwitch.Assign(i + 1, recent[i].Id);
             }
         }
 

@@ -20,6 +20,12 @@ public sealed class StatusViewModel
     /// <summary>Token totals text ("12.3k↑ 4.5k↓") — second from the right.</summary>
     public string? Tokens { get; set; }
 
+    /// <summary>Retry countdown line ("retry 2/3 in 4s") — a fixed-priority
+    /// Warning segment while the host feeds it; null when no retry is pending.
+    /// Set once per change (precomputed via <see cref="RetryCountdown.Line" />),
+    /// never interpolated per frame.</summary>
+    public string? Retry { get; set; }
+
     public StatusBarMode Mode { get; set; }
 
     public int? ContextTokensUsed { get; private set; }
@@ -73,6 +79,11 @@ public sealed class StatusViewModel
             case StatusBarMode.Compacting:
                 workspace[n++] = new StatusSeg("compacting…", StatusAccent.Dim, FixedPriority: true);
                 break;
+        }
+
+        if (!string.IsNullOrEmpty(Retry))
+        {
+            workspace[n++] = new StatusSeg(Retry!, StatusAccent.Warning, FixedPriority: true);
         }
 
         if (TryGetContextTokens(out var used))
