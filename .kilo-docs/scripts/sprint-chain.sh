@@ -1,7 +1,21 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-LOCK_FILE="/tmp/harbor-sprint-chain.lock"
+HEARTBEAT_PID=""
+STATUS_SERVER_PID=""
+
+cleanup() {
+  if [[ -n "$HEARTBEAT_PID" ]] && kill -0 "$HEARTBEAT_PID" 2>/dev/null; then
+    kill "$HEARTBEAT_PID" 2>/dev/null || true
+    wait "$HEARTBEAT_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$STATUS_SERVER_PID" ]] && kill -0 "$STATUS_SERVER_PID" 2>/dev/null; then
+    kill "$STATUS_SERVER_PID" 2>/dev/null || true
+    wait "$STATUS_SERVER_PID" 2>/dev/null || true
+  fi
+  rm -f /tmp/harbor-sprint-chain.lock
+}
+trap cleanup EXIT
 
 REPO="${1:-.}"
 cd "$REPO"
@@ -35,7 +49,7 @@ kill_duplicates() {
   done
 }
 
-dirty_count() { git status --porcelain | grep -vc '^\(M \.\kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)' ; }
+dirty_count() { git status --porcelain | grep -vc '^\(M \.kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)' ; }
 
 update_status() {
   local sprint="$1" state="$2"
@@ -50,14 +64,107 @@ update_status() {
   fi
 }
 
+update_progress() {
+  local sprint="$1" current_task="$2" tasks_done="$3" tasks_total="$4" eta_min="$5"
+  local status_file=".kilo-docs/sprints/$sprint/status.json"
+  if [[ -f "$status_file" ]]; then
+    local tmp
+    tmp=$(mktemp)
+    jq --arg task "$current_task" \
+       --argjson done "$tasks_done" \
+       --argjson total "$tasks_total" \
+       --argjson eta "$eta_min" \
+       --arg last "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+       '.progress.current_task = $task | .progress.tasks_done = $done | .progress.tasks_total = $total | .progress.eta_minutes = $eta | .progress.last_heartbeat = $last' \
+       "$status_file" > "$tmp" && mv "$tmp" "$status_file"
+  fi
+}
+
+health_check() {
+  log "=== health check ==="
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log "FATAL: not a git repo"
+    exit 1
+  fi
+  local dirty
+  dirty=$(git status --porcelain | grep -vc '^\(M \.kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)')
+  if [[ "$dirty" -gt 0 ]]; then
+    log "WARN: dirty tree ($dirty files), cleaning..."
+    git reset --hard HEAD
+    git clean -fd
+  fi
+  local kn
+  kn=$(pgrep -af '\.kilo run' 2>/dev/null | wc -l || echo 0)
+  if [[ "$kn" -gt 0 ]]; then
+    log "WARN: $kn kilo processes alive, killing..."
+    pkill -9 -f '\.kilo run' 2>/dev/null || true
+    sleep 2
+  fi
+  log "health check passed"
+}
+
+start_heartbeat() {
+  local sprint="$1"
+  (
+    while true; do
+      sleep 30
+      local status_file=".kilo-docs/sprints/$sprint/status.json"
+      if [[ -f "$status_file" ]]; then
+        local tmp
+        tmp=$(mktemp)
+        jq --arg last "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+           '.progress.last_heartbeat = $last' \
+           "$status_file" > "$tmp" && mv "$tmp" "$status_file"
+      fi
+    done
+  ) &
+  HEARTBEAT_PID=$!
+}
+
+start_status_server() {
+  (
+    cd .kilo-docs || exit 1
+    python3 -m http.server 4321 >/dev/null 2>&1
+  ) &
+  STATUS_SERVER_PID=$!
+  log "status server started at http://localhost:4321/ (pid=$STATUS_SERVER_PID)"
+}
+
+estimate_validation() {
+  local sprint="$1"
+  local sprint_dir=".kilo-docs/sprints/$sprint"
+
+  if [[ ! -f "$sprint_dir/estimate.json" ]]; then
+    log "WARN: missing estimate.json for $sprint"
+    return 1
+  fi
+
+  if ! jq empty "$sprint_dir/estimate.json" 2>/dev/null; then
+    log "WARN: invalid estimate.json for $sprint"
+    return 1
+  fi
+
+  local confidence
+  confidence=$(jq -r '.confidence // 0' "$sprint_dir/estimate.json" 2>/dev/null || echo 0)
+  if [[ "$(echo "$confidence < 0.7" | bc -l 2>/dev/null || echo 0)" == "1" ]]; then
+    log "ALERT: confidence=$confidence < 0.7, stopping chain for human review"
+    return 2
+  fi
+
+  return 0
+}
+
 # ── preflight ────────────────────────────────────────────────────────
 kill_duplicates
+health_check
 log "=== sprint-chain starting ==="
 log "repo: $REPO"
 log "branch: $(git branch --show-current)"
 log "HEAD: $(git rev-parse --short HEAD)"
 log "last commits:"
 git log --oneline -5 --no-decorate 2>/dev/null | while read -r line; do log "  $line"; done
+
+start_status_server
 
 # ── parse chain and run sprints ──────────────────────────────────────
 while IFS= read -r line; do
@@ -79,13 +186,11 @@ while IFS= read -r line; do
     continue
   fi
 
-  # skip if prompt file missing
   if [[ ! -f "$PROMPT" ]]; then
     log "WARN: prompt file missing for $SPRINT: $PROMPT"
     continue
   fi
 
-  # check status.json — skip if already done
   STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
   if [[ -f "$STATUS_FILE" ]]; then
     STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "")
@@ -102,21 +207,41 @@ while IFS= read -r line; do
 
   log "=== starting sprint: $SPRINT (model=$MODEL, prompt=$PROMPT) ==="
   update_status "$SPRINT" "running"
+  start_heartbeat "$SPRINT"
+
+  # ensure progress block exists
+  if [[ -f "$STATUS_FILE" ]]; then
+    tmp=$(mktemp)
+    jq '.progress //= {"current_task":"","tasks_done":0,"tasks_total":0,"eta_minutes":0,"last_heartbeat":""}' "$STATUS_FILE" > "$tmp" && mv "$tmp" "$STATUS_FILE"
+  fi
 
   # use sprint-local base from status.json, not stale global
-  SPRINT_BASE="$(jq -r '.base // empty' ".kilo-docs/sprints/$SPRINT/status.json" 2>/dev/null || true)"
+  SPRINT_BASE="$(jq -r '.base // empty' "$STATUS_FILE" 2>/dev/null || true)"
   if [[ -z "$SPRINT_BASE" ]]; then
     SPRINT_BASE="$(git rev-parse --short HEAD)"
     tmp=$(mktemp)
-    jq --arg base "$SPRINT_BASE" '.base = $base' ".kilo-docs/sprints/$SPRINT/status.json" > "$tmp" && mv "$tmp" ".kilo-docs/sprints/$SPRINT/status.json"
+    jq --arg base "$SPRINT_BASE" '.base = $base' "$STATUS_FILE" > "$tmp" && mv "$tmp" "$STATUS_FILE"
   fi
 
-  # run dispatch, capture output
-  DISPATCH_OUT=$(bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$SPRINT_BASE" -M 360 -i 300 2>&1) || true
-  RC=${PIPESTATUS[0]:-$?}
+  # run dispatch with restart policy
+  RESTARTS=0
+  MAX_RESTARTS=3
+  RC=1
+  while [[ $RESTARTS -lt $MAX_RESTARTS ]]; do
+    log "dispatch attempt $((RESTARTS+1)) for $SPRINT"
+    DISPATCH_OUT=$(bash "$DISPATCH" -f "$PROMPT" -m "$MODEL" -r "$(pwd)" -b "$SPRINT_BASE" -M 360 -i 300 2>&1) || true
+    RC=${PIPESTATUS[0]:-$?}
+    echo "$DISPATCH_OUT" | tail -30 | while read -r line; do log "  [kilo] $line"; done
 
-  # log dispatch output
-  echo "$DISPATCH_OUT" | tail -30 | while read -r line; do log "  [kilo] $line"; done
+    if [[ "$RC" -eq 143 ]]; then
+      RESTARTS=$((RESTARTS+1))
+      BACKOFF=$((60 * RESTARTS))
+      log "WARN: dispatch rc=143, restarting in ${BACKOFF}s (attempt $RESTARTS/$MAX_RESTARTS)"
+      sleep "$BACKOFF"
+      continue
+    fi
+    break
+  done
 
   # verify finish
   NEW_SHA="$(git rev-parse HEAD 2>/dev/null || echo "$SPRINT_BASE")"
@@ -126,15 +251,24 @@ while IFS= read -r line; do
 
   if [[ "$NEW_SHA" != "$SPRINT_BASE" ]] && [[ "$DIRTY" -eq 0 ]] && [[ "$KILO_ALIVE" -eq 0 ]]; then
     log "✓ $SPRINT finished: $(git rev-list --count "$SPRINT_BASE"..HEAD) new commits"
+
+    EST_RC=0
+    estimate_validation "$SPRINT" || EST_RC=$?
+
+    if [[ $EST_RC -eq 2 ]]; then
+      log "STOP: confidence too low, human review required"
+      update_status "$SPRINT" "failed"
+      exit 2
+    fi
+
     update_status "$SPRINT" "done"
     BASE_SHA="$NEW_SHA"
-    
-    # move prompt to done/
+
     if [[ -d ".kilo-docs/sprints/$SPRINT/done" ]]; then
       log "→ $SPRINT marked done"
     fi
   else
-    log "⚠ $SPRINT did not finish cleanly (RC=$RC, head_changed=$([ "$NEW_SHA" != "$BASE_SHA" ] && echo yes || echo no), dirty=$DIRTY, kilo_alive=$KILO_ALIVE)"
+    log "⚠ $SPRINT did not finish cleanly (RC=$RC, head_changed=$([ "$NEW_SHA" != "$SPRINT_BASE" ] && echo yes || echo no), dirty=$DIRTY, kilo_alive=$KILO_ALIVE)"
     update_status "$SPRINT" "failed"
   fi
 
@@ -143,7 +277,6 @@ while IFS= read -r line; do
   git log --oneline -3 --no-decorate 2>/dev/null | while read -r l; do log "  $l"; done
 
   kill_duplicates
-
 done < "$CHAIN_FILE"
 
 # ── final push ───────────────────────────────────────────────────────
