@@ -37,6 +37,14 @@ public readonly struct Cell : IEquatable<Cell>
     /// <summary>Invisible tail half that follows a wide lead cell.</summary>
     public static Cell WideTail { get; } = new(0, 0, 0, 0, WSkip);
 
+    /// <summary>
+    ///     Rebuilds a cell from its raw packed fields — the cell-diff protocol
+    ///     codec round-trip path (renderer-unification Phase 6.2). Width is
+    ///     preserved verbatim, unlike <see cref="Cell.From"/> which derives it.
+    /// </summary>
+    public static Cell FromRaw(int rune, uint fg, uint bg, ushort flags, byte width) =>
+        new(rune, fg, bg, flags, width);
+
     public static Cell From(Rune rune, in CellStyle style) => new(
         rune.Value,
         style.Fg.Value,
