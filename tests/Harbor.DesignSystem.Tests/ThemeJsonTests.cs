@@ -78,8 +78,25 @@ public class ThemeJsonTests
     public async Task Parse_TrailingCommas_Accepted()
     {
         var result = ThemeJson.Parse("""{ "accent": "#123456", }""", HarborTheme.HarborDark);
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Theme.Accent).IsEqualTo(new RgbColor(0x12, 0x34, 0x56));
+    }
+
+    [Test]
+    public async Task Parse_JsonComments_Accepted()
+    {
+        string json = """
+            {
+              // my favorite accent
+              "name": "commented",
+              "accent": "#123456", // inline note
+            }
+            """;
+
+        var result = ThemeJson.Parse(json, HarborTheme.HarborDark);
 
         await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Theme.Name).IsEqualTo("commented");
         await Assert.That(result.Theme.Accent).IsEqualTo(new RgbColor(0x12, 0x34, 0x56));
     }
 

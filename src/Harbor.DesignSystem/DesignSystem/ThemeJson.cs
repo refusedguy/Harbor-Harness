@@ -65,6 +65,7 @@ internal sealed record ThemeDto(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
     AllowTrailingCommas = true,
+    ReadCommentHandling = JsonCommentHandling.Skip,
     WriteIndented = true)]
 [JsonSerializable(typeof(ThemeDto))]
 internal sealed partial class ThemeJsonContext : JsonSerializerContext;
