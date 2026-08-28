@@ -183,6 +183,21 @@
   Whole-solution <code>dotnet test</code> не использовался (MTP). Архитектурные тесты
   (47, включая NetArchTest-матрицу слоёв) — зелёные.
 </p>
+<p class="sub">
+  Re-верификация на head <span class="sha">3db6942</span> (свежая сессия, 29.08.2026):
+  Release build — 0 errors; полный пер-проектный прогон 10 suites —
+  <b>882 passed / 0 failed / 6 skipped</b> (все rc=0, счёт идентичен базовому).
+  Приёмочные критерии подтверждены на месте: (1) live E2E
+  <code>harbor run task agent=explore "find all .cs files"</code> — sub-agent
+  реально выполняется в собственной сессии <span class="sha">f2460532…</span>
+  (7 сообщений, включая tool-calls), финальный отчёт возвращён в родительский чат,
+  exit=0; (2) <code>.Transition(</code> — 0 вызовов вне класса, регрессионный тест
+  <code>TuiEffectHostConcurrencyTests</code> (2 параллельных PromptAsync,
+  изоляция ошибок) зелёный; (3) <code>_currentTurn</code> отсутствует в src/,
+  <code>BroadcasterTurnIsolationTests</code> (два interleaved run'а, каждый TurnEnd
+  несёт свой turn) зелёный; (4) 14 изолированных тестов behaviors
+  (<code>PipelineBehaviorTests</code>) зелёные.
+</p>
 
 <h2>Коммиты</h2>
 <table>

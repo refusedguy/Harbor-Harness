@@ -3,23 +3,23 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "f83bf53",
-  "commits": 18,
+  "head": "3db6942",
+  "commits": 53,
   "created_at": "2026-08-28T14:38:08Z",
-  "last_activity": "2026-08-29T02:10:00+05:00",
+  "last_activity": "2026-08-29T03:20:00+05:00",
   "progress": {
     "current_task": "",
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-29T02:10:00+05:00"
+    "last_heartbeat": "2026-08-29T03:20:00+05:00"
   },
   "verification": {
-    "verified_at": "2026-08-29T02:10:00+05:00",
-    "build": "dotnet build Harbor.slnx -c Release at head f83bf53 — 0 errors, 63s; 192 analyzer warnings all pre-existing in tests/samples/bench projects, 0 in sprint-touched src/ code (Harbor.Application, Harbor.Ipc.Server, Harbor.Ui.Framework.State, Harbor.Tools.Builtin)",
-    "e2e": "harbor run task agent=explore \"find all .cs files\" — live run with provider key (prior session): sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context; CLI verb + SubAgentRunner wiring re-confirmed at b43ad82 (ToolsCatalog.cs:91, RegistriesModule.cs:45-53, TaskRunRunner.cs)",
-    "note": "Fresh full 10-suite re-run at head 9da02ca (Release, per-project MTP): 882/0/6 — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 173/0/2 (env-dependent: MissingRg + UnresolvableHost fail-closed), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Independent re-verification (fresh session): code-state spot checks re-done at 9da02ca — TaskTool wired via ToolsCatalog.cs:92 + RegistriesModule.cs:45-56 (DeferredSubAgentRunner→SubAgentRunner), CLI verb 'run task' usage smoke-tested live (live E2E sub-run not re-run — no provider key in this environment; prior live run claimed sub-session 42a2639e), UiStore.Transition private (UiStore.cs:124, zero external .Transition( callers), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:82, no _currentTurn left), AgentLoop _pipeline.HandleAsync (AgentLoop.cs:121) with 5 behaviors in Agents/Pipeline/ (Logging, PermissionCheck, Compaction, SteeringDrain, MaxSteps), regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + BroadcasterTurnIsolationTests + PipelineBehaviorTests present and green.",
-    "reverify": "Re-verification at head f83bf53 (fresh session 2026-08-29): Release build 0 errors; 5 sprint-critical suites re-run per-project — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Tools.Builtin 173/0/2 (env-dependent skips) — 0 failures, counts identical to the 10-suite baseline; code-state spot checks re-confirmed (TaskTool → ISubAgentRunner wiring, UiStore.Transition private, EventBroadcaster _turnsBySession, 5 behaviors in Agents/Pipeline/); broken stray watcher artifact .kilo-docs/docs/sprint-report-20260829-0122.html (unexpanded $() placeholders, non-deliverable) removed."
+    "verified_at": "2026-08-29T03:20:00+05:00",
+    "build": "dotnet build Harbor.slnx -c Release at head 3db6942 — 0 errors; 192 analyzer warnings all pre-existing in tests/samples/bench projects, 0 in sprint-touched src/ code",
+    "e2e": "harbor run task agent=explore \"find all .cs files\" — LIVE RUN at head 3db6942 (this session): sub-agent executed in own session f246053222be4445997af4c7685d20e4 (7 messages incl. tool calls), final report returned to parent output, exit=0",
+    "note": "Fresh full 10-suite re-run at head 3db6942 (Release, per-project MTP): 882/0/6 — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 173/0/2 (env-dependent: MissingRg + UnresolvableHost fail-closed), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. All 10 suites rc=0.",
+    "reverify": "Re-verification at head 3db6942 (fresh session 2026-08-29): Release build 0 errors; 10 suites re-run per-project, all rc=0 — 882/0/6, counts identical to baseline. Acceptance re-proven live: (1) run task agent=explore executed a real sub-run in session f2460532… with parent-bound output (exit 0); (2) zero .Transition( callers outside the class, TuiEffectHostConcurrencyTests green; (3) no _currentTurn in src/, BroadcasterTurnIsolationTests green; (4) PipelineBehaviorTests 14 isolated tests green. Deliverables refreshed: status.json + report.html at .kilo-docs/sprints/multi-agent/."
   },
   "base": "1919af7",
   "tests": {
