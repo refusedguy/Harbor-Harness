@@ -97,6 +97,7 @@ public sealed class LayoutTree
 {
     private readonly Dictionary<string, Panel> _panels = [];
     private readonly Dictionary<string, SpringFx> _ratioSprings = [];
+    private readonly Dictionary<string, SpringFx> _minWidthSprings = [];
     private SplitNode? _root;
     private uint _capsVer = 1;
 
@@ -130,6 +131,7 @@ public sealed class LayoutTree
     public void Remove(string panelId)
     {
         _ratioSprings.Remove(panelId);
+        _minWidthSprings.Remove(panelId);
         if (_root?.Leaf?.Id == panelId)
         {
             _panels.Remove(panelId);
@@ -165,13 +167,70 @@ public sealed class LayoutTree
         _capsVer++;
     }
 
+    /// <summary>
+    /// Springs the horizontal minimum width of a leaf panel (HDS v1
+    /// panel-resize motion). Complements <see cref="AnimateRatio" /> for
+    /// show/hide transitions the ratio alone cannot express: while the
+    /// sidebar's fixed 42-column minimum pins it, hide must glide the
+    /// minimum to 0 (with the ratio to 1) so the solver narrows the panel
+    /// across frames instead of binary-collapsing it. Each <see cref="Solve" />
+    /// advances the spring one frame while unsettled — the effective leaf
+    /// minimum then comes from the spring position, not the immutable
+    /// <c>Min</c>. Width-only: vertical (row) minimums are never animated.
+    /// </summary>
+    public void AnimateMinWidth(string panelId, int target)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(target);
+        if (!_panels.ContainsKey(panelId))
+        {
+            throw new KeyNotFoundException($"panel '{panelId}' not found");
+        }
+
+        if (!_minWidthSprings.TryGetValue(panelId, out var spring))
+        {
+            spring = new SpringFx(_panels[panelId].Min.Width);
+            _minWidthSprings[panelId] = spring;
+        }
+
+        spring.Retarget(target);
+        _capsVer++;
+    }
+
+    /// <summary>
+    /// True while any spring (ratio or min-width) is still in flight — hosts
+    /// use it to keep frames flowing until the resize motion settles.
+    /// </summary>
+    public bool IsAnimating
+    {
+        get
+        {
+            foreach (var spring in _ratioSprings.Values)
+            {
+                if (!spring.Settled)
+                {
+                    return true;
+                }
+            }
+
+            foreach (var spring in _minWidthSprings.Values)
+            {
+                if (!spring.Settled)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Resolves every panel rect for the given viewport. Cached.</summary>
     public void Solve(int width, int height)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         ArgumentOutOfRangeException.ThrowIfNegative(height);
 
-        bool animating = AdvanceRatioSprings();
+        bool animating = AdvanceSprings();
         if (!animating && _cacheKey == (width, height, _capsVer))
         {
             ApplyCached();
@@ -244,9 +303,9 @@ public sealed class LayoutTree
         }
     }
 
-    private bool AdvanceRatioSprings()
+    private bool AdvanceSprings()
     {
-        if (_ratioSprings.Count == 0)
+        if (_ratioSprings.Count == 0 && _minWidthSprings.Count == 0)
         {
             return false;
         }
@@ -261,6 +320,12 @@ public sealed class LayoutTree
                 node.Ratio = (float)position;
                 anyUnsettled |= !spring.Settled;
             }
+        }
+
+        foreach (var spring in _minWidthSprings.Values)
+        {
+            spring.Step();
+            anyUnsettled |= !spring.Settled;
         }
 
         return anyUnsettled;
@@ -281,6 +346,23 @@ public sealed class LayoutTree
         return FindSplitWithAChild(node.A, id) ?? FindSplitWithAChild(node.B, id);
     }
 
+    /// <summary>
+    /// Leaf minimum along a split axis, honoring an active min-width spring:
+    /// the spring position replaces the panel's immutable base width while an
+    /// entry exists (settled at the base value it is a no-op). Split subtrees
+    /// keep their summed static minimum — springs target direct leaves only.
+    /// </summary>
+    private int EffectiveMinAlong(SplitNode node, SplitDir dir)
+    {
+        if (dir == SplitDir.Horizontal && node.Leaf is not null
+            && _minWidthSprings.TryGetValue(node.Leaf.Id, out var spring))
+        {
+            return Math.Max(0, (int)Math.Round(spring.Position));
+        }
+
+        return node.MinAlong(dir);
+    }
+
     private Rect SolveNode(SplitNode node, Rect avail)
     {
         if (node.Leaf is not null)
@@ -294,14 +376,16 @@ public sealed class LayoutTree
         int gap = Math.Min(node.GapSize, total);
         int usable = total - gap;
 
-        int minA = node.A!.MinAlong(node.Dir);
-        int minB = node.B!.MinAlong(node.Dir);
+        SplitNode childA = node.A!;
+        SplitNode childB = node.B!;
+        int minA = EffectiveMinAlong(childA, node.Dir);
+        int minB = EffectiveMinAlong(childB, node.Dir);
 
         // Collapse: when children cannot both fit, sacrifice the lower priority.
         if (usable < minA + minB)
         {
             var winner = PickWinner(node);
-            var loser = ReferenceEquals(winner, node.A) ? node.B : node.A;
+            var loser = ReferenceEquals(winner, childA) ? childB : childA;
             CollapseAll(loser);
             return SolveNode(winner, avail);
         }
