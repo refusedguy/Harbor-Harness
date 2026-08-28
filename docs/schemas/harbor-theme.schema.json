@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harbor-sh.github.io/harbor/schemas/harbor-theme.schema.json",
+  "title": "Harbor HDS v1 Theme",
+  "description": "Marketplace format for Harbor terminal/desktop/web themes. Every color slot is optional — omitted slots merge over the active theme, so an override file can tweak two accents without redefining the catalog. Colors accept #RGB and #RRGGBB hex (leading # optional). Unknown properties load but are flagged as lint warnings; text/background contrast below WCAG AA 4.5:1 is also a lint warning, never a load failure.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Theme name shown in the switcher. Defaults to 'custom'.",
+      "minLength": 1,
+      "maxLength": 64,
+      "examples": ["harbor-dark", "sunset", "my-warm-edit"]
+    },
+    "accent": { "$ref": "#/$defs/hex", "description": "Primary actions, active states, user-prompt prefix (dark reference: #39BAE6)." },
+    "success": { "$ref": "#/$defs/hex", "description": "Tool success, approved gates (dark reference: #7FD962)." },
+    "warning": { "$ref": "#/$defs/hex", "description": "Pending approvals, running tools (dark reference: #FFB454)." },
+    "error": { "$ref": "#/$defs/hex", "description": "Tool errors, denied gates (dark reference: #FF6B6B)." },
+    "tool": { "$ref": "#/$defs/hex", "description": "Tool-call cards / role label (dark reference: #D2A6FF)." },
+    "system": { "$ref": "#/$defs/hex", "description": "System notices role accent (dark reference: #F29668)." },
+    "user": { "$ref": "#/$defs/hex", "description": "User-message role tone (dark reference: #B3B9C5)." },
+    "background": { "$ref": "#/$defs/hex", "description": "App background surface (dark reference: #0A0E14)." },
+    "panel": { "$ref": "#/$defs/hex", "description": "Elevated panel surface (dark reference: #0D1117)." },
+    "surface": { "$ref": "#/$defs/hex", "description": "Card body surface (dark reference: #131820)." },
+    "surface2": { "$ref": "#/$defs/hex", "description": "Hover/active surface (dark reference: #1A1F2B)." },
+    "border": { "$ref": "#/$defs/hex", "description": "Hairline separators (dark reference: #1F2430)." },
+    "muted": { "$ref": "#/$defs/hex", "description": "Secondary text, hints, gutters (dark reference: #5C6773)." },
+    "text": { "$ref": "#/$defs/hex", "description": "Primary text on the active surfaces (dark reference: #B3B9C5)." }
+  },
+  "$defs": {
+    "hex": {
+      "type": "string",
+      "pattern": "^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+      "examples": ["#39BAE6", "39BAE6", "#F0A"]
+    }
+  }
+}

@@ -9,6 +9,7 @@ namespace Harbor.DesignSystem.Tests;
 /// reference ZERO Harbor.* assemblies, so any consumer referencing only this
 /// package pulls in nothing else.
 /// </summary>
+[NotInParallel("terminal-color-palette")]
 public class StandalonePackageTests
 {
     [Test]

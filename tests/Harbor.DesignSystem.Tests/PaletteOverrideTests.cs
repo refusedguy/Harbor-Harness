@@ -3,8 +3,8 @@ using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.DesignSystem.Tests;
 
-/// <summary>Static palette state — serialized to avoid cross-test theme races.</summary>
-[NotInParallel]
+/// <summary>Static palette state — serialized (shared key) to avoid cross-test theme races.</summary>
+[NotInParallel("terminal-color-palette")]
 public class PaletteOverrideTests
 {
     [After(Test)]
