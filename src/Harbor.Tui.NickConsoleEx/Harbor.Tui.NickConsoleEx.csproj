@@ -7,16 +7,11 @@
     <Description>Harbor TUI — wrapper backend over nickprotop/ConsoleEx (SharpConsoleUI): an ITuiRenderer adapter that hosts a Harbor chat window on SharpConsoleUI's window system. ADDITIVE backend — does not replace Harbor.Tui.CellForge.</Description>
     <PackageTags>harbor;tui;sharpconsoleui;wrapper</PackageTags>
     <!--
-      SharpConsoleUI (vendored submodule external/ConsoleEx) requires
-      Spectre.Console >= 0.55.0, while the Harbor root pins 0.54.0 for
-      RazorConsole compat (see Directory.Packages.props). This project carries
-      the vendored graph's own Spectre resolution: transitive pinning to the
-      root's 0.54.0 would trigger NU1109 here. Consumers (Harbor.Hosting) must
-      reference this project conditionally (HarborWithNickConsoleEx=true) and
-      the flag is mutually exclusive with HarborWithSpectreTui for the same
-      reason — enforced at restore time by NuGet with a loud NU1109.
+      SharpConsoleUI (vendored submodule external/ConsoleEx) declares
+      Spectre.Console >= 0.55.0; external/Directory.Build.targets retargets
+      that edge to the Harbor root pin 0.54.0 (RazorConsole compat), so the
+      normal root CPM + transitive pinning apply unmodified here.
     -->
-    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup>
