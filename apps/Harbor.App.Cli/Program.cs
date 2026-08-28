@@ -130,6 +130,7 @@ public static class Program
         {
             "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
             "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
+            "run" => await RunRunAsync(args.Skip(1).ToArray()),
             "providers" => await RunListProvidersAsync(),
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
             "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
@@ -166,6 +167,28 @@ public static class Program
         _logger.LogInformation("Interactive mode ended with exit code {ExitCode}", exitCode);
         await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
+    }
+
+    /// <summary>
+    ///     <c>harbor run task agent=&lt;name&gt; &lt;prompt&gt;</c> — drive the sub-agent
+    ///     runner directly (same isolation path as the <c>task</c> tool) without a
+    ///     parent agent turn.
+    /// </summary>
+    private static async Task<int> RunRunAsync(string[] args)
+    {
+        string sub = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
+        if (sub != "task")
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor run task agent=<name> <prompt>
+                                      run task agent=explore "find all .cs files"
+                                    """);
+            return sub.Length == 0 ? 2 : 1;
+        }
+
+        using var host = HostBuilder.Build(args);
+        return await TaskRunRunner.RunAsync(Console.Out, Console.Error, host.Services, args.Skip(1).ToArray())
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -813,7 +836,7 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
 
                           --script <path>   Run a .js or .ts script at startup (registers tools via Harbor.registerTool).
                                             See docs/SCRIPTING.md for the full comparison of CS / Jint / SharpTS / MCP.
