@@ -13,7 +13,7 @@ using Harbor.Application.Configuration;
 using Harbor.Application.Onboarding;
 using Harbor.Ipc;
 using Harbor.Ipc.Protocol;
-using Harbor.Tui.Ansi;
+using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
