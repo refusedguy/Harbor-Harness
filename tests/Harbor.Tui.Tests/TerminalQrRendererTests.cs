@@ -1,4 +1,4 @@
-using Harbor.Tui.Ansi;
+using Harbor.Tui.AnsiPlain;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
