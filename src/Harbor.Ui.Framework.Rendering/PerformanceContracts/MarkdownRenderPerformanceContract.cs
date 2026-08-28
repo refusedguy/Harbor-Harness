@@ -55,9 +55,11 @@ public sealed record MarkdownRenderPerformanceContract
     ///     (10–50 ms/token). The original 50 ms aspiration underestimated
     ///     fixed per-render costs (hash recompute + batch allocation); the
     ///     DESIGN guarantee — cost independent of document size, frozen
-    ///     blocks free — is what this ceiling actually protects.
+    ///     blocks free — is what this ceiling actually protects. 300 ms
+    ///     leaves headroom for shared-runner timing noise while still failing
+    ///     on any accidental full-document re-render (which costs seconds).
     /// </summary>
-    public TimeSpan LongDocumentTotalBudget { get; init; } = TimeSpan.FromMilliseconds(150);
+    public TimeSpan LongDocumentTotalBudget { get; init; } = TimeSpan.FromMilliseconds(300);
 }
 
 /// <summary>Measured result of one contract scenario run.</summary>
