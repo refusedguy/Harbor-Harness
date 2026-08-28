@@ -41,20 +41,6 @@ public sealed class AppStore
         _uiStore.Dispatch(@event);
     }
 
-    /// <summary>
-    ///     Apply a pure transition function to the current <see cref="AppState" /> and
-    ///     write the result back through the underlying <see cref="UiStore" />.
-    /// </summary>
-    public void Transition(Func<AppState, AppState> transition)
-    {
-        _uiStore.Transition(uiState =>
-        {
-            var appState = AdaptForward(uiState);
-            var nextAppState = transition(appState);
-            return AdaptBack(nextAppState);
-        });
-    }
-
     /// <summary>Map <see cref="UiState" /> → <see cref="AppState" />.</summary>
     private static AppState AdaptForward(UiState uiState)
     {
@@ -87,32 +73,5 @@ public sealed class AppStore
             Chrome = null
         };
     }
-
-    /// <summary>Map <see cref="AppState" /> → <see cref="UiState" />.</summary>
-    private static UiState AdaptBack(AppState appState)
-    {
-        return new UiState
-        {
-            Lines = appState.Lines,
-            Active = appState.Active,
-            IsStreaming = appState.IsStreaming,
-            Status = appState.Status,
-            Cost = appState.Cost,
-            Model = appState.Model,
-            Provider = appState.Provider,
-            AgentName = appState.AgentName,
-            IsAgentRunning = appState.IsAgentRunning,
-            WasRunning = appState.WasRunning,
-            ShouldQuit = appState.ShouldQuit,
-            Input = appState.Input,
-            Focus = appState.Focus,
-            ScrollOffset = appState.ScrollOffset,
-            ViewportLines = appState.ViewportLines,
-            TotalLines = appState.TotalLines,
-            PanelStates = appState.PanelStates,
-            PanelSizes = appState.PanelSizes,
-            FocusedPanelId = appState.FocusedPanelId,
-            RegisteredPanelIds = appState.RegisteredPanelIds
-        };
-    }
 }
+

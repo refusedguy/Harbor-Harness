@@ -59,7 +59,7 @@ public sealed class TerminaTeaBridge : IDisposable
 
     /// <summary>Dispatch a synthesized system line.</summary>
     public void PushLine(string text) =>
-        Store.Transition(s => s.AddLine(ChatRole.System, text));
+        Store.Dispatch(new UiMsg.AppendLine(ChatRole.System, text));
 
     /// <summary>Enqueue a toast (auto-dismissed by the renderer after 4s).</summary>
     public void Toast(string message) => _toastQueue.Enqueue(message);
@@ -81,7 +81,7 @@ public sealed class TerminaTeaBridge : IDisposable
         }
         var view = new DiagnosticsView();
         foreach (string line in view.Render(DiagnosticsPanel, 10))
-            Store.Transition(s => s.AddLine(ChatRole.System, line));
+            Store.Dispatch(new UiMsg.AppendLine(ChatRole.System, line));
     }
 
     /// <summary>Submit a prompt through the TEA reducer (runs PromptAgent effect).</summary>
@@ -89,7 +89,7 @@ public sealed class TerminaTeaBridge : IDisposable
     {
         if (string.IsNullOrWhiteSpace(text))
             return;
-        Store.Transition(s => s.SetInput(s.Input.SetText(text)));
+        Store.Dispatch(new UiMsg.InputText(text));
         var effect = Store.Dispatch(new UiMsg.KeyInput(ChatAction.Submit, UiKey.ForChar('\r')));
         Effects.Run(effect);
     }
