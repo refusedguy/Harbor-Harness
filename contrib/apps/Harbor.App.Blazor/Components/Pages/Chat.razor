@@ -37,13 +37,13 @@
                   placeholder="Type a message…  (Enter = send, Shift+Enter = newline)"
                   rows="2"></textarea>
         <div style="display:flex;flex-direction:column;gap:8px;">
-            <button class="btn-primary" @onclick="Vm.SendAsync" disabled="@Vm.State.IsAgentRunning">
+            <button class="btn-primary spring-press" @onclick="Vm.SendAsync" disabled="@Vm.State.IsAgentRunning">
                 @(Vm.State.IsAgentRunning ? "…" : "Send")
             </button>
-            <button class="btn-secondary" @onclick="Vm.CancelAsync" disabled="@(!Vm.State.IsAgentRunning)">
+            <button class="btn-secondary spring-press" @onclick="Vm.CancelAsync" disabled="@(!Vm.State.IsAgentRunning)">
                 Cancel
             </button>
-            <button class="btn-secondary" @onclick="ClearLocal">Clear</button>
+            <button class="btn-secondary spring-press" @onclick="ClearLocal">Clear</button>
         </div>
     </div>
 </div>
