@@ -47,6 +47,6 @@ global using Harbor.Ipc.InProcess;
 global using Harbor.Ipc.Server;
 global using Harbor.Tools.Builtin;
 global using Harbor.Tools.Mcp;
-global using Harbor.Tui.Plain;
+global using Harbor.Tui.AnsiPlain;
 global using Harbor.Terminal.Abstractions;
 global using Harbor.Ui.Framework.Panels;
