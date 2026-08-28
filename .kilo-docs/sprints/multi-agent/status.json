@@ -12,13 +12,13 @@
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T18:03:27Z"
+    "last_heartbeat": "2026-08-28T18:07:57Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T23:05:00Z",
+    "verified_at": "2026-08-28T23:07:00Z",
     "build": "dotnet build Harbor.slnx — 0 errors (warnings only in pre-existing E2E/UI test projects)",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — live re-run with provider key: sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context",
-    "note": "Re-verified at head b985328 (dev): Release build 0 errors; all 10 suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Core.Tests 92/0/0, Harbor.Ipc.Tests 81/0/4, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Abstractions.Tests 53/0/0, Harbor.Tools.Builtin.Tests 171/0/2, Harbor.Architecture.Tests 47/0/0, Harbor.Hosting.Tests 10/0/0, Harbor.Tui.Tests 118/0/0, Harbor.App.Cli.Tests 78/0/0 — totals 876/0/6, matching the table below. Live E2E confirmed (real provider call, sub-agent tool execution). Code-state spot checks: UiStore.Transition private (UiStore.cs:125), EventBroadcaster/InProcessHarborClient use ConcurrentDictionary _turnsBySession, 5 behaviors + AgentPipeline present, regression tests present (TuiEffectHostConcurrencyTests, PipelineBehaviorTests)."
+    "note": "Re-verified at head cae081d (dev; code identical to b985328, docs-only commits after): Release build 0 errors; sprint-critical suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Ipc.Tests 81/0/4 (4 known self-skips). Prior full 10-suite run: 876/0/6 at b985328. Live E2E confirmed earlier (real provider call, sub-agent tool execution). Code-state spot checks: UiStore.Transition private (UiStore.cs:125), EventBroadcaster/InProcessHarborClient use ConcurrentDictionary _turnsBySession, 5 behaviors + AgentPipeline present, regression tests present (TuiEffectHostConcurrencyTests, PipelineBehaviorTests)."
   },
   "base": "1919af7",
   "tests": {
