@@ -75,8 +75,7 @@ public class FullLayerMatrixTests
         "Harbor.Desktop.Shared",
         "Harbor.Desktop.Animations",
         "Harbor.Tui.Notifications",
-        "Harbor.Tui.Plain",
-        "Harbor.Tui.Ansi",
+        "Harbor.Tui.AnsiPlain",
         "Harbor.Tui.CellForge",
         // Application
         "Harbor.Application",
@@ -202,9 +201,9 @@ public class FullLayerMatrixTests
             ["Harbor.DesignSystem", "Harbor.Ui.Framework.Projection"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
-        ["Harbor.Tui.Plain"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
-        ["Harbor.Tui.Ansi"] = new(Layer.Presentation,
+        // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
+        // styling flows through IEscapeCodeStrategy (Ansi / Null impls).
+        ["Harbor.Tui.AnsiPlain"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // CellForge owns its own input+render stack; reuses Presentation-state
         // streaming buffers (StreamingSync/ChunkedBuffer) and the shared
@@ -285,7 +284,7 @@ public class FullLayerMatrixTests
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             "Harbor.Storage.Jsonl", "Harbor.Storage.Memory", "Harbor.Storage.Sqlite",
-            "Harbor.Tui.Plain", "Harbor.Tui.Ansi",
+            "Harbor.Tui.AnsiPlain",
             "Harbor.Tui.CellForge",
             "Harbor.Providers.Ollama", "Harbor.Providers.OpenAiCompatible",
             "Harbor.Providers.Anthropic", "Harbor.Providers.OpenAI",
