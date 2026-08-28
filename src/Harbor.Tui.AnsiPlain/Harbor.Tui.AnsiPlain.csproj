@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Tui.AnsiPlain</PackageId>
+    <Description>Harbor TUI — unified streaming renderer for ANSI terminals and plain-text pipes/CI. One renderer, two escape-code strategies (ANSI SGR / none). AOT-compatible. Merges the former Harbor.Tui.Ansi and Harbor.Tui.Plain backends (renderer-unification sprint Phase 4).</Description>
+    <PackageTags>harbor;tui;ansi;plain</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>
