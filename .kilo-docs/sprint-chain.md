@@ -27,3 +27,4 @@ sprint|OSC Expansion|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/osc-expans
 sprint|Design System Product|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/design-system-product/prompt.md
 sprint|Mascot as Brand|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/mascot-brand/prompt.md
 sprint|Demo GIF|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/demo-gif/prompt.md
+sprint|CI/CD Maturity|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ci-cd-maturity/prompt.md
