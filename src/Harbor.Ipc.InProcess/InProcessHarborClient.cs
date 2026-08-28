@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
@@ -48,7 +49,14 @@ public sealed class InProcessHarborClient : IHarborClient
     private readonly IProviderRegistry _providers;
     private readonly ISessionStore _sessionStore;
     private readonly IToolRegistry _tools;
-    private int _currentTurn;
+    // Session-scoped turn tracking (multi-agent sprint, lockstep with the IPC
+    // EventBroadcaster): parallel agent runs each keep their own turn index, so
+    // emitted TurnEnd events can never carry another run's turn.
+    private readonly ConcurrentDictionary<string, int> _turnsBySession = new();
+
+    // Fallback owner for legacy events that carry no SessionId (parity with the
+    // IPC EventBroadcaster's active-run resolution).
+    private volatile string? _activeSessionId;
     private int _disposed;
     private TaskCompletionSource<bool>? _subscriptionReady;
 
@@ -258,8 +266,8 @@ public sealed class InProcessHarborClient : IHarborClient
             MessageEndEvent e => new HarborEvent.MessageEnd(e.Message),
             ToolExecutionStartEvent e => new HarborEvent.ToolStart(e.ToolCallId, e.ToolName),
             ToolExecutionEndEvent e => new HarborEvent.ToolEnd(e.ToolCallId, e.Result),
-            TurnStartEvent e => TrackTurnAndProject(e.TurnIndex),
-            TurnEndEvent => new HarborEvent.TurnEnd(_currentTurn),
+            TurnStartEvent e => TrackTurnAndProject(e),
+            TurnEndEvent e => new HarborEvent.TurnEnd(ResolveCurrentTurn(e.SessionId)),
             AgentEndEvent => null, // AgentEnded emitted separately by the agent runner hook
             AgentErrorEvent e => new HarborEvent.AgentError(e.Message),
             CompactionStartedEvent e => new HarborEvent.CompactionStarted(e.SessionId),
@@ -272,14 +280,31 @@ public sealed class InProcessHarborClient : IHarborClient
 
     private HarborEvent ResetTurnAndProject(string sessionId)
     {
-        _currentTurn = 0;
+        _activeSessionId = sessionId;
+        _turnsBySession[sessionId] = 0;
         return new HarborEvent.AgentStarted(sessionId);
     }
 
-    private HarborEvent TrackTurnAndProject(int turnIndex)
+    /// <summary>
+    ///     Store the turn index carried by the event (never re-derived) under its
+    ///     session; legacy emitters without a session id keep the previous
+    ///     single-run behavior by tracking against the last known session.
+    /// </summary>
+    private HarborEvent TrackTurnAndProject(TurnStartEvent e)
     {
-        _currentTurn = turnIndex;
-        return new HarborEvent.TurnStart(turnIndex);
+        string? session = e.SessionId ?? _activeSessionId;
+        if (session is not null)
+        {
+            _turnsBySession[session] = e.TurnIndex;
+        }
+
+        return new HarborEvent.TurnStart(e.TurnIndex);
+    }
+
+    private int ResolveCurrentTurn(string? sessionId)
+    {
+        string? session = sessionId ?? _activeSessionId;
+        return session is not null && _turnsBySession.TryGetValue(session, out int turn) ? turn : 0;
     }
 
     private static string ExtractDelta(LlmEvent llmEvent)
