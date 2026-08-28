@@ -3,7 +3,7 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "823194a",
+  "head": "b985328",
   "commits": 18,
   "created_at": "2026-08-28T14:38:08Z",
   "last_activity": "2026-08-28T17:44:56Z",
@@ -12,13 +12,13 @@
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T17:52:26Z"
+    "last_heartbeat": "2026-08-28T17:59:56Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T17:50:00Z",
+    "verified_at": "2026-08-28T23:05:00Z",
     "build": "dotnet build Harbor.slnx — 0 errors (warnings only in pre-existing E2E/UI test projects)",
-    "e2e": "harbor run task agent=explore \"find all .cs files\" — sub-agent executed in own session (3 messages), final answer returned to parent output",
-    "note": "Re-verified at head 823194a (dev, independent audit pass): build 0 errors / 0 warnings; code state confirmed for all 4 tasks (SubAgentRunner in RegistriesModule.cs:47 + TaskRunRunner CLI verb; UiStore.Transition private; EventBroadcaster/InProcessHarborClient _turnsBySession; 5 behaviors + AgentPipeline). Sprint-critical suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Ipc.Tests 81/0/4, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Tools.Builtin.Tests 171/0/2, Harbor.Architecture.Tests 47/0/0 — counts match the table below exactly. Live E2E (harbor run task agent=explore) stands from 689789c verification; no provider key in current env, CLI wiring verified at code level. Pre-existing source-gen gap (anonymous session Metadata type in JsonlSessionStore) logs a non-fatal failure during sub-run metadata persist; storage is out of sprint scope."
+    "e2e": "harbor run task agent=explore \"find all .cs files\" — live re-run with provider key: sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context",
+    "note": "Re-verified at head b985328 (dev): Release build 0 errors; all 10 suites re-run fresh (Release, per-project MTP) — Harbor.Application.Tests 150/0/0, Harbor.Core.Tests 92/0/0, Harbor.Ipc.Tests 81/0/4, Harbor.Ui.Framework.Tests 76/0/0, Harbor.Abstractions.Tests 53/0/0, Harbor.Tools.Builtin.Tests 171/0/2, Harbor.Architecture.Tests 47/0/0, Harbor.Hosting.Tests 10/0/0, Harbor.Tui.Tests 118/0/0, Harbor.App.Cli.Tests 78/0/0 — totals 876/0/6, matching the table below. Live E2E confirmed (real provider call, sub-agent tool execution). Code-state spot checks: UiStore.Transition private (UiStore.cs:125), EventBroadcaster/InProcessHarborClient use ConcurrentDictionary _turnsBySession, 5 behaviors + AgentPipeline present, regression tests present (TuiEffectHostConcurrencyTests, PipelineBehaviorTests)."
   },
   "base": "1919af7",
   "tests": {
