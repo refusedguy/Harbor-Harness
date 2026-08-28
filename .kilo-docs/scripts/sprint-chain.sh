@@ -49,11 +49,11 @@ kill_duplicates() {
   done
 }
 
-dirty_count() { git status --porcelain | grep -vc '^\(M \.kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)' ; }
+dirty_count() { local all; all=$(git status --porcelain | wc -l || true); local excluded; excluded=$(git status --porcelain | grep -E "^M \.kilo-docs/sprints/.*/status.json|\.nuke/" | wc -l || true); echo $((all - excluded)); }
 
 update_status() {
   local sprint="$1" state="$2"
-  local status_file=".kilo-docs/sprints/$sprint/status.json"
+  local status_file=".kilo-docs/sprints/${sprint,,}/status.json"
   if [[ -f "$status_file" ]]; then
     local tmp
     tmp=$(mktemp)
@@ -66,7 +66,7 @@ update_status() {
 
 update_progress() {
   local sprint="$1" current_task="$2" tasks_done="$3" tasks_total="$4" eta_min="$5"
-  local status_file=".kilo-docs/sprints/$sprint/status.json"
+  local status_file=".kilo-docs/sprints/${sprint,,}/status.json"
   if [[ -f "$status_file" ]]; then
     local tmp
     tmp=$(mktemp)
@@ -91,7 +91,7 @@ health_check() {
   if [[ "$dirty" -gt 0 ]]; then
     log "WARN: dirty tree ($dirty files), cleaning..."
     git reset --hard HEAD
-    git clean -fd
+    git clean -fd -e '.kilo-docs/sprints/' -e '.kilo-docs/docs/' || true
   fi
   local kn
   kn=$(pgrep -af '\.kilo run' 2>/dev/null | wc -l || echo 0)
@@ -108,7 +108,7 @@ start_heartbeat() {
   (
     while true; do
       sleep 30
-      local status_file=".kilo-docs/sprints/$sprint/status.json"
+      local status_file=".kilo-docs/sprints/${sprint,,}/status.json"
       if [[ -f "$status_file" ]]; then
         local tmp
         tmp=$(mktemp)
@@ -132,7 +132,7 @@ start_status_server() {
 
 estimate_validation() {
   local sprint="$1"
-  local sprint_dir=".kilo-docs/sprints/$sprint"
+  local sprint_dir=".kilo-docs/sprints/${sprint,,}"
 
   if [[ ! -f "$sprint_dir/estimate.json" ]]; then
     log "WARN: missing estimate.json for $sprint"
@@ -191,7 +191,7 @@ while IFS= read -r line; do
     continue
   fi
 
-  STATUS_FILE=".kilo-docs/sprints/$SPRINT/status.json"
+  STATUS_FILE=".kilo-docs/sprints/${SPRINT,,}/status.json"
   if [[ -f "$STATUS_FILE" ]]; then
     STATE=$(jq -r '.state' "$STATUS_FILE" 2>/dev/null || echo "")
     RETRIES=$(jq -r '.retries // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
@@ -264,7 +264,7 @@ while IFS= read -r line; do
     update_status "$SPRINT" "done"
     BASE_SHA="$NEW_SHA"
 
-    if [[ -d ".kilo-docs/sprints/$SPRINT/done" ]]; then
+    if [[ -d ".kilo-docs/sprints/${SPRINT,,}/done" ]]; then
       log "→ $SPRINT marked done"
     fi
   else
