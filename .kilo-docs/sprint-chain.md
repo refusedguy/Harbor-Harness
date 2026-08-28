@@ -9,11 +9,13 @@ sprint|NAME|MODEL|PROMPT_PATH
 - все поля обязательные
 - MODEL — полный ID с провайдером, без этого кило не стартует
 - PROMPT_PATH — путь к prompt.md относительно репо
+- NAME — без пробелов (lowercase-hyphen): из NAME строится путь .kilo-docs/sprints/<name>/status.json,
+  иначе диспетчер не находит status.json и не может пропустить выполненный спринт (re-dispatch loop)
 
 sprint|UI-FINAL|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-final/prompt.md
 sprint|UI-V2|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-v2/prompt.md
 sprint|UI-V2-HOTFIX|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ui-v2-hotfix/prompt.md
-sprint|Renderer Unification|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-unification/prompt.md
+sprint|renderer-unification|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-unification/prompt.md
 sprint|Multi-Agent|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/multi-agent/prompt.md
 sprint|Performance|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/performance/prompt.md
 sprint|IDE Integration|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ide-integration/prompt.md
