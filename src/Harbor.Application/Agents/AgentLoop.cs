@@ -1,6 +1,7 @@
 using System.Globalization;
 using Harbor.Diagnostics;
 using Harbor.Abstractions.Sessions;
+using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Resilience;
 using Harbor.Application.Resources;
 using Harbor.Application.Sessions;
@@ -36,6 +37,9 @@ public sealed class AgentLoop : IAgentLoop
     private readonly ITokenTracker _tokenTracker;
     private readonly IToolDispatcher _toolDispatcher;
     private readonly IToolRegistry _tools;
+    private readonly AgentPipeline _pipeline;
+    private readonly CompactionBehavior _compactionBehavior;
+    private readonly SteeringDrainBehavior _steering;
     private readonly IMcpRegistry? _mcpRegistry;
     private readonly IMetrics _metrics;
     private readonly ITracer _tracer;
@@ -85,6 +89,17 @@ public sealed class AgentLoop : IAgentLoop
         // not be lent out under a foreign category (S6672).
         _toolDispatcher = toolDispatcher
             ?? new ToolDispatcher(tools, permissions, eventBus, NullLogger<ToolDispatcher>.Instance);
+        // §3.5 pipeline: run-level cross-cutting concerns are middleware over the
+        // whole run; per-turn behaviors (compaction, steering, max steps) are
+        // extracted classes the core loop calls each turn. Behaviors share the
+        // loop's logger so log categories stay identical to pre-extraction.
+        _pipeline = new AgentPipeline(
+        [
+            new LoggingBehavior(logger),
+            new PermissionCheckBehavior(logger),
+        ]);
+        _compactionBehavior = new CompactionBehavior(compaction, tokenTracker, eventBus, _metrics, logger);
+        _steering = new SteeringDrainBehavior(tokenTracker, logger);
         // ROP-D Z3: MCP server instructions flow into the system prompt when a
         // registry is composed in; tests without one keep the section absent.
         _mcpRegistry = mcpRegistry;
@@ -99,15 +114,27 @@ public sealed class AgentLoop : IAgentLoop
     /// <param name="agent">The agent definition driving the loop.</param>
     /// <param name="ct">Cancellation token used to abort the run at the next safe boundary.</param>
     /// <returns>Success on normal completion, or failure with an error message.</returns>
-    public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+    public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
     {
+        // §3.5: the run enters the behavior pipeline; the original turn loop is the
+        // terminal handler (RunCoreAsync).
+        return _pipeline.HandleAsync(new PromptRequest(session, agent), RunCoreAsync, ct);
+    }
+
+    /// <summary>
+    ///     Terminal pipeline handler: the turn loop itself — prompt → LLM stream →
+    ///     tool execution → next turn, repeating until no tool calls are emitted,
+    ///     the step budget is exhausted, or the run is cancelled.
+    /// </summary>
+    private async Task<Result> RunCoreAsync(PromptRequest run, CancellationToken ct)
+    {
+        ISessionContext session = run.Session;
+        AgentDefinition agent = run.Agent;
         using var activity = HarborTelemetry.Source.StartActivity("Agent.Run");
         activity?.SetTag(GenAiTags.AgentName, agent.Name.Value);
         activity?.SetTag(GenAiTags.RequestModel, agent.Model);
         try
         {
-            _logger.LogInformation(CoreResources.GetLog("AgentLoopStarting"), agent.Name.Value);
-
             // Resolve the model once up front so the context window can be carried
             // on AgentStartEvent (renderers need it to show context usage).
             // ROP-C П.1-П.3/П.7: the TryCreate → GetClient → catalog chain rides
@@ -139,70 +166,14 @@ public sealed class AgentLoop : IAgentLoop
                 // not re-trigger on every subsequent turn.
                 IReadOnlyList<AgentMessage> turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
 
-                // 2. Compaction check. Never retried once the fallback is
-                // engaged — the summarizer just failed, so every turn after
-                // the failure derives its request from truncation below.
-                if (!truncationFallback && _tokenTracker.ShouldCompact(turnMessages, model))
-                {
-                    using var compactionActivity = HarborTelemetry.Source.StartActivity("Compaction");
-                    _logger.LogInformation("Compaction triggered for session {SessionId}", session.Session.Id);
-                    await _eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
-                    // O9/T.6: record the PRE-compaction context size so the drop
-                    // is observable per transformation, not just via TokensSaved.
-                    _metrics.Histogram(
-                        "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
-                        new KeyValuePair<string, object?>("context.phase", "pre-compaction"),
-                        new KeyValuePair<string, object?>("session.id", session.Session.Id));
-                    var compactionResult = await _compaction.CompactAsync(session.Session.Id, turnMessages, model, ct).ConfigureAwait(false);
-
-                    // Railway Oriented Programming: Match dispatches to the
-                    // success or failure branch without an explicit
-                    // `if (result.IsSuccess)` check, making the
-                    // happy-path/error-path split structural rather than
-                    // control-flow.
-                    await compactionResult.Match(
-                        async result =>
-                        {
-                            await session.AppendMessageAsync(result.SummaryMessage, ct).ConfigureAwait(false);
-                            // Recompute so THIS turn's request is already built
-                            // from the compacted view instead of the overfull
-                            // pre-compaction history.
-                            turnMessages = CompactionService.MaterializeCompactedView(session.Messages);
-                            _metrics.Histogram(
-                                "session.context.size", _tokenTracker.EstimateTokens(turnMessages),
-                                new KeyValuePair<string, object?>("context.phase", "post-compaction"),
-                                new KeyValuePair<string, object?>("session.id", session.Session.Id));
-                            await _eventBus.PublishAsync(new CompactionCompletedEvent(
-                                session.Session.Id,
-                                result.Summary,
-                                result.PrunedMessageCount,
-                                result.TokensSaved,
-                                result.Duration), ct).ConfigureAwait(false);
-                        },
-                        error =>
-                        {
-                            // F17: a cancelled run surfaces as a compaction
-                            // Failure, but it is NOT a summarizer failure —
-                            // engaging the destructive truncation fallback
-                            // here would irreversibly degrade the session on
-                            // a plain Esc.
-                            if (ct.IsCancellationRequested)
-                            {
-                                _logger.LogInformation(
-                                    "Compaction cancelled for session {SessionId}; no fallback",
-                                    session.Session.Id);
-                                return Task.CompletedTask;
-                            }
-
-                            // Never continue silently with a known-invalid
-                            // (overfull) context: publish the failure and
-                            // switch to strict tail truncation for this and
-                            // all subsequent requests.
-                            _logger.LogWarning("Compaction failed: {Error}. Falling back to truncation.", error);
-                            truncationFallback = true;
-                            return _eventBus.PublishAsync(new CompactionFailedEvent(session.Session.Id, error), CancellationToken.None);
-                        }).ConfigureAwait(false);
-                }
+                // 2. Compaction check + truncation fallback — the per-turn
+                // CompactionBehavior owns threshold check, summarization,
+                // events/metrics and the fallback decision (§3.5).
+                CompactionOutcome compactionOutcome = await _compactionBehavior
+                    .BeforeTurnAsync(session, turnMessages, model, truncationFallback, ct)
+                    .ConfigureAwait(false);
+                turnMessages = compactionOutcome.TurnMessages;
+                truncationFallback = compactionOutcome.TruncationFallback;
 
                 // A compaction failure — including one earlier in this very
                 // turn — leaves the history known-overfull: derive THIS
@@ -323,7 +294,7 @@ public sealed class AgentLoop : IAgentLoop
                 // the assistant tool_calls and their results — providers
                 // require that adjacency) so the NEXT LLM request of THIS run
                 // already carries the steering, not just the next turn.
-                await DrainSteeringAsync(session, ct).ConfigureAwait(false);
+                await _steering.DrainAsync(session, ct).ConfigureAwait(false);
 
                 _logger.LogDebug("Turn {Turn} end (with tool results)", turn);
                 await _eventBus.PublishAsync(
@@ -332,10 +303,10 @@ public sealed class AgentLoop : IAgentLoop
                 // 9. Boundary steering drain — kept for runs that reach max
                 // steps or a terminal stop reason right after execution; on
                 // the normal path it is a no-op (B2 drained above).
-                await DrainSteeringAsync(session, ct).ConfigureAwait(false);
+                await _steering.DrainAsync(session, ct).ConfigureAwait(false);
 
                 // 10. Max steps — also honoured after a terminal stop reason.
-                if (turn >= agent.MaxSteps)
+                if (MaxStepsBehavior.IsExhausted(turn, agent))
                 {
                     _logger.LogInformation("Agent reached max steps ({MaxSteps})", agent.MaxSteps);
                     break;
@@ -625,31 +596,6 @@ public sealed class AgentLoop : IAgentLoop
         List<MalformedToolCall> MalformedCalls,
         Usage? FinalUsage,
         StopReason StopReason);
-
-    /// <summary>
-    ///     Drain the whole steering queue into the session history. Called
-    ///     mid-turn (after tool results) and at the turn boundary (Ф2/B2).
-    /// </summary>
-    private async Task DrainSteeringAsync(ISessionContext session, CancellationToken ct)
-    {
-        while (session.SteeringQueue.Reader.TryRead(out var steerMsg))
-        {
-            // G2: the steering channel is one-per-agent and outlives session
-            // rebinds. A message authored against another session must never
-            // enter this history — least of all be persisted under this
-            // session's id.
-            if (!string.Equals(steerMsg.SessionId, session.Session.Id, StringComparison.Ordinal))
-            {
-                _logger.LogWarning(
-                    "Dropped steering message {MessageId} authored for session {MessageSession} while agent is bound to {Session}",
-                    steerMsg.Id, steerMsg.SessionId, session.Session.Id);
-                continue;
-            }
-
-            await session.AppendMessageAsync(steerMsg, ct).ConfigureAwait(false);
-            _tokenTracker.RecordAppendedMessage(steerMsg);
-        }
-    }
 
     /// <summary>
     ///     Execute the turn's tool calls and synthesize error results for
