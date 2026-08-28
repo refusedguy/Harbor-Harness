@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Boundary for vendored/third-party source trees (git submodules).
+    Deliberately does NOT import the repo-root Directory.Build.props/targets:
+    upstream projects keep their own package versions, warning policy and
+    TargetFrameworks. Central Package Management and TreatWarningsAsErrors
+    must not leak into external code.
+  -->
+
+</Project>
