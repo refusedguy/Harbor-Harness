@@ -203,6 +203,10 @@ while IFS= read -r line; do
       log "SKIP: $SPRINT (state=$STATE)"
       continue
     fi
+    if [[ "$STATE" == "running" ]]; then
+      log "SKIP: $SPRINT (already running)"
+      continue
+    fi
     if [[ "$STATE" == "failed" && "$RETRIES" -ge 2 ]]; then
       log "SKIP: $SPRINT (state=$STATE, retries=$RETRIES)"
       continue
