@@ -329,14 +329,15 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
-    /// <summary>Render-thread drain of gates requested off-thread; newest wins the routing slot.</summary>
+    /// <summary>Render-thread drain of gates requested off-thread; every queued
+    /// gate lands on the timeline and joins the pending queue in arrival order.</summary>
     private void DrainGateQueue()
     {
         bool appended = false;
         while (_gateQueue.TryDequeue(out var gate))
         {
-            _pendingApproval = gate;
             _panel.Timeline.Append(gate);
+            EnqueuePendingGate(gate);
             appended = true;
         }
 
@@ -436,8 +437,15 @@ public sealed class ChatScreenBridge : IDisposable
 
     // ── Approval gates ─────────────────────────────────────────────────────
 
-    /// <summary>Newest undecided <see cref="ApprovalGateView" /> — keys are routed here first.</summary>
-    private ApprovalGateView? _pendingApproval;
+    /// <summary>Bound on simultaneously pending gates; overflow auto-denies the
+    /// oldest so its host-side await always wakes and no unreachable
+    /// <c>IsPending</c> block survives.</summary>
+    private const int MaxPendingGates = 8;
+
+    /// <summary>Undecided <see cref="ApprovalGateView" />s in arrival order —
+    /// the front one owns key/click routing (hotfix: a single slot turned every
+    /// earlier gate into a zombie the user could never answer).</summary>
+    private readonly Queue<ApprovalGateView> _pendingGates = new();
 
     /// <summary>Gates posted off the render thread (tool-execution context), drained by <see cref="Tick" />.</summary>
     private readonly ConcurrentQueue<ApprovalGateView> _gateQueue = new();
@@ -456,41 +464,63 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     /// <summary>
-    /// Appends a permission gate to the timeline and arms it as the newest
-    /// pending decision point. One pending gate at a time: a newer call simply
-    /// supersedes the older card visually (the old one stays unresolved in the
-    /// history — the host resolves permissions sequentially by contract).
+    /// Appends a permission gate to the timeline and arms it at the tail of
+    /// the pending queue. Every queued gate stays interactable in arrival
+    /// order — the front one is answered first; deciding it exposes the next.
     /// </summary>
     public ApprovalGateView BeginApprovalGate(string toolName, string detail)
     {
         var gate = new ApprovalGateView(toolName, detail);
-        _pendingApproval = gate;
         _panel.Timeline.Append(gate);
+        EnqueuePendingGate(gate);
         _panel.Timeline.MarkLastDirty();
         return gate;
     }
 
+    /// <summary>Appends to the pending queue, auto-denying the oldest gate on
+    /// overflow (the bound keeps both the queue and host-side waiters finite).</summary>
+    private void EnqueuePendingGate(ApprovalGateView gate)
+    {
+        _pendingGates.Enqueue(gate);
+        while (_pendingGates.Count > MaxPendingGates)
+        {
+            _ = _pendingGates.Dequeue().TryDecide(ApprovalChoice.Deny);
+        }
+    }
+
+    /// <summary>Drops gates resolved off the routing path (e.g. host called
+    /// <see cref="Widgets.ApprovalGateView.TryDecide" /> directly).</summary>
+    private void PruneResolvedGates()
+    {
+        while (_pendingGates.Count > 0 && !_pendingGates.Peek().IsPending)
+        {
+            _ = _pendingGates.Dequeue();
+        }
+    }
+
     /// <summary>
-    /// Routes one key event to the newest pending gate BEFORE composer input.
+    /// Routes one key event to the OLDEST pending gate BEFORE composer input.
     /// Consumed keys always wake the frame pipeline (decision stamps repaint).
     /// Returns false while no gate is armed or the key is not one of y/n/a/
     /// Enter/Escape — callers fall through to normal routing.
     /// </summary>
     public bool TryRouteApprovalKey(in Input.KeyEvent key)
     {
-        if (_pendingApproval is null)
+        PruneResolvedGates();
+        if (_pendingGates.Count == 0)
         {
             return false;
         }
 
-        if (!_pendingApproval.HandleKey(key))
+        var gate = _pendingGates.Peek();
+        if (!gate.HandleKey(key))
         {
             return false;
         }
 
-        if (!_pendingApproval.IsPending)
+        if (!gate.IsPending)
         {
-            _pendingApproval = null;
+            _ = _pendingGates.Dequeue();
         }
 
         _panel.Timeline.MarkLastDirty();
@@ -498,33 +528,35 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     /// <summary>
-    /// Routes a left-button press/click to the newest pending gate's hint-row
+    /// Routes a left-button press/click to the OLDEST pending gate's hint-row
     /// buttons (see <see cref="Widgets.ApprovalGateView.TryHitDecision" />).
     /// Returns false when no gate is armed or the click lands outside its
     /// decision zones — callers keep normal scroll/routing behavior.
     /// </summary>
     public bool TryRouteApprovalClick(in Input.MouseEvent mouse)
     {
-        if (_pendingApproval is null)
+        PruneResolvedGates();
+        if (_pendingGates.Count == 0)
         {
             return false;
         }
 
+        var gate = _pendingGates.Peek();
         if (mouse.Type is not (Input.MouseEventType.Press or Input.MouseEventType.Click)
             || mouse.Button != Input.MouseButton.Left)
         {
             return false;
         }
 
-        if (_pendingApproval.TryHitDecision(mouse.Column, mouse.Row) is not { } choice
-            || !_pendingApproval.TryDecide(choice))
+        if (gate.TryHitDecision(mouse.Column, mouse.Row) is not { } choice
+            || !gate.TryDecide(choice))
         {
             return false;
         }
 
-        if (!_pendingApproval.IsPending)
+        if (!gate.IsPending)
         {
-            _pendingApproval = null;
+            _ = _pendingGates.Dequeue();
         }
 
         _panel.Timeline.MarkLastDirty();

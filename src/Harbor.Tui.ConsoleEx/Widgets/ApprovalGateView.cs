@@ -38,8 +38,13 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
 
     private bool _focused;
 
-    /// <summary>Stable router id — one gate per tool invocation.</summary>
-    public string Id => $"approval:{ToolName}";
+    // Instance-unique id source: tool names collide when two prompts for the
+    // same tool queue up (hotfix — router ids must not overwrite each other).
+    private static long _nextId;
+    private readonly long _id = Interlocked.Increment(ref _nextId);
+
+    /// <summary>Stable router id — unique per gate instance, suffixed with the tool name.</summary>
+    public string Id => $"approval:{_id}:{ToolName}";
 
     public void OnFocusChanged(bool focused) => _focused = focused;
 
