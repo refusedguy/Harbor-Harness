@@ -97,6 +97,7 @@ internal static partial class HostBuilder
         EventBusMiddlewares = lf =>
             new IEventBusMiddleware[] { new TypeFilterMiddleware(lf.CreateLogger<TypeFilterMiddleware>()) },
         DefaultTuiRenderer = cliConfig.DefaultTuiRenderer,
+        RuntimeSwappable = cliConfig.RuntimeSwappable,
         Configuration = configuration,
         BootstrapLoggerFactory = () => _loggerFactory,
     };
