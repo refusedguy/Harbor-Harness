@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Harbor.Tui.Ansi;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 
