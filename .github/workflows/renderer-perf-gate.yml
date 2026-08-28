@@ -1,0 +1,86 @@
+# Renderer performance gate (renderer-unification sprint Phase 6.1).
+#
+# Fails when any renderer backend misses its DECLARED contract ceilings
+# (throughput / p99 latency / allocations — RendererPerformanceContract.Defaults)
+# or when the markdown render contract is violated. These absolute ceilings are
+# deterministic enough for shared CI runners.
+#
+# The relative >5%-regression check against the committed baseline runs too,
+# but only ENFORCES when HARBOR_PERF_BASELINE_STRICT=1 — shared runners have
+# ±20% noise, so strict regression gating is intended for dedicated perf
+# hardware. The report artifact is uploaded on every run for diffing.
+name: renderer-perf-gate
+
+on:
+  pull_request:
+    paths:
+      - "src/Harbor.Tui.**"
+      - "src/Harbor.Ui.Framework.Rendering/**"
+      - "src/Harbor.Terminal.Abstractions/**"
+      - "tests/Harbor.Tui.PerfTests/**"
+      - "tests/Harbor.Tui.RendererTests/**"
+      - ".github/workflows/renderer-perf-gate.yml"
+  push:
+    branches: [dev, master]
+
+jobs:
+  perf-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
+      # Flip to 1 (on a self-hosted perf runner) to enforce the 5% rule:
+      # HARBOR_PERF_BASELINE_STRICT: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet build tests/Harbor.Tui.PerfTests -c Release
+
+      - name: Run renderer performance gate
+        run: dotnet test tests/Harbor.Tui.PerfTests -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Enforce relative 5% regression rule (strict mode only)
+        if: env.HARBOR_PERF_BASELINE_STRICT == '1'
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          baseline = {}
+          for line in open("tests/Harbor.Tui.PerfTests/baseline.csv"):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              b, _, eps, p99, mem = line.split(";")
+              baseline[b] = (float(eps), float(p99), float(mem))
+          failed = False
+          for line in open(os.environ["HARBOR_PERF_REPORT"]):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              b, _, eps, p99, mem = line.split(";")
+              eps, p99, mem = float(eps), float(p99), float(mem)
+              b0 = baseline.get(b)
+              if not b0:
+                  print(f"{b}: no baseline entry — add one to baseline.csv"); failed = True; continue
+              if eps < b0[0] * 0.95:
+                  print(f"{b}: throughput regression {eps:F0} < 95% of {b0[0]:F0}"); failed = True
+              if p99 > b0[1] * 1.05:
+                  print(f"{b}: p99 regression {p99:F3} > 105% of {b0[1]:F3}"); failed = True
+              if mem > b0[2] * 1.05:
+                  print(f"{b}: allocation regression {mem:F4} > 105% of {b0[2]:F4}"); failed = True
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: Upload perf report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-perf-report
+          path: renderer-perf-report.txt
