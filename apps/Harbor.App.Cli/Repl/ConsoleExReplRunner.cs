@@ -10,6 +10,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
 using Harbor.Tui.ConsoleEx.Input;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Tui.ConsoleEx.Rendering;
 using Harbor.Tui.ConsoleEx.Streaming;
 using Harbor.Tui.ConsoleEx.Widgets;
@@ -103,6 +104,10 @@ internal sealed class ConsoleExReplRunner(
     /// touched from the frame thread only.</summary>
     private volatile string? _themeReloadLine;
 
+    /// <summary>True when a custom theme file exists — it owns the palette and
+    /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
+    private bool _themeFileApplied;
+
     private int _timelineViewportH;
 
     /// <summary>Retry-countdown clock (sprint UI-V2 P6.3): the agent loop owns
@@ -151,6 +156,13 @@ internal sealed class ConsoleExReplRunner(
             return 1;
         }
         await backend.WriteAsync(Utf8(SeqEnterAltScreen), ct).ConfigureAwait(false);
+
+        // OSC 11 auto-theme probe (sprint UI-V2 P3.3): ask the terminal for its
+        // background; the answer surfaces as a Capability event and flips the
+        // palette before the first frame. A custom JSON theme (ArmThemeWatcher)
+        // applied later always wins over the auto pick.
+        await backend.WriteAsync(Utf8(TerminalBackgroundProbe.Query), ct).ConfigureAwait(false);
+
         await PrintWelcomeAsync().ConfigureAwait(false);
         ArmThemeWatcher();
 
@@ -330,6 +342,27 @@ internal sealed class ConsoleExReplRunner(
         _wake.Writer.TryWrite(null);
     }
 
+    /// <summary>OSC 11 auto-theme (sprint UI-V2 P3.3): bright terminal
+    /// background → HarborLight, dark → HarborDark. Runs before any custom
+    /// theme file applies, so an explicit theme always wins.</summary>
+    private void ApplyAutoTheme(CapabilityEvent report)
+    {
+        if (_themeFileApplied)
+        {
+            return; // custom JSON owns the palette — auto-detect stands down
+        }
+
+        var background = new RgbColor(
+            (byte)Math.Clamp(report.Red, 0, 255),
+            (byte)Math.Clamp(report.Green, 0, 255),
+            (byte)Math.Clamp(report.Blue, 0, 255));
+        var theme = TerminalBackgroundProbe.RelativeLuminance(background)
+                    >= TerminalBackgroundProbe.LightLuminanceThreshold
+            ? HarborTheme.HarborLight
+            : HarborTheme.HarborDark;
+        TerminalColorPalette.Apply(theme);
+    }
+
     // ── Input routing ──────────────────────────────────────────────────────
 
     private async Task HandleInputAsync(InputEvent evt, CancellationToken ct)
@@ -338,6 +371,10 @@ internal sealed class ConsoleExReplRunner(
         {
             case InputEventKind.Key:
                 await HandleKeyAsync(evt.Key, ct).ConfigureAwait(false);
+                break;
+
+            case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc11BackgroundReport:
+                ApplyAutoTheme(evt.Capability);
                 break;
 
             case InputEventKind.Paste:
@@ -870,6 +907,8 @@ internal sealed class ConsoleExReplRunner(
         {
             return;
         }
+
+        _themeFileApplied = true;
 
         var initial = JsonThemeLoader.LoadFile(path);
         if (initial.IsSuccess)
