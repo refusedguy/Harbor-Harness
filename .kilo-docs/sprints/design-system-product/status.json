@@ -14,9 +14,9 @@
   "retries": 0,
   "last_activity": "2026-08-28T23:40:00+05:00",
   "verification": {
-    "verified_at": "2026-08-28T23:40:00+05:00",
-    "build": "dotnet build Harbor.slnx -c Release — 0 errors (192 warnings, pre-existing in test projects)",
-    "tests_head": "Harbor.DesignSystem.Tests 48/0/0, Harbor.Tui.CellForge.Tests 669/0/0, Harbor.Architecture.Tests 47/0/0 (Release, per-project MTP)",
+    "verified_at": "2026-08-28T23:58:00+05:00",
+    "build": "dotnet build Harbor.slnx -c Release — 0 errors (warnings pre-existing in test projects only; src/Harbor.DesignSystem + samples/designsystem-consumer clean-build with 0 warnings)",
+    "tests_head": "re-verified fresh at head 38f3d37: Harbor.DesignSystem.Tests 48/0/0, Harbor.Tui.CellForge.Tests 669/0/0, Harbor.Architecture.Tests 47/0/0 (Release, per-project MTP); out-of-repo nupkg consume 7/7 PASS; docgen regen zero git drift; nuspec MIT + empty dependencies group",
     "per_commit": {
       "7100f90": "worktree build DesignSystem 0 err; samples/designsystem-consumer run -> 'standalone OK: zero Harbor.* assembly references'; DesignSystem.Tests 26/0/0; Architecture.Tests 47/0/0",
       "88a923e": "worktree build DesignSystem 0 err; DesignSystem.Tests 48/0/0 (ThemeJson/ThemeStore/watcher tests incl.); Harbor.Tui.CellForge.Tests 669/0/0 (JsonThemeLoaderTests, ThemeFileWatcherTests incl.)",
