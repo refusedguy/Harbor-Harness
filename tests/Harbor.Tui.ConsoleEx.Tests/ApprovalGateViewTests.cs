@@ -158,6 +158,18 @@ public class ApprovalGateViewTests
     }
 
     [Test]
+    public async Task Id_IsUniquePerInstance_ForSameToolGates()
+    {
+        var a = new ApprovalGateView("bash", "one");
+        var b = new ApprovalGateView("bash", "two");
+
+        await Assert.That(a.Id).IsNotEqualTo(b.Id);
+        await Assert.That(a.Id).Contains("bash");
+        await Assert.That(b.Id).Contains("bash");
+        await Assert.That(a.Id).IsEqualTo(a.Id);
+    }
+
+    [Test]
     public async Task TryDecide_ClickPath_OneShot_AndRejectsNone()
     {
         var (gate, hintRow) = PaintedGate(60);

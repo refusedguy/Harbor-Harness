@@ -317,6 +317,63 @@ public class ChatScreenBridgeTests
         await Assert.That(gate.Decision).IsEqualTo(ApprovalChoice.AlwaysAllow);
     }
 
+    [Test]
+    public async Task TwoConsecutiveBashGates_ResolveInArrivalOrder_NoZombies()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var first = bridge.BeginApprovalGate("bash", "rm -rf build/");
+        var second = bridge.BeginApprovalGate("bash", "make clean");
+
+        // Same-tool gates must not collide on router ids.
+        await Assert.That(first.Id).IsNotEqualTo(second.Id);
+
+        // Oldest gate is served first; deciding it exposes the next.
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsTrue();
+        await Assert.That(first.Decision).IsEqualTo(ApprovalChoice.Approve);
+        await Assert.That(first.IsPending).IsFalse();
+        await Assert.That(second.IsPending).IsTrue();
+
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('n')))).IsTrue();
+        await Assert.That(second.Decision).IsEqualTo(ApprovalChoice.Deny);
+        await Assert.That(second.IsPending).IsFalse();
+
+        // No zombie pending blocks survive: routing fully disarmed.
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsFalse();
+        await Assert.That(panel.Timeline.Count).IsEqualTo(2);
+        for (int i = 0; i < panel.Timeline.Count; i++)
+        {
+            if (panel.Timeline.BlockAt(i) is ApprovalGateView gate)
+            {
+                await Assert.That(gate.IsPending).IsFalse();
+            }
+        }
+    }
+
+    [Test]
+    public async Task RequestApprovalGate_TwoGates_RoutedInArrivalOrder_OnTick()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        var first = bridge.RequestApprovalGate("bash", "cargo build");
+        var second = bridge.RequestApprovalGate("bash", "cargo test");
+
+        bridge.Tick(100); // both queue entries land in one drain, arrival order
+        await Assert.That(panel.Timeline.Count).IsEqualTo(2);
+        await Assert.That(panel.Timeline.BlockAt(0)).IsSameReferenceAs(first);
+        await Assert.That(panel.Timeline.BlockAt(1)).IsSameReferenceAs(second);
+
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsTrue();
+        await Assert.That(first.Decision).IsEqualTo(ApprovalChoice.Approve);
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('a')))).IsTrue();
+        await Assert.That(second.Decision).IsEqualTo(ApprovalChoice.AlwaysAllow);
+        await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsFalse();
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;
