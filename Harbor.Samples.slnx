@@ -5,6 +5,9 @@
     <Project Path="contrib/apps/Harbor.App.Maui/Harbor.App.Maui.csproj" />
     <Project Path="contrib/apps/Harbor.App.Wpf/Harbor.App.Wpf.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Harbor.Abstractions/Harbor.Abstractions.csproj" />
     <Project Path="src/Harbor.Application/Harbor.Application.csproj" />

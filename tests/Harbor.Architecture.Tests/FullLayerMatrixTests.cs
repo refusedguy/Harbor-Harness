@@ -172,18 +172,23 @@ public class FullLayerMatrixTests
         ["Harbor.Ui.Framework.ViewModels"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
-            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions"]),
+            ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions",
+             // RgbColor is defined in the standalone DesignSystem package but
+             // keeps its historical Projection namespace for compatibility.
+             "Harbor.DesignSystem"]),
         // Renderer-agnostic shared layer: cell/screen primitives, input
         // vocabulary and chat widgets consumed by every renderer backend.
         // Leaf Presentation library over the projection primitives; the HDS
         // token catalog (DesignSystem) and motion tokens (Desktop.Animations)
-        // back ChatPalette/PanelFx.
+        // back ChatPalette/PanelFx (ChatPalette + the cell-style primitives
+        // physically live in the DesignSystem package assembly now).
         ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
             ["Harbor.Ui.Framework.Projection", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
-        // HDS v1 token catalog — leaf Presentation library over the projection
-        // primitives (RgbColor); consumed by Desktop.Animations / CellForge / apps.
-        ["Harbor.DesignSystem"] = new(Layer.Presentation,
-            ["Harbor.Ui.Framework.Projection"]),
+        // HDS v1 token catalog — standalone leaf: ZERO Harbor references. The
+        // design-system package ships RgbColor (under the historical Projection
+        // namespace) plus the cell-style primitives and ChatPalette, so
+        // Projection/Rendering/CellForge/apps all resolve them from here.
+        ["Harbor.DesignSystem"] = new(Layer.Presentation, []),
         ["Harbor.Ui.Framework.Sessions"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.ViewModels", "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Desktop.Abstractions"] = new(Layer.Presentation,
@@ -195,10 +200,10 @@ public class FullLayerMatrixTests
         ]),
         ["Harbor.Desktop.Shared"] = new(Layer.Presentation,
             ["Harbor.Desktop.Abstractions", "Harbor.Ui.Framework"]),
-        // RgbColor resolves its AssemblyRef directly to the projection primitive
-        // library even though token types come through Harbor.DesignSystem.
+        // RgbColor is defined in Harbor.DesignSystem (standalone package); the
+        // token types come through that same reference.
         ["Harbor.Desktop.Animations"] = new(Layer.Presentation,
-            ["Harbor.DesignSystem", "Harbor.Ui.Framework.Projection"]),
+            ["Harbor.DesignSystem"]),
         ["Harbor.Tui.Notifications"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Terminal.Abstractions"]),
         // renderer-unification Phase 4: Ansi + Plain merged into one assembly;
