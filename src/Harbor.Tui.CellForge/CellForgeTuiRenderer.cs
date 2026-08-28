@@ -28,6 +28,17 @@ public sealed class CellForgeTuiRenderer : BaseTuiRenderer
         Context = new CellForgeRenderContext();
     }
 
+    /// <summary>
+    ///     Golden-frame test seam (renderer-unification Phase 5): route the
+    ///     adapter's writes through a caller-supplied terminal backend
+    ///     (e.g. an in-memory capture backend). Production code keeps using
+    ///     the parameterless ctor (StdoutBackend).
+    /// </summary>
+    public CellForgeTuiRenderer(ILogger<CellForgeTuiRenderer> logger, ITerminalBackend backend) : base(logger)
+    {
+        Context = new CellForgeRenderContext(backend);
+    }
+
     public override ITuiRenderContext Context { get; }
 
     protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
