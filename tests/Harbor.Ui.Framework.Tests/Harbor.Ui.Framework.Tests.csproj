@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.Rendering/Harbor.Ui.Framework.Rendering.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
