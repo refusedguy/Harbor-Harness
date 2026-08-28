@@ -57,6 +57,16 @@ public sealed record CliConfig : AppConfigBase
     public bool EnableOnboardingWizard { get; init; } = true;
 
     /// <summary>
+    ///     Whether the TUI renderer backend can be swapped mid-session via
+    ///     <c>/renderer</c> (<c>ui.runtime_swappable</c>, renderer-unification
+    ///     Phase 6.3). The <c>HARBOR_TUI_RUNTIME_SWAP</c> env var overrides
+    ///     this: <c>1</c>/<c>true</c> enables swapping to any registered
+    ///     backend; a comma-separated list enables an explicit allow-list.
+    ///     Defaults to <c>true</c>.
+    /// </summary>
+    public bool RuntimeSwappable { get; init; } = true;
+
+    /// <summary>
     ///     Whether to register builtin slash commands (<c>/help</c>,
     ///     <c>/clear</c>, <c>/agents</c>, etc.). Defaults to <c>true</c>.
     ///     Disabled in test harnesses that want a bare REPL.

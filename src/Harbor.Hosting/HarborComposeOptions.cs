@@ -57,6 +57,16 @@ public sealed class HarborComposeOptions
     public string? DefaultTuiRenderer { get; init; }
 
     /// <summary>
+    ///     Whether the renderer backend can be swapped at runtime
+    ///     (<c>ui.runtime_swappable</c> toggle, renderer-unification Phase
+    ///     6.3). The <c>HARBOR_TUI_RUNTIME_SWAP</c> env var overrides this.
+    ///     Defaults to true — a mid-session <c>/renderer</c> swap is safe by
+    ///     design (CAS-gated, state-restoring) and opting out only pins the
+    ///     startup backend.
+    /// </summary>
+    public bool RuntimeSwappable { get; init; } = true;
+
+    /// <summary>
     ///     Extra event-bus middlewares (CLI adds TypeFilterMiddleware, Avalonia
     ///     passes none). Factory receives the bootstrap logger factory.
     /// </summary>
