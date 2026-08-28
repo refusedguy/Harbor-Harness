@@ -37,6 +37,12 @@
   <PropertyGroup>
     <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
+    <!--
+      NickConsoleEx (renderer-unification Phase 3) auto-enables when the
+      vendored nickprotop/ConsoleEx submodule is initialized; fresh clones
+      without submodules build the rest of the graph unaffected.
+    -->
+    <DefineConstants Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')">$(DefineConstants);HARBOR_WITH_NICK_CONSOLE_EX</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
   </PropertyGroup>
@@ -99,6 +105,17 @@
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+  <!--
+    NickConsoleEx (renderer-unification Phase 3): ADDITIVE wrapper backend over
+    the vendored nickprotop/ConsoleEx submodule. external/Directory.Build.targets
+    retargets SharpConsoleUI's Spectre.Console dependency to the Harbor root pin
+    (0.54.0), so this reference is safe next to every other renderer backend.
+    Skipped when the submodule is not initialized (fresh clone).
+  -->
+  <ItemGroup Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')">
+    <ProjectReference Include="..\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
   </ItemGroup>
 
 </Project>

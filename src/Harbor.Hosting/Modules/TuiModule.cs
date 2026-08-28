@@ -35,6 +35,30 @@ internal static class TuiModule
         if (string.IsNullOrWhiteSpace(tui))
             tui = defaultTui;
         ctx.Logger.LogInformation("TUI renderer: {Tui}", tui);
+#elif HARBOR_WITH_NICK_CONSOLE_EX
+        string tui;
+        if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex")
+        {
+            tui = "cellforge";
+        }
+        else if (!string.IsNullOrWhiteSpace(envTui) && envTui.Trim() == "nickconsoleex")
+        {
+            tui = "nickconsoleex";
+        }
+        else if (!string.IsNullOrWhiteSpace(defaultTui) && defaultTui is "cellforge" or "consoleex")
+        {
+            tui = "cellforge";
+        }
+        else if (defaultTui == "nickconsoleex")
+        {
+            tui = "nickconsoleex";
+        }
+        else
+        {
+            tui = "plain";
+        }
+
+        ctx.Logger.LogInformation("TUI renderer: {Tui} (Spectre off, CellForge always enabled)", tui);
 #else
         string tui = !string.IsNullOrWhiteSpace(envTui) && envTui.Trim() is "cellforge" or "consoleex"
             ? "cellforge"
@@ -55,6 +79,15 @@ internal static class TuiModule
                 return new Harbor.Tui.CellForge.CellForgeTuiRenderer(
                     sp.GetRequiredService<ILogger<Harbor.Tui.CellForge.CellForgeTuiRenderer>>());
             }
+
+#if HARBOR_WITH_NICK_CONSOLE_EX
+            // Phase 3: ADDITIVE backend — nickprotop/ConsoleEx window system.
+            if (tui == "nickconsoleex")
+            {
+                return new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
+                    sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>());
+            }
+#endif
 
 #if HARBOR_WITH_SPECTRE_TUI
             return tui.ToLowerInvariant() switch
