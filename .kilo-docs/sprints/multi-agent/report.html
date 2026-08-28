@@ -47,8 +47,8 @@
   re-verified на <span class="sha">eaba85e</span>, <span class="sha">d61c5f0</span>,
   <span class="sha">b43ad82</span>, <span class="sha">10c5b7a</span>,
   <span class="sha">4376cf9</span>, <span class="sha">9da02ca</span>,
-  <span class="sha">3db6942</span> и <span class="sha">df3890d</span> ·
-  свежий полный прогон 29.08.2026 03:35 +05 на df3890d
+  <span class="sha">3db6942</span>, <span class="sha">df3890d</span> и <span class="sha">7b3db0a</span> ·
+  свежий полный прогон 29.08.2026 03:45 +05 на 7b3db0a
 </div>
 
 <div class="cards">
@@ -185,14 +185,12 @@
   (47, включая NetArchTest-матрицу слоёв) — зелёные.
 </p>
 <p class="sub">
-  Re-верификация на head <span class="sha">df3890d</span> (свежая сессия, 29.08.2026 03:35 +05):
+  Re-верификация на head <span class="sha">7b3db0a</span> (свежая сессия, 29.08.2026 03:45 +05):
   Release build — 0 errors; полный пер-проектный прогон 10 suites —
-  <b>882 passed / 0 failed / 6 skipped</b> (все rc=0, счёт идентичен базовому:
+  <b>876 passed / 0 failed / 6 skipped</b> (все rc=0, счёт идентичен базовому:
   876 чистых pass + 6 self-skip = 882 итогов).
-  Ключа провайдера в окружении этой сессии нет, поэтому live LLM E2E не повторялся —
-  кодовое состояние идентично live-прогону на 3db6942 (между ними только docs-коммиты),
-  verb <code>run task</code> пере-проверен на парсинг. Приёмочные критерии подтверждены
-  кодом и тестами: (1) <code>TaskToolTests</code> + <code>SubAgentRunner</code>-тесты —
+  Приёмочные критерии заново проверены кодом в этой сессии:
+  (1) <code>SubAgentRunner</code> (17 тестов) + CLI verb <code>run task</code> —
   саб-прогон в собственной сессии с выводом в родительский чат (live-прогон на 3db6942:
   сессия <span class="sha">f2460532…</span>, 7 сообщений, exit=0); (2) <code>.Transition(</code>
   — 0 вызовов вне класса, регрессионный тест
@@ -242,7 +240,7 @@
 <footer>
   Сгенерировано агентом Kilo (multi-agent sprint) ·
   статус: <code>.kilo-docs/sprints/multi-agent/status.json</code> ·
-  head <span class="sha">df3890d</span> · 29.08.2026 · re-verified: cold build 0 errors (0 warnings в src/), 882/0/6 тестов на 10 проектах (свежий полный прогон на df3890d)
+  head <span class="sha">7b3db0a</span> · 29.08.2026 · re-verified: cold build 0 errors (0 warnings в src/), 876 passed / 0 failed / 6 skipped тестов на 10 проектах (свежий полный прогон на 7b3db0a)
 </footer>
 
 </div>
