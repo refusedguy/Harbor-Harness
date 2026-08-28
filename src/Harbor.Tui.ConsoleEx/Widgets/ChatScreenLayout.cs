@@ -85,6 +85,13 @@ public sealed class StatusPanel : Panel
     /// <summary>Idle uptime (ms) before the mascot dozes off.</summary>
     public const int MascotSleepAfterMs = 60_000;
 
+    /// <summary>
+    /// HARBOR_MASCOT=off disables the ambient cat (accessibility, CI determinism);
+    /// read once, never per-frame.
+    /// </summary>
+    private static readonly bool MascotEnabled =
+        !string.Equals(Environment.GetEnvironmentVariable("HARBOR_MASCOT"), "off", StringComparison.OrdinalIgnoreCase);
+
     private readonly StatusSeg[] _compose = new StatusSeg[12];
     private byte _lastMode;
     private bool _modeSeen;
@@ -149,7 +156,7 @@ public sealed class StatusPanel : Panel
             _compose[0] = new StatusSeg(SpinnerStrip.FrameString(Tick, rhythm.Value), StatusAccent.Accent, FixedPriority: true);
         }
 
-        string? mascot = Rect.Width >= MascotMinWidth
+        string? mascot = MascotEnabled && Rect.Width >= MascotMinWidth
             ? AmbientMascot.Frame(Tick, MascotFor(Vm.Mode))
             : null;
 

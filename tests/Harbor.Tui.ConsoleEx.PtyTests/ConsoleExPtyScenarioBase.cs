@@ -274,6 +274,7 @@ public abstract class ConsoleExPtyScenarioBase
         ["HARBOR_LOGLEVEL"] = VerboseLogging ? "Information" : "Warning",
         ["HARBOR_SKIP_ONBOARDING"] = "1",
         ["HARBOR_TUI"] = "consoleex",
+        ["HARBOR_MASCOT"] = "off", // ambient cat blinks per tick — byte-exact goldens need it out of the frame
         ["TERM"] = "xterm-256color",
         ["LANG"] = "C.UTF-8",
         ["LC_ALL"] = "C.UTF-8",
