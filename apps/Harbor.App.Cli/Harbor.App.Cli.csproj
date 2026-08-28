@@ -215,14 +215,14 @@
        The main solution does not list them, but the CLI still compiles them
        in when HarborWithSpectreTui=true (default); minimal/no-spectre-tui
        builds exclude them entirely. -->
-  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
+<!--  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
     <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
-  </ItemGroup>
+  </ItemGroup>-->
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
