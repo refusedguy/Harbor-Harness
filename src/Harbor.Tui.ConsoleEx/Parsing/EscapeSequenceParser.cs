@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.DesignSystem;
 using Harbor.Tui.ConsoleEx.Input;
 
 namespace Harbor.Tui.ConsoleEx.Parsing;
@@ -40,6 +41,12 @@ public sealed class EscapeSequenceParser
     // OSC / DCS / APC / PM string consumption guard.
     private int _stringLength;
     private bool _stringEscSeen;
+
+    // OSC string capture (auto-theme §3.x): bytes of the current OSC string
+    // body, lazily allocated, bounded by MaxStringBytes. Only OSC 11 reports
+    // are decoded — every other OSC string stays discarded.
+    private byte[]? _oscBuffer;
+    private int _oscLength;
 
     // SGR-mouse press context for Click/Drag/Release synthesis (§3.3).
     private MouseButton _mousePressedButton;
@@ -339,6 +346,7 @@ public sealed class EscapeSequenceParser
             case (byte)'_':
                 _stringLength = 0;
                 _stringEscSeen = false;
+                _oscLength = 0;
                 _state = b == (byte)']' ? ParserState.OscString : ParserState.StringUntilSt;
                 return;
             case Esc:
@@ -918,6 +926,8 @@ public sealed class EscapeSequenceParser
             _stringEscSeen = false;
             if (b == (byte)'\\')
             {
+                // ST terminator — an OSC string just completed.
+                EmitOsc11IfPresent("\u001B\\");
                 _state = ParserState.Ground;
                 return;
             }
@@ -933,6 +943,7 @@ public sealed class EscapeSequenceParser
 
         if (belTerminates && b == Bel)
         {
+            EmitOsc11IfPresent("\u0007");
             _state = ParserState.Ground;
             return;
         }
@@ -943,10 +954,50 @@ public sealed class EscapeSequenceParser
             return;
         }
 
+        CaptureOscByte(b);
         _stringLength++;
         if (_stringLength > _options.MaxStringBytes)
         {
             ForceStringAbort();
+        }
+    }
+
+    /// <summary>Stashes one OSC-string body byte (OscString state only) so an
+    /// OSC 11 background report can be decoded on termination.</summary>
+    private void CaptureOscByte(byte b)
+    {
+        if (_state != ParserState.OscString)
+        {
+            return;
+        }
+
+        if (_oscBuffer is null)
+        {
+            _oscBuffer = new byte[_options.MaxStringBytes];
+        }
+
+        if (_oscLength < _oscBuffer.Length)
+        {
+            _oscBuffer[_oscLength++] = b;
+        }
+    }
+
+    /// <summary>Decodes a just-terminated OSC string: only «11;rgb:…» reports
+    /// become capability events; every other OSC string stays discarded.</summary>
+    private void EmitOsc11IfPresent(string terminator)
+    {
+        int len = _oscLength;
+        _oscLength = 0;
+        if (_state != ParserState.OscString || len < 3 || _oscBuffer is null
+            || _oscBuffer[0] != (byte)'1' || _oscBuffer[1] != (byte)'1' || _oscBuffer[2] != (byte)';')
+        {
+            return;
+        }
+
+        string report = Encoding.ASCII.GetString(_oscBuffer, 0, len) + terminator;
+        if (TerminalBackgroundProbe.TryParseOsc11(report, out var background))
+        {
+            EnqueueCapability(CapabilityEvent.Osc11Background(background.R, background.G, background.B));
         }
     }
 
@@ -956,6 +1007,7 @@ public sealed class EscapeSequenceParser
         Enqueue(InputEvent.Unknown());
         _stringEscSeen = false;
         _stringLength = 0;
+        _oscLength = 0;
         _state = ParserState.Ground;
     }
 
@@ -1202,5 +1254,6 @@ public sealed class EscapeSequenceParser
         _csiPrivatePrefix = 0;
         _stringEscSeen = false;
         _stringLength = 0;
+        _oscLength = 0;
     }
 }
