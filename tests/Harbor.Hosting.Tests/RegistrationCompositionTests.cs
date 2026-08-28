@@ -3,7 +3,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
-using Harbor.Tui.Plain;
+using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
