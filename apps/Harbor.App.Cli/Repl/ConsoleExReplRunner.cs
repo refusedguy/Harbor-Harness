@@ -8,6 +8,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
+using Harbor.DesignSystem;
 using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Tui.ConsoleEx.Rendering;
 using Harbor.Tui.ConsoleEx.Streaming;
@@ -74,6 +75,7 @@ internal sealed class ConsoleExReplRunner(
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
     private readonly QuickSwitchSlots _quickSwitch = new();
+    private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
     /// feed no-ops, the status bar just stays without token segments).</summary>
@@ -94,6 +96,11 @@ internal sealed class ConsoleExReplRunner(
     /// <summary>Leader digit hand-off: the quick-switch chord resolves into a
     /// session switch on the frame loop (async work can't run inside Bind actions).</summary>
     private char? _quickSwitchChord;
+
+    /// <summary>Theme live-reload hand-off: the watcher's poll timer thread
+    /// writes the line, the frame loop drains and appends it — the bridge is
+    /// touched from the frame thread only.</summary>
+    private volatile string? _themeReloadLine;
 
     private int _timelineViewportH;
 
@@ -144,6 +151,7 @@ internal sealed class ConsoleExReplRunner(
         }
         await backend.WriteAsync(Utf8(SeqEnterAltScreen), ct).ConfigureAwait(false);
         await PrintWelcomeAsync().ConfigureAwait(false);
+        ArmThemeWatcher();
 
         var inputTask = inputSource.RunAsync(ct);
         BindLeaderKeys();
@@ -166,6 +174,7 @@ internal sealed class ConsoleExReplRunner(
         }
         finally
         {
+            _themeWatcher?.Dispose();
             await backend.WriteAsync(Utf8(SeqLeaveAltScreen), CancellationToken.None).ConfigureAwait(false);
             modeController.Restore();
             inputSource.Dispose();
@@ -221,6 +230,12 @@ internal sealed class ConsoleExReplRunner(
 
             bridge.Tick(Environment.TickCount64);
             UpdateRetryCountdown();
+            if (_themeReloadLine is { } themeLine)
+            {
+                _themeReloadLine = null;
+                bridge.AppendSystemLine(themeLine);
+            }
+
             if (_usageDirty)
             {
                 _usageDirty = false;
@@ -759,8 +774,7 @@ internal sealed class ConsoleExReplRunner(
         error.Contains("canceled", StringComparison.OrdinalIgnoreCase);
 
     private async Task PrintWelcomeAsync()
-    {
-        var configResult = await services.GetRequiredService<IConfigStore>()
+    {        var configResult = await services.GetRequiredService<IConfigStore>()
             .LoadAsync().ConfigureAwait(false);
         string model = configResult.IsSuccess ? configResult.Value.EffectiveModel : "?";
         bridge.AppendSystemLine("Harbor — modular AI coding agent [consoleex]");
@@ -792,6 +806,44 @@ internal sealed class ConsoleExReplRunner(
         }
 
         _wake.Writer.TryWrite(null);
+    }
+
+    /// <summary>
+    ///     Custom JSON theme with live-reload (sprint UI-V2 P3.2): the file
+    ///     applies once at startup, later edits flow through the watcher's
+    ///     poll timer (parse failures keep the last applied theme). Path:
+    ///     <c>HARBOR_THEME_FILE</c>, else <c>~/.harbor/theme.json</c> when present.
+    /// </summary>
+    private void ArmThemeWatcher()
+    {
+        string path = Environment.GetEnvironmentVariable("HARBOR_THEME_FILE")
+                      ?? Path.Combine(
+                          Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                          ".harbor", "theme.json");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var initial = JsonThemeLoader.LoadFile(path);
+        if (initial.IsSuccess)
+        {
+            TerminalColorPalette.Apply(initial.Value);
+            bridge.AppendSystemLine($"theme: {initial.Value.Name} ({path})");
+        }
+
+        _themeWatcher = new ThemeFileWatcher(
+            path,
+            onApplied: theme =>
+            {
+                _themeReloadLine = $"theme: live-reload → {theme.Name}";
+                _wake.Writer.TryWrite(null);
+            },
+            onError: error =>
+            {
+                _themeReloadLine = "! theme: " + error;
+                _wake.Writer.TryWrite(null);
+            });
     }
 
     private static ReadOnlyMemory<byte> Utf8(string s) => Encoding.UTF8.GetBytes(s);
