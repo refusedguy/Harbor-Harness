@@ -20,3 +20,8 @@ sprint|IDE Integration|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ide-inte
 sprint|Security & Sandboxing|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/security/prompt.md
 sprint|Release Engineering|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/release-engineering/prompt.md
 sprint|Testing Strategy|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/testing-strategy/prompt.md
+
+sprint|Renderer Moat|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-moat/prompt.md
+sprint|OSC Expansion|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/osc-expansion/prompt.md
+sprint|Design System Product|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/design-system-product/prompt.md
+sprint|Mascot as Brand|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/mascot-brand/prompt.md
