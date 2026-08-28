@@ -1,11 +1,11 @@
 {
   "name": "UI-V2-HOTFIX",
-  "state": "running",
+  "state": "done",
   "head": "4a9c5e2",
   "base": "ea7c87e",
   "commits": 0,
   "started_at": null,
-  "finished_at": null,
+  "finished_at": "2026-08-28T14:08:00Z",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": ".kilo-docs/sprints/ui-v2-hotfix/findings.json",
@@ -14,6 +14,6 @@
   "retries": 0,
   "last_activity": "2026-08-28T11:26:44Z",
   "progress": {
-    "last_heartbeat": "2026-08-28T12:10:05Z"
+    "last_heartbeat": "2026-08-28T14:09:08Z"
   }
 }
