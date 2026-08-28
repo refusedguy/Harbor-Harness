@@ -56,8 +56,16 @@ public class DefaultUiProjectorBenchmark
         };
     }
 
-    [Benchmark(Description = "Project UiState -> UiScreenModel", Baseline = true)]
+    [Benchmark(Description = "Project UiState -> UiScreenModel (cold, distinct instance)", Baseline = true)]
     public UiScreenModel Project_UiState()
+    {
+        // Force cache miss: new record instance defeats ReferenceEquals hit that gave 8ns.
+        var fresh = _state with { ScrollOffset = _state.ScrollOffset };
+        return _projector.Project(fresh);
+    }
+
+    [Benchmark(Description = "Project UiState -> UiScreenModel (cached hit, same ref)")]
+    public UiScreenModel Project_UiState_CachedHit()
     {
         return _projector.Project(_state);
     }
@@ -65,7 +73,8 @@ public class DefaultUiProjectorBenchmark
     [Benchmark(Description = "ExtractRenderedLines from projected screen")]
     public ImmutableArray<UiRenderedLine> ExtractRenderedLines()
     {
-        var screen = _projector.Project(_state);
+        var fresh = _state with { ScrollOffset = _state.ScrollOffset };
+        var screen = _projector.Project(fresh);
         return DefaultUiProjector.ExtractRenderedLines(screen);
     }
 }

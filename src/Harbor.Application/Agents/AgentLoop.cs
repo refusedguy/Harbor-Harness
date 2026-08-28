@@ -218,14 +218,14 @@ public sealed class AgentLoop : IAgentLoop
 
                 // 3. Build system prompt
                 var tools = _tools.ResolveTools(agent.Name.Value, agent.Permission);
-                // ROP-C Z3: skills / context files come from the workspace.
-                // ROP-D Z3: MCP instructions aggregate from connected servers.
+                // Cached per-directory: avoids File.Exists/Directory.GetFiles on every turn (50x regression).
+                var (contextFiles, skills) = WorkspaceContextSource.GetOrLoadCached(session.Session.Directory);
                 var promptContext = new SystemPromptContext(
                     agent,
                     model,
                     tools,
-                    WorkspaceContextSource.LoadContextFiles(session.Session.Directory),
-                    WorkspaceContextSource.LoadSkills(session.Session.Directory),
+                    contextFiles,
+                    skills,
                     WorkspaceContextSource.FormatMcpInstructions(_mcpRegistry?.GetInstructions()),
                     session.Session.Directory);
                 string systemPrompt = await _promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);

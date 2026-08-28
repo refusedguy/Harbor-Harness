@@ -19,6 +19,12 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <IsTestProject>false</IsTestProject>
+    <!-- Analyzer-ы из Directory.Build.props (Roslynator/Sonar/Meziantou) люто
+         замедляют сборку boilerplate BenchmarkDotNet (223 бенча + UseSharedCompilation=false).
+         Без этого билд не укладывается в дефолтные 120с BDN и падает по таймауту. -->
+    <RunAnalyzers>false</RunAnalyzers>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
   </PropertyGroup>
 
   <ItemGroup>

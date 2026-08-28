@@ -83,7 +83,7 @@ public class IdentifiersValueTypeBenchmark
         string result = string.Empty;
         for (int i = 0; i < Count; i++)
         {
-            var name = ToolName.Create($"tool-{i}");
+            var name = ToolName.Create($"tool_{i}");
             result = name.Value;
         }
         return result;

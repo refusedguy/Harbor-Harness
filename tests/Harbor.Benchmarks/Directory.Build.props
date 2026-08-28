@@ -1,0 +1,15 @@
+<!--
+  Перекрывает корневой Directory.Build.props для автогенерированных
+  BenchmarkDotNet-проектов (путь .../bin/Release/.../Harbor.Benchmarks-Job-*/),
+  которые наследуют анализаторы из корня и не укладываются в дефолтные 120с.
+  Условие Contains('bin') срабатывает только для boilerplate, обычный
+  `dotnet build tests/Harbor.Benchmarks` идёт через Harbor.Benchmarks.csproj
+  где анализаторы уже выключены явно.
+-->
+<Project>
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('bin'))">
+    <RunAnalyzers>false</RunAnalyzers>
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+</Project>

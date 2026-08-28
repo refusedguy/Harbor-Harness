@@ -32,6 +32,7 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
 {
     private const char Separator = '\u001f';
 
+    private static readonly ConcurrentDictionary<System.Text.Json.JsonDocument, string> _schemaTextCache = new();
     private readonly ConcurrentDictionary<string, string> _cache = new(StringComparer.Ordinal);
 
     /// <summary>Number of prompts served from cache (diagnostics/tests).</summary>
@@ -83,7 +84,8 @@ public sealed class CachingSystemPromptBuilder(ISystemPromptBuilder inner) : ISy
             var t = tools[i];
             AppendField(sb, t.Name.Value);
             AppendField(sb, t.Description);
-            AppendField(sb, t.Schema.RootElement.GetRawText());
+            string raw = _schemaTextCache.GetOrAdd(t.Schema, static d => d.RootElement.GetRawText());
+            AppendField(sb, raw);
             AppendField(sb, t.PromptSnippet);
         }
 
