@@ -3,22 +3,22 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "10c5b7a",
+  "head": "4376cf9",
   "commits": 18,
   "created_at": "2026-08-28T14:38:08Z",
-  "last_activity": "2026-08-28T20:04:42Z",
+  "last_activity": "2026-08-28T20:17:01Z",
   "progress": {
     "current_task": "",
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-28T20:05:01Z"
+    "last_heartbeat": "2026-08-28T20:17:01Z"
   },
   "verification": {
-    "verified_at": "2026-08-28T20:04:42Z",
-    "build": "dotnet build Harbor.slnx -c Release at head 10c5b7a — 0 errors (warnings pre-existing in test projects)",
+    "verified_at": "2026-08-28T20:17:01Z",
+    "build": "dotnet build Harbor.slnx -c Release at head 4376cf9 — 0 errors, 0 warnings",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — live run with provider key (prior session): sub-agent executed in own session 42a2639e (12 messages incl. tool calls), final report returned to parent context; CLI verb + SubAgentRunner wiring re-confirmed at b43ad82 (ToolsCatalog.cs:91, RegistriesModule.cs:45-53, TaskRunRunner.cs)",
-    "note": "Fresh full 10-suite re-run at head 10c5b7a (Release, per-project MTP): 882/0/6 — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 173/0/2 (legacy no-runner path), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Code-state spot checks at 10c5b7a: TaskTool wired via ToolsCatalog.cs + RegistriesModule.cs:45-56 (DeferredSubAgentRunner→SubAgentRunner) + CLI verb 'run task' (Program.cs:173-190), UiStore.Transition private (UiStore.cs:125), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:83, TrackTurnAndProject/ResolveCurrentTurn), AgentLoop stamps session id on TurnStart/TurnEnd (AgentLoop.cs:161,271,301), 5 behaviors in Agents/Pipeline/ + AgentLoop.cs:121 _pipeline.HandleAsync, regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + BroadcasterTurnIsolationTests + PipelineBehaviorTests present."
+    "note": "Fresh full 10-suite re-run at head 4376cf9 (Release, per-project MTP): 882/0/6 — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 173/0/2 (legacy no-runner path), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. Independent re-verification (fresh session): code-state spot checks re-done at 4376cf9 — TaskTool wired via ToolsCatalog.cs:92 + RegistriesModule.cs:45-56 (DeferredSubAgentRunner→SubAgentRunner), CLI verb 'run task' smoke-tested (usage output OK; live E2E not re-run — no provider key in this environment, prior live run claimed sub-session 42a2639e), UiStore.Transition private (UiStore.cs:125, zero external .Transition( callers), EventBroadcaster ConcurrentDictionary _turnsBySession (EventBroadcaster.cs:83, TrackTurnAndProject/ResolveCurrentTurn), AgentLoop _pipeline.HandleAsync (AgentLoop.cs:121) with 5 behaviors in Agents/Pipeline/, regression tests TuiEffectHostConcurrencyTests (2 parallel PromptAsync) + BroadcasterTurnIsolationTests + PipelineBehaviorTests/TurnBehaviorTests present and green.",
   },
   "base": "1919af7",
   "tests": {
