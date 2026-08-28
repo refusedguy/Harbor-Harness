@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     Broadcasts <see cref="HarborEvent" />s to all connected client streams.
@@ -72,8 +73,14 @@ public sealed class EventBroadcaster : IAsyncDisposable
     private static readonly TimeSpan ClientWriteTimeout = TimeSpan.FromMilliseconds(250);
 
     private ulong _sequence;
-    private int _currentTurn;
     private int _disposed;
+
+    // Turn tracking is SESSION-SCOPED (multi-agent sprint): two parallel agent
+    // runs each advance their own turn index, so a shared mutable counter would
+    // leak run A's turn into run B's emitted TurnEnd events. The key is the
+    // session id carried on AgentStart/TurnStart/TurnEnd events; legacy emitters
+    // that send no session id resolve against the active run's session.
+    private readonly ConcurrentDictionary<string, int> _turnsBySession = new();
     private IDisposable? _eventBusSubscription;
     private TaskCompletionSource<bool>? _subscriptionReady;
 
@@ -401,9 +408,9 @@ public sealed class EventBroadcaster : IAsyncDisposable
             ToolExecutionEndEvent e =>
                 new HarborEvent.ToolEnd(e.ToolCallId, e.Result),
             TurnStartEvent e =>
-                TrackTurnAndProject(e.TurnIndex),
-            TurnEndEvent =>
-                new HarborEvent.TurnEnd(_currentTurn),
+                TrackTurnAndProject(e),
+            TurnEndEvent e =>
+                new HarborEvent.TurnEnd(ResolveCurrentTurn(e.SessionId)),
             AgentEndEvent => null,
             AgentErrorEvent e =>
                 new HarborEvent.AgentError(e.Message),
@@ -418,14 +425,31 @@ public sealed class EventBroadcaster : IAsyncDisposable
 
     private HarborEvent ResetTurnAndProject(string sessionId)
     {
-        _currentTurn = 0;
+        _turnsBySession[sessionId] = 0;
         return new HarborEvent.AgentStarted(sessionId);
     }
 
-    private HarborEvent TrackTurnAndProject(int turnIndex)
+    /// <summary>
+    ///     Record the turn index the event itself carries — the broadcaster never
+    ///     derives or overwrites it. The index is filed under the event's session
+    ///     (legacy emitters without a session fall back to the active run).
+    /// </summary>
+    private HarborEvent TrackTurnAndProject(TurnStartEvent e)
     {
-        _currentTurn = turnIndex;
-        return new HarborEvent.TurnStart(turnIndex);
+        string? session = e.SessionId ?? _activeSessionId;
+        if (session is not null)
+        {
+            _turnsBySession[session] = e.TurnIndex;
+        }
+
+        return new HarborEvent.TurnStart(e.TurnIndex);
+    }
+
+    /// <summary>Session-scoped current turn, 0 when unknown.</summary>
+    private int ResolveCurrentTurn(string? sessionId)
+    {
+        string? session = sessionId ?? _activeSessionId;
+        return session is not null && _turnsBySession.TryGetValue(session, out int turn) ? turn : 0;
     }
 
     private static string ExtractDelta(LlmEvent llmEvent)
