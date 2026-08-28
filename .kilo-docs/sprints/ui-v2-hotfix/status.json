@@ -1,7 +1,7 @@
 {
   "name": "UI-V2-HOTFIX",
-  "state": "running",
-  "head": "1146f8e",
+  "state": "queued",
+  "head": "",
   "base": "ea7c87e",
   "commits": 0,
   "started_at": null,
@@ -12,8 +12,8 @@
   "report": ".kilo-docs/sprints/ui-v2-hotfix/report.html",
   "failures": 0,
   "retries": 0,
-  "last_activity": "2026-08-28T14:45:24+0500",
+  "last_activity": null,
   "progress": {
-    "last_heartbeat": "2026-08-28T09:50:01Z"
+    "last_heartbeat": "2026-08-28T11:13:03Z"
   }
 }
