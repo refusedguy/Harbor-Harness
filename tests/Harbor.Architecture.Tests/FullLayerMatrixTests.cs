@@ -68,6 +68,7 @@ public class FullLayerMatrixTests
         "Harbor.Ui.Framework.Services",
         "Harbor.Ui.Framework.ViewModels",
         "Harbor.Ui.Framework.Projection",
+        "Harbor.Ui.Framework.Rendering",
         "Harbor.DesignSystem",
         "Harbor.Ui.Framework.Sessions",
         "Harbor.Desktop.Abstractions",
@@ -173,6 +174,13 @@ public class FullLayerMatrixTests
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services", "Harbor.Ui.Framework.Abstractions"]),
         ["Harbor.Ui.Framework.Projection"] = new(Layer.Presentation,
             ["Harbor.Abstractions", "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Abstractions"]),
+        // Renderer-agnostic shared layer: cell/screen primitives, input
+        // vocabulary and chat widgets consumed by every renderer backend.
+        // Leaf Presentation library over the projection primitives; the HDS
+        // token catalog (DesignSystem) and motion tokens (Desktop.Animations)
+        // back ChatPalette/PanelFx.
+        ["Harbor.Ui.Framework.Rendering"] = new(Layer.Presentation,
+            ["Harbor.Ui.Framework.Projection", "Harbor.DesignSystem", "Harbor.Desktop.Animations"]),
         // HDS v1 token catalog — leaf Presentation library over the projection
         // primitives (RgbColor); consumed by Desktop.Animations / ConsoleEx / apps.
         ["Harbor.DesignSystem"] = new(Layer.Presentation,
@@ -207,6 +215,7 @@ public class FullLayerMatrixTests
             [
                 "Harbor.Abstractions", "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Projection",
+                "Harbor.Ui.Framework.Rendering",
                 "Harbor.DesignSystem", "Harbor.Desktop.Animations",
             ]),
 

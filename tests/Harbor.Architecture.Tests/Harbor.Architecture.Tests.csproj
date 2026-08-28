@@ -84,6 +84,7 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>

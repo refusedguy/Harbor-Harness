@@ -1,7 +1,7 @@
 using System.Globalization;
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
 /// Typed status payload (widgets §3.7, grok StatusLineContext): «нет данных ⇒

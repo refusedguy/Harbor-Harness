@@ -1,7 +1,7 @@
 using Harbor.Desktop.Animations;
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
 /// HDS v1 motion primitives for the ConsoleEx renderer (widgets §3.x):

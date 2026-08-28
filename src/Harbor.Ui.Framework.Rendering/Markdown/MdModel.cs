@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Widgets.Markdown;
+namespace Harbor.Ui.Framework.Rendering.Markdown;
 
 /// <summary>Simplified markdown style tags (CE-3 scope: paragraphs/fences/ATX/lists + inline B/I/code).</summary>
 public enum MdStyle : byte

@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text;
 
-namespace Harbor.Tui.ConsoleEx.Rendering;
+namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
 /// Display-width aware greedy wrapper (inline mode): fills each output line up

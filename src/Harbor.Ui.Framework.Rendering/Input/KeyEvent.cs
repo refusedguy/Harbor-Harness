@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Harbor.Tui.ConsoleEx.Input;
+namespace Harbor.Ui.Framework.Rendering.Input;
 
 /// <summary>
 /// A decoded keyboard event. <see cref="Character"/> is meaningful only when

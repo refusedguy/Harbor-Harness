@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Permissions;
 using Harbor.Tui.ConsoleEx.Streaming;
 using Harbor.Tui.ConsoleEx.Widgets;
+using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.App.Cli.Repl;
 

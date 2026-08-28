@@ -1,6 +1,6 @@
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>Segment kind inside an intraline (word-level) diff.</summary>
 public enum WordSegKind : byte

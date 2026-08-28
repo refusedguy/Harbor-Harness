@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Input;
+namespace Harbor.Ui.Framework.Rendering.Input;
 
 /// <summary>
 /// Keyboard modifiers, bits 1–4 of the kitty modifier encoding

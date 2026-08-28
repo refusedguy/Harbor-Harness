@@ -6,6 +6,8 @@ using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Tui.ConsoleEx.Rendering;
 using Harbor.Tui.ConsoleEx.Streaming;
 using Harbor.Tui.ConsoleEx.Widgets;
+using Harbor.Ui.Framework.Rendering.Input;
+using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.App.Cli.Tests;
 

@@ -56,7 +56,7 @@ public class SpinnerStripTests
     {
         foreach (var f in SpinnerStrip.WorkingFrames.Concat(SpinnerStrip.AwaitingFrames))
         {
-            await Assert.That(Harbor.Tui.ConsoleEx.Rendering.UnicodeWidth.Width(f)).IsEqualTo(1);
+            await Assert.That(UnicodeWidth.Width(f)).IsEqualTo(1);
         }
     }
 }

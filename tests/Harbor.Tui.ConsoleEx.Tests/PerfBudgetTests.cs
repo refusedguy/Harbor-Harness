@@ -55,7 +55,7 @@ public class PerfBudgetTests
     public async Task StreamingPushRender_SteadyTail_IsAllocationFree_AfterFreeze()
     {
         // Frozen document + empty tail: repeated renders must not allocate.
-        var renderer = new Widgets.Markdown.StreamingMarkdownRenderer();
+        var renderer = new Harbor.Ui.Framework.Rendering.Markdown.StreamingMarkdownRenderer();
         renderer.Push("# heading\n\nparagraph **with** inline `styles`.\n");
         renderer.Complete();
         _ = renderer.RenderTail(60);

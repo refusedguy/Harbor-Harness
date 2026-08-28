@@ -1,8 +1,8 @@
 using System.Text;
-using Harbor.Tui.ConsoleEx.Input;
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering.Input;
+using Harbor.Ui.Framework.Rendering;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>User decision produced by an <see cref="ApprovalGateView" /> gate.</summary>
 public enum ApprovalChoice : byte

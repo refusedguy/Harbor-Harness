@@ -4,7 +4,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.ConsoleEx.Widgets;
-using Harbor.Tui.ConsoleEx.Widgets.Markdown;
+using Harbor.Ui.Framework.Rendering.Markdown;
 
 namespace Harbor.Tui.ConsoleEx.Streaming;
 
@@ -504,7 +504,7 @@ public sealed class ChatScreenBridge : IDisposable
     /// Returns false while no gate is armed or the key is not one of y/n/a/
     /// Enter/Escape — callers fall through to normal routing.
     /// </summary>
-    public bool TryRouteApprovalKey(in Input.KeyEvent key)
+    public bool TryRouteApprovalKey(in KeyEvent key)
     {
         PruneResolvedGates();
         if (_pendingGates.Count == 0)

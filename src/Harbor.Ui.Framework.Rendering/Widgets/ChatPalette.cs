@@ -1,8 +1,8 @@
 using Harbor.DesignSystem;
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Projection;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
 /// Shared cell styles for chat widgets — the terminal-side instance of the

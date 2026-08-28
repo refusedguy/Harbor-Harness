@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text;
 
-namespace Harbor.Tui.ConsoleEx.Rendering;
+namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
 /// Double-duty screen grid (celldiff §1.2): BACK holds what panels painted

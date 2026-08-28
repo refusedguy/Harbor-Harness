@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Rendering;
+namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>Integer rectangle shared by buffer fills, layout and mouse routing.</summary>
 public readonly record struct Rect(int X, int Y, int Width, int Height)

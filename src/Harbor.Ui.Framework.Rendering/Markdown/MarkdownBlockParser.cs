@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Widgets.Markdown;
+namespace Harbor.Ui.Framework.Rendering.Markdown;
 
 internal enum MdBlockKind : byte
 {

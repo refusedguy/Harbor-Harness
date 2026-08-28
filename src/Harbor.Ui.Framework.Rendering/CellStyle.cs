@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Rendering;
+namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
 /// Attribute bits of a cell style (celldiff §1.1). Low byte holds the eight

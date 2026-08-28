@@ -1,7 +1,7 @@
 using System.Text;
-using Harbor.Tui.ConsoleEx.Rendering;
+using Harbor.Ui.Framework.Rendering;
 
-namespace Harbor.Tui.ConsoleEx.Widgets;
+namespace Harbor.Ui.Framework.Rendering.Widgets;
 
 /// <summary>
 /// Width-keyed wrap cache for an immutable text: the wrapped line list is

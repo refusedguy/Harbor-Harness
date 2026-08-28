@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text;
 
-namespace Harbor.Tui.ConsoleEx.Rendering;
+namespace Harbor.Ui.Framework.Rendering;
 
 /// <summary>
 /// Display-width lookup for terminal cells (perf-audit §3.2): two sorted

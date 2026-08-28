@@ -1,15 +1,7 @@
-using Harbor.Tui.ConsoleEx.Rendering;
-
 namespace Harbor.Tui.ConsoleEx.Input;
 
-/// <summary>Focusable surface receiving keyboard input (celldiff §5.2).</summary>
-public interface IFocusTarget
-{
-    string Id { get; }
-
-    /// <summary>Called when the target gains or loses focus.</summary>
-    void OnFocusChanged(bool focused);
-}
+// IFocusTarget moved to Harbor.Ui.Framework.Rendering.Input (renderer-agnostic
+// shared vocabulary); FocusRouter keeps consuming it via GlobalUsings.
 
 /// <summary>
 /// Flat Tab-order focus traversal (lazygit style): Tab/Shift+Tab wrap around,

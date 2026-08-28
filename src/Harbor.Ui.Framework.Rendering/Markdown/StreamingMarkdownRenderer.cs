@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Harbor.Tui.ConsoleEx.Widgets.Markdown;
+namespace Harbor.Ui.Framework.Rendering.Markdown;
 
 /// <summary>Checkpoint into the frozen prefix (grok streaming.rs).</summary>
 public readonly record struct MdCheckpoint(int OutputLines, int SourceChars);

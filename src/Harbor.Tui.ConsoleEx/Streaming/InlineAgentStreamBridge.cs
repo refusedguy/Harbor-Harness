@@ -130,7 +130,7 @@ public sealed class InlineAgentStreamBridge : IDisposable
         var lines = new List<string>(64);
         if (text.Length > 0)
         {
-            Rendering.TextWrap.WrapDocument(text, Width, lines);
+            TextWrap.WrapDocument(text, Width, lines);
         }
 
         foreach (var line in lines)

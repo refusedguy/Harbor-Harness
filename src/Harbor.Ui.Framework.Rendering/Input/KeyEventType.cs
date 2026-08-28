@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Input;
+namespace Harbor.Ui.Framework.Rendering.Input;
 
 /// <summary>
 /// Key lifecycle phase. Press/repeat/release distinction is only available

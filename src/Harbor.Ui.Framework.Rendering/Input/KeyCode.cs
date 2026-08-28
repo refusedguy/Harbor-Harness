@@ -1,4 +1,4 @@
-namespace Harbor.Tui.ConsoleEx.Input;
+namespace Harbor.Ui.Framework.Rendering.Input;
 
 /// <summary>
 /// Logical key identity. <see cref="KeyCode.Char"/> keys carry the actual

@@ -6,6 +6,7 @@ using Harbor.App.Cli.Repl;
 using Harbor.Tui.ConsoleEx.Input;
 using Harbor.Tui.ConsoleEx.Rendering;
 using Harbor.Tui.ConsoleEx.Streaming;
+using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Tui.ConsoleEx.Widgets;
 using Microsoft.Extensions.DependencyInjection;
 

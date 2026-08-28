@@ -1,5 +1,5 @@
 using Harbor.Tui.ConsoleEx.Rendering;
-using Harbor.Tui.ConsoleEx.Widgets.Markdown;
+using Harbor.Ui.Framework.Rendering.Markdown;
 
 namespace Harbor.Tui.ConsoleEx.Widgets;
 
@@ -51,7 +51,7 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         {
             var span = line.Spans[s];
             buffer.SetText(cursor, y, span.Text, StyleFor(span.Style));
-            cursor += Rendering.UnicodeWidth.Width(span.Text);
+            cursor += UnicodeWidth.Width(span.Text);
         }
     }
 

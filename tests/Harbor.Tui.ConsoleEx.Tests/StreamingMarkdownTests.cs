@@ -1,4 +1,4 @@
-using Harbor.Tui.ConsoleEx.Widgets.Markdown;
+using Harbor.Ui.Framework.Rendering.Markdown;
 
 namespace Harbor.Tui.ConsoleEx.Tests;
 
