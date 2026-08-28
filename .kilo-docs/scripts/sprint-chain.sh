@@ -87,7 +87,7 @@ health_check() {
     exit 1
   fi
   local dirty
-  dirty=$(git status --porcelain | grep -vc '^\(M \.kilo-docs\/sprints\/.*\/status\.json\|\.nuke\/\)')
+  dirty=$(git status --porcelain | grep -E "^M \.kilo-docs/sprints/.*/status\.json|\.nuke/" | wc -l || true)
   if [[ "$dirty" -gt 0 ]]; then
     log "WARN: dirty tree ($dirty files), cleaning..."
     git reset --hard HEAD
