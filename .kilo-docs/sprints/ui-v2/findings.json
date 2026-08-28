@@ -4,7 +4,7 @@
   "branch": "dev",
   "commits": [
     {
-      "sha": "0b4ee27",
+      "sha": "4c7c84f",
       "task": "1 — ApprovalGateView queue",
       "files": [
         "src/Harbor.Tui.ConsoleEx/Streaming/ChatScreenBridge.cs",
@@ -14,7 +14,7 @@
       "tests": "Harbor.Tui.ConsoleEx.Tests 661/661 pass; temp acceptance harness (2 consecutive bash gates accepted in arrival order, no zombie IsPending, ids distinct; overflow auto-deny) 2/2 pass, harness removed before commit."
     },
     {
-      "sha": "38ad8f7",
+      "sha": "876862b",
       "task": "2 — Renderer lag / wide-cell artifacts",
       "files": [
         "src/Harbor.Tui.ConsoleEx/Rendering/ScreenBuffer.cs",
@@ -24,7 +24,7 @@
       "tests": "Harbor.Tui.ConsoleEx.Tests 661/661 pass (incl. DiffEngine style-only and golden SGR tests, Budget eviction test); temp harness verified lead+tail restyle, tail routing, no stale colors after BlendRegion, and 20k appends with eviction complete in tens of ms — harness removed before commit."
     },
     {
-      "sha": "52f0712",
+      "sha": "734a003",
       "task": "3 — Windows PTY restore path",
       "files": [
         "apps/Harbor.App.Cli/Repl/ConsoleExReplRunner.cs"
@@ -35,7 +35,8 @@
   ],
   "verification": {
     "independent_recheck": "All three commits re-verified post-hoc: full Harbor.slnx Release build 0 errors / 180 warnings (pre-existing, none in the five touched files); Harbor.Tui.ConsoleEx.Tests 661/661, Harbor.Tui.ConsoleEx.PtyTests 39/39 (×2 after one transient flake), Harbor.App.Cli.Tests 78/78.",
-    "pty_flake": "PtyTests first invocation had 1/39 failure with no reproduction on two full re-runs — treat as environment-flaky, not a regression from 52f0712."
+    "pty_flake": "PtyTests first invocation had 1/39 failure with no reproduction on two full re-runs — treat as environment-flaky, not a regression from 734a003.",
+    "fresh_rerun": "2026-08-28 post-hoc re-verification on dev: Harbor.slnx Release build 0 errors; Harbor.Tui.ConsoleEx.Tests 661/661, Harbor.App.Cli.Tests 78/78, Harbor.Tui.ConsoleEx.PtyTests 39/39 — no PTY flake observed."
   },
   "notes": [
     "Hard rule '1-2 files per commit' held: 2/2/1 files; three atomic commits (task 2's named files both fit in one).",
