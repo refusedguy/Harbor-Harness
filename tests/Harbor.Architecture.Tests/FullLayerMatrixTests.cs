@@ -300,6 +300,10 @@ public class FullLayerMatrixTests
             "Harbor.Tui.Spectre", "Harbor.Tui.Spectre.Fullscreen",
             "Harbor.Tui.SpectreTui", "Harbor.Tui.TerminalGui",
             "Harbor.Tui.Termina", "Harbor.Tui.RazorConsole",
+            // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
+            // wired behind HarborWithNickConsoleEx (mutually exclusive with
+            // HarborWithSpectreTui — see Harbor.Hosting.csproj).
+            "Harbor.Tui.NickConsoleEx",
         ]),
     };
 
