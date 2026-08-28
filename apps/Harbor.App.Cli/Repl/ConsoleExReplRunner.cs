@@ -75,6 +75,7 @@ internal sealed class ConsoleExReplRunner(
     private readonly LeaderKeyRouter _leader = new();
     private readonly VimComposerMode _vim = new();
     private readonly QuickSwitchSlots _quickSwitch = new();
+    private readonly SelectionEngine _selection = new();
     private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
@@ -289,6 +290,13 @@ internal sealed class ConsoleExReplRunner(
             panel.Paint(screenSession.Back);
         }
 
+        // Copy-on-select highlight (P6.4): transient Reverse overlay — the
+        // next repaint without an active selection clears it for free.
+        if (_selection.IsActive)
+        {
+            _selection.Paint(screenSession.Back);
+        }
+
         if (_palette.Visible)
         {
             int w = Math.Clamp(cols - 8, 20, 56);
@@ -299,6 +307,27 @@ internal sealed class ConsoleExReplRunner(
         }
 
         await screenSession.FlushFrameAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Copy-on-select release (killer features §P6.4): extracts the
+    /// selected text from the back buffer and ships it via OSC 52 — terminals
+    /// that support the sequence copy it, everything else ignores silently.</summary>
+    private async Task FinishSelectionAsync(int releaseX, int releaseY, CancellationToken ct)
+    {
+        int cols = Math.Max(1, screenSession.CurrentCols);
+        int rows = Math.Max(1, screenSession.CurrentRows);
+        string? text = _selection.OnRelease(
+            releaseX, releaseY, cols, rows,
+            (x, y) => x >= 0 && x < cols && y >= 0 && y < rows ? screenSession.Back.Get(x, y) : Cell.Blank);
+        if (string.IsNullOrEmpty(text))
+        {
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        await backend.WriteAsync(Utf8(Osc52Clipboard.Encode(text)), ct).ConfigureAwait(false);
+        bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
+        _wake.Writer.TryWrite(null);
     }
 
     // ── Input routing ──────────────────────────────────────────────────────
@@ -323,12 +352,29 @@ internal sealed class ConsoleExReplRunner(
 
             case InputEventKind.Mouse when evt.Mouse.Type is MouseEventType.Press or MouseEventType.Click:
                 // Click-to-decide: pending approval gates get first claim on a
-                // left press; otherwise presses are inert (wheel handles scroll).
+                // left press; otherwise a press anchors a copy-on-select
+                // selection (P6.4) — a plain click selects nothing on release.
                 if (bridge.TryRouteApprovalClick(evt.Mouse))
+                {
+                    // claimed by the approval gate
+                }
+                else if (evt.Mouse.Type == MouseEventType.Press
+                         && _selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
                 {
                     _wake.Writer.TryWrite(null);
                 }
 
+                break;
+
+            case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.Drag
+                                           && evt.Mouse.Button == MouseButton.Left:
+                _selection.OnDrag(evt.Mouse.Column, evt.Mouse.Row);
+                _wake.Writer.TryWrite(null); // repaint the growing highlight
+                break;
+
+            case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.Release
+                                           && evt.Mouse.Button == MouseButton.Left:
+                await FinishSelectionAsync(evt.Mouse.Column, evt.Mouse.Row, ct).ConfigureAwait(false);
                 break;
 
             case InputEventKind.Mouse when evt.Mouse.Type == MouseEventType.WheelUp:
