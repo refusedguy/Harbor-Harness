@@ -1,9 +1,87 @@
 {
-  "state": "queued",
+  "state": "done",
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "",
-  "commits": 0,
-  "created_at": "2026-08-28T14:38:08Z"
+  "head": "4889b57eb27c6b0e0c7c851ab1c7a665c433e543",
+  "commits": 18,
+  "created_at": "2026-08-28T14:38:08Z",
+  "last_activity": "2026-08-28T15:32:05Z",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 4,
+    "tasks_total": 4,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-08-28T15:33:20Z"
+  },
+  "base": "1919af7",
+  "tests": {
+    "passed": 876,
+    "failed": 0,
+    "skipped": 6,
+    "per_project": {
+      "Harbor.Application.Tests": 150,
+      "Harbor.Core.Tests": 92,
+      "Harbor.Ipc.Tests": 81,
+      "Harbor.Ui.Framework.Tests": 76,
+      "Harbor.Abstractions.Tests": 53,
+      "Harbor.Tools.Builtin.Tests": 171,
+      "Harbor.Architecture.Tests": 47,
+      "Harbor.Hosting.Tests": 10,
+      "Harbor.Tui.Tests": 118,
+      "Harbor.App.Cli.Tests": 78
+    }
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Включи TaskTool execution",
+      "status": "pass",
+      "commits": [
+        "406e788"
+      ],
+      "note": "SubAgentRunner/DeferredSubAgentRunner уже были в дереве; проверен сквозной прогон harbor run task agent=explore (собственная сессия, вывод в родительский контекст), добавлен CLI-verb run task"
+    },
+    {
+      "id": 2,
+      "title": "Убери UiStore.Transition escape hatch",
+      "status": "pass",
+      "commits": [
+        "2e805c8",
+        "9f627a9",
+        "80b2d1e",
+        "d36dd44",
+        "b6d40e0"
+      ],
+      "note": "Transition приватен; все вызыватели (TuiEffectHost, SessionManager, SessionSwitcher, Avalonia ChatViewModel, contrib-мосты) диспатчат UiMsg.AgentStarted/AgentEnded/StatusChanged/AppendLine/InputText/Quit; CAS lock-free сохранён; регрессионный тест с 2 параллельными PromptAsync добавлен"
+    },
+    {
+      "id": 3,
+      "title": "Сделай EventBroadcaster session-scoped",
+      "status": "pass",
+      "commits": [
+        "fa482de",
+        "995152a",
+        "50d6ac4",
+        "704f640",
+        "3c114c3"
+      ],
+      "note": "_currentTurn заменён на ConcurrentDictionary<string,int> _turnsBySession; TurnStart/TurnEnd события несут SessionId; broadcaster не перезаписывает TurnIndex; InProcessHarborClient изменён lockstep; тесты параллельной изоляции и reset per session"
+    },
+    {
+      "id": 4,
+      "title": "AgentLoop pipeline behaviors (§3.5)",
+      "status": "pass",
+      "commits": [
+        "300336c",
+        "6dfa414",
+        "d19fb8b",
+        "7ef00fa",
+        "85f225d",
+        "4889b57"
+      ],
+      "note": "PromptRequest + IPipelineBehavior + AgentPipeline; LoggingBehavior и PermissionCheckBehavior — run-level middleware; CompactionBehavior/SteeringDrainBehavior/MaxStepsBehavior — per-turn классы, вызываемые ядром цикла; все тестируются изолированно; AgentLoop unit tests не сломаны (136 -> 150)"
+    }
+  ],
+  "report": ".kilo-docs/sprints/multi-agent/report.html"
 }
