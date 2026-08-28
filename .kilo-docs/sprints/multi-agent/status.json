@@ -3,25 +3,26 @@
   "sprint": "multi-agent",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/multi-agent/prompt.md",
-  "head": "dc9fae3",
+  "head": "5cac99a",
   "commits": 54,
   "created_at": "2026-08-28T14:38:08Z",
-  "last_activity": "2026-08-29T04:00:15+05:00",
+  "last_activity": "2026-08-29T04:45:00+05:00",
   "progress": {
     "current_task": "",
     "tasks_done": 4,
     "tasks_total": 4,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-29T04:00:15+05:00"
+    "last_heartbeat": "2026-08-29T04:45:00+05:00"
   },
   "verification": {
-    "verified_at": "2026-08-29T04:00:15+05:00",
+    "verified_at": "2026-08-29T04:45:00+05:00",
     "build": "dotnet build Harbor.slnx -c Release at head df3890d — 0 errors; 192 analyzer warnings all pre-existing in tests/samples/bench projects, 0 in sprint-touched src/ code",
     "e2e": "harbor run task agent=explore \"find all .cs files\" — LIVE RUN at head 3db6942: sub-agent executed in own session f246053222be4445997af4c7685d20e4 (7 messages incl. tool calls), final report returned to parent output, exit=0. df3890d differs from 3db6942 only by docs commits — no code delta; CLI verb re-verified parseable (run task --help) in this session",
     "note": "Fresh full 10-suite re-run at head df3890d (Release, per-project MTP): 882/0/6 — Application 150/0/0, Core 92/0/0, Ipc 85/0/4 (known self-skips), Ui.Framework 76/0/0, Abstractions 53/0/0, Tools.Builtin 173/0/2 (env-dependent: MissingRg + UnresolvableHost fail-closed), Architecture 47/0/0, Hosting 10/0/0, Tui 118/0/0, App.Cli 78/0/0. All 10 suites rc=0.",
     "reverify": "Re-verification at head 7b3db0a (fresh session 2026-08-29 03:45+05): Release build 0 errors; 10 suites re-run per-project, all rc=0 — 876 passed / 0 failed / 6 self-skips = 882 totals, counts identical to baseline. Code-level acceptance re-checked in this session: zero .Transition( callers outside UiStore (Transition private, CAS-only), EventBroadcaster uses ConcurrentDictionary _turnsBySession (no _currentTurn), 5 pipeline behaviors present with 14 isolated tests, TuiEffectHostConcurrencyTests.TwoParallelPromptHosts regression green. Deliverables: status.json + report.html at .kilo-docs/sprints/multi-agent/.",
     "reverify2": "Re-verification at head bef04d6 (fresh session 2026-08-29 03:51+05): Release build 0 errors (192 analyzer warnings pre-existing outside src/ sprint code); full 10-suite per-project run — 876 passed / 0 failed / 6 skipped (Application 150, Core 92, Ipc 81+4skip, Ui.Framework 76, Abstractions 53, Tools.Builtin 171+2skip, Architecture 47, Hosting 10, Tui 118, App.Cli 78), all rc=0. Acceptance re-confirmed in code: Transition private (UiStore.cs:125), _turnsBySession in EventBroadcaster.cs:83 + InProcessHarborClient.cs:55, 5 behaviors in src/Harbor.Application/Agents/Pipeline/, AgentLoop.cs:121 _pipeline.HandleAsync, SubAgentRunner+DeferredSubAgentRunner in Harbor.Application/Agents.",
-    "reverify3": "Re-verification at head dc9fae3 (fresh session 2026-08-29 04:00+05): Release build — 0 errors / 0 warnings; full 10-suite per-project run all rc=0 — 876 passed / 0 failed / 6 skipped, counts identical to baseline (Application 150, Core 92, Ipc 81+4skip, Ui.Framework 76, Abstractions 53, Tools.Builtin 171+2skip, Architecture 47, Hosting 10, Tui 118, App.Cli 78). CLI acceptance re-checked: `harbor run task --help` parses (Usage: harbor run task agent=<name> <prompt>); live run proven at 3db6942, only docs commits since. Code grep: zero .Transition( callers outside UiStore, zero _currentTurn in src/. Stray duplicate report .kilo-docs/docs/sprint-report-20260829-0257.html removed."
+    "reverify3": "Re-verification at head dc9fae3 (fresh session 2026-08-29 04:00+05): Release build — 0 errors / 0 warnings; full 10-suite per-project run all rc=0 — 876 passed / 0 failed / 6 skipped, counts identical to baseline (Application 150, Core 92, Ipc 81+4skip, Ui.Framework 76, Abstractions 53, Tools.Builtin 171+2skip, Architecture 47, Hosting 10, Tui 118, App.Cli 78). CLI acceptance re-checked: `harbor run task --help` parses (Usage: harbor run task agent=<name> <prompt>); live run proven at 3db6942, only docs commits since. Code grep: zero .Transition( callers outside UiStore, zero _currentTurn in src/. Stray duplicate report .kilo-docs/docs/sprint-report-20260829-0257.html removed.",
+    "reverify4": "Re-verification at head 5cac99a (fresh session 2026-08-29 04:34+05, sprint re-dispatch): Release build 0 errors (192 analyzer warnings pre-existing in tests/samples only). Full 10-suite per-project run all rc=0 — 876 passed / 0 failed / 6 skipped, counts identical to baseline (Application 150, Core 92, Ipc 81+4skip, Ui.Framework 76, Abstractions 53, Tools.Builtin 171+2skip, Architecture 47, Hosting 10, Tui 118, App.Cli 78). CLI acceptance re-checked live: `harbor run task --help` parses. Code-level acceptance re-confirmed by grep: zero .Transition( callers outside UiStore, zero _currentTurn in src/apps/contrib, _pipeline.HandleAsync(new PromptRequest(...)) at AgentLoop.cs:121, 5 behaviors + AgentPipeline + PromptRequest in src/Harbor.Application/Agents/Pipeline/, SubAgentRunner wired via DeferredSubAgentRunner in RegistriesModule.cs:45-53, regression tests TuiEffectHostConcurrencyTests + PipelineBehaviorTests present. Stray untracked duplicate report .kilo-docs/docs/sprint-report-20260829-0402.html removed. Zero code delta vs verified heads — only docs commits since 3db6942."
   },
   "base": "1919af7",
   "tests": {
