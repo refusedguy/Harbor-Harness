@@ -120,4 +120,24 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext
     /// </summary>
     public static bool IsDenied(string assemblyName, IReadOnlySet<PluginCapability> granted) =>
         DenyList.TryGetValue(assemblyName, out var required) && !granted.Contains(required);
+
+    /// <summary>
+    ///     Build a sandbox for <paramref name="script" /> using its manifest-declared
+    ///     capabilities, with the standard host-shared assembly set (Harbor.Abstractions,
+    ///     Harbor.Abstractions.Contracts, Harbor.Plugins.Abstractions).
+    /// </summary>
+    public static CollectiblePluginLoadContext ForScript(PluginScript script)
+    {
+        if (script is null)
+            throw new ArgumentNullException(nameof(script));
+
+        return new CollectiblePluginLoadContext(
+            script.Path,
+            script.DeclaredCapabilities,
+            [
+                typeof(Harbor.Abstractions.Plugins.IPlugin).Assembly,
+                typeof(Harbor.Abstractions.Models.AgentMessage).Assembly,
+                typeof(PluginScript).Assembly,
+            ]);
+    }
 }
