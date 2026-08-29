@@ -166,4 +166,109 @@ public sealed class TrustLayerTests : IDisposable
         await Assert.That(staleWithPrompt).IsEqualTo(PluginTrustDecision.Trusted); // prompt fired again after edit
         await Assert.That(promptCount).IsGreaterThanOrEqualTo(2);
     }
+
+    [Test]
+    public async Task TrustingPluginSource_NarrowsYieldedScriptToApprovedSubset()
+    {
+        const string body = "// harbor:capabilities read_files,http_requests\nclass G { }";
+        WritePlugin(_projectDir, "google.cs", body);
+        string store = Path.Combine(_globalDir, "trust.json");
+        var source = new TrustingPluginSource(
+            new FileSystemPluginSource(new[] { _projectDir }, NullLogger<FileSystemPluginSource>.Instance),
+            new FileTrustPolicy(
+                new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
+                capabilityPrompt: (_, declared) => Task.FromResult<IReadOnlySet<PluginCapability>>(
+                    declared.Where(c => c == PluginCapability.ReadFiles).ToHashSet())),
+            NullLogger<TrustingPluginSource>.Instance);
+
+        var scripts = await CollectAsync(source);
+
+        await Assert.That(scripts).HasCount().EqualTo(1);
+        var yielded = scripts[0];
+        await Assert.That(yielded.DeclaredCapabilities.Count).IsEqualTo(1);
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.ReadFiles)).IsTrue();
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.HttpRequests)).IsFalse();
+        // The narrowing must not touch the identity the compiler/cache keys on.
+        await Assert.That(yielded.Hash).IsEqualTo(new PluginScript(yielded.Path, body).Hash);
+    }
+
+    [Test]
+    public async Task TrustingPluginSource_NeverWidensBeyondManifest()
+    {
+        // Prompt returns capabilities the manifest never declared — the seam must
+        // intersect with the declaration instead of granting the wider set.
+        const string body = "// harbor:capabilities read_files\nclass X { }";
+        WritePlugin(_projectDir, "over.cs", body);
+        string store = Path.Combine(_globalDir, "trust.json");
+        var source = new TrustingPluginSource(
+            new FileSystemPluginSource(new[] { _projectDir }, NullLogger<FileSystemPluginSource>.Instance),
+            new FileTrustPolicy(
+                new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
+                capabilityPrompt: (_, _) => Task.FromResult<IReadOnlySet<PluginCapability>>(
+                    new HashSet<PluginCapability>
+                    {
+                        PluginCapability.ReadFiles,
+                        PluginCapability.RunProcesses,
+                        PluginCapability.HttpRequests,
+                    })),
+            NullLogger<TrustingPluginSource>.Instance);
+
+        var scripts = await CollectAsync(source);
+
+        await Assert.That(scripts).HasCount().EqualTo(1);
+        var yielded = scripts[0];
+        await Assert.That(yielded.DeclaredCapabilities.Count).IsEqualTo(1);
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.ReadFiles)).IsTrue();
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.RunProcesses)).IsFalse();
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.HttpRequests)).IsFalse();
+    }
+
+    [Test]
+    public async Task TrustingPluginSource_GlobalScopeKeepsDeclaredCapabilities()
+    {
+        const string body = "// harbor:capabilities read_files,sub_agents\nclass M { }";
+        WritePlugin(_globalDir, "mine.cs", body);
+        var source = new TrustingPluginSource(
+            new FileSystemPluginSource(new[] { _globalDir }, NullLogger<FileSystemPluginSource>.Instance),
+            new FileTrustPolicy(
+                new[] { _globalDir }, Path.Combine(_globalDir, "trust.json"), NullLogger<FileTrustPolicy>.Instance),
+            NullLogger<TrustingPluginSource>.Instance);
+
+        var scripts = await CollectAsync(source);
+
+        var yielded = scripts.Single();
+        await Assert.That(yielded.DeclaredCapabilities.Count).IsEqualTo(2);
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.ReadFiles)).IsTrue();
+        await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.SubAgents)).IsTrue();
+    }
+
+    [Test]
+    public async Task TrustingPluginSource_InvalidManifest_SkippedEvenIfPolicyTrusts()
+    {
+        // Unknown capability token → the plugin must be rejected regardless of the
+        // policy's verdict (fail-closed contract of PluginScript.HasInvalidManifest).
+        const string body = "// harbor:capabilities read_files,bogus_token\nclass B { }";
+        WritePlugin(_projectDir, "bad.cs", body);
+        string store = Path.Combine(_globalDir, "trust.json");
+        var source = new TrustingPluginSource(
+            new FileSystemPluginSource(new[] { _projectDir }, NullLogger<FileSystemPluginSource>.Instance),
+            new FileTrustPolicy(
+                new[] { _globalDir }, store, NullLogger<FileTrustPolicy>.Instance,
+                capabilityPrompt: (_, declared) => Task.FromResult(declared)),
+            NullLogger<TrustingPluginSource>.Instance);
+
+        var scripts = await CollectAsync(source);
+
+        await Assert.That(scripts).IsEmpty();
+        // Nothing was persisted for the rejected plugin either.
+        await Assert.That(File.Exists(store)).IsFalse();
+    }
+
+    private static async Task<List<PluginScript>> CollectAsync(TrustingPluginSource source)
+    {
+        var scripts = new List<PluginScript>();
+        await foreach (var script in source.GetScriptsAsync())
+            scripts.Add(script);
+        return scripts;
+    }
 }
