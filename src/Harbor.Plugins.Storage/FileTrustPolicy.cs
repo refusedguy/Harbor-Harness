@@ -33,6 +33,13 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
 
         [JsonPropertyName("hash")]
         public string Hash { get; set; } = string.Empty;
+
+        /// <summary>
+        ///     v2: capabilities the user approved for this exact (path, hash) pair.
+        ///     Stored as canonical lowercase names; null for legacy v1 entries.
+        /// </summary>
+        [JsonPropertyName("capabilities")]
+        public List<string>? Capabilities { get; set; }
     }
 
     private static readonly JsonSerializerOptions StoreOptions = new()
@@ -43,6 +50,7 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
 
     private readonly ILogger<FileTrustPolicy> _logger;
     private readonly Func<PluginScript, Task<bool>>? _prompt;
+    private readonly Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? _capabilityPrompt;
     private readonly IReadOnlyList<string> _trustedDirs;
     private readonly string _storePath;
     private readonly object _sync = new();
@@ -60,13 +68,20 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
     /// <param name="trustPrompt">
     ///     Optional async hook invoked with scripts that have no persisted decision yet
     ///     (e.g. a console yes/no prompt). Return <c>true</c> to trust and persist. When
-    ///     null, unknown scripts are skipped.
+    ///     null, unknown scripts are skipped. Superseded by <paramref name="capabilityPrompt" />
+    ///     when both are supplied.
+    /// </param>
+    /// <param name="capabilityPrompt">
+    ///     Optional v2 hook invoked with the plugin's manifest-declared capabilities.
+    ///     Returns the subset the user approved (may be empty — plugin still loads,
+    ///     but with zero capabilities granted). Persisted to the trust store.
     /// </param>
     public FileTrustPolicy(
         IEnumerable<string> trustedRoots,
         string storePath,
         ILogger<FileTrustPolicy> logger,
-        Func<PluginScript, Task<bool>>? trustPrompt = null)
+        Func<PluginScript, Task<bool>>? trustPrompt = null,
+        Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? capabilityPrompt = null)
     {
         _trustedDirs = (trustedRoots ?? throw new ArgumentNullException(nameof(trustedRoots)))
             .Select(NormalizeDir)
@@ -75,6 +90,7 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
         _storePath = Path.GetFullPath(storePath);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _prompt = trustPrompt;
+        _capabilityPrompt = capabilityPrompt;
     }
 
     /// <inheritdoc />
@@ -104,11 +120,57 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
                 script.Hash[..Math.Min(12, script.Hash.Length)]);
         }
 
-        if (_prompt is null || !await _prompt(script).ConfigureAwait(false))
-            return PluginTrustDecision.Untrusted;
+        // v2: per-capability approval. Empty approval still grants loading (the
+        // plugin can run sandboxed with zero capabilities) but must be persisted.
+        IReadOnlySet<PluginCapability> granted;
+        if (_capabilityPrompt is not null)
+        {
+            granted = await _capabilityPrompt(script, script.DeclaredCapabilities).ConfigureAwait(false);
+        }
+        else
+        {
+            bool accepted = _prompt is not null && await _prompt(script).ConfigureAwait(false);
+            if (!accepted)
+                return PluginTrustDecision.Untrusted;
+            granted = script.DeclaredCapabilities;
+        }
 
-        PersistAccept(entries, existing, fullPath, script.Hash);
+        PersistAccept(entries, existing, fullPath, script.Hash, granted, script.DeclaredCapabilities);
         return PluginTrustDecision.Trusted;
+    }
+
+    /// <summary>
+    ///     Look up the capabilities the user approved for an already-trusted plugin
+    ///     (path + hash must both match). Returns the empty set for unknown or stale
+    ///     entries, for v1 entries (no stored capabilities), and for plugins whose
+    ///     stored grants are not in the manifest — fail-closed in every ambiguous case.
+    /// </summary>
+    public IReadOnlySet<PluginCapability> GetGrantedCapabilities(PluginScript script)
+    {
+        if (script is null)
+            throw new ArgumentNullException(nameof(script));
+
+        string fullPath = Path.GetFullPath(script.Path);
+        if (_trustedDirs.Any(d => IsUnder(fullPath, d)))
+            return script.DeclaredCapabilities;
+
+        var entries = LoadEntries();
+        var existing = entries.FirstOrDefault(e => string.Equals(
+            e.Path,
+            fullPath,
+            StringComparison.OrdinalIgnoreCase));
+        if (existing is null ||
+            !string.Equals(existing.Hash, script.Hash, StringComparison.Ordinal) ||
+            existing.Capabilities is null)
+            return EmptyGranted;
+
+        var parse = PluginCapabilities.TryParse(string.Join(",", existing.Capabilities));
+        if (parse.IsFailure)
+            return EmptyGranted;
+
+        // Fail-closed: stored grants outside the manifest are dropped, not granted.
+        var granted = parse.Value.Where(script.DeclaredCapabilities.Contains).ToHashSet();
+        return granted;
     }
 
     /// <summary>
@@ -171,7 +233,13 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
             .Cast<TrustEntry>()
             .ToList();
 
-    private void PersistAccept(List<TrustEntry> snapshot, TrustEntry? stale, string fullPath, string hash)
+    private void PersistAccept(
+        List<TrustEntry> snapshot,
+        TrustEntry? stale,
+        string fullPath,
+        string hash,
+        IReadOnlySet<PluginCapability> granted,
+        IReadOnlySet<PluginCapability> declared)
     {
         var updated = new List<TrustEntry>(snapshot.Count + 1);
         foreach (var entry in snapshot)
@@ -180,7 +248,10 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
                 updated.Add(entry);
         }
 
-        updated.Add(new TrustEntry { Path = fullPath, Hash = hash });
+        // Fail-closed: only capabilities that are BOTH approved by the user AND
+        // declared in the manifest are persisted.
+        var persisted = granted.Where(declared.Contains).Select(PluginCapabilities.ToName).ToList();
+        updated.Add(new TrustEntry { Path = fullPath, Hash = hash, Capabilities = persisted });
 
         lock (_sync)
         {
@@ -205,4 +276,7 @@ public sealed class FileTrustPolicy : IPluginTrustPolicy
             }
         }
     }
+
+    private static readonly IReadOnlySet<PluginCapability> EmptyGranted =
+        new HashSet<PluginCapability>();
 }
