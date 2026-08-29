@@ -123,17 +123,15 @@ public sealed class SandboxedPluginTool : ITool
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            // Sandbox budget fired (the agent-loop token is still live).
             cts.Cancel(); // belt-and-braces: make sure the abandoned execution also observes the token
             return await BlockAsync(
                 "timeout",
                 $"Plugin tool '{_inner.Name}' was cancelled by the {_timeout.TotalSeconds:0}s sandbox budget.",
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            // The outer (agent-loop) token was cancelled — propagate, not a plugin block.
-            throw;
-        }
+        // An OperationCanceledException from the agent-loop token is NOT caught here:
+        // the filter above fails and it propagates untouched to the caller.
 
         long allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
         long delta = allocatedAfter - allocatedBefore;
