@@ -1,6 +1,9 @@
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
 using Harbor.Ipc;
 using Harbor.Ipc.Ide;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Commands;
 
