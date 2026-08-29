@@ -75,7 +75,7 @@ public sealed class CachingCompiler : IPluginCompiler
 #pragma warning restore S3885
                 _logger.LogDebug("Cache hit for {Path} ({Hash})", script.Path, script.Hash);
                 return CompilationResult.Cached(new CompiledPluginAssembly(
-                    cachedAsm, script.Hash, script.Path, null, true));
+                    cachedAsm, script.Hash, script.Path, null, true, script.DeclaredCapabilities));
             }
             catch (Exception ex)
             {

@@ -85,7 +85,13 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
             : null;
         var asm = _assemblyLoader?.Invoke(script)
             ?? sandbox!.LoadFromImage(assemblyBytes);
-        var compiled = new CompiledPluginAssembly(asm, script.Hash, script.Path, assemblyBytes);
+        var compiled = new CompiledPluginAssembly(
+            asm,
+            script.Hash,
+            script.Path,
+            assemblyBytes,
+            FromCache: false,
+            script.DeclaredCapabilities);
         return Task.FromResult(CompilationResult.Fresh(compiled));
     }
 
