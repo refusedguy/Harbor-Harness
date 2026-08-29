@@ -150,14 +150,16 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
 
         File.Move(oldPath, newPath);
 
-        // Dequeued peek keeps returning the head until both lands land.
+        // Wait for BOTH rename signals specifically, not a bare event count: the
+        // Removed(old) and Added(new) debounced timers fire near-simultaneously, and
+        // under thread-pool load the polling loop can observe count>=2 from
+        // [Added(before), Removed(old)] before Added(new) has been enqueued.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (received.Count < 2 && DateTime.UtcNow < deadline)
+        bool RemovedOld() => received.Any(c => c.Path == oldPath && c.Kind == PluginSourceChangeKind.Removed);
+        bool AddedNew() => received.Any(c => c.Path == newPath && c.Kind == PluginSourceChangeKind.Added);
+        while (!(RemovedOld() && AddedNew()) && DateTime.UtcNow < deadline)
             await Task.Delay(40);
-        await Assert.That(received.Count).IsGreaterThanOrEqualTo(2);
-
-        var all = received.ToArray();
-        await Assert.That(all.Any(c => c.Path == oldPath && c.Kind == PluginSourceChangeKind.Removed)).IsTrue();
-        await Assert.That(all.Any(c => c.Path == newPath && c.Kind == PluginSourceChangeKind.Added)).IsTrue();
+        await Assert.That(RemovedOld()).IsTrue();
+        await Assert.That(AddedNew()).IsTrue();
     }
 }
