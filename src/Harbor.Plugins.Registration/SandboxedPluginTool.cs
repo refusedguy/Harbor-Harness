@@ -46,6 +46,8 @@ public sealed class SandboxedPluginTool : ITool
     private readonly ILogger _logger;
     private readonly TimeSpan _timeout;
     private readonly long _memoryBudgetBytes;
+    private readonly IPluginAuditLog? _audit;
+    private readonly IReadOnlySet<PluginCapability> _capabilities;
 
     /// <summary>
     ///     Wrap a plugin-contributed tool with the execution sandbox.
@@ -56,13 +58,23 @@ public sealed class SandboxedPluginTool : ITool
     /// <param name="logger">Diagnostics logger.</param>
     /// <param name="timeout">Execution budget; defaults to 30s.</param>
     /// <param name="memoryBudgetBytes">Allocation budget per call; defaults to 10 MB.</param>
+    /// <param name="capabilities">
+    ///     Capabilities granted to the owning plugin (audited per call). Empty set when
+    ///     unknown — nothing is audited as granted, blocks still are.
+    /// </param>
+    /// <param name="audit">
+    ///     Optional audit sink: each call appends one entry per exercised capability
+    ///     (allow) and one per block (deny).
+    /// </param>
     public SandboxedPluginTool(
         ITool inner,
         string pluginName,
         IEventBus eventBus,
         ILogger logger,
         TimeSpan? timeout = null,
-        long memoryBudgetBytes = DefaultMemoryBudgetBytes)
+        long memoryBudgetBytes = DefaultMemoryBudgetBytes,
+        IReadOnlySet<PluginCapability>? capabilities = null,
+        IPluginAuditLog? audit = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _pluginName = pluginName ?? throw new ArgumentNullException(nameof(pluginName));
@@ -70,6 +82,8 @@ public sealed class SandboxedPluginTool : ITool
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeout = timeout ?? DefaultTimeout;
         _memoryBudgetBytes = memoryBudgetBytes;
+        _capabilities = capabilities ?? new HashSet<PluginCapability>();
+        _audit = audit;
     }
 
     /// <inheritdoc />
@@ -119,6 +133,7 @@ public sealed class SandboxedPluginTool : ITool
             return await BlockAsync(
                 "timeout",
                 $"Plugin tool '{_inner.Name.Value}' exceeded its {_timeout.TotalSeconds:0}s execution budget.",
+                args,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -128,6 +143,7 @@ public sealed class SandboxedPluginTool : ITool
             return await BlockAsync(
                 "timeout",
                 $"Plugin tool '{_inner.Name}' was cancelled by the {_timeout.TotalSeconds:0}s sandbox budget.",
+                args,
                 cancellationToken).ConfigureAwait(false);
         }
         // An OperationCanceledException from the agent-loop token is NOT caught here:
@@ -140,9 +156,14 @@ public sealed class SandboxedPluginTool : ITool
             return await BlockAsync(
                 "memory",
                 $"Plugin tool '{_inner.Name}' exceeded its allocation budget: {delta / 1024.0 / 1024.0:F1} MB > {_memoryBudgetBytes / 1024.0 / 1024.0:0} MB.",
+                args,
                 cancellationToken).ConfigureAwait(false);
         }
 
+        if (result.IsError)
+            return result;
+
+        await AuditCallAsync(args, "allow", detail: null, cancellationToken).ConfigureAwait(false);
         return result;
     }
 
@@ -150,7 +171,7 @@ public sealed class SandboxedPluginTool : ITool
     ///     Publish <see cref="PluginBlockedEvent" /> and convert to an error
     ///     <see cref="ToolResult" /> so the agent loop treats it as a failed tool call.
     /// </summary>
-    private async Task<ToolResult> BlockAsync(string reason, string detail, CancellationToken ct)
+    private async Task<ToolResult> BlockAsync(string reason, string detail, JsonElement args, CancellationToken ct)
     {
         _logger.LogWarning(
             "Plugin sandbox blocked {Plugin} tool {Tool}: {Reason} — {Detail}",
@@ -159,10 +180,77 @@ public sealed class SandboxedPluginTool : ITool
             reason,
             detail);
 
+        await AuditCallAsync(args, "deny", detail: $"{reason}: {detail}", ct).ConfigureAwait(false);
+
         await _eventBus.PublishAsync(
             new PluginBlockedEvent(_pluginName, reason, detail),
             ct).ConfigureAwait(false);
 
         return ToolResult.Error($"[sandbox:{reason}] {detail}");
     }
+
+    /// <summary>
+    ///     Append one audit line per granted capability for this tool call. The target
+    ///     is extracted from the call arguments when a well-known key matches the
+    ///     capability (url/path/command); otherwise the tool name is used.
+    /// </summary>
+    private async Task AuditCallAsync(JsonElement args, string result, string? detail, CancellationToken ct)
+    {
+        if (_audit is null || _capabilities.Count == 0)
+            return;
+
+        string rawArgs = args.ValueKind is JsonValueKind.String
+            ? args.GetString() ?? string.Empty
+            : args.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+                ? args.GetRawText()
+                : string.Empty;
+
+        foreach (var capability in _capabilities)
+        {
+            await _audit.WriteAsync(
+                _pluginName,
+                capability,
+                ExtractTarget(capability, args, rawArgs),
+                result,
+                detail,
+                ct).ConfigureAwait(false);
+        }
+    }
+
+    private static string ExtractTarget(PluginCapability capability, JsonElement args, string rawArgs)
+    {
+        string? Pick(params string[] keys)
+        {
+            if (args.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var key in keys)
+                {
+                    if (args.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+                    {
+                        var s = value.GetString();
+                        if (!string.IsNullOrEmpty(s))
+                            return s;
+                    }
+                }
+            }
+            return null;
+        }
+
+        return capability switch
+        {
+            PluginCapability.HttpRequests => Pick("url", "endpoint", "query", "search", "q") is { } url
+                ? url
+                : Truncate(rawArgs),
+            PluginCapability.ReadFiles or PluginCapability.WriteFiles => Pick("path", "file", "filename") is { } path
+                ? path
+                : Truncate(rawArgs),
+            PluginCapability.RunProcesses => Pick("command", "process", "exe") is { } cmd
+                ? cmd
+                : Truncate(rawArgs),
+            _ => Truncate(rawArgs),
+        };
+    }
+
+    private static string Truncate(string value) =>
+        value.Length <= 200 ? value : value[..200];
 }
