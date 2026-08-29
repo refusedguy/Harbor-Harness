@@ -22,7 +22,7 @@
 <body>
 
 <h1>Sprint Report — Security &amp; Sandboxing</h1>
-<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">fb60d3a6485d</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
+<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">45b7fbf858cd</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
 
 <h2>1. Goal</h2>
 <p>Defence in depth for CS-source plugins on top of the existing <code>IPluginTrustPolicy</code> gate: sandbox ALC with capability-driven deny-list, per-capability approval persisted in <code>trust.json</code> v2, execution timeout + memory guard around every plugin tool call, and an append-only capability audit log. Fail-closed everywhere; granular, approved-once rights instead of all-or-nothing.</p>
@@ -43,7 +43,7 @@
   <tr>
     <td>trust.json v2 (per-capability approval)</td>
     <td><code>src/Harbor.Plugins.Storage/FileTrustPolicy.cs</code></td>
-    <td>Entries keyed by <code>(path, sha256)</code> + approved capability list. Editing a plugin changes the hash ⇒ entry invalidated ⇒ re-approval at next start. Persisted grants are intersected with the manifest — stale grants are dropped, never granted.</td>
+    <td>Entries keyed by <code>(path, sha256)</code> + approved capability list. Editing a plugin changes the hash ⇒ entry invalidated ⇒ re-approval at next start. Persisted grants are intersected with the manifest — stale grants are dropped, never granted. <code>GetGrantedCapabilities</code> is part of the <code>IPluginTrustPolicy</code> contract; <code>TrustingPluginSource</code> narrows each trusted script to the approved subset (<code>PluginScript.WithGrantedCapabilities</code>) so the sandbox ALC and the tool sandbox enforce approved grants, not the declared superset. Startup prompt is interactive per-capability (<code>RegistriesModule</code>); non-interactive hosts pass no hook and fail closed.</td>
   </tr>
   <tr>
     <td>Execution timeout + memory guard</td>
@@ -58,13 +58,13 @@
 </table>
 
 <h2>3. Pipeline integrity</h2>
-<p>CachingCompiler, Roslyn CS-source compile (<code>CsPluginLoader</code> / <code>PluginHostBuilder</code>) and the existing trust-prompt flow are unchanged; the sandbox is layered behind them: trust gate → compile (capabilities attached) → collectible ALC load → tool registration wraps each contributed tool in <code>SandboxedPluginTool</code>.</p>
+<p>CachingCompiler, Roslyn CS-source compile (<code>CsPluginLoader</code> / <code>PluginHostBuilder</code>) and the existing trust-prompt flow are unchanged; the sandbox is layered behind them: trust gate (capability set narrowed to approved grants, invalid manifests rejected at the seam) → compile (approved capabilities attached) → collectible ALC load → tool registration wraps each contributed tool in <code>SandboxedPluginTool</code>.</p>
 
 <h2>4. Verification</h2>
 <table>
   <tr><th>Gate</th><th>Result</th></tr>
-  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors, 0 warnings</span> (head <span class="sha">767c37b</span>; sprint projects re-verified warning-free with <code>--no-incremental</code>)</td></tr>
-  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">60 / 60</span> — includes new suites: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped)</td></tr>
+  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">45b7fbf</span>)</td></tr>
+  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">64 / 64</span> — includes: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped), TrustLayerTests (10: pre-existing trust semantics + seam narrowing — yielded scripts carry only the approved subset with hash preserved, grants never widen beyond the manifest, global scope keeps declared capabilities, unknown capability token skips the plugin even when the policy would trust it)</td></tr>
   <tr><td><code>tests/Harbor.Architecture.Tests/</code></td><td><span class="ok">47 / 47</span></td></tr>
   <tr><td><code>tests/Harbor.Abstractions.Tests/</code></td><td><span class="ok">53 / 53</span> (after JsonDerivedType fix)</td></tr>
   <tr><td><code>tests/Harbor.Core.Tests/</code> / <code>Harbor.Hosting.Tests/</code> / <code>Harbor.App.Cli.Tests/</code></td><td><span class="ok">92 / 10 / 78</span>, 0 failures</td></tr>
@@ -89,6 +89,12 @@
   <tr><td class="sha">883c64f</td><td>fix(ide): restore missing usings in IdeBridgeRunner so the solution builds</td></tr>
   <tr><td class="sha">fb60d3a</td><td>fix(plugins): register PluginBlockedEvent as AgentEvent JsonDerivedType</td></tr>
   <tr><td class="sha">767c37b</td><td>test(plugins): trust.json v2 per-capability approval contract tests</td></tr>
+  <tr><td class="sha">66da1b1</td><td>docs(sprint): security report — 60/60 suite incl. trust v2 capability tests</td></tr>
+  <tr><td class="sha">b2ce47a</td><td>feat(plugins): promote GetGrantedCapabilities to IPluginTrustPolicy contract</td></tr>
+  <tr><td class="sha">6d7be18</td><td>feat(plugins): narrow plugin capability set to approved grants at the trust seam</td></tr>
+  <tr><td class="sha">a636a68</td><td>fix(plugins): fail closed on invalid capability manifest in the trust gate</td></tr>
+  <tr><td class="sha">0e0f1bb</td><td>feat(plugins): interactive per-capability approval at startup</td></tr>
+  <tr><td class="sha">45b7fbf</td><td>test(plugins): trust-seam capability narrowing + invalid-manifest rejection</td></tr>
 </table>
 
 <h2>6. Residual risks / next hardening</h2>
@@ -96,7 +102,8 @@
   <li><b>Deny-list granularity:</b> blocking <code>System.IO.FileSystem</code>/<code>System.Net.Http</code> at assembly resolution stops direct references; a plugin holding a host-shared <code>Stream</code> or an already-created <code>HttpClient</code> instance still has process-level powers — full enforcement needs OS-level isolation (out-of-process plugins, AGENTS.md "two-process architecture").</li>
   <li><b>Memory guard is retroactive:</b> allocation delta is measured after the call returns; a long-running call over budget is cut by the timeout, and the abandoned task is GC'd — but the allocation may already have happened. Acceptable for a solo-dev threat model; noted for the out-of-process design.</li>
   <li><b>Audit log ownership:</b> append-only by code path and directory placement; for a defense-in-depth guarantee against host-level tampering, set OS ACLs (read-only for non-host users) at install time.</li>
-  <li><b>Capability prompt UX:</b> per-capability approval needs an interactive CLI flow pass in a UI sprint (the v2 hook is wired; TUI presentation is pending).</li>
+  <li><b>Capability prompt UX:</b> the per-capability flow is wired end-to-end at the CLI (interactive y/N per declared capability in <code>RegistriesModule</code>, persisted via <code>FileTrustPolicy</code>); a richer TUI presentation is left to a UI sprint.</li>
+  <li><b>Zero-approval still loads:</b> declining every capability loads the plugin with an empty grant set — the sandbox ALC blocks the sensitive assemblies, but the plugin's code still executes in-process. A "decline ⇒ skip entirely" option belongs to the TUI UX pass.</li>
 </ul>
 
 </body>
