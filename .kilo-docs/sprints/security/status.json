@@ -3,8 +3,8 @@
   "sprint": "security",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/security/prompt.md",
-  "head": "c928b4cfa5bde3b2f7110e2c97690d51492a547a",
-  "commits": 26,
+  "head": "54c8497fa5bde3b2f7110e2c97690d51492a547a",
+  "commits": 27,
   "created_at": "2026-08-28T14:38:08Z",
   "completed_at": "2026-08-30T00:30:00Z",
   "report": ".kilo-docs/sprints/security/report.html"

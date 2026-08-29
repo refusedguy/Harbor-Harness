@@ -63,7 +63,7 @@
 <h2>4. Verification</h2>
 <table>
   <tr><th>Gate</th><th>Result</th></tr>
-  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">45b7fbf</span>)</td></tr>
+  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">54c8497</span>)</td></tr>
   <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">64 / 64</span> — includes: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped), TrustLayerTests (10: pre-existing trust semantics + seam narrowing — yielded scripts carry only the approved subset with hash preserved, grants never widen beyond the manifest, global scope keeps declared capabilities, unknown capability token skips the plugin even when the policy would trust it)</td></tr>
   <tr><td><code>tests/Harbor.Architecture.Tests/</code></td><td><span class="ok">47 / 47</span></td></tr>
   <tr><td><code>tests/Harbor.Abstractions.Tests/</code></td><td><span class="ok">53 / 53</span> (after JsonDerivedType fix)</td></tr>
@@ -74,7 +74,7 @@
   <tr><td>Acceptance: <code>alc.Unload()</code> frees memory</td><td><code>Unload_AfterLoadingPluginImage_IsGarbageCollected</code> — WeakReference + GC.Collect loop over a collectible context that loaded a real PE image</td></tr>
   <tr><td>Acceptance: GoogleSearch install → audit entries</td><td><code>GoogleSearchInstall_AuditTrail_ContainsReadFilesOnSourceAndHttpRequestOnUrl</code>: line 1 = <code>read_files</code> on the .cs source (trust gate), line 2 = <code>http_requests</code> on the URL (first tool call)</td></tr>
 </table>
-<blockquote>Known flake (not sprint-introduced): <code>DebouncedPluginWatcherTests</code> timing tests (<code>Rename_SignalsRemovedForOldAndAddedForNew</code>, <code>Delete_OutranksEarlierModifications</code>) each failed once in a parallel full run, passed isolated and in subsequent full runs — filesystem-event timing class, same category as the pre-existing Avalonia headless flakes in docs/ROADMAP.md.</blockquote>
+<blockquote>Flake resolved at root cause: <code>Rename_SignalsRemovedForOldAndAddedForNew</code> failed twice in parallel full runs — the test awaited a bare <code>received.Count &gt;= 2</code>, which can be satisfied by <code>[Added(before), Removed(old)]</code> before the near-simultaneous <code>Added(new)</code> debounced timer lands. Fixed to await both rename signals specifically (commit <span class="sha">54c8497</span>); a standalone FSW probe under CPU/churn load confirmed event delivery itself is correct. 3 consecutive clean 64/64 full-suite runs afterwards.</blockquote>
 
 <h2>5. Commit trail (sprint range)</h2>
 <p>Earlier sprint commits (capabilities model, ALC, trust v2, sandbox wrapper, audit sink, composition wiring) plus this session's:</p>
@@ -95,6 +95,7 @@
   <tr><td class="sha">a636a68</td><td>fix(plugins): fail closed on invalid capability manifest in the trust gate</td></tr>
   <tr><td class="sha">0e0f1bb</td><td>feat(plugins): interactive per-capability approval at startup</td></tr>
   <tr><td class="sha">45b7fbf</td><td>test(plugins): trust-seam capability narrowing + invalid-manifest rejection</td></tr>
+  <tr><td class="sha">54c8497</td><td>test(plugins): fix rename race — await both rename signals, not a bare event count</td></tr>
 </table>
 
 <h2>6. Residual risks / next hardening</h2>
