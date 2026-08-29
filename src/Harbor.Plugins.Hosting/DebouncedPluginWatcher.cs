@@ -198,9 +198,17 @@ public sealed class DebouncedPluginWatcher : IDisposable
         if (handler is null)
             return;
 
+        // Filesystem truth outranks raw-event order: inotify (Linux) may deliver a
+        // stale Changed event AFTER Deleted for the same path, and "last event wins"
+        // would then report Modified for a file that no longer exists. Reload scope
+        // keys on existence, so a vanished file is always Removed.
+        var kind = UnmapRank(state.Rank);
+        if (kind != PluginSourceChangeKind.Added && !File.Exists(fullPath))
+            kind = PluginSourceChangeKind.Removed;
+
         try
         {
-            handler(this, new PluginSourceChangeEventArgs(fullPath, UnmapRank(state.Rank)));
+            handler(this, new PluginSourceChangeEventArgs(fullPath, kind));
         }
         catch (Exception ex)
         {
