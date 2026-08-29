@@ -67,7 +67,7 @@ public sealed class PluginAuditLogTests : IDisposable
         await audit.WriteAsync("web_search", PluginCapability.HttpRequests, "https://api.example.com", "deny", "sandbox: timeout");
 
         var lines = await ReadLinesAsync(_logPath);
-        await Assert.That(lines).HasCount().EqualTo(2);
+        await Assert.That(lines).Count().IsEqualTo(2);
 
         await Assert.That(lines[0].GetProperty("plugin").GetString()).IsEqualTo("web_search");
         await Assert.That(lines[0].GetProperty("capability").GetString()).IsEqualTo("read_files");
@@ -91,7 +91,7 @@ public sealed class PluginAuditLogTests : IDisposable
         await audit.WriteAsync("new", PluginCapability.ReadEnv, "HOME", "allow");
 
         var lines = await ReadLinesAsync(_logPath);
-        await Assert.That(lines).HasCount().EqualTo(2);
+        await Assert.That(lines).Count().IsEqualTo(2);
         await Assert.That(lines[0].GetProperty("plugin").GetString()).IsEqualTo("old");
         await Assert.That(lines[1].GetProperty("plugin").GetString()).IsEqualTo("new");
     }
@@ -139,7 +139,7 @@ public sealed class PluginAuditLogTests : IDisposable
 
         // First capability use: Harbor itself reads the .cs at the trust gate.
         var lines = await ReadLinesAsync(_logPath);
-        await Assert.That(lines).HasCount().EqualTo(1);
+        await Assert.That(lines).Count().IsEqualTo(1);
         await Assert.That(lines[0].GetProperty("capability").GetString()).IsEqualTo("read_files");
         await Assert.That(lines[0].GetProperty("target").GetString()).IsEqualTo(pluginPath);
         await Assert.That(lines[0].GetProperty("result").GetString()).IsEqualTo("allow");
@@ -169,7 +169,7 @@ public sealed class PluginAuditLogTests : IDisposable
 
         await Assert.That(result.IsError).IsFalse();
         lines = await ReadLinesAsync(_logPath);
-        await Assert.That(lines).HasCount().EqualTo(2);
+        await Assert.That(lines).Count().IsEqualTo(2);
         await Assert.That(lines[1].GetProperty("capability").GetString()).IsEqualTo("http_requests");
         await Assert.That(lines[1].GetProperty("target").GetString()).IsEqualTo("https://www.google.com/search?q=hello");
         await Assert.That(lines[1].GetProperty("result").GetString()).IsEqualTo("allow");

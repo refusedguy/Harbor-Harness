@@ -76,7 +76,7 @@ public sealed class SandboxedPluginToolTests
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(bus.Events).IsEmpty();
-        await Assert.That(audit.Entries).HasCount().EqualTo(1);
+        await Assert.That(audit.Entries).Count().IsEqualTo(1);
         var entry = audit.Entries[0];
         await Assert.That(entry.Capability).IsEqualTo(PluginCapability.ReadFiles);
         await Assert.That(entry.Target).IsEqualTo("notes.txt");
@@ -103,7 +103,7 @@ public sealed class SandboxedPluginToolTests
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:timeout]");
-        await Assert.That(bus.Of<PluginBlockedEvent>()).HasCount().EqualTo(1);
+        await Assert.That(bus.Of<PluginBlockedEvent>()).Count().IsEqualTo(1);
         await Assert.That(bus.Of<PluginBlockedEvent>()[0].Reason).IsEqualTo("timeout");
         await Assert.That(audit.Entries.Single(e => e.Result == "deny").Detail).Contains("timeout");
     }
@@ -128,7 +128,7 @@ public sealed class SandboxedPluginToolTests
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:timeout]");
-        await Assert.That(bus.Of<PluginBlockedEvent>()).HasCount().EqualTo(1);
+        await Assert.That(bus.Of<PluginBlockedEvent>()).Count().IsEqualTo(1);
     }
 
     [Test]
@@ -143,7 +143,7 @@ public sealed class SandboxedPluginToolTests
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:memory]");
-        await Assert.That(bus.Of<PluginBlockedEvent>()).HasCount().EqualTo(1);
+        await Assert.That(bus.Of<PluginBlockedEvent>()).Count().IsEqualTo(1);
         await Assert.That(bus.Of<PluginBlockedEvent>()[0].Reason).IsEqualTo("memory");
     }
 
