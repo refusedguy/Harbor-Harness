@@ -510,3 +510,40 @@ providers/ external/` (пусто; последующие коммиты — т�
 историческую полосу §7–§14 (6 107 393…6 107 798 B, I/O-шум файлового стора);
 full roundtrip 64B 1 832 B против 1 831 B (±1 B графа MessagePack). Спринт
 остаётся **done**, вердикты §0 в силе.
+
+## 16. Ре-верификация 2026-08-29, ре-диспетч №10 (head `7e03c4e`)
+
+Спринт-промпт ре-диспетчен цепочкой одиннадцатый раз; код с момента `2079bc0`
+не менялся — проверено `git diff f78b7ec..HEAD -- src/ tests/ apps/ contrib/
+providers/ external/` (пусто; коммит после `f78b7ec` — только docs).
+Контрольный прогон:
+
+- Сборка `Harbor.slnx -c Release`: 0 ошибок; warnings pre-existing (31 в
+  сводке slnx-прогона, все — Sonar/CS0618 в тест-проектах вне спринта).
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669**, Tui.Tests
+  **118/118** — 0 fails. Инфра-заметка: параллельный запуск CellForge и
+  Tui.Tests из одного тул-колла один раз вернул ложный exit 2 при
+  «сбой: 0» в выводе — одиночный прогон CellForge зелёный 669/669; причина —
+  конкурентная запись отчётов в общий `TestResults/`, не дефект сьютов.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — hard rule 5 выполнен,
+  реальная проверка — прогоном бенчмарков ниже).
+
+Бенчмарки (Release; stale-DLL проблема §7 воспроизвелась и вылечена
+документированным `dotnet build tests/Harbor.Benchmarks -c Release
+--no-incremental`):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 515.4 ns, 0 B / 1 096.4 ns, 0 B / 11 449.2 ns; full roundtrip 64B = 1 828 B (граф MessagePack); ReadFrame 0 B / 242.9 ns | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 112.96 µs; snapshot-floor 240.52 KB / 48.63 µs | ✅ (34×) |
+| §3 JSONL parse machinery | **392 / 720 B** user/assistant граф (OLD 2 336 / 4 032 B); 10k cold 23.95 ms / 6 107 646 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** STREAM-BYTES (min=max=6995) / 1000 deltas = 7.0 KB/s < 10 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B alloc; layout 184 B / 719.2 ns | ✅ |
+
+Аллокации байт-в-байт с задокументированными (§2: 567.48 / 240.52 KB;
+§3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 / 184 B; §1: 0 B на всех
+размерах кадра). Mean-отклонения в шуме: 10k cold 6 107 646 B — в исторической
+полосе §7–§14 (6 107 393…6 107 798 B); full roundtrip 64B 1 828 B против
+1 832 B (±4 B графа MessagePack). Спринт остаётся **done**, вердикты §0
+в силе.
