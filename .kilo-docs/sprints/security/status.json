@@ -1,9 +1,11 @@
 {
-  "state": "queued",
+  "state": "done",
   "sprint": "security",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/security/prompt.md",
-  "head": "",
-  "commits": 0,
-  "created_at": "2026-08-28T14:38:08Z"
+  "head": "fb60d3a6485de780a1702df0d760a402eb76e899",
+  "commits": 26,
+  "created_at": "2026-08-28T14:38:08Z",
+  "completed_at": "2026-08-30T00:30:00Z",
+  "report": ".kilo-docs/sprints/security/report.html"
 }
