@@ -19,6 +19,7 @@ public sealed class TrustingPluginSource : IPluginSource
     private readonly IPluginSource _inner;
     private readonly ILogger<TrustingPluginSource> _logger;
     private readonly IPluginTrustPolicy _policy;
+    private readonly IPluginAuditLog? _audit;
 
     /// <summary>
     ///     Construct a trust-gated view over <paramref name="inner" />.
@@ -26,11 +27,21 @@ public sealed class TrustingPluginSource : IPluginSource
     /// <param name="inner">Source to enumerate.</param>
     /// <param name="policy">Trust policy consulted per script, in stream order.</param>
     /// <param name="logger">Logger for diagnostics.</param>
-    public TrustingPluginSource(IPluginSource inner, IPluginTrustPolicy policy, ILogger<TrustingPluginSource> logger)
+    /// <param name="audit">
+    ///     Optional audit sink. When supplied, every trust decision is recorded as a
+    ///     <c>read_files</c> capability entry on the plugin source file — the first
+    ///     capability use in the plugin's lifecycle (Harbor itself reads the file).
+    /// </param>
+    public TrustingPluginSource(
+        IPluginSource inner,
+        IPluginTrustPolicy policy,
+        ILogger<TrustingPluginSource> logger,
+        IPluginAuditLog? audit = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _audit = audit;
     }
 
     /// <inheritdoc />
@@ -41,7 +52,20 @@ public sealed class TrustingPluginSource : IPluginSource
         {
             ct.ThrowIfCancellationRequested();
             var decision = await _policy.DecideAsync(script, ct).ConfigureAwait(false);
-            if (decision == PluginTrustDecision.Trusted)
+            var trusted = decision == PluginTrustDecision.Trusted;
+
+            if (_audit is not null)
+            {
+                await _audit.WriteAsync(
+                    Path.GetFileNameWithoutExtension(script.Path),
+                    PluginCapability.ReadFiles,
+                    script.Path,
+                    trusted ? "allow" : "deny",
+                    trusted ? null : "trust denied — plugin not loaded",
+                    ct).ConfigureAwait(false);
+            }
+
+            if (trusted)
             {
                 yield return script;
             }
