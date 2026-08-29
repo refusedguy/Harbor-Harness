@@ -62,7 +62,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
         {
             if (plugin.Instance is IToolPlugin toolPlugin)
             {
-                toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(host, _logger, _loggerFactory));
+                toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(host, plugin.Instance.Name, _logger, _loggerFactory));
             }
             if (plugin.Instance is IProviderPlugin providerPlugin)
             {
@@ -109,19 +109,28 @@ public sealed class PluginRegistrar : IPluginRegistrar
     private sealed class ToolRegistryBuilderAdapter : IToolRegistryBuilder
     {
         private readonly IPluginLoadHost _host;
+        private readonly string _pluginName;
         private readonly ILogger _logger;
         private readonly ILoggerFactory _loggerFactory;
 
-        internal ToolRegistryBuilderAdapter(IPluginLoadHost host, ILogger logger, ILoggerFactory loggerFactory)
+        internal ToolRegistryBuilderAdapter(IPluginLoadHost host, string pluginName, ILogger logger, ILoggerFactory loggerFactory)
         {
             _host = host;
+            _pluginName = pluginName;
             _logger = logger;
             _loggerFactory = loggerFactory;
         }
 
         public void AddTool(ITool tool)
         {
-            var r = _host.RegisterTool(tool);
+            // Every plugin-contributed tool passes through the execution sandbox:
+            // 30s timeout + 10MB allocation guard, with PluginBlockedEvent on enforcement.
+            var sandboxed = new SandboxedPluginTool(
+                tool,
+                _pluginName,
+                _host.EventBus,
+                _host.LoggerFactory.CreateLogger<SandboxedPluginTool>());
+            var r = _host.RegisterTool(sandboxed);
             if (r.IsFailure)
                 _logger.LogWarning("Plugin tool registration failed for {Name}: {Error}", tool.Name, r.Error);
         }
