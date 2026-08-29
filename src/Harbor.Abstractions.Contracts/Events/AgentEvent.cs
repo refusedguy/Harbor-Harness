@@ -111,6 +111,19 @@ public sealed record AgentEndEvent(IReadOnlyList<AgentMessage> NewMessages, bool
 public sealed record AgentErrorEvent(string Message, string? Exception = null) : AgentEvent;
 
 /// <summary>
+///     Emitted when the plugin sandbox blocks a plugin operation — execution timeout,
+///     memory-budget overrun, or a capability-deny. Agents can keep running; the event
+///     surfaces the enforcement event in TUIs and audit tooling.
+/// </summary>
+/// <param name="PluginName">Name of the plugin whose activity was blocked.</param>
+/// <param name="Reason">Machine-readable reason: <c>timeout</c>, <c>memory</c>, <c>capability</c>.</param>
+/// <param name="Detail">Human-readable detail (what was attempted, limit that fired).</param>
+public sealed record PluginBlockedEvent(
+    string PluginName,
+    string Reason,
+    string Detail) : AgentEvent;
+
+/// <summary>
 ///     Emitted when compaction starts for the given session.
 /// </summary>
 public sealed record CompactionStartedEvent(string SessionId) : AgentEvent;
