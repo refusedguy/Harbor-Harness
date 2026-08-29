@@ -77,17 +77,30 @@ public sealed class DebouncedPluginWatcherTests : IDisposable
         // Consume the creation burst so the save burst starts from a clean slate.
         await NextAsync(watcher, received, 1, TimeSpan.FromSeconds(10));
 
-        int flushes = 0;
-        foreach (int i in Enumerable.Range(0, 5))
+        // Drain late echoes of the creation write: inotify can deliver additional
+        // Changed events well after the debounced callback fired, and each echo arms
+        // its own debounce window. An echo counted as part of the save burst would
+        // fake a second callback below.
+        int baseline;
+        while (true)
         {
-            File.WriteAllText(path, $"// v{i + 2}");
-            if (++flushes % 2 == 0)
-                await Task.Delay(20);
+            baseline = received.Count;
+            await Task.Delay(Debounce * 3);
+            if (received.Count == baseline)
+                break;
         }
 
-        var change = await NextAsync(watcher, received, 2, TimeSpan.FromSeconds(10));
+        // Tight burst — five writes without sleeps land as one inotify batch inside
+        // a single debounce window; spreading them over 40ms lets a loaded host
+        // split delivery across two windows.
+        foreach (int i in Enumerable.Range(0, 5))
+            File.WriteAllText(path, $"// v{i + 2}");
+
+        var change = await NextAsync(watcher, received, baseline + 1, TimeSpan.FromSeconds(10));
         await Assert.That(change.Kind).IsEqualTo(PluginSourceChangeKind.Modified);
-        await Assert.That(received.Count).IsEqualTo(2); // save burst produced ONE callback
+        // The burst produced ONE callback: nothing else fires within a settle window.
+        await Task.Delay(Debounce * 2);
+        await Assert.That(received.Count).IsEqualTo(baseline + 1);
     }
 
     [Test]
