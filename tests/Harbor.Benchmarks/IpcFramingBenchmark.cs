@@ -1,3 +1,4 @@
+#nullable enable
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Pipelines;
@@ -7,20 +8,25 @@ namespace Harbor.Benchmarks;
 
 /// <summary>
 ///     Benchmarks the length-prefixed MessagePack framing layer used by
-///     <see cref=\"WireCodec\" />. Two scenarios are exercised:
-///     - <see cref=\"Roundtrip_Stream\" />: full WriteResponseAsync + ReadResponseAsync
-///       roundtrip over a <see cref=\"PipeStream\" />, measuring the end-to-end
-///       cost of framing + MessagePack serialization.
-///     - <see cref=\"ReadFrame_FromPipe\" />: raw frame-header parsing from a
-///       <see cref=\"PipeReader\" />, measuring only the length-prefix + payload
-///       extraction without MessagePack deserialization.
+///     <see cref="WireCodec" />. Three scenarios are exercised over one
+///     persistent <see cref="PipeStream" /> (per-iteration connection setup
+///     excluded — the codec is measured, not the dial):
+///     - <see cref="Roundtrip_Full" />: WriteResponseAsync + ReadResponseAsync
+///       with MessagePack serialization, steady-state (pre-built response).
+///     - <see cref="Roundtrip_FrameOnly" />: raw frame write + read without
+///       MessagePack — the framing layer alone; steady-state target is 0 B.
+///     - <see cref="ReadFrame_FromPipe" />: raw frame-header parsing from a
+///       <see cref="PipeReader" />.
 /// </summary>
 [MemoryDiagnoser]
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class IpcFramingBenchmark
 {
     private Pipe _pipe = null!;
-    private byte[] _preformedMessage = null!;
+    private PipeStream _stream = null!;
+    private PipeReader _reader = null!;
+    private byte[] _preformedFrame = null!;
+    private OkResponse _response = null!;
 
     [Params(64, 4096, 65536)]
     public int PayloadSize;
@@ -32,36 +38,49 @@ public class IpcFramingBenchmark
             pauseWriterThreshold: 1024 * 1024,
             resumeWriterThreshold: 512 * 1024,
             useSynchronizationContext: false));
+        _stream = new PipeStream(_pipe);
+        _reader = PipeReader.Create(_stream, new StreamPipeReaderOptions(leaveOpen: true));
 
-        _preformedMessage = new byte[PayloadSize + 4];
-        BinaryPrimitives.WriteInt32LittleEndian(_preformedMessage, PayloadSize);
-        Random.Shared.NextBytes(_preformedMessage.AsSpan(4));
+        var payload = new byte[PayloadSize];
+        Random.Shared.NextBytes(payload);
+        _response = new OkResponse { RequestId = Guid.NewGuid(), Payload = payload };
+
+        _preformedFrame = new byte[PayloadSize + 4];
+        // Little-endian here matches the raw-header reader below (this
+        // benchmark's internal convention predates the big-endian wire
+        // format used by WireCodec itself).
+        BinaryPrimitives.WriteInt32LittleEndian(_preformedFrame, PayloadSize);
+        Random.Shared.NextBytes(_preformedFrame.AsSpan(4));
     }
 
-    [Benchmark(Description = "WireCodec roundtrip (Stream)", Baseline = true)]
-    public async Task<HarborResponse?> Roundtrip_Stream()
+    [GlobalCleanup]
+    public void Cleanup()
     {
-        var pipe = new Pipe(new PipeOptions(
-            pauseWriterThreshold: 1024 * 1024,
-            resumeWriterThreshold: 512 * 1024,
-            useSynchronizationContext: false));
-        var stream = new PipeStream(pipe);
-        var request = new OkResponse
-        {
-            RequestId = Guid.NewGuid(),
-            Payload = _preformedMessage.AsSpan(4).ToArray()
-        };
+        _reader.Complete();
+        _stream.Dispose();
+    }
 
-        await WireCodec.WriteResponseAsync(stream, request).ConfigureAwait(false);
-        var result = await WireCodec.ReadResponseAsync(stream).ConfigureAwait(false);
-        stream.Dispose();
-        return result;
+    [Benchmark(Description = "WireCodec roundtrip (MessagePack, pooled + PipeReader)", Baseline = true)]
+    public async ValueTask<HarborResponse?> Roundtrip_Full()
+    {
+        await WireCodec.WriteResponseAsync(_stream, _response).ConfigureAwait(false);
+        return await WireCodec.ReadResponseAsync(_reader).ConfigureAwait(false);
+    }
+
+    [Benchmark(Description = "WireCodec frame-only roundtrip (no MessagePack, pooled + PipeReader)")]
+    public async ValueTask<int> Roundtrip_FrameOnly()
+    {
+        await WireCodec.WriteFrameAsync(_stream, _preformedFrame.AsMemory(4)).ConfigureAwait(false);
+        ReadOnlySequence<byte>? frame = await WireCodec.ReadFrameAsync(_reader).ConfigureAwait(false);
+        int length = (int)frame!.Value.Length;
+        _reader.AdvanceTo(frame.Value.End);
+        return length;
     }
 
     [Benchmark(Description = "Read frame header from PipeReader")]
     public async ValueTask<ReadOnlySequence<byte>> ReadFrame_FromPipe()
     {
-        await _pipe.Writer.WriteAsync(_preformedMessage).ConfigureAwait(false);
+        await _pipe.Writer.WriteAsync(_preformedFrame).ConfigureAwait(false);
         var result = await _pipe.Reader.ReadAsync().ConfigureAwait(false);
         var buffer = result.Buffer;
 
@@ -88,8 +107,8 @@ public class IpcFramingBenchmark
 }
 
 /// <summary>
-///     Minimal <see cref=\"Stream\" /> implementation backed by a
-///     <see cref=\"Pipe\" />, used to benchmark the WireCodec Stream-based
+///     Minimal <see cref="Stream" /> implementation backed by a
+///     <see cref="Pipe" />, used to benchmark the WireCodec Stream-based
 ///     roundtrip without allocating a real network socket.
 /// </summary>
 internal sealed class PipeStream : Stream
@@ -162,4 +181,3 @@ internal sealed class PipeStream : Stream
         base.Dispose(disposing);
     }
 }
-
