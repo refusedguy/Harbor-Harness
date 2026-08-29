@@ -28,4 +28,5 @@ public sealed record CompiledPluginAssembly(
     string SourceHash,
     string SourcePath,
     byte[]? AssemblyBytes = null,
-    bool FromCache = false);
+    bool FromCache = false,
+    IReadOnlySet<PluginCapability>? DeclaredCapabilities = null);

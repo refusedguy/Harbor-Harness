@@ -20,11 +20,31 @@ public sealed record LoadedPlugin(
     Type PluginType,
     string SourcePath,
     string SourceHash,
-    bool LoadedFromCache)
+    bool LoadedFromCache,
+    IReadOnlySet<PluginCapability> DeclaredCapabilities)
 {
+    /// <summary>
+    ///     Convenience ctor for callers that don't track capability manifests
+    ///     (legacy tests, custom instantiators) — grants an empty set (fail-closed).
+    /// </summary>
+    public LoadedPlugin(
+        IPlugin Instance,
+        string Name,
+        Version Version,
+        Type PluginType,
+        string SourcePath,
+        string SourceHash,
+        bool LoadedFromCache)
+        : this(Instance, Name, Version, PluginType, SourcePath, SourceHash, LoadedFromCache, FrozenCapabilities)
+    {
+    }
+
     /// <summary>
     ///     Human-readable identifier used in log lines and the <c>/plugins</c>
     ///     slash-command. Format: <c>name@version (file)</c>.
     /// </summary>
     public string DisplayName => $"{Name}@{Version} ({Path.GetFileName(SourcePath)})";
+
+    private static readonly IReadOnlySet<PluginCapability> FrozenCapabilities =
+        new HashSet<PluginCapability>();
 }
