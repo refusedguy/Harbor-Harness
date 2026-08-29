@@ -1,44 +1,10 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Plugins.Storage;
-
-/// <summary>
-///     One audit record: a plugin exercised (or attempted to exercise) a capability.
-///     Written as a single JSON line to the append-only audit log.
-/// </summary>
-/// <param name="Timestamp">UTC timestamp of the event.</param>
-/// <param name="PluginName">Stable plugin id.</param>
-/// <param name="Capability">Canonical capability name (e.g. <c>read_files</c>).</param>
-/// <param name="Target">Concrete target: file path, URL, process, agent id, env var name.</param>
-/// <param name="Result">Outcome: <c>allow</c> or <c>deny</c> (plus short detail in <c>detail</c>).</param>
-/// <param name="Detail">Optional extra context (denial reason, truncated error).</param>
-public sealed record PluginAuditEntry(
-    DateTime Timestamp,
-    string PluginName,
-    string Capability,
-    string Target,
-    string Result,
-    string? Detail = null);
-
-/// <summary>
-///     Append-only JSONL audit sink for plugin capability usage. Every grant/deny
-///     decision is recorded; plugins run with unprivileged host credentials and the
-///     log directory is outside the plugin data root, so a plugin cannot rewrite or
-///     delete its own audit trail.
-/// </summary>
-public interface IPluginAuditLog
-{
-    /// <summary>
-    ///     Append one audit entry. Must never throw for I/O problems — audit failures
-    ///     are logged, not propagated (best-effort security telemetry).
-    /// </summary>
-    Task WriteAsync(string pluginName, PluginCapability capability, string target, string result, string? detail = null, CancellationToken ct = default);
-}
 
 /// <summary>
 ///     Default <see cref="IPluginAuditLog" /> — append-only JSONL at
