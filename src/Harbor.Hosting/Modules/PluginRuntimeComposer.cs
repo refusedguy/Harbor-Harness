@@ -43,7 +43,17 @@ internal static class PluginRuntimeComposer
     /// <param name="trustPrompt">
     ///     Optional first-sight approval hook for project-local plugins. Startup passes an
     ///     interactive console prompt; hot-reload passes null so unapproved or edited
-    ///     plugins fail closed instead of interrupting a live session.
+    ///     plugins fail closed instead of interrupting a live session. Ignored when
+    ///     <paramref name="capabilityPrompt" /> is supplied (the per-capability flow
+    ///     supersedes the all-or-nothing one).
+    /// </param>
+    /// <param name="capabilityPrompt">
+    ///     Optional v2 per-capability approval hook: invoked with the plugin's
+    ///     manifest-declared capabilities, returns the user-approved subset which is
+    ///     persisted to <c>trust.json</c> (path + sha256 + capabilities). Startup passes
+    ///     an interactive prompt; hot-reload passes null so new/edited plugins fail
+    ///     closed. When null (and <paramref name="trustPrompt" /> is null too), unknown
+    ///     scripts are skipped entirely.
     /// </param>
     /// <returns>The wired pair, ready for <see cref="PluginHost.LoadAllAsync" />.</returns>
     public static (PluginLoadHost Host, PluginHost Runtime) Compose(
@@ -57,7 +67,8 @@ internal static class PluginRuntimeComposer
         PanelRegistry panelRegistry,
         string globalPluginsDir,
         string projectPluginsDir,
-        Func<PluginScript, Task<bool>>? trustPrompt)
+        Func<PluginScript, Task<bool>>? trustPrompt,
+        Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? capabilityPrompt = null)
     {
         var loadHost = new PluginLoadHost(
             services,
@@ -79,7 +90,7 @@ internal static class PluginRuntimeComposer
             loggerFactory.CreateLogger<PluginAuditLog>());
 
         var runtime = new PluginHostBuilder()
-            .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt, audit))
+            .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt, capabilityPrompt, audit))
             .WithCompiler(new CachingCompiler(
                 new RoslynPluginCompiler(references),
                 pluginsCacheDir,
@@ -101,13 +112,15 @@ internal static class PluginRuntimeComposer
     /// <summary>
     ///     Trust-gated discovery over both scopes: the user-managed global directory is
     ///     trusted implicitly, project-local scripts go through a persisted per
-    ///     path+hash decision with optional interactive approval on first sight.
+    ///     path+hash decision — per-capability approval when the hook is supplied,
+    ///     all-or-nothing approval otherwise, fail-closed skip when neither is.
     /// </summary>
     private static IPluginSource BuildTrustedSource(
         string globalPluginsDir,
         string projectPluginsDir,
         ILoggerFactory loggerFactory,
         Func<PluginScript, Task<bool>>? trustPrompt,
+        Func<PluginScript, IReadOnlySet<PluginCapability>, Task<IReadOnlySet<PluginCapability>>>? capabilityPrompt,
         IPluginAuditLog audit)
     {
         var inner = new FileSystemPluginSource(
@@ -118,7 +131,8 @@ internal static class PluginRuntimeComposer
             new[] { globalPluginsDir },
             Path.Combine(globalPluginsDir, "trust.json"),
             loggerFactory.CreateLogger<FileTrustPolicy>(),
-            trustPrompt);
+            trustPrompt,
+            capabilityPrompt);
 
         return new TrustingPluginSource(
             inner,

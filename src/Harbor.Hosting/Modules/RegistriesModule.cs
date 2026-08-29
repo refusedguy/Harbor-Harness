@@ -114,6 +114,11 @@ internal static class RegistriesModule
         string globalPluginsDir = Path.Combine(harborDir, "plugins");
         string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
 
+        // Per-capability approval (trust.json v2) when an interactive console is
+        // available; non-interactive hosts get no prompt hook at all — DecideAsync
+        // then fails closed and unreviewed project-local plugins are skipped.
+        bool interactive = !Console.IsInputRedirected && !Console.IsOutputRedirected;
+
         var (pluginHost, pluginRuntime) = PluginRuntimeComposer.Compose(
             services,
             ctx.Options.Configuration ?? new ConfigurationBuilder().Build(),
@@ -125,7 +130,10 @@ internal static class RegistriesModule
             panelRegistry,
             globalPluginsDir,
             projectPluginsDir,
-            trustPrompt: script => PromptForProjectPluginTrustAsync(script, ctx.Logger));
+            trustPrompt: null,
+            capabilityPrompt: interactive
+                ? (script, declared) => PromptForPluginCapabilitiesAsync(script, declared, ctx.Logger)
+                : null);
 
 #pragma warning disable RS0030 // Sync-over-async at startup — same pattern as config load.
         var pluginResult = pluginRuntime.LoadAllAsync(pluginHost).GetAwaiter().GetResult();
@@ -145,33 +153,56 @@ internal static class RegistriesModule
     }
 
     /// <summary>
-    ///     Interactive first-sight approval for project-local plugins at startup.
-    ///     Non-interactive hosts fail closed and skip unreviewed plugins (ROADMAP v0.5
-    ///     trust prompt). Accepted decisions are persisted by <see cref="FileTrustPolicy" />.
+    ///     Interactive per-capability approval for project-local plugins at startup
+    ///     (trust.json v2). The user approves each manifest-declared capability
+    ///     individually; the approved subset is persisted by
+    ///     <see cref="FileTrustPolicy" /> keyed by path + sha256. Declining everything
+    ///     still loads the plugin with zero capabilities — fully sandboxed. Unknown
+    ///     capability tokens are rejected before any prompt (fail-closed).
     /// </summary>
-    private static async Task<bool> PromptForProjectPluginTrustAsync(PluginScript script, ILogger log)
+    private static async Task<IReadOnlySet<PluginCapability>> PromptForPluginCapabilitiesAsync(
+        PluginScript script,
+        IReadOnlySet<PluginCapability> declared,
+        ILogger log)
     {
-        if (Console.IsInputRedirected || Console.IsOutputRedirected)
+        var approved = new HashSet<PluginCapability>();
+
+        if (script.HasInvalidManifest)
         {
             log.LogWarning(
-                "Non-interactive run: project-local plugin {Path} skipped. Run interactively to review it, or remove it from .harbor/plugins",
+                "Plugin {Path} declares an unknown capability token — refusing to grant anything (fail-closed)",
                 script.Path);
-            return false;
+            return approved;
         }
 
         Console.WriteLine();
         Console.WriteLine("Harbor found a new or changed project-local plugin:");
         Console.WriteLine($"  path : {script.Path}");
         Console.WriteLine($"  sha256: {script.Hash[..Math.Min(12, script.Hash.Length)]}…");
-        Console.WriteLine("Project plugins execute in-process with full trust — only approve code you reviewed.");
-        Console.Write("Trust and load this plugin? [y/N] ");
+        Console.WriteLine("Plugins execute in-process — approve each capability individually.");
+        Console.WriteLine("Declining everything loads the plugin with no capabilities (fully sandboxed).");
 
-        string answer = await Console.In.ReadLineAsync().ConfigureAwait(false) ?? string.Empty;
-        bool trusted = answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
-                       || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
-        if (!trusted)
-            log.LogInformation("Project-local plugin {Path} not approved by the user", script.Path);
-        return trusted;
+        if (declared.Count == 0)
+        {
+            Console.WriteLine("  (manifest declares no capabilities — nothing to approve)");
+            return approved;
+        }
+
+        int index = 0;
+        foreach (PluginCapability capability in declared)
+        {
+            index++;
+            Console.Write($"  [{index}/{declared.Count}] {PluginCapabilities.ToName(capability)} [y/N] ");
+            string answer = await Console.In.ReadLineAsync().ConfigureAwait(false) ?? string.Empty;
+            if (answer.Trim() is "y" or "yes")
+                approved.Add(capability);
+        }
+
+        log.LogInformation(
+            "Project-local plugin {Path}: approved capabilities [{Capabilities}]",
+            script.Path,
+            approved.Count == 0 ? "none" : string.Join(",", approved.Select(PluginCapabilities.ToName)));
+        return approved;
     }
 #endif
 }
