@@ -11,6 +11,9 @@ public sealed record IdeSessionBridgeOptions
     ///     this is the safety net, not the UX contract.
     /// </summary>
     public TimeSpan RunTimeout { get; init; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>Per-request budget for bridge requests themselves (delegate to the framing server).</summary>
+    public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromMinutes(2);
 }
 
 /// <summary>
@@ -52,21 +55,29 @@ public sealed class IdeSessionBridge : IAsyncDisposable
     private int _disposed;
 
     /// <summary>
-    ///     Create a bridge. The host glue is responsible for connecting the
-    ///     client and calling <c>StartAgentAsync</c> for <paramref name="sessionId"/>.
+    ///     Create a bridge over the editor-facing stdio pair. The host glue is
+    ///     responsible for connecting the client and calling
+    ///     <c>StartAgentAsync</c> for <paramref name="sessionId"/> before
+    ///     <see cref="RunAsync"/>.
     /// </summary>
     public IdeSessionBridge(
         IHarborClient client,
-        IdeJsonRpcServer server,
+        TextReader input,
+        TextWriter output,
         string? sessionId,
         ILogger logger,
         IdeSessionBridgeOptions? options = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
-        _server = server ?? throw new ArgumentNullException(nameof(server));
-        SessionId = sessionId;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options ?? new IdeSessionBridgeOptions();
+        SessionId = sessionId;
+        _server = new IdeJsonRpcServer(
+            input,
+            output,
+            HandleAsync,
+            logger,
+            new IdeJsonRpcServerOptions { RequestTimeout = _options.RequestTimeout });
     }
 
     /// <summary>Session the bridge is bound to (null until the glue binds one).</summary>
