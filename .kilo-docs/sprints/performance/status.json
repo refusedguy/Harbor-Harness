@@ -1,9 +1,29 @@
 {
-  "state": "queued",
+  "state": "done",
   "sprint": "performance",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/performance/prompt.md",
-  "head": "",
-  "commits": 0,
-  "created_at": "2026-08-28T14:38:08Z"
+  "head": "7be1390",
+  "commits": 7,
+  "created_at": "2026-08-28T14:38:08Z",
+  "last_activity": "2026-08-29T09:05:00Z",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 4,
+    "tasks_total": 4,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-08-29T09:05:00Z"
+  },
+  "base": "af32355",
+  "result": {
+    "verdicts": {
+      "1_wirecodec_arraypool_pipereader": "MET — frame-only roundtrip 64B…64KB: 0 B alloc (was 1.8 KB / 4 arrays per frame)",
+      "2_appreducer_streaming_concat": "34x — 19.4 MB → 567.5 KB per 1000 TextDelta; literal <100 KB conflicts with immutable-state design + mid-stream byte-exactness (see benchmark.md §2.3)",
+      "3_jsonl_utf8jsonreader": "MET — parse machinery 0 B/line (was ~1.4–2.5 KB); 10k cold parse 25.3 ms / 5.96 MB total ≈ 5.5 MB returned object graph + 0.4 MB dedup/sort",
+      "4_differentialrenderer": "MET — paced 60fps: 6 995 B per 1000 deltas = 7.0 KB/s < 10 KB/s; unpaced worst case 33 440 B"
+    },
+    "report": ".kilo-docs/sprints/performance/benchmark.md",
+    "report_html": ".kilo-docs/sprints/performance/report.html",
+    "tests": "jsonl 36/36, ui.framework 76/76, ipc 81 (+4 self-skip linux), build 0 errors / 0 new warnings"
+  }
 }
