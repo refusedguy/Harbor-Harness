@@ -23,7 +23,9 @@ public sealed class PluginScript
     public const string CapabilityDirective = "harbor:capabilities";
 
     private static readonly System.Text.RegularExpressions.Regex CapabilitiesPattern = new(
-        @"^\s*//\s*harbor:capabilities\s*:\s*(?<caps>[^\r\n]+)",
+        // Colon after the directive keyword is accepted but not required — the
+        // documented form is '// harbor:capabilities read_files,http_requests'.
+        @"^\s*//\s*harbor:capabilities:?\s*(?<caps>[^\r\n]+)",
         System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
