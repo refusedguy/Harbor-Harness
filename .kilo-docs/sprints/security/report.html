@@ -63,8 +63,8 @@
 <h2>4. Verification</h2>
 <table>
   <tr><th>Gate</th><th>Result</th></tr>
-  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors, 0 warnings</span> (head <span class="sha">fb60d3a</span>)</td></tr>
-  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">54 / 54</span> — includes new suites: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow)</td></tr>
+  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors, 0 warnings</span> (head <span class="sha">767c37b</span>; sprint projects re-verified warning-free with <code>--no-incremental</code>)</td></tr>
+  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">60 / 60</span> — includes new suites: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped)</td></tr>
   <tr><td><code>tests/Harbor.Architecture.Tests/</code></td><td><span class="ok">47 / 47</span></td></tr>
   <tr><td><code>tests/Harbor.Abstractions.Tests/</code></td><td><span class="ok">53 / 53</span> (after JsonDerivedType fix)</td></tr>
   <tr><td><code>tests/Harbor.Core.Tests/</code> / <code>Harbor.Hosting.Tests/</code> / <code>Harbor.App.Cli.Tests/</code></td><td><span class="ok">92 / 10 / 78</span>, 0 failures</td></tr>
@@ -74,7 +74,7 @@
   <tr><td>Acceptance: <code>alc.Unload()</code> frees memory</td><td><code>Unload_AfterLoadingPluginImage_IsGarbageCollected</code> — WeakReference + GC.Collect loop over a collectible context that loaded a real PE image</td></tr>
   <tr><td>Acceptance: GoogleSearch install → audit entries</td><td><code>GoogleSearchInstall_AuditTrail_ContainsReadFilesOnSourceAndHttpRequestOnUrl</code>: line 1 = <code>read_files</code> on the .cs source (trust gate), line 2 = <code>http_requests</code> on the URL (first tool call)</td></tr>
 </table>
-<blockquote>Known flake (not sprint-introduced): <code>DebouncedPluginWatcherTests.Rename_SignalsRemovedForOldAndAddedForNew</code> failed once in a parallel full run, passed 3/3 isolated runs and 3 subsequent full runs — filesystem-event timing class, same category as the pre-existing Avalonia headless flakes in docs/ROADMAP.md.</blockquote>
+<blockquote>Known flake (not sprint-introduced): <code>DebouncedPluginWatcherTests</code> timing tests (<code>Rename_SignalsRemovedForOldAndAddedForNew</code>, <code>Delete_OutranksEarlierModifications</code>) each failed once in a parallel full run, passed isolated and in subsequent full runs — filesystem-event timing class, same category as the pre-existing Avalonia headless flakes in docs/ROADMAP.md.</blockquote>
 
 <h2>5. Commit trail (sprint range)</h2>
 <p>Earlier sprint commits (capabilities model, ALC, trust v2, sandbox wrapper, audit sink, composition wiring) plus this session's:</p>
@@ -88,6 +88,7 @@
   <tr><td class="sha">0515cfb</td><td>fix(plugins): allow-path audits only evidenced capabilities; JSONL append-only audit tests</td></tr>
   <tr><td class="sha">883c64f</td><td>fix(ide): restore missing usings in IdeBridgeRunner so the solution builds</td></tr>
   <tr><td class="sha">fb60d3a</td><td>fix(plugins): register PluginBlockedEvent as AgentEvent JsonDerivedType</td></tr>
+  <tr><td class="sha">767c37b</td><td>test(plugins): trust.json v2 per-capability approval contract tests</td></tr>
 </table>
 
 <h2>6. Residual risks / next hardening</h2>
