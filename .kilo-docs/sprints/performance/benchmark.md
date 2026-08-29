@@ -378,3 +378,32 @@ Harbor.Ui.Framework.Reducers») из-за рассинхронизированн
 размерах кадра). Все Mean в пределах шума предыдущих прогонов (§3 10k cold
 24.65 ms против 23.1–24.2 ms в §7–§10 — внутри разброса машины), ни одного
 регресса. Спринт остаётся **done**, вердикты §0 в силе.
+
+## 12. Ре-верификация 2026-08-29, ре-диспетч №6 (head `5b0f492`)
+
+Спринт-промпт ре-диспетчен цепочкой седьмой раз; код с момента `beda182` не
+менялся (последующие коммиты — только docs: §11 + status.json). Контрольный
+прогон:
+
+- Сборка `Harbor.slnx -c Release --no-incremental`: 0 ошибок; warnings
+  **190 — все pre-existing** (Sonar/CS0618 в тест-проектах + AVLN3001
+  `MainWindow.axaml`, коммит `53fa225`, до базы спринта `af32355`), в `src/` — 0.
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669** — 0 fails.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — hard rule 5 выполнен,
+  реальная проверка — прогоном бенчмарков ниже).
+
+Бенчмарки (Release, свежий `--no-incremental` rebuild Benchmarks-проекта):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 520.0 ns, 0 B / 1 115.8 ns, 0 B / 11 742.1 ns; full roundtrip 64B = 1 826 B (граф MessagePack) | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 112.51 µs; snapshot-floor 240.52 KB / 48.83 µs | ✅ (34×) |
+| §3 JSONL parse machinery | **0 B** (392 B user / 720 B assistant граф; OLD 2 336 / 4 032 B); 10k cold 23.81 ms / 6 107 798 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** / 1000 deltas = 7.0 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B alloc; layout 184 B | ✅ |
+
+Аллокации байт-в-байт с задокументированными (§2: 567.48 / 240.52 KB;
+§3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 / 184 B; §1: 0 B на всех
+размерах кадра). Все Mean в пределах шума предыдущих прогонов, ни одного
+регресса. Спринт остаётся **done**, вердикты §0 в силе.
