@@ -183,7 +183,7 @@ public sealed class TrustLayerTests : IDisposable
 
         var scripts = await CollectAsync(source);
 
-        await Assert.That(scripts).HasCount().EqualTo(1);
+        await Assert.That(scripts).Count().IsEqualTo(1);
         var yielded = scripts[0];
         await Assert.That(yielded.DeclaredCapabilities.Count).IsEqualTo(1);
         await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.ReadFiles)).IsTrue();
@@ -215,7 +215,7 @@ public sealed class TrustLayerTests : IDisposable
 
         var scripts = await CollectAsync(source);
 
-        await Assert.That(scripts).HasCount().EqualTo(1);
+        await Assert.That(scripts).Count().IsEqualTo(1);
         var yielded = scripts[0];
         await Assert.That(yielded.DeclaredCapabilities.Count).IsEqualTo(1);
         await Assert.That(yielded.DeclaredCapabilities.Contains(PluginCapability.ReadFiles)).IsTrue();
