@@ -1,3 +1,5 @@
+using System.IO.Pipelines;
+
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     MessagePack RPC client. Sends <see cref="HarborRequest" />s over a
@@ -14,6 +16,13 @@ namespace Harbor.Ipc.Protocol;
 ///         <see cref="TaskCompletionSource{HarborResponse}" />;
 ///         <see cref="EventEnvelope" /> frames are pushed to the event
 ///         channel for the <see cref="EventSubscription" /> to enumerate.
+///     </para>
+///     <para>
+///         <b>Framing (perf sprint):</b> the read loop owns ONE persistent
+///         <see cref="PipeReader" /> per connection — required because
+///         responses and event envelopes interleave on the same stream, so
+///         bytes over-read past the current frame must stay buffered for the
+///         next frame. A per-call transient reader would discard them.
 ///     </para>
 ///     <para>
 ///         <b>Concurrency:</b> a single writer serializes request frames
@@ -41,6 +50,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     private int _disposed;
     private Task? _readLoopTask;
     private Stream? _stream;
+    private PipeReader? _reader;
 
     /// <summary>
     ///     Construct an RPC client over the given transport.
@@ -111,6 +121,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     {
         if (_stream is not null) return;
         _stream = await _transport.ConnectAsync(ct).ConfigureAwait(false);
+        _reader = PipeReader.Create(_stream, new StreamPipeReaderOptions(leaveOpen: true));
         _readLoopTask = ReadLoopAsync(_cts.Token);
 
         if (_psk is not null)
@@ -184,7 +195,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             HarborResponse? response;
             try
             {
-                response = await WireCodec.ReadResponseAsync(_stream, ct).ConfigureAwait(false);
+                response = await WireCodec.ReadResponseAsync(_reader!, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
             catch (EndOfStreamException) { break; }
@@ -226,6 +237,14 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
                 tcs.TrySetException(new IOException("Server closed the connection"));
             }
             _pending.Clear();
+        }
+
+        if (_reader is not null)
+        {
+            // Release the persistent reader's pooled buffers (leaveOpen — the
+            // transport owns the stream's lifetime).
+            await _reader.CompleteAsync().ConfigureAwait(false);
+            _reader = null;
         }
 
         _stream = null;
