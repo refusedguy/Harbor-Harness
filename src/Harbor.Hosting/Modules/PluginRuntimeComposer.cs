@@ -73,15 +73,24 @@ internal static class PluginRuntimeComposer
         var references = new PluginAssemblyReferences(
             loggerFactory.CreateLogger<PluginAssemblyReferences>());
 
+        // Append-only capability audit trail: ~/.harbor/logs/plugin-audit.jsonl.
+        var audit = new PluginAuditLog(
+            Path.GetDirectoryName(globalPluginsDir) ?? globalPluginsDir,
+            loggerFactory.CreateLogger<PluginAuditLog>());
+
         var runtime = new PluginHostBuilder()
-            .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt))
+            .WithSource(BuildTrustedSource(globalPluginsDir, projectPluginsDir, loggerFactory, trustPrompt, audit))
             .WithCompiler(new CachingCompiler(
                 new RoslynPluginCompiler(references),
                 pluginsCacheDir,
                 loggerFactory.CreateLogger<CachingCompiler>()))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(globalPluginsDir, loggerFactory.CreateLogger<PluginRegistrar>(), loggerFactory),
+                new PluginRegistrar(
+                    globalPluginsDir,
+                    loggerFactory.CreateLogger<PluginRegistrar>(),
+                    loggerFactory,
+                    audit),
                 loggerFactory.CreateLogger<SafePluginRegistrar>()))
             .WithOptions(o => o.PluginRoot = globalPluginsDir)
             .Build(loggerFactory.CreateLogger<PluginHost>());
@@ -98,7 +107,8 @@ internal static class PluginRuntimeComposer
         string globalPluginsDir,
         string projectPluginsDir,
         ILoggerFactory loggerFactory,
-        Func<PluginScript, Task<bool>>? trustPrompt)
+        Func<PluginScript, Task<bool>>? trustPrompt,
+        IPluginAuditLog audit)
     {
         var inner = new FileSystemPluginSource(
             new[] { globalPluginsDir, projectPluginsDir },
@@ -110,7 +120,11 @@ internal static class PluginRuntimeComposer
             loggerFactory.CreateLogger<FileTrustPolicy>(),
             trustPrompt);
 
-        return new TrustingPluginSource(inner, policy, loggerFactory.CreateLogger<TrustingPluginSource>());
+        return new TrustingPluginSource(
+            inner,
+            policy,
+            loggerFactory.CreateLogger<TrustingPluginSource>(),
+            audit);
     }
 }
 #endif
