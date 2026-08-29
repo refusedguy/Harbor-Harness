@@ -190,9 +190,11 @@ public sealed class SandboxedPluginTool : ITool
     }
 
     /// <summary>
-    ///     Append one audit line per granted capability for this tool call. The target
-    ///     is extracted from the call arguments when a well-known key matches the
-    ///     capability (url/path/command); otherwise the tool name is used.
+    ///     Append audit lines for this tool call. On <c>allow</c>, only capabilities
+    ///     whose well-known argument key is present in the call are audited
+    ///     (evidence-based: a <c>{"url":...}</c> call exercises <c>http_requests</c>,
+    ///     not every granted capability). On <c>deny</c>, every granted capability is
+    ///     recorded so the operator sees the full blast radius of the blocked call.
     /// </summary>
     private async Task AuditCallAsync(JsonElement args, string result, string? detail, CancellationToken ct)
     {
@@ -205,19 +207,28 @@ public sealed class SandboxedPluginTool : ITool
                 ? args.GetRawText()
                 : string.Empty;
 
+        bool evidenceBased = result == "allow";
         foreach (var capability in _capabilities)
         {
+            var target = ExtractTarget(capability, args);
+            if (target is null)
+            {
+                if (evidenceBased)
+                    continue;
+                target = Truncate(rawArgs);
+            }
+
             await _audit.WriteAsync(
                 _pluginName,
                 capability,
-                ExtractTarget(capability, args, rawArgs),
+                target,
                 result,
                 detail,
                 ct).ConfigureAwait(false);
         }
     }
 
-    private static string ExtractTarget(PluginCapability capability, JsonElement args, string rawArgs)
+    private static string? ExtractTarget(PluginCapability capability, JsonElement args)
     {
         string? Pick(params string[] keys)
         {
@@ -238,16 +249,10 @@ public sealed class SandboxedPluginTool : ITool
 
         return capability switch
         {
-            PluginCapability.HttpRequests => Pick("url", "endpoint", "query", "search", "q") is { } url
-                ? url
-                : Truncate(rawArgs),
-            PluginCapability.ReadFiles or PluginCapability.WriteFiles => Pick("path", "file", "filename") is { } path
-                ? path
-                : Truncate(rawArgs),
-            PluginCapability.RunProcesses => Pick("command", "process", "exe") is { } cmd
-                ? cmd
-                : Truncate(rawArgs),
-            _ => Truncate(rawArgs),
+            PluginCapability.HttpRequests => Pick("url", "endpoint", "query", "search", "q"),
+            PluginCapability.ReadFiles or PluginCapability.WriteFiles => Pick("path", "file", "filename"),
+            PluginCapability.RunProcesses => Pick("command", "process", "exe"),
+            _ => null,
         };
     }
 
