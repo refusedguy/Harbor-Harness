@@ -37,4 +37,14 @@ public interface IPluginTrustPolicy
     /// <param name="ct">Cancellation token.</param>
     /// <returns><see cref="PluginTrustDecision.Trusted" /> to allow loading.</returns>
     Task<PluginTrustDecision> DecideAsync(PluginScript script, CancellationToken ct = default);
+
+    /// <summary>
+    ///     Capabilities the user approved for this exact plugin (path + hash must both
+    ///     match the persisted decision). Implementations must fail closed: the returned
+    ///     set is intersected with the manifest declaration by the caller, and unknown
+    ///     / stale / ambiguous cases yield the empty set — never the declared superset.
+    /// </summary>
+    /// <param name="script">The trusted plugin script being loaded.</param>
+    /// <returns>The approved capability subset (possibly empty).</returns>
+    IReadOnlySet<PluginCapability> GetGrantedCapabilities(PluginScript script);
 }
