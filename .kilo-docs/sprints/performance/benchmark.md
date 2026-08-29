@@ -215,3 +215,19 @@ dotnet run -c Release --no-build --project tests/Harbor.Benchmarks -- --filter "
 
 «Before» для §3: `git show c546b16~1:src/Harbor.Storage.Jsonl/JsonlSessionStore.cs`
 (путь reader+JsonElement); для §1: `git show 255134b~1:src/Harbor.Ipc.Abstractions/Protocol/WireCodec.cs`.
+
+## 6. Ре-верификация 2026-08-29 (head `ec82f52`)
+
+Полный повторный прогон всех четырёх бенчмарков на head (Release, свежий build:
+`dotnet build tests/Harbor.Benchmarks -c Release`; тест-сьюты: IPC 81 pass /
+4 self-skip, Ui.Framework 76, Storage.Jsonl 36, CellForge 669 — 0 fails):
+
+| Приёмка | Задокументировано | Ре-прогон | Статус |
+|---|---|---|---|
+| §1 WireCodec frame-only 64B | 0 B / 617 ns | **0 B** / 514 ns (64B), 0 B @4K, 0 B @64K | ✅ |
+| §2 AppReducer 1000 TextDelta | 567.48 KB / 133.0 µs | **567.48 KB** / 114.7 µs; snapshot-floor 240.5 KB | ✅ (34×) |
+| §3 JSONL parse machinery | 0 B/строку (392/720 B граф) | **0 B** machinery (392 B user / 720 B assistant); OLD 2336/4032 B; 10k cold 24.19 ms / 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | 6 995 B / 1000 deltas | **6 995 B** / 1000 deltas (7.0 KB/s); unpaced 33 440 B | ✅ |
+
+Аллокационные числа воспроизведены байт-в-байт; расхождение только в Mean
+(114.7 µs и 24.19 ms — быстрее задокументированных, шум машины).
