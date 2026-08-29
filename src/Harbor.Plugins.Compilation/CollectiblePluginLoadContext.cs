@@ -23,7 +23,7 @@ namespace Harbor.Plugins.Compilation;
 ///         is type-identical, not structurally matched).</item>
 ///     </list>
 /// </summary>
-public sealed class CollectiblePluginLoadContext : AssemblyLoadContext
+public sealed class CollectiblePluginLoadContext : AssemblyLoadContext, IDisposable
 {
     /// <summary>Sensitive assembly → capability required to resolve it. Fail-closed.</summary>
     private static readonly IReadOnlyDictionary<string, PluginCapability> DenyList =
@@ -107,6 +107,14 @@ public sealed class CollectiblePluginLoadContext : AssemblyLoadContext
         pdbBytes is null
             ? LoadFromStream(new MemoryStream(assemblyBytes))
             : LoadFromStream(new MemoryStream(assemblyBytes), new MemoryStream(pdbBytes));
+
+    /// <summary>
+    ///     Start unloading this collectible sandbox. Implemented explicitly so the
+    ///     method name is unambiguous about the underlying mechanism: the actual
+    ///     memory reclamation is GC-driven and happens once no references into the
+    ///     context remain (see <see cref="AssemblyLoadContext.Unload" />).
+    /// </summary>
+    void IDisposable.Dispose() => Unload();
 
     /// <summary>
     ///     Load a cached plugin assembly file into this collectible context.
