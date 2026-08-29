@@ -473,3 +473,40 @@ providers/ external/` (пусто; последующие коммиты — т�
 184 B байт-в-байт, холодный кэш-промах после `--no-incremental` ребилда — шум
 машины, не регресс: в §7–§13 Mean этой строки не публиковался). Спринт
 остаётся **done**, вердикты §0 в силе.
+
+## 15. Ре-верификация 2026-08-29, ре-диспетч №9 (head `f78b7ec`)
+
+Спринт-промпт ре-диспетчен цепочкой десятый раз; код с момента `2079bc0` не
+менялся — проверено `git diff 2079bc0..f78b7ec -- src/ tests/ apps/ contrib/
+providers/ external/` (пусто; последующие коммиты — только docs). Контрольный
+прогон:
+
+- Сборка `Harbor.slnx -c Release`: 0 ошибок; warnings **190 — все
+  pre-existing** (Sonar/CS0618 в тест-проектах); grep-фильтр по логу сборки:
+  в спринт-проектах (`Ipc`, `Ui.Framework`, `Storage.Jsonl`, `CellForge`) —
+  **0 warnings**.
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669**, Tui.Tests
+  **118/118** — 0 fails.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — hard rule 5 выполнен,
+  реальная проверка — прогоном бенчмарков ниже).
+
+Бенчмарки (Release; инфра-заметка §7 воспроизвелась — BDN-валидатор отклонил
+первый прогон из-за stale-копии `Harbor.Ui.Framework.Reducers.dll` в
+`tests/Harbor.Benchmarks/bin/Release`, вылечено документированным способом
+`dotnet build tests/Harbor.Benchmarks -c Release --no-incremental`):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 511.1 ns, 0 B / 1 082.7 ns, 0 B / 11 725.7 ns; full roundtrip 64B = 1 832 B (граф MessagePack); ReadFrame 0 B / 244.1 ns | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 113.06 µs; snapshot-floor 240.52 KB / 49.02 µs | ✅ (34×) |
+| §3 JSONL parse machinery | **0 B** (392 B user / 720 B assistant граф; OLD 2 336 / 4 032 B); 10k cold 23.94 ms / 6 107 644 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** / 1000 deltas = 7.0 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B alloc; layout 184 B / 707.9 ns | ✅ |
+
+Аллокации байт-в-байт с задокументированными (§2: 567.48 / 240.52 KB;
+§3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 / 184 B; §1: 0 B на всех
+размерах кадра). Mean-отклонения в шуме: 10k cold 6 107 644 B попадает в
+историческую полосу §7–§14 (6 107 393…6 107 798 B, I/O-шум файлового стора);
+full roundtrip 64B 1 832 B против 1 831 B (±1 B графа MessagePack). Спринт
+остаётся **done**, вердикты §0 в силе.
