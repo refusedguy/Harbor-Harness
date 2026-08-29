@@ -262,3 +262,31 @@ Harbor.Ui.Framework.Reducers») из-за рассинхронизированн
 `tests/Harbor.Benchmarks/bin/Release` (stale-копия от промежуточного билда);
 лечится `dotnet build tests/Harbor.Benchmarks -c Release --no-incremental`.
 Содержимого src это не касалось.
+
+## 8. Ре-верификация 2026-08-29, ре-диспетч №2 (head `6018eaa`)
+
+Спринт-промпт ре-диспетчен цепочкой третий раз; код с момента `ec82f52` не
+менялся (последующие коммиты — только docs). Контрольный прогон:
+
+- Сборка `Harbor.slnx -c Release`: 0 ошибок, 190 warnings — pre-existing
+  (Sonar/CS0618 в тест-проектах), в `src/` — 0.
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669** — 0 fails.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — hard rule 5 выполнен,
+  реальная проверка — прогоном бенчмарков ниже).
+
+Бенчмарки (Release, свежий `--no-incremental` rebuild Benchmarks-проекта,
+артефакты в корневом `BenchmarkDotNet.Artifacts/`):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 517.4 ns, 0 B / 1106.7 ns, 0 B / 11 992.9 ns; full roundtrip 64B = 1 830 B (граф MessagePack) | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 113.47 µs; snapshot-floor 240.52 KB / 48.98 µs | ✅ (34×) |
+| §3 JSONL parse machinery | **0 B** (392 B user / 720 B assistant граф; OLD 2 336 / 4 032 B); 10k cold 23.37 ms / 6 107 648 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** / 1000 deltas = 7.0 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B alloc | ✅ |
+
+Аллокации байт-в-байт с задокументированными (§2: 567.48 / 240.52 KB;
+§3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 B; §1: 0 B на всех
+размерах кадра). Расхождение только в Mean — шум машины (все Mean в пределах
+±5% предыдущих прогонов). Спринт остаётся **done**, все вердикты §0 в силе.
