@@ -26,6 +26,7 @@ namespace Harbor.Plugins.Compilation;
 public sealed class RoslynPluginCompiler : IPluginCompiler
 {
     private readonly PluginAssemblyReferences _references;
+    private readonly Func<PluginScript, Assembly>? _assemblyLoader;
 
     /// <summary>
     ///     Construct a new Roslyn compiler.
@@ -35,9 +36,16 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
     ///     of <see cref="AppDomain.CurrentDomain" /> is taken via
     ///     <see cref="PluginAssemblyReferences" />.
     /// </param>
-    public RoslynPluginCompiler(PluginAssemblyReferences references)
+    /// <param name="assemblyLoader">
+    ///     Optional custom loader used to place the compiled PE image into an
+    ///     <see cref="AssemblyLoadContext" />. When <see langword="null" />, the assembly
+    ///     loads into a fresh <see cref="CollectiblePluginLoadContext" /> sandbox built
+    ///     from the script's declared capabilities (fail-closed deny-list).
+    /// </param>
+    public RoslynPluginCompiler(PluginAssemblyReferences references, Func<PluginScript, Assembly>? assemblyLoader = null)
     {
         _references = references ?? throw new ArgumentNullException(nameof(references));
+        _assemblyLoader = assemblyLoader;
     }
 
     /// <inheritdoc />
@@ -72,7 +80,11 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
         }
 
         byte[] assemblyBytes = ms.ToArray();
-        var asm = Assembly.Load(assemblyBytes);
+        var sandbox = _assemblyLoader is null
+            ? CollectiblePluginLoadContext.ForScript(script)
+            : null;
+        var asm = _assemblyLoader?.Invoke(script)
+            ?? sandbox!.LoadFromImage(assemblyBytes);
         var compiled = new CompiledPluginAssembly(asm, script.Hash, script.Path, assemblyBytes);
         return Task.FromResult(CompilationResult.Fresh(compiled));
     }

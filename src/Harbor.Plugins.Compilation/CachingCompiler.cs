@@ -26,6 +26,7 @@ public sealed class CachingCompiler : IPluginCompiler
     private readonly string _cacheDir;
     private readonly IPluginCompiler _inner;
     private readonly ILogger<CachingCompiler> _logger;
+    private readonly Func<PluginScript, string, Assembly>? _assemblyLoader;
 
     /// <summary>
     ///     Construct a new caching decorator.
@@ -33,14 +34,21 @@ public sealed class CachingCompiler : IPluginCompiler
     /// <param name="inner">Underlying compiler invoked on cache miss.</param>
     /// <param name="cacheDir">Directory to store cached DLLs.</param>
     /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="assemblyLoader">
+    ///     Optional custom loader for cache-hit assemblies. When <see langword="null" />,
+    ///     the cached DLL loads into a fresh <see cref="CollectiblePluginLoadContext" />
+    ///     sandbox built from the script's declared capabilities (fail-closed deny-list).
+    /// </param>
     public CachingCompiler(
         IPluginCompiler inner,
         string cacheDir,
-        ILogger<CachingCompiler> logger)
+        ILogger<CachingCompiler> logger,
+        Func<PluginScript, string, Assembly>? assemblyLoader = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _cacheDir = cacheDir ?? throw new ArgumentNullException(nameof(cacheDir));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _assemblyLoader = assemblyLoader;
     }
 
     /// <inheritdoc />
@@ -55,12 +63,15 @@ public sealed class CachingCompiler : IPluginCompiler
         {
             try
             {
-                // Assembly.LoadFrom is intentional here: the cache file lives on disk and
-                // we want the runtime to resolve it as a path-based assembly so subsequent
-                // Assembly.Load* calls for the same path hit the cache. Assembly.Load(byte[])
-                // would re-load a fresh copy each time, defeating the cache.
-#pragma warning disable S3885 // LoadFrom is intentional for the disk-cache path.
-                var cachedAsm = Assembly.LoadFrom(cachePath);
+                // Load into a collectible sandbox ALC (or the injected loader) instead of
+                // the default ALC: plugin code must be unloadable and subject to the
+                // capability deny-list even on cache hits.
+#pragma warning disable S3885 // Path-based load is intentional for the disk cache.
+                var sandbox = _assemblyLoader is null
+                    ? CollectiblePluginLoadContext.ForScript(script)
+                    : null;
+                var cachedAsm = _assemblyLoader?.Invoke(script, cachePath)
+                    ?? sandbox!.LoadFromPluginPath(cachePath);
 #pragma warning restore S3885
                 _logger.LogDebug("Cache hit for {Path} ({Hash})", script.Path, script.Hash);
                 return CompilationResult.Cached(new CompiledPluginAssembly(
