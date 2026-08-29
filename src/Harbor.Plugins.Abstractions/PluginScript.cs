@@ -41,6 +41,22 @@ public sealed class PluginScript
         DeclaredCapabilities = ParseCapabilities(source);
     }
 
+    private PluginScript(string path, string source, IReadOnlySet<PluginCapability> narrowed)
+        : this(path, source) => DeclaredCapabilities = narrowed;
+
+    /// <summary>
+    ///     Copy of this script whose capability set is narrowed to the user-approved
+    ///     grants (intersected with the declared manifest — the trust gate narrows,
+    ///     never widens). Path, source and hash are shared; downstream enforcement
+    ///     points (sandbox ALC, tool sandbox) read <see cref="DeclaredCapabilities" />
+    ///     and therefore enforce the approved subset.
+    /// </summary>
+    public PluginScript WithGrantedCapabilities(IReadOnlySet<PluginCapability> granted)
+    {
+        ArgumentNullException.ThrowIfNull(granted);
+        return new PluginScript(Path, Source, granted.Where(DeclaredCapabilities.Contains).ToHashSet());
+    }
+
     /// <summary>
     ///     Capabilities declared by the plugin manifest. Empty set = no capabilities
     ///     (fail-closed). An invalid manifest token results in an empty set plus

@@ -67,7 +67,11 @@ public sealed class TrustingPluginSource : IPluginSource
 
             if (trusted)
             {
-                yield return script;
+                // Narrow the capability set to what the user actually approved before
+                // the script reaches the compiler: the sandbox ALC and the tool sandbox
+                // both read DeclaredCapabilities downstream, so approval granularity
+                // must be baked in here, at the single trust seam.
+                yield return script.WithGrantedCapabilities(_policy.GetGrantedCapabilities(script));
             }
             else
             {
