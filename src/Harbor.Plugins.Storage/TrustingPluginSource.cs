@@ -51,7 +51,11 @@ public sealed class TrustingPluginSource : IPluginSource
         await foreach (var script in _inner.GetScriptsAsync(ct).ConfigureAwait(false))
         {
             ct.ThrowIfCancellationRequested();
-            var decision = await _policy.DecideAsync(script, ct).ConfigureAwait(false);
+            // Fail-closed: an unknown capability token in the manifest directive rejects
+            // the plugin regardless of user choice (contracted by PluginScript docs).
+            var decision = script.HasInvalidManifest
+                ? PluginTrustDecision.Untrusted
+                : await _policy.DecideAsync(script, ct).ConfigureAwait(false);
             var trusted = decision == PluginTrustDecision.Trusted;
 
             if (_audit is not null)
@@ -61,7 +65,9 @@ public sealed class TrustingPluginSource : IPluginSource
                     PluginCapability.ReadFiles,
                     script.Path,
                     trusted ? "allow" : "deny",
-                    trusted ? null : "trust denied — plugin not loaded",
+                    trusted ? null : script.HasInvalidManifest
+                        ? "invalid capability manifest — unknown token"
+                        : "trust denied — plugin not loaded",
                     ct).ConfigureAwait(false);
             }
 
