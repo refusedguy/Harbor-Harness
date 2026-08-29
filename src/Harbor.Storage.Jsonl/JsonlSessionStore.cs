@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -645,9 +646,19 @@ public sealed class JsonlSessionStore : ISessionStore
     ///     while still returning the successfully deserialized messages
     ///     (§ROP-001 resolved).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Perf sprint (PERF-005 successor):</b> the file is read once
+    ///         into a pooled buffer and parsed line-by-line over raw UTF-8
+    ///         spans via <see cref="JsonlLineParser" /> — no per-line
+    ///         <see cref="string" />, no <c>Encoding.UTF8.GetBytes</c>, no
+    ///         <see cref="JsonElement"/> round-trip for payloads. Allocations
+    ///         are limited to the returned message object graph.
+    ///     </para>
+    /// </remarks>
     /// <param name="sessionFile">Absolute path to the .jsonl file.</param>
-    /// <param name="sessionId">The session id (passed through to <see cref="DeserializeMessage" />).</param>
-    /// <param name="ct">Cancellation token observed by <c>StreamReader.ReadLineAsync</c>.</param>
+    /// <param name="sessionId">The session id (passed through to the parser).</param>
+    /// <param name="ct">Cancellation token observed by the file read.</param>
     /// <returns>The chronological message list, or failure with the first error.</returns>
     private async Task<Result<IReadOnlyList<AgentMessage>>> ParseMessagesFromDiskAsync(
         string sessionFile,
@@ -657,16 +668,59 @@ public sealed class JsonlSessionStore : ISessionStore
         var messages = new Dictionary<string, AgentMessage>();
         var errors = new List<string>(capacity: 0);
 
-        using var reader = new StreamReader(sessionFile);
-        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+        long fileLength = new FileInfo(sessionFile).Length;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent((int)Math.Max(fileLength, 1));
+        try
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            int read = 0;
+            using (var fs = new FileStream(
+                       sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
+                       bufferSize: 64 * 1024, useAsync: true))
+            {
+                while (read < buffer.Length)
+                {
+                    int n = await fs.ReadAsync(buffer.AsMemory(read, buffer.Length - read), ct).ConfigureAwait(false);
+                    if (n == 0) break;
+                    read += n;
+                }
+            }
 
-            var msgResult = ParseMessageLine(line, sessionId);
-            if (msgResult.IsSuccess)
-                messages[msgResult.Value.Id] = msgResult.Value;
-            else
-                errors.Add($"Line parse failed: {msgResult.Error}");
+            ReadOnlySpan<byte> rest = buffer.AsSpan(0, read);
+            if (rest.StartsWith("\xEF\xBB\xBF"u8))
+            {
+                rest = rest[3..];
+            }
+
+            while (!rest.IsEmpty)
+            {
+                int nl = rest.IndexOf((byte)'\n');
+                ReadOnlySpan<byte> line = nl < 0 ? rest : rest[..nl];
+                rest = nl < 0 ? default : rest[(nl + 1)..];
+
+                if (line.Length > 0 && line[^1] == (byte)'\r')
+                {
+                    line = line[..^1];
+                }
+
+                if (line.IsEmpty || line.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
+                {
+                    continue;
+                }
+
+                var msgResult = JsonlLineParser.Parse(line, sessionId);
+                if (msgResult.IsSuccess)
+                {
+                    messages[msgResult.Value.Id] = msgResult.Value;
+                }
+                else
+                {
+                    errors.Add($"Line parse failed: {msgResult.Error}");
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         if (errors.Count > 0)
@@ -677,345 +731,6 @@ public sealed class JsonlSessionStore : ISessionStore
 
         var ordered = messages.Values.OrderBy(m => m.CreatedAt).ToList();
         return Result.Success<IReadOnlyList<AgentMessage>>(ordered);
-    }
-
-    private static Result<AgentMessage> ParseMessageLine(string line, string sessionId)
-    {
-        try
-        {
-            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(line));
-
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Result.Failure<AgentMessage>("JSON does not start with an object");
-
-            string? type = null;
-            string? id = null;
-            DateTimeOffset createdAt = default;
-            string? parentId = null;
-            string? role = null;
-            JsonElement? payload = default;
-
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                    break;
-
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                string propName = reader.GetString()!;
-                reader.Read();
-
-                switch (propName)
-                {
-                    case "type":
-                        type = reader.GetString()!;
-                        break;
-                    case "id":
-                        id = reader.GetString()!;
-                        break;
-                    case "createdAt":
-                        createdAt = reader.GetDateTimeOffset();
-                        break;
-                    case "parentId":
-                        if (reader.TokenType == JsonTokenType.String)
-                            parentId = reader.GetString()!;
-                        break;
-                    case "role":
-                        role = reader.GetString()!;
-                        break;
-                     case "payload":
-                        payload = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
-                        break;
-                }
-            }
-
-            if (type != "message")
-                return Result.Failure<AgentMessage>("Not a message line");
-
-            if (id is null)
-                return Result.Failure<AgentMessage>("missing 'id'");
-
-            if (role is null)
-                return Result.Failure<AgentMessage>($"message {id}: missing 'role'");
-
-            if (payload is null)
-                return Result.Failure<AgentMessage>($"message {id}: missing 'payload'");
-
-            return role switch
-            {
-                "user" => ParseUserPayload(id, sessionId, createdAt, parentId, payload.Value),
-                "assistant" => ParseAssistantPayload(id, sessionId, createdAt, parentId, payload.Value),
-                "tool_result" => ParseToolResultPayload(id, sessionId, createdAt, parentId, payload.Value),
-                _ => Result.Failure<AgentMessage>($"message {id}: unknown role '{role}'")
-            };
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"Line parse failed: {ex.Message}");
-        }
-    }
-
-    private static Result<AgentMessage> ParseUserPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
-    {
-        try
-        {
-            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
-
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Result.Failure<AgentMessage>($"user message {id}: payload is not an object");
-
-            string? content = null;
-            string? agent = null;
-            string? model = null;
-
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                    break;
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                string propName = reader.GetString()!;
-                reader.Read();
-
-                switch (propName)
-                {
-                    case "content":
-                        content = reader.GetString()!;
-                        break;
-                    case "agent":
-                        agent = reader.GetString()!;
-                        break;
-                    case "model":
-                        model = reader.GetString()!;
-                        break;
-                }
-            }
-
-            if (content is null || agent is null || model is null)
-                return Result.Failure<AgentMessage>($"user message {id}: missing content/agent/model");
-
-            return Result.Success<AgentMessage>(new UserMessage(id, sessionId, createdAt, content, agent, model, parentId));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"user message {id}: {ex.Message}");
-        }
-    }
-
-    private static Result<AgentMessage> ParseAssistantPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
-    {
-        try
-        {
-            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
-
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Result.Failure<AgentMessage>($"assistant message {id}: payload is not an object");
-
-            List<ContentPart>? parts = null;
-            StopReason? stopReason = null;
-            Usage? usage = null;
-            string? model = null;
-            bool isSummary = false;
-            string? summaryFirstKeptId = null;
-
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                    break;
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                string propName = reader.GetString()!;
-                reader.Read();
-
-                switch (propName)
-                {
-                    case "parts":
-                        parts = ParseParts(ref reader);
-                        break;
-                    case "stopReason":
-                        var srStr = reader.GetString()!;
-                        stopReason = StopReasonJsonConverter.Parse(srStr);
-                        break;
-                    case "usage":
-                        usage = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.Usage) as Usage ?? new Usage(0, 0);
-                        break;
-                    case "model":
-                        model = reader.GetString()!;
-                        break;
-                    case "isSummary":
-                        isSummary = reader.GetBoolean();
-                        break;
-                    case "summaryFirstKeptId":
-                        summaryFirstKeptId = reader.GetString()!;
-                        break;
-                }
-            }
-
-            if (parts is null)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'parts'");
-            if (stopReason is null)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'stopReason'");
-            if (usage is null)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'usage'");
-            if (model is null)
-                return Result.Failure<AgentMessage>($"assistant message {id}: missing 'model'");
-
-            return Result.Success<AgentMessage>(new AssistantMessage(id, sessionId, createdAt, parts, stopReason.Value, usage, model, parentId, isSummary, summaryFirstKeptId));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"assistant message {id}: {ex.Message}");
-        }
-    }
-
-    private static Result<AgentMessage> ParseToolResultPayload(string id, string sessionId, DateTimeOffset createdAt, string? parentId, JsonElement payload)
-    {
-        try
-        {
-            var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(payload.GetRawText()));
-
-            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
-                return Result.Failure<AgentMessage>($"tool_result message {id}: payload is not an object");
-
-            List<ToolResultEntry>? results = null;
-
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject)
-                    break;
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-
-                string propName = reader.GetString()!;
-                reader.Read();
-
-                if (propName == "results" && reader.TokenType == JsonTokenType.StartArray)
-                {
-                    results = new List<ToolResultEntry>();
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-                    {
-                        if (reader.TokenType != JsonTokenType.StartObject)
-                            continue;
-
-                        string? tcId = null;
-                        string? tn = null;
-                        string? output = null;
-                        bool isError = false;
-
-                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-                        {
-                            if (reader.TokenType != JsonTokenType.PropertyName)
-                                continue;
-                            string rProp = reader.GetString()!;
-                            reader.Read();
-
-                            switch (rProp)
-                            {
-                                case "toolCallId":
-                                    tcId = reader.GetString()!;
-                                    break;
-                                case "toolName":
-                                    tn = reader.GetString()!;
-                                    break;
-                                case "output":
-                                    output = reader.GetString()!;
-                                    break;
-                                case "isError":
-                                    isError = reader.GetBoolean();
-                                    break;
-                            }
-                        }
-
-                        if (tcId is null || tn is null || output is null)
-                            return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
-
-                        results.Add(new ToolResultEntry(tcId, tn, output, isError));
-                    }
-                }
-            }
-
-            if (results is null)
-                return Result.Failure<AgentMessage>($"tool_result message {id}: missing 'results'");
-
-            return Result.Success<AgentMessage>(new ToolResultMessage(id, sessionId, createdAt, results, parentId));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<AgentMessage>($"tool_result message {id}: {ex.Message}");
-        }
-    }
-
-    private static List<ContentPart> ParseParts(ref Utf8JsonReader reader)
-    {
-        var parts = new List<ContentPart>();
-
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
-        {
-            if (reader.TokenType != JsonTokenType.StartObject)
-                continue;
-
-            string? partType = null;
-            string? text = null;
-            string? partId = null;
-            string? toolName = null;
-            JsonElement? args = null;
-            string? path = null;
-            string? mimeType = null;
-            long sizeBytes = 0;
-
-            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-            {
-                if (reader.TokenType != JsonTokenType.PropertyName)
-                    continue;
-                string pProp = reader.GetString()!;
-                reader.Read();
-
-                switch (pProp)
-                {
-                    case "type":
-                        partType = reader.GetString()!;
-                        break;
-                    case "text":
-                        text = reader.GetString()!;
-                        break;
-                    case "id":
-                        partId = reader.GetString()!;
-                        break;
-                    case "toolName":
-                        toolName = reader.GetString()!;
-                        break;
-                    case "args":
-                        args = JsonSerializer.Deserialize(ref reader, JsonlCodecContext.Default.JsonElement);
-                        break;
-                    case "path":
-                        path = reader.GetString()!;
-                        break;
-                    case "mimeType":
-                        mimeType = reader.GetString()!;
-                        break;
-                    case "sizeBytes":
-                        sizeBytes = reader.GetInt64();
-                        break;
-                }
-            }
-
-            ContentPart? part = partType switch
-            {
-                "text" => new TextPart(text!),
-                "thinking" => new ThinkingPart(text!),
-                "tool_call" => new ToolCallPart(partId!, toolName!, args!.Value),
-                "file" => new FilePart(path!, mimeType!, sizeBytes),
-                _ => null
-            };
-
-            if (part is not null)
-                parts.Add(part);
-        }
-
-        return parts;
     }
 
     private string GetSessionFilePath(string sessionId) =>
