@@ -231,3 +231,34 @@ dotnet run -c Release --no-build --project tests/Harbor.Benchmarks -- --filter "
 
 Аллокационные числа воспроизведены байт-в-байт; расхождение только в Mean
 (114.7 µs и 24.19 ms — быстрее задокументированных, шум машины).
+
+## 7. Ре-верификация 2026-08-29, ре-диспетч (head `6b3f5ec`)
+
+Спринт-промпт был ре-диспетчен цепочкой при `status.json: done`; код с момента
+§6 не менялся (единственный коммит — docs). Полный контрольный прогон:
+
+- Сборка `Harbor.slnx -c Release`: 0 ошибок; warnings только pre-existing
+  (тест-проекты), в `src/` — 0.
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669** — 0 fails.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — проверяется сборкой +
+  прогоном бенчмарков, см. шапку).
+
+Бенчмарки (Release, свежий `--no-incremental` rebuild Benchmarks-проекта):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 506 ns, 0 B / 1116 ns, 0 B / 11 562 ns; full roundtrip 64B = 1 829 B (граф MessagePack) | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 113.4 µs; snapshot-floor 240.52 KB | ✅ (34×) |
+| §3 JSONL parse machinery | **0 B** (392 B user / 720 B assistant граф; OLD 2 336 / 4 032 B); 10k cold 24.01 ms / 6 107 410 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** / 1000 deltas = 7.0 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B | ✅ |
+
+Аллокации снова байт-в-байт с задокументированными (567.48 KB, 240.52 KB,
+392/720/2 336/4 032 B, 6 995 / 33 440 B, 184 B layout).
+
+Инфра-заметка: BDN-валидатор отклонил прогон («references non-optimized
+Harbor.Ui.Framework.Reducers») из-за рассинхронизированной копии DLL в
+`tests/Harbor.Benchmarks/bin/Release` (stale-копия от промежуточного билда);
+лечится `dotnet build tests/Harbor.Benchmarks -c Release --no-incremental`.
+Содержимого src это не касалось.
