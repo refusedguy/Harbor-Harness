@@ -290,3 +290,32 @@ Harbor.Ui.Framework.Reducers») из-за рассинхронизированн
 §3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 B; §1: 0 B на всех
 размерах кадра). Расхождение только в Mean — шум машины (все Mean в пределах
 ±5% предыдущих прогонов). Спринт остаётся **done**, все вердикты §0 в силе.
+
+## 9. Ре-верификация 2026-08-29, ре-диспетч №3 (head `c581949`)
+
+Спринт-промпт ре-диспетчен цепочкой четвёртый раз; код с момента `6018eaa` не
+менялся (последующие коммиты — только docs). Контрольный прогон:
+
+- Сборка `Harbor.slnx -c Release`: 0 ошибок; warnings только pre-existing
+  (Sonar/CS0618 в тест-проектах; AVLN3001 в `apps/Harbor.App.Avalonia` —
+  источник `MainWindow.axaml` коммит `53fa225`, предшествует базе спринта
+  `af32355`), в `src/` — 0.
+- Сьюты: Storage.Jsonl **36/36**, Ui.Framework **76/76**, IPC **81 + 4
+  self-skip** (linux named-pipe, ожидаемо), CellForge **669/669** — 0 fails.
+- `dotnet test tests/Harbor.Benchmarks/ -c Release --no-build` → «Тестовые
+  проекты не найдены» (BDN-консоль, не тест-проект — hard rule 5 выполнен,
+  реальная проверка — прогоном бенчмарков ниже).
+
+Бенчмарки (Release, свежий `--no-incremental` rebuild Benchmarks-проекта):
+
+| Приёмка | Ре-прогон | Статус |
+|---|---|---|
+| §1 WireCodec frame-only 64B / 4K / 64K | **0 B** / 508.3 ns, 0 B / 1 096.3 ns, 0 B / 11 572.3 ns; full roundtrip 64B = 1 830 B (граф MessagePack) | ✅ |
+| §2 AppReducer 1000 TextDelta | **567.48 KB** / 114.45 µs; snapshot-floor 240.52 KB / 49.10 µs | ✅ (34×) |
+| §3 JSONL parse machinery | **0 B** (392 B user / 720 B assistant граф; OLD 2 336 / 4 032 B); 10k cold 23.12 ms / 6 107 631 B ≈ 5.96 MB | ✅ |
+| §4 DiffEngine paced 60fps | **6 995 B** / 1000 deltas = 7.0 KB/s; unpaced 33 440 B; idle/token/full-repaint 0 B alloc; layout 184 B | ✅ |
+
+Аллокации байт-в-байт с задокументированными (§2: 567.48 / 240.52 KB;
+§3: 392 / 720 / 2 336 / 4 032 B; §4: 6 995 / 33 440 / 184 B; §1: 0 B на всех
+размерах кадра). Все Mean ≤ предыдущих прогонов (шум машины, ни одного
+регресса). Спринт остаётся **done**, вердикты §0 в силе.
