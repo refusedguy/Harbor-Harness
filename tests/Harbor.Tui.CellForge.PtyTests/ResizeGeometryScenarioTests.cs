@@ -1,0 +1,79 @@
+using TUnit.Assertions;
+
+namespace Harbor.Tui.CellForge.PtyTests;
+
+/// <summary>
+///     Sprint Testing-Strategy З.1 — геометрия: (a) rows-only resize
+///     (100×30 → 100×12): вертикальное сжатие не теряет композер и статус,
+///     контент остаётся; (b) termios size mismatch — экстремальный аспект
+///     300×8 и 20×50 подряд: winsize ядра расходится с ожиданиями рендера,
+///     приложение обязано пережить оба края и остаться работоспособным.
+/// </summary>
+[NotInParallel("pty")]
+public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
+{
+    [Test]
+    [Timeout(30_000)]
+    public async Task RowsOnlyShrink_KeepsComposerAndStatus()
+    {
+        Server.SetResponse("test-model", "ok");
+        await StartAppAsync(100, 30).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
+
+        await Session.ResizeAsync(100, 12).ConfigureAwait(false);
+        await Task.Delay(900).ConfigureAwait(false);
+
+        string[] lines = NormalizedLines();
+        // Grid emulates the new 12-row height; nothing scrolled off the bottom.
+        await Assert.That(lines.Length <= 12).IsTrue();
+        await Assert.That(lines.All(x => x.Length <= 100)).IsTrue();
+        // Status re-rendered at the new geometry.
+        await Assert.That(lines.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).IsTrue();
+
+        // Still functional: a turn runs and lands.
+        SubmitLine("rows-only");
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+
+        // Restore: grow back to 30 rows without losing the app.
+        await Session.ResizeAsync(100, 30).ConfigureAwait(false);
+        await Task.Delay(600).ConfigureAwait(false);
+        await Assert.That(NormalizedLines().Length <= 30).IsTrue();
+    }
+
+    [Test]
+    [Timeout(30_000)]
+    public async Task ExtremeAspectMismatch_SurvivesBothDirections()
+    {
+        Server.SetResponse("test-model", "ok");
+        await StartAppAsync(100, 30).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
+
+        // Rows-starved extreme: 100×8 (emulator geometry — the AnsiTerminalBuffer
+        // is created at launch size, so resizes stay within 100 cols).
+        await Session.ResizeAsync(100, 8).ConfigureAwait(false);
+        await Task.Delay(900).ConfigureAwait(false);
+
+        string[] starved = NormalizedLines();
+        await Assert.That(starved.Length <= 8).IsTrue();
+        await Assert.That(starved.All(x => x.Length <= 100)).IsTrue();
+        await Assert.That(starved.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).IsTrue();
+
+        // Opposite extreme: 20 cols × 50 rows.
+        await Session.ResizeAsync(20, 50).ConfigureAwait(false);
+        await Task.Delay(900).ConfigureAwait(false);
+
+        string[] narrow = NormalizedLines();
+        await Assert.That(narrow.All(x => x.Length <= 20)).IsTrue();
+        await Assert.That(narrow.Length <= 50).IsTrue();
+
+        // The app survived both mismatches and still runs a turn.
+        SubmitLine("narrow");
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+    }
+}

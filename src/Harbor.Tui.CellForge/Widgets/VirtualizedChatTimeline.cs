@@ -310,6 +310,12 @@ public sealed class VirtualizedChatTimeline
             return;
         }
 
+        // Erase the previous frame's timeline content first: scroll glides
+        // and appends shift blocks row-by-row, and without a rect-level blank
+        // every vacated row keeps its stale cells as ghost trails (same class
+        // of bug as the composer's SetText("") no-op erase).
+        buffer.Fill(rect, Cell.Blank);
+
         var (first, last) = _cache.VisibleRange(EffectiveScrollY, rect.Height);
         for (int i = first; i <= last; i++)
         {
