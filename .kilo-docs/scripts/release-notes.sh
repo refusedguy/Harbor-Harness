@@ -65,17 +65,24 @@ fi
 COMMIT_COUNT="$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)"
 
 # 3) merge tasks + results + metrics into status.json
+#    (.head / .commits are refreshed too: re-verification commits after the
+#    dispatch-completed write_status would otherwise leave a stale tip SHA)
 TMP_JSON="$(mktemp)"
 COMMITS_JSON="$(git log --format='- %h %s' "$RANGE" 2>/dev/null | head -40 \
   | jq -Rsc 'split("\n") | map(select(length > 0))')"
+HEAD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "")"
 jq --arg title "$TITLE" \
    --argjson tasks "$TASKS_JSON" \
    --argjson commits "$COMMITS_JSON" \
    --argjson commit_count "$COMMIT_COUNT" \
    --arg range "$RANGE" \
+   --arg head "$HEAD_SHA" \
    '.name //= (.sprint // "")
     | .title = $title
     | .tasks = $tasks
+    | .head = $head
+    | .commits = $commit_count
+    | .last_activity = (now | todateiso8601)
     | .results = {commit_count: $commit_count, range: $range, commits: $commits}' \
   "$STATUS_FILE" > "$TMP_JSON" 2>/dev/null \
   && mv -f "$TMP_JSON" "$STATUS_FILE" \
