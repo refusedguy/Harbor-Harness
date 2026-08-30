@@ -22,7 +22,7 @@
 <body>
 
 <h1>Sprint Report — Security &amp; Sandboxing</h1>
-<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">41f1531</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
+<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">e5959d0</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
 
 <h2>1. Goal</h2>
 <p>Defence in depth for CS-source plugins on top of the existing <code>IPluginTrustPolicy</code> gate: sandbox ALC with capability-driven deny-list, per-capability approval persisted in <code>trust.json</code> v2, execution timeout + memory guard around every plugin tool call, and an append-only capability audit log. Fail-closed everywhere; granular, approved-once rights instead of all-or-nothing.</p>
@@ -63,8 +63,8 @@
 <h2>4. Verification</h2>
 <table>
   <tr><th>Gate</th><th>Result</th></tr>
-  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">54c8497</span>; re-run at <span class="sha">eedb970</span> and <span class="sha">41f1531</span>)</td></tr>
-  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">64 / 64</span> × 6 consecutive runs at <span class="sha">41f1531</span> — includes: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped), TrustLayerTests (10: pre-existing trust semantics + seam narrowing — yielded scripts carry only the approved subset with hash preserved, grants never widen beyond the manifest, global scope keeps declared capabilities, unknown capability token skips the plugin even when the policy would trust it). Sprint test files are CS0618-clean (deprecated TUnit <code>HasCount</code> migrated to <code>Count().IsEqualTo</code>); the only remaining warnings are the intentionally-legacy <code>CsPluginLoader</code> usages.</td></tr>
+  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">54c8497</span>; re-run at <span class="sha">eedb970</span>, <span class="sha">41f1531</span> and sprint-close <span class="sha">e5959d0</span>)</td></tr>
+  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">64 / 64</span> × 7 consecutive runs (final at sprint-close <span class="sha">e5959d0</span>) — includes: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped), TrustLayerTests (10: pre-existing trust semantics + seam narrowing — yielded scripts carry only the approved subset with hash preserved, grants never widen beyond the manifest, global scope keeps declared capabilities, unknown capability token skips the plugin even when the policy would trust it). Sprint test files are CS0618-clean (deprecated TUnit <code>HasCount</code> migrated to <code>Count().IsEqualTo</code>); the only remaining warnings are the intentionally-legacy <code>CsPluginLoader</code> usages.</td></tr>
   <tr><td><code>tests/Harbor.Architecture.Tests/</code></td><td><span class="ok">47 / 47</span></td></tr>
   <tr><td><code>tests/Harbor.Abstractions.Tests/</code></td><td><span class="ok">53 / 53</span> (after JsonDerivedType fix)</td></tr>
   <tr><td><code>tests/Harbor.Core.Tests/</code> / <code>Harbor.Hosting.Tests/</code> / <code>Harbor.App.Cli.Tests/</code></td><td><span class="ok">92 / 10 / 78</span>, 0 failures</td></tr>
@@ -100,6 +100,9 @@
   <tr><td class="sha">12985a4</td><td>test(plugins): migrate deprecated TUnit HasCount assertions to Count().IsEqualTo</td></tr>
   <tr><td class="sha">fe2fabc</td><td>test(plugins): migrate remaining HasCount assertions in TrustLayerTests</td></tr>
   <tr><td class="sha">41f1531</td><td>fix(plugins): report Removed when a watched file vanished by fire time</td></tr>
+  <tr><td class="sha">de84a31</td><td>docs(sprint): security report — delete/modify FSW flake fixed in component, 64/64 x6 at 41f1531</td></tr>
+  <tr><td class="sha">8a8e1e8</td><td>test(plugins): drain late creation echo before asserting save-burst collapse</td></tr>
+  <tr><td class="sha">e5959d0</td><td>chore(sprint): security status head → 8a8e1e8 (sprint-close verification: build 0 errors, plugins 64/64, arch 47/47)</td></tr>
 </table>
 
 <h2>6. Residual risks / next hardening</h2>
