@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint release-engineering — 30.08.2026
+
+**Release Engineering.**
+
+- Полная автоматизация sprint-chain.sh.
+- Zero-warning arch-test gate в build.
+- Pre-commit hook (git alias `harbor-check`).
+- Автоматические release notes.
+
+**Commits since previous sprint tag** (7):
+- 4924202 feat(release-notes): automatic sprint release notes — status.json merge + CHANGELOG entry + sprint tags
+- dccdc01 feat(git): install pre-commit hook (.githooks) + git alias harbor-check
+- 9c4c62c feat(hooks): harbor-check — fast pre-commit verification gate
+- 6c6a32c feat(build): release arch-test gate — dotnet build fails when arch tests regress
+- e11a6e0 feat(cli): harbor ide — NDJSON JSON-RPC stdio bridge verb (attach mode, silent stdout)
+- 6873d5a chore(sprint): queue names → slug form (status paths match sprint dirs), model kilo-auto/free
+- 23070e8 feat(sprint-chain): fully automated dispatcher — branch, dispatch, status.json, fail-safe
+
 
 ### Sprint 2 — contrib migration + documentation sweep
 
