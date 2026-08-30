@@ -9,7 +9,7 @@
   "base": "5320515",
   "branch": "dev",
   "completed_at": "2026-08-30T02:13:23Z",
-  "last_activity": "2026-08-30T02:13:23Z",
+  "last_activity": "2026-08-30T03:32:19Z",
   "duration_seconds": 128115,
   "dispatch_exit_code": 0,
   "tests": {
@@ -25,7 +25,7 @@
     "pre_commit_hook": "harbor-check blocks on arch regression (verified)",
     "passed": 3,
     "failed": 0,
-    "reverified": "8.05 2026-08-30T03:05:55Z: Release build 0 errors, arch-gate 47/47 in-build; chain DRY_RUN plan ok; git harbor-check + .githooks/pre-commit ok"
+    "reverified": "08.35 2026-08-30T03:35:00Z: re-dispatch — slnx Release build 0 err, arch-gate 47/47 in-build + standalone, RS0030 negative re-proven, git harbor-check fast 0.03s + full path 30.3s green, DRY_RUN no-args plan ok; 86443f9 stale-running self-heal added; 3 concurrent dispatches coexist (heartbeat guard)"
   },
   "name": "release-engineering",
   "title": "Release Engineering",

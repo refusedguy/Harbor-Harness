@@ -146,6 +146,21 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 </table>
 </div>
 
+<h3>Ре-верификация 30.08 08:20–08:35 (re-dispatch, модель glm-5.3-flash)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 1:26 · arch-gate 47/47 in-build (harbor-arch-gate.log)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.9 c</td></tr>
+<tr><td>Негатив: banned API (повтор, зонд в src/Harbor.Logging)</td><td class="ok">error RS0030 воспроизведён, зонд удалён</td></tr>
+<tr><td><code>git harbor-check</code> (алиас) — docs-only</td><td class="ok">fast path 0.03 c</td></tr>
+<tr><td><code>git harbor-check</code> — полный путь (build-файлы)</td><td class="ok">arch gate + Harbor.Logging инкрементально = 30.3 c, all green</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">полный план очереди за 1 c: 5 next-sprint, 5 skip(done), live-dispatch guard</td></tr>
+<tr><td><span class="accent">Усиление:</span> self-heal stale <code>state=running</code></td><td class="ok"><code>86443f9</code> — running_stale(): heartbeat &lt; 15 мин → SKIP (нет double-dispatch), иначе requeue как failed (retries+1). Конкурентные диспетчи (3 шт. одновременно) не мешают друг другу</td></tr>
+</table>
+</div>
+</div>
+
 <h2>4. Инциденты окружения (не код)</h2>
 <div class="card">
 <div class="finding">tmpfs /tmp (3.9 ГБ) был забит на 100%: 538 core-dump артефактов
@@ -160,7 +175,7 @@ build-серверов + очистка артефактов + <code>-m:1</code>
 <div class="card">
 <div class="title">status.json (сводка)</div>
 <ul>
-<li><span class="ok">state: done</span> · head <code>4924202</code> (на момент merge-шага) · 7 коммитов · база <code>5320515</code></li>
+<li><span class="ok">state: done</span> · head <code>7552ace</code> (+ <code>86443f9</code> self-heal re-verification) · 13 коммитов · база <code>5320515</code></li>
 <li>tests: arch 47 passed / 0 failed; checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
 <li>CHANGELOG: <code>### Sprint release-engineering — 30.08.2026</code> под <code>## [Unreleased]</code></li>
 <li>Тег <code>sprint/release-engineering</code> создан (локальный, аннотированный)</li>
