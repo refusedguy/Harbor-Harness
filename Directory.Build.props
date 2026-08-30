@@ -208,7 +208,6 @@
   -->
   <PropertyGroup>
     <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
-    <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
   </PropertyGroup>
 
   <Target Name="HarborArchitectureGate"
@@ -217,6 +216,12 @@
                      AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'
                      AND '$(DesignTimeBuild)' != 'true'
                      AND '$(BuildingInsideVisualStudio)' != 'true'">
+    <!-- Evaluated HERE, at execution time: at Directory.Build.props import
+         time $(IntermediateOutputPath) is still empty, which used to scatter
+         the gate log into the project dir instead of obj/. -->
+    <PropertyGroup>
+      <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
+    </PropertyGroup>
     <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)" />
     <Exec Command="dotnet exec &quot;$(TargetPath)&quot; > &quot;$(HarborArchGateLog)&quot; 2>&amp;1 || { tail -30 &quot;$(HarborArchGateLog)&quot;; exit 1; }"
           IgnoreExitCode="false"
