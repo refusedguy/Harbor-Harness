@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — Harbor verification gate (Release Engineering).
+#
+# Runs .kilo-docs/scripts/harbor-check.sh: architecture tests + per-project
+# Release build/tests for everything touched by the staged diff. Any red
+# result blocks the commit. Install once with:
+#
+#   bash .kilo-docs/scripts/setup-git-hooks.sh
+#
+# Fast path: docs-only commits exit instantly; green results are memoized.
+# Bypass in emergencies: git commit --no-verify (use sparingly — CI still gates).
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+exec bash "$REPO_ROOT/.kilo-docs/scripts/harbor-check.sh" --staged
