@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint renderer-unification — 28.08.2026
+
+**Renderer Unification.**
+
+- Phase 1: Shared Business Logic
+- Phase 2: CellForge Rename
+- Phase 3: NickConsoleEx
+- Phase 4: Unify Ansi/Plain
+- Phase 5: Visual Regression Tests
+- Phase 6: Moat-Building Architecture (competitive differentiators)
+
+**Commits since previous sprint tag** (77):
+- 4c9d3e7 docs(sprint): renderer-unification report.html
+- 43378b5 fix(markdown): measured long-document budget (see BENCHMARKS_RENDERERS.md)
+- 180b82c feat(ansi-plain): writer-injection ctor for golden-frame capture
+- ff21a65 docs(nickconsoleex): reflect the retarget in csproj notes
+- 22aaf14 fix(external): retarget SharpConsoleUI Spectre.Console to the Harbor root pin 0.54.0
+- 87bcf3b test(ui-framework): move timing-gate enforcement to the serialized perf project
+- e1152dd docs: BENCHMARKS_RENDERERS.md — per-renderer contracts, baselines, cell-diff bandwidth (Phase 6.1)
+- 654f19d ci(renderer-perf-gate): fail on contract violation; strict 5% regression mode (Phase 6.1)
+- 27df847 chore(perf): commit measured baseline; register PerfTests in solution (Phase 6.1)
+- 161e27a test(perf): absolute contract gate + markdown contract in CI scope (Phase 6.1)
+- 4e67e6b feat(perf): RendererBenchmarkSuite — identical synthetic load per backend (Phase 6.1)
+- 3aa758b feat(perf): per-backend renderer performance contracts (Phase 6.1)
+- 6207447 fix(chain): mark ui-v2-hotfix done, stale status cleanup
+- 121ba53 test(ui-framework): frozen-tail cache, tail-only diff, and perf-contract tests (Phase 6.4)
+- 8cfcb3e feat(markdown): MarkdownRenderPerformanceContract + measurable gate (Phase 6.4)
+- 00a023d feat(markdown): DifferentialMarkdownPipeline — tail-only cell diffs via protocol (Phase 6.4)
+- bcaec70 feat(markdown): FrozenTailMarkdownCache — LRU cell snapshots with observable freeze (Phase 6.4)
+- 762c499 test(tui): RendererPipeline swap/state-restore/CAS-gate tests (Phase 6.3)
+- e1cb981 feat(hot-swap): /renderer slash command for mid-session backend swap (Phase 6.3)
+- 29882ca feat(hot-swap): HostBuilder wires RuntimeSwappable into compose options (Phase 6.3)
+- c51dd1d feat(hot-swap): ui.runtime_swappable config toggle on CliConfig/ComposeOptions (Phase 6.3)
+- c65f85d feat(hot-swap): TuiModule registers RendererPipeline + backend factories (Phase 6.3)
+- a6e7114 feat(hot-swap): RuntimeRendererSwapMiddleware — config/env policy guard (Phase 6.3)
+- 77efaff feat(hot-swap): RendererPipeline — CAS-gated swap, UiState snapshot restore, single dispose (Phase 6.3)
+- 36e097b feat(hot-swap): IRendererPipeline contract with cancelable swapping event (Phase 6.3)
+- c90451d feat(chain): add demo-gif sprint as last in queue
+- 4511010 test(ui-framework): cell-diff protocol encoder/codec/pipeline tests (Phase 6.2)
+- 3531cd5 feat(cellforge): CellForgeDiffEncoder — engine-linked batch emitter, ANSI path untouched (Phase 6.2)
+- 3114bb4 feat(rendering): Cell.FromRaw for protocol codec round-trips (Phase 6.2)
+- 6c23d00 feat(protocol): DifferentialRenderPipeline — producer sinks + consumer replay (Phase 6.2)
+- 2946457 feat(protocol): RowHashDiffEncoder — portable row-hash fast path + hint threshold (Phase 6.2)
+- 98dd117 feat(protocol): compact binary codec with backward-compatible V1 decode (Phase 6.2)
+- 8e7f6f2 feat(protocol): ICellDiffEncoder/ICellDiffDecoder/ICellDiffSink contracts (Phase 6.2)
+- 8f59b49 feat(protocol): immutable sequence-numbered CellDiffBatch (Phase 6.2)
+- aa6349d feat(protocol): portable CellDiffMessage value (Phase 6.2)
+- a296367 feat(protocol): versioned cell-diff protocol — v1 baseline, v2 FrameHints (Phase 6.2)
+- f047535 test(renderer-tests): commit golden frames for cellforge/nickconsoleex/ansiplain (Phase 5)
+- d191916 chore(editorconfig): reserve section for renderer capture test diagnostics
+- b073e21 test(renderer-tests): NickConsoleEx golden frame; disable SharpConsoleUI clock panels (Phase 5)
+- e9d8814 test(renderer-tests): RecordingConsoleDriver cell-grid capture decorator (Phase 5)
+
 ### Sprint multi-agent — 29.08.2026
 
 **Multi-Agent.**
