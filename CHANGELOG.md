@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint performance — 29.08.2026
+
+**Performance.**
+
+- WireCodec: ArrayPool + PipeReader.
+- AppReducer: streaming concat zero-alloc.
+- JsonlSessionStore: Utf8JsonReader streaming parse.
+- DifferentialRenderer для ConsoleEx.
+
+**Commits since previous sprint tag** (20):
+- 7e03c4e docs(sprint): performance re-verified at head f78b7ec on re-dispatch №9 — suites 36/76/81+4s/669/118 green, alloc numbers byte-identical
+- f78b7ec docs(sprint): performance status.json heartbeat corrected to actual commit time
+- ad80362 docs(sprint): performance re-verified at head 2079bc0 on re-dispatch №8 — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 2079bc0 docs(sprint): performance re-verified at head 09254c5 on re-dispatch №7 — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 09254c5 docs(sprint): performance re-verified at head 5b0f492 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 5b0f492 docs(sprint): performance re-verified at head beda182 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- beda182 docs(sprint): performance re-verified at head ab5952f on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- ab5952f docs(sprint): performance re-verified at head c581949 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- c581949 docs(sprint): performance re-verified at head 6018eaa on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 6018eaa docs(sprint): performance re-verified at head 6b3f5ec on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 6b3f5ec docs(sprint): performance re-verified at head ec82f52 — 4 benchmarks re-run, alloc numbers byte-identical, suites 862/0/4-skip
+- ec82f52 docs(sprint): performance status → done, 4/4 tasks with verdicts
+- 7be1390 docs(sprint): performance — benchmark report before/after (WireCodec 0B/frame, AppReducer 34x, JSONL 0B machinery, DiffEngine 7KB/s) + HTML report
+- 0cd7f8f bench(tui): streaming-delta ANSI-bytes acceptance for DiffEngine (§3.10)
+- 66b6338 bench(ui): AppReducer streaming-delta cost — the P0 O(n^2) baseline scenario
+- caec831 bench(storage): JSONL parse micro + 10k-message cold-parse acceptance benchmarks
+- c546b16 perf(storage): zero-intermediate JSONL line parse — raw UTF-8 spans, no JsonDocument round-trip (PERF-005)
+- 9f39718 perf(ipc): persistent PipeReader per connection in MessagePackRpcClient
+- 255134b perf(ipc): WireCodec zero-alloc framing — pooled single-write + PipeReader read path
+- af32355 docs(sprint): multi-agent re-verified at head 26eb64f — build 0 errors + 10-suite run 876/0/6 all rc=0, stray duplicate report removed
+
 ### Sprint security — 30.08.2026
 
 **Security & Sandboxing.**
