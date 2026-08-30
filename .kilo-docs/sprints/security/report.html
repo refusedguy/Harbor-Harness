@@ -22,7 +22,7 @@
 <body>
 
 <h1>Sprint Report — Security &amp; Sandboxing</h1>
-<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">e5959d0</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
+<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">50b1a5b</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
 
 <h2>1. Goal</h2>
 <p>Defence in depth for CS-source plugins on top of the existing <code>IPluginTrustPolicy</code> gate: sandbox ALC with capability-driven deny-list, per-capability approval persisted in <code>trust.json</code> v2, execution timeout + memory guard around every plugin tool call, and an append-only capability audit log. Fail-closed everywhere; granular, approved-once rights instead of all-or-nothing.</p>
@@ -76,6 +76,8 @@
 </table>
 <blockquote>Flake resolved at root cause: <code>Rename_SignalsRemovedForOldAndAddedForNew</code> failed twice in parallel full runs — the test awaited a bare <code>received.Count &gt;= 2</code>, which can be satisfied by <code>[Added(before), Removed(old)]</code> before the near-simultaneous <code>Added(new)</code> debounced timer lands. Fixed to await both rename signals specifically (commit <span class="sha">54c8497</span>); a standalone FSW probe under CPU/churn load confirmed event delivery itself is correct. 3 consecutive clean 64/64 full-suite runs afterwards.</blockquote>
 <blockquote>Second flake of the same class, fixed in the component: <code>Delete_OutranksEarlierModifications</code> failed once under parallel load — inotify may deliver a stale <code>Changed</code> event <i>after</i> <code>Deleted</code> for the same path within one debounce window, and the watcher's last-event-wins rule then reported <code>Modified</code> for a file that no longer exists. <code>DebouncedPluginWatcher</code> now checks filesystem truth at fire time: a non-<code>Added</code> kind whose file is gone is classified <code>Removed</code> (commit <span class="sha">41f1531</span>). 6 consecutive clean 64/64 full-suite runs afterwards.</blockquote>
+
+<blockquote>Final independent re-verification at sprint head <span class="sha">50b1a5b</span> (fresh session, no code changes): <code>dotnet build Harbor.slnx -c Release -warnaserror</code> 0 errors / 0 warnings; <code>tests/Harbor.Plugins.Runtime.Tests</code> 64/64; <code>tests/Harbor.Architecture.Tests</code> 47/47; <code>tests/Harbor.Abstractions.Tests</code> 53/53. Deliverable wiring re-audited end-to-end: <code>PluginRuntimeComposer</code> composes <code>PluginAuditLog</code> + <code>FileTrustPolicy</code>, <code>RoslynPluginCompiler</code>/<code>CachingCompiler</code> load into <code>CollectiblePluginLoadContext.ForScript</code>, <code>PluginRegistrar</code> wraps every contributed tool in <code>SandboxedPluginTool</code>, per-capability prompt lives in <code>RegistriesModule</code>.</blockquote>
 
 <h2>5. Commit trail (sprint range)</h2>
 <p>Earlier sprint commits (capabilities model, ALC, trust v2, sandbox wrapper, audit sink, composition wiring) plus this session's:</p>
