@@ -35,9 +35,12 @@
     "Автоматические release notes."
   ],
   "results": {
-    "commit_count": 7,
+    "commit_count": 10,
     "range": "5320515..HEAD",
     "commits": [
+      "- a32529a docs(sprint): release-engineering report.html — deliverables, negative-test matrix, incidents",
+      "- ec299b0 docs(sprint): release-engineering — state done, 7 commits, gates verified; CHANGELOG entry",
+      "- 7df1a55 fix(release-notes): emit extracted tasks (missing sed p-flag) + created_at range fallback",
       "- 4924202 feat(release-notes): automatic sprint release notes — status.json merge + CHANGELOG entry + sprint tags",
       "- dccdc01 feat(git): install pre-commit hook (.githooks) + git alias harbor-check",
       "- 9c4c62c feat(hooks): harbor-check — fast pre-commit verification gate",
