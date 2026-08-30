@@ -25,7 +25,7 @@
     "pre_commit_hook": "harbor-check blocks on arch regression (verified)",
     "passed": 3,
     "failed": 0,
-    "reverified": "30.08 2026-08-30T04:00Z re-dispatch: Harbor.slnx Release build 0 err; arch-gate 47/47 in-build + standalone; DRY_RUN no-args plan ok (osc-expansion→ci-cd-maturity queued); git harbor-check ok; release-notes re-run synced head=afe6628/19 commits"
+    "reverified": "30.08 2026-08-30T04:07Z re-dispatch: arch 47/47 standalone; DRY_RUN no-args plan RC=0; git harbor-check pass; full-slnx Release build blocked by host OOM (MSB4166/SIGBUS) — tree unchanged vs 08:31 verified build 0 err"
   },
   "name": "release-engineering",
   "title": "Release Engineering",
