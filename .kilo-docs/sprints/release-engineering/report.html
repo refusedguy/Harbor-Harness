@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harbor Sprint Report — release-engineering</title>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #0d1117; --border: #1f2430;
+    --text: #b3b9c5; --dim: #5c6773; --accent: #39bae6;
+    --ok: #7fd962; --warn: #ffb454; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 8px; color: var(--accent); }
+  h2 { font-size: 16px; margin: 16px 0 8px; color: var(--accent); }
+  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--text); }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px; margin: 8px 0;
+  }
+  .title {
+    color: var(--dim); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td {
+    text-align: left; padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--dim); font-weight: normal; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  .warn { color: var(--warn); }
+  .accent { color: var(--accent); }
+  code {
+    background: #131820; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 6px; font-size: 11px;
+    color: #d2a6ff;
+  }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .finding {
+    background: rgba(255,180,84,0.05);
+    border-left: 2px solid var(--warn);
+    padding: 8px; margin: 6px 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Sprint: Release Engineering — <span class="ok">DONE</span></h1>
+<div class="sub">Модель: openrouter/z-ai/glm-5.3-flash · Очередь: .kilo-docs/sprint-chain.md ·
+Создан: 28.08.2026 14:38 UTC · Завершён: 30.08.2026 02:10 UTC · Длительность (wall): ~35.5 ч ·
+Коммитов: 7 · Ветка: dev · Тег: <code>sprint/release-engineering</code></div>
+
+<h2>1. Deliverables</h2>
+
+<div class="card">
+<div class="title">1 — Fully automated sprint-chain.sh</div>
+<code>.kilo-docs/scripts/sprint-chain.sh</code> — цикл «спринт в очереди → CI зелёный, статус записан»
+без ручных шагов: preflight (jq, dispatcher, lock через <code>flock</code>) → проверка чистоты
+рабочей директории (<code>git status --porcelain</code> с белым списком sprint-метаданных) →
+feature branch <code>sprint/&lt;slug&gt;</code> → копия prompt.md в sprint dir → kilo dispatch через
+<code>DISPATCH=$HOME/.hermes/skills/autonomous-ai-agents/kilo-dispatch/scripts/kilo-dispatch.sh</code>
+(синхронно, restart-политика rc=143, ≤3 попыток) → <code>status.json</code> (pass/fail counts,
+head SHA, model, duration, log excerpt, checks) → release notes → push sprint-ветки.<br>
+Acceptance: <span class="ok">PASS</span> — <code>sprint-chain.sh</code> стартует с пустым аргументом
+(REPO по умолчанию = текущая директория) и завершает весь цикл. Fail-safe: никогда
+<code>rm -rf</code>, никогда <code>git reset --hard</code>/clean, mainline не коммитится,
+heartbeat/прогресс — в /tmp, а не в worktree.
+</div>
+
+<div class="card">
+<div class="title">2 — Zero-warning arch-test gate в build (compile-time)</div>
+<code>Directory.Build.props</code>: (a) <code>BannedSymbols.txt</code> (68 правил) подключён через
+<code>&lt;AdditionalFiles&gt;</code> + <code>Microsoft.CodeAnalysis.BannedApiAnalyzers</code> — banned
+symbol (в т.ч. <code>TaskAwaiter.GetResult()</code>) даёт <span class="ok">error RS0030</span>;
+(b) target <code>HarborArchitectureGate</code> (AfterTargets=Build, только Release, только
+Harbor.Architecture.Tests, скип design-time/IDE) гоняет 47 arch-правил прямым
+<code>dotnet exec</code> — регресс даёт <span class="ok">error MSB3073</span>. Escape hatch:
+<code>-p:HarborArchGate=false</code>. Zero-warning: <code>TreatWarningsAsErrors=true</code> для
+production-кода (src/, apps/); для tests/ — осознанное исключение в
+<code>tests/Directory.Build.props</code>.<br>
+Acceptance: <span class="ok">PASS</span> — негативные тесты ниже (§3).
+</div>
+
+<div class="card">
+<div class="title">3 — Pre-commit hook <code>harbor-check</code></div>
+<code>.kilo-docs/scripts/harbor-check.sh</code> + <code>.githooks/pre-commit</code> +
+<code>setup-git-hooks.sh</code> (идемпотентная установка <code>core.hooksPath</code> и git-alias
+<code>harbor-check</code>). Stage 1: всегда 47 arch-правил прямым MTP-хостом (~1.5–3 c, timeout 25 c).
+Stage 2: staged diff → ближайшие .csproj по <code>git diff --cached --name-only</code> →
+инкрементальный Release-build каждого затронутого проекта; тестовые проекты — ещё и полный прогон
+своей suite. Green-результат мемоизируется по (HEAD + staged tree) — повторные попытки мгновенны;
+docs-only коммиты выходят мгновенно. Аварийный обход: <code>--no-verify</code> (CI всё равно гейтит).<br>
+Acceptance: <span class="ok">PASS</span> — сломанный arch-тест в staged diff →
+<code>BLOCKED: architecture tests regressed</code>, exit 1 (§3).
+</div>
+
+<div class="card">
+<div class="title">4 — Automatic release notes</div>
+<code>.kilo-docs/scripts/release-notes.sh &lt;slug&gt;</code>: title + tasks из prompt.md →
+git log с прошлого <code>sprint/*</code> тега (fallback: base SHA → последний коммит перед
+<code>created_at</code> статус-файла) → merge <code>tasks[]</code>/<code>results</code>/metrics в
+<code>status.json</code> → идемпотентная вставка <code>### Sprint &lt;slug&gt;</code> под
+<code>## [Unreleased]</code> в CHANGELOG.md → аннотированный тег <code>sprint/&lt;slug&gt;</code>.
+Вызывается из sprint-chain.sh автоматически по state=done; пишет только status.json +
+CHANGELOG.md + один тег; повторы не дублируют записи.<br>
+Acceptance: <span class="ok">PASS</span> — для этого спринта: status.json содержит задачи,
+результаты и метрики; CHANGELOG.md содержит запись; тег создан.
+</div>
+
+<h2>2. Изменённые файлы (7 коммитов, 1–2 файла на коммит)</h2>
+<div class="card">
+<table>
+<tr><th>Коммит</th><th>Файлы</th></tr>
+<tr><td><code>23070e8</code></td><td>sprint-chain.sh — fully automated dispatcher (branch, dispatch, status.json, fail-safe)</td></tr>
+<tr><td><code>6873d5a</code></td><td>sprint-chain.md — queue names → slug form, model kilo-auto/free</td></tr>
+<tr><td><code>e11a6e0</code></td><td>harbor ide — NDJSON JSON-RPC stdio bridge (интерлив из ide-integration, вне задач спринта)</td></tr>
+<tr><td><code>6c6a32c</code></td><td>Directory.Build.props — HarborArchitectureGate + BannedApiAnalyzers wiring</td></tr>
+<tr><td><code>9c4c62c</code></td><td>harbor-check.sh — fast pre-commit verification gate</td></tr>
+<tr><td><code>dccdc01</code></td><td>.githooks/pre-commit + setup-git-hooks.sh + git alias</td></tr>
+<tr><td><code>4924202</code> / <code>7df1a55</code> / <code>ec299b0</code></td><td>release-notes.sh + fix (sed p-flag, created_at fallback) + status.json/CHANGELOG</td></tr>
+</table>
+</div>
+
+<h2>3. Верификация (все замеры этой сессии)</h2>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · arch-gate выполнен в составе build</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 2.1 c</td></tr>
+<tr><td>Негатив: banned API <code>.GetAwaiter().GetResult()</code> в src/</td><td class="ok">error RS0030 → build падает (проверено, зонд удалён)</td></tr>
+<tr><td>Негатив: сломанный arch-тест + Release build</td><td class="ok">error MSB3073 → build падает (проверено, откат)</td></tr>
+<tr><td>Негатив: сломанный arch-тест в staged diff + <code>harbor-check --staged</code></td><td class="ok">BLOCKED, exit 1: «architecture tests regressed» (46/47, ~1.5 c тест-стадия)</td></tr>
+<tr><td>Release-notes pipeline на этом спринте</td><td class="ok">status.json (tasks/results/metrics) + CHANGELOG-запись + тег</td></tr>
+<tr><td>Pre-commit hook на docs-коммитах</td><td class="ok">мгновенный pass («no build files in change»)</td></tr>
+</table>
+</div>
+
+<h2>4. Инциденты окружения (не код)</h2>
+<div class="card">
+<div class="finding">tmpfs /tmp (3.9 ГБ) был забит на 100%: 538 core-dump артефактов
+<code>.[0-9a-f]*-00000000.so</code> (~3.5 ГБ) от SIGBUS-крашей MSBuild при нехватке памяти
+(машина: 7.6 ГБ RAM, ~1.2 ГБ свободно при параллельных MCP-серверах). Проявлялось как
+<code>MSB4166</code> (краш child-нод) и <code>SIGBUS/exit 135</code>. Лечение: shutdown
+build-серверов + очистка артефактов + <code>-m:1</code>. К продуктовым gate'ам отношения не имеет;
+в CI с нормальной памятью <code>dotnet build -c Release</code> работает штатно.</div>
+</div>
+
+<h2>5. Статус</h2>
+<div class="card">
+<div class="title">status.json (сводка)</div>
+<ul>
+<li><span class="ok">state: done</span> · head <code>4924202</code> (на момент merge-шага) · 7 коммитов · база <code>5320515</code></li>
+<li>tests: arch 47 passed / 0 failed; checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
+<li>CHANGELOG: <code>### Sprint release-engineering — 30.08.2026</code> под <code>## [Unreleased]</code></li>
+<li>Тег <code>sprint/release-engineering</code> создан (локальный, аннотированный)</li>
+</ul>
+Дальше по контракту цепочки: human approval — merge sprint-ветки в mainline после зелёного CI.
+</div>
+
+</div>
+</body>
+</html>
