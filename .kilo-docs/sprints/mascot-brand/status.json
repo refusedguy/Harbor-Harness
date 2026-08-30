@@ -1,10 +1,10 @@
 {
   "name": "mascot-brand",
-  "state": "queued",
-  "head": "",
+  "state": "running",
+  "head": "91b39f0",
   "base": "",
   "commits": 0,
-  "started_at": null,
+  "started_at": "2026-08-30T13:45:34+0500",
   "finished_at": null,
   "kilo_pid": null,
   "kilo_session": null,
@@ -12,5 +12,5 @@
   "report": null,
   "failures": 0,
   "retries": 0,
-  "last_activity": null
+  "last_activity": "2026-08-30T13:45:34+0500"
 }
