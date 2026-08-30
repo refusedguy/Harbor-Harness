@@ -38,10 +38,11 @@ fi
 
 # tasks: numbered `1. **Title.**` bullets under the "## Tasks" heading
 TASKS_JSON="$(awk '/^## Tasks/{f=1;next} /^## /{f=0} f' "$PROMPT_FILE" 2>/dev/null \
-  | sed -nE 's/^[[:space:]]*[0-9]+\.[[:space:]]+\*\*([^*]+)\*\*.*/\1/' \
+  | sed -nE 's/^[[:space:]]*[0-9]+\.[[:space:]]+\*\*([^*]+)\*\*.*/\1/p' \
   | jq -Rsc 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")"
 
-# 2) commit range: previous sprint tag → HEAD, else the sprint's base
+# 2) commit range: previous sprint tag → HEAD, else the sprint's base,
+#    else the last commit before the sprint was queued (status.json created_at)
 PREV_TAG="$(git tag -l 'sprint/*' --sort=-creatordate | grep -Fxv "$TAG_NAME" | head -1 || true)"
 BASE_SHA="$(jq -r '.base // ""' "$STATUS_FILE" 2>/dev/null || echo "")"
 RANGE=""
@@ -50,7 +51,16 @@ if [[ -n "$BASE_SHA" ]] && git rev-parse --verify -q "${BASE_SHA}^{commit}" >/de
 elif [[ -n "$PREV_TAG" ]]; then
   RANGE="${PREV_TAG}..HEAD"
 else
-  RANGE="$(git rev-list --max-parents=0 HEAD | head -1)..HEAD"
+  CREATED_AT="$(jq -r '.created_at // ""' "$STATUS_FILE" 2>/dev/null || echo "")"
+  BASE_AT=""
+  if [[ -n "$CREATED_AT" ]]; then
+    BASE_AT="$(git rev-list -1 --before="$CREATED_AT" HEAD 2>/dev/null || true)"
+  fi
+  if [[ -n "$BASE_AT" ]]; then
+    RANGE="${BASE_AT}..HEAD"
+  else
+    RANGE="$(git rev-list --max-parents=0 HEAD | head -1)..HEAD"
+  fi
 fi
 COMMIT_COUNT="$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)"
 
