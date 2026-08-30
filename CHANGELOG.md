@@ -6,6 +6,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint multi-agent — 29.08.2026
+
+**Multi-Agent.**
+
+- Включи TaskTool execution.
+- Убери UiStore.Transition escape hatch.
+- Сделай EventBroadcaster session-scoped.
+- Добавь AgentLoop pipeline behaviors (§3.5).
+
+**Commits since previous sprint tag** (64):
+- 26eb64f docs(sprint): multi-agent re-verified at head 5cac99a — build 0 errors + 10-suite run 876/0/6 all rc=0, stray duplicate report removed
+- 5cac99a docs(sprint): multi-agent re-verified at head dc9fae3 — build 0 err/0 warn, 10 suites 876/0/6 all rc=0, stray duplicate report removed
+- dc9fae3 docs(sprint): multi-agent re-verified at head bef04d6 — build 0 errors + 10-suite run 876/0/6 (all rc=0)
+- bef04d6 docs(sprint): multi-agent re-verified at head 7b3db0a — build 0 errors + 10-suite run 876/0/6 (all rc=0)
+- 7b3db0a docs(sprint): multi-agent re-verified at head df3890d — build 0 errors + 10-suite run 882/0/6
+- df3890d docs(sprint): multi-agent re-verified at head 3db6942 — build 0 errors, 10-suite run 882/0/6 (all rc=0) + live E2E run task agent=explore proven
+- 3db6942 docs(sprint): multi-agent re-verified at head f83bf53 — build 0 errors + 5 sprint-critical suites 576/0/6
+- f83bf53 docs(sprint): multi-agent re-verified at head 9da02ca — cold build 0 errors (src/ clean) + 10-suite run 882/0/6
+- 9da02ca fix(chain): restore valid JSON in multi-agent status.json
+- 96005bd docs(sprint): multi-agent re-verified at head 4376cf9 — fresh build 0/0 + 10-suite run 882/0/6
+- 4376cf9 docs(sprint): multi-agent re-verified at head 10c5b7a — fresh build 0 errors + 10-suite run 882/0/6
+- 10c5b7a chore(sprint): multi-agent heartbeat timestamp refresh (live hermes watcher)
+- 35d8664 chore(sprint): multi-agent re-verified at head b43ad82 — fresh build 0 errors + sprint-critical suites 484/0/6 green
+- b43ad82 docs(sprint): multi-agent re-verified at head d61c5f0 — fresh build 0 errors + 10-suite run 882/0/6
+- d61c5f0 chore(sprint): multi-agent re-verified at head eaba85e — fresh build 0 errors + 10-suite run 882/0/6
+- eaba85e chore(sprint): multi-agent re-verified at head 12da510 — fresh build 0 errors + 10-suite run 876/0/6
+- b476921 chore(sprint): design-system-product status heartbeat — pack consume 8/8 refreshed at head 12da510 (leftover from prior session)
+- 12da510 chore(sprint): design-system-product verification refresh — head cd4a8b7 re-proven: 49+47+669 suites green, docgen zero-drift, nupkg fresh-consume 8/8
+- cd4a8b7 chore(sprint): design-system-product verification refresh — comment-tolerance fix consumed 7/7, suites 49+669+47 green at head 7846615
+- 7846615 fix(designsystem): tolerate JSON comments in theme files
+- 50a9134 chore(sprint): multi-agent heartbeat timestamp refresh (leftover from prior session)
+- 650eb5b chore(sprint): design-system-product verification refresh — pack consume 5/5, docgen zero drift re-proven at head 38f3d37
+- 38f3d37 chore(sprint): design-system-product closed — 3 commits re-verified per-commit + pack dry-run consume green
+- 257493b chore(sprint): multi-agent heartbeat — fresh re-verification 618/0/6 across 6 suites at head c8ffd6c
+- 05762c2 chore(sprint): multi-agent full 10-suite re-verified 876/0/6 at head c8ffd6c
+- c8ffd6c chore(sprint): multi-agent status heartbeat (sprint-critical suites re-run at head cae081d)
+- f1f2f36 chore(sprint): multi-agent status heartbeat (sprint-critical suites re-run at head cae081d)
+- cae081d chore(sprint): multi-agent status heartbeat (876/0/6 verified at head b985328)
+- 9316939 docs(sprint): multi-agent verified at head b985328 — full 10-suite re-run 876/0/6 + live E2E sub-agent run
+- b985328 docs(sprint): multi-agent independent re-verification at head 823194a — 5 sprint-critical suites fresh green
+- 823194a docs(sprint): multi-agent re-verified at final head 689789c — fresh 876/0/6 across 10 suites
+- 4c98413 docs(sprint): multi-agent final re-verification at head 689789c (5 sprint-critical suites fresh)
+- 689789c chore(sprint): multi-agent status heartbeat (re-verified 876/0/6 at head)
+- 9307a5e docs(sprint): multi-agent re-verification at final head 405db82
+- 405db82 docs(designsystem): theme guide, generated API reference, example themes
+- 88a923e feat(designsystem): theme marketplace — JSON format, validation, store, live reload
+- 7100f90 feat(designsystem): extract Harbor.DesignSystem as standalone zero-dependency package
+- 8296524 chore(sprint): sweep stale ui-v2 queue entries + multi-agent heartbeat
+- 9d1c9aa docs(sprint): multi-agent verification record (E2E run-task smoke + fresh test counts)
+- ba1fdf0 docs(sprint): multi-agent status.json + report.html
+
 ### Sprint performance — 29.08.2026
 
 **Performance.**
