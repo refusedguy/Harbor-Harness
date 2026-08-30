@@ -129,6 +129,7 @@ public static class Program
         return command switch
         {
             "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
+            "ide" => await RunIdeAsync(args.Skip(1).ToArray()),
             "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
             "run" => await RunRunAsync(args.Skip(1).ToArray()),
             "providers" => await RunListProvidersAsync(),
@@ -291,6 +292,25 @@ public static class Program
         int exitCode = await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
         await StopIpcAsync(host.Services).ConfigureAwait(false);
         return exitCode;
+    }
+
+    /// <summary>
+    ///     <c>harbor ide --session &lt;id&gt;</c> — NDJSON JSON-RPC stdio bridge
+    ///     for external editors. Protocol frames own stdout: console logging is
+    ///     silenced (the file log keeps full Debug detail) and no renderer is
+    ///     initialized. Defaults to <c>HARBOR_MODE=ipc-client</c> so the bridge
+    ///     attaches to a running daemon/TUI instead of spawning its own agent.
+    /// </summary>
+    private static async Task<int> RunIdeAsync(string[] args)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL")))
+            Environment.SetEnvironmentVariable("HARBOR_LOGLEVEL", "None");
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+
+        _logger.LogInformation("Starting IDE bridge (attach mode)");
+        using var host = HostBuilder.Build(args);
+        return await IdeBridgeRunner.RunAsync(host.Services, args).ConfigureAwait(false);
     }
 
     /// <summary>
