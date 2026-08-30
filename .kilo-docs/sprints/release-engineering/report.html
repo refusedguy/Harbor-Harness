@@ -175,8 +175,11 @@ build-серверов + очистка артефактов + <code>-m:1</code>
 <div class="card">
 <div class="title">status.json (сводка)</div>
 <ul>
-<li><span class="ok">state: done</span> · head <code>753d184</code> (re-verified at final tip 30.08 09:25) · 21 коммит · база <code>5320515</code></li>
-<li>tests: arch 47 passed / 0 failed; checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
+<li><span class="ok">state: done</span> · head <code>75a2868</code> (final re-verification 30.08 04:36 UTC) · 27 коммит · база <code>5320515</code> (21 код + 4 backfill + 2 meta; кодовый tip <code>753d184</code>)</li>
+<li>tests: arch 47 passed / 0 failed (standalone, at 75a2868); checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
+<li>Release-notes покрытие: 5/5 done-спринтов имеют title + tasks + results (commit range) + секцию в CHANGELOG.md + аннотированный тег <code>sprint/*</code> — legacy-спринты (renderer-unification 77c, multi-agent 64c, performance 20c, security 54c) дозаполнены 30.08</li>
+<li>DRY_RUN план (sprint-chain.sh без аргументов): rc=0, очередь парсится целиком, done-спринты SKIP, pending-спринты планируются на <code>sprint/&lt;name&gt;</code></li>
+<li><code>git harbor-check</code>: arch-тесты в hook всегда; docs-only коммит — instant pass; кэш green-результата по (HEAD + staged tree)</li>
 <li>CHANGELOG: <code>### Sprint release-engineering — 30.08.2026</code> под <code>## [Unreleased]</code></li>
 <li>Тег <code>sprint/release-engineering</code> создан (локальный, аннотированный)</li>
 </ul>
