@@ -3,7 +3,7 @@
   "sprint": "release-engineering",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/release-engineering/prompt.md",
-  "head": "4924202",
+  "head": "7552ace",
   "commits": 7,
   "created_at": "2026-08-28T14:38:08Z",
   "base": "5320515",
@@ -24,7 +24,8 @@
     "banned_api_gate": "build fails on banned API (RS0030, verified)",
     "pre_commit_hook": "harbor-check blocks on arch regression (verified)",
     "passed": 3,
-    "failed": 0
+    "failed": 0,
+    "reverified": "8.05 2026-08-30T03:05:55Z: Release build 0 errors, arch-gate 47/47 in-build; chain DRY_RUN plan ok; git harbor-check + .githooks/pre-commit ok"
   },
   "name": "release-engineering",
   "title": "Release Engineering",
@@ -35,9 +36,12 @@
     "Автоматические release notes."
   ],
   "results": {
-    "commit_count": 10,
+    "commit_count": 13,
     "range": "5320515..HEAD",
     "commits": [
+      "- 7552ace fix(build): arch-gate log path — evaluate IntermediateOutputPath at target run time",
+      "- 7f1b1ba docs(sprint): persist auto-generated dispatch reports (29-30.08)",
+      "- c000d89 chore(sprint): release-engineering status refresh — head/commit_count via release-notes re-run",
       "- a32529a docs(sprint): release-engineering report.html — deliverables, negative-test matrix, incidents",
       "- ec299b0 docs(sprint): release-engineering — state done, 7 commits, gates verified; CHANGELOG entry",
       "- 7df1a55 fix(release-notes): emit extracted tasks (missing sed p-flag) + created_at range fallback",
