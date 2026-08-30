@@ -146,7 +146,8 @@ start_heartbeat() {
   # Liveness probe OUTSIDE the git tree (/tmp) — writing status.json here
   # would keep the worktree dirty and stall kilo-dispatch's clean-tree check.
   # start_heartbeat <slug>
-  local slug="$1" hb="/tmp/harbor-sprint-progress-${slug}.json"
+  local slug="$1"
+  local hb="/tmp/harbor-sprint-progress-${slug}.json"
   (
     while true; do
       sleep 30

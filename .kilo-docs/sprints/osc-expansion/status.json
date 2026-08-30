@@ -1,10 +1,10 @@
 {
   "name": "osc-expansion",
-  "state": "queued",
-  "head": "",
-  "base": "",
+  "state": "running",
+  "head": "de6b3fc",
+  "base": "4593b36",
   "commits": 0,
-  "started_at": null,
+  "started_at": "2026-08-30T12:19:32+0500",
   "finished_at": null,
   "kilo_pid": null,
   "kilo_session": null,
@@ -12,5 +12,12 @@
   "report": null,
   "failures": 0,
   "retries": 0,
-  "last_activity": null
+  "last_activity": "2026-08-30T12:19:32+0500",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 0,
+    "tasks_total": 0,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-08-30T08:13:13Z"
+  }
 }

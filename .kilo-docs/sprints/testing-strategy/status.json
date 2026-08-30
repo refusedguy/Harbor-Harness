@@ -1,9 +1,20 @@
 {
-  "state": "queued",
+  "state": "failed",
   "sprint": "testing-strategy",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/testing-strategy/prompt.md",
-  "head": "",
+  "head": "de6b3fc977125749a90f209fa1bfe2a55d37aca6",
   "commits": 0,
-  "created_at": "2026-08-28T14:38:08Z"
+  "created_at": "2026-08-28T14:38:08Z",
+  "last_activity": "2026-08-30T11:48:40+0500",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 0,
+    "tasks_total": 0,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-08-30T08:13:20Z"
+  },
+  "base": "547240b",
+  "started_at": "2026-08-30T08:38:27+0500",
+  "failures": 1
 }

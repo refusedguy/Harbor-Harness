@@ -1,8 +1,8 @@
 {
   "name": "renderer-moat",
-  "state": "queued",
-  "head": "",
-  "base": "",
+  "state": "failed",
+  "head": "4593b36",
+  "base": "59455e6",
   "commits": 0,
   "started_at": null,
   "finished_at": null,
@@ -12,5 +12,12 @@
   "report": null,
   "failures": 0,
   "retries": 0,
-  "last_activity": null
+  "last_activity": "2026-08-30T05:47:09Z",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 0,
+    "tasks_total": 0,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-08-30T08:13:20Z"
+  }
 }
