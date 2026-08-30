@@ -159,6 +159,21 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 <tr><td><span class="accent">Усиление:</span> self-heal stale <code>state=running</code></td><td class="ok"><code>86443f9</code> — running_stale(): heartbeat &lt; 15 мин → SKIP (нет double-dispatch), иначе requeue как failed (retries+1). Конкурентные диспетчи (3 шт. одновременно) не мешают друг другу</td></tr>
 </table>
 </div>
+<h3>Ре-верификация 30.08 10:12–10:20 (re-dispatch #2, модель glm-5.3-flash)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0, полный план очереди: 3 skip(done) + live-dispatch guard + stale-requeue notes + 4 next-sprint планируются</td></tr>
+<tr><td>Fail-safe аудит sprint-chain.sh (grep)</td><td class="ok">rm -rf / reset --hard / git clean / force-push — только в комментарии-правиле, 0 в коде</td></tr>
+<tr><td>Негатив: сломанный arch-тест + Release build</td><td class="ok">error MSB3073 из HarborArchitectureGate (Directory.Build.props:226) → build падает (зонд откачен)</td></tr>
+<tr><td>Негатив: сломанный arch-тест в staged diff + hook</td><td class="ok">BLOCKED, exit 1: «architecture tests regressed» (47 green + probe, тест-стадия 1.6 c)</td></tr>
+<tr><td><code>git harbor-check</code> — fast path (docs-only)</td><td class="ok">0.13 c (мемо-кэш зелёного результата работает)</td></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 57 c · <code>[arch-gate]</code> выполнен в составе build (harbor-arch-gate.log)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.8 c</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> → harbor-check.sh --all; пре-коммит флоу docs-коммитов = instant pass</td></tr>
+</table>
+Вывод: zero code delta с build-verified tip <code>753d184</code>; все 4 gate'а (RS0030, MSB3073, pre-commit, release-notes) воспроизводимы re-dispatch'ом.
+</div>
 </div>
 
 <h2>4. Инциденты окружения (не код)</h2>

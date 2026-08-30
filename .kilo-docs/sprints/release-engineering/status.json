@@ -25,7 +25,7 @@
     "pre_commit_hook": "harbor-check blocks on arch regression (verified)",
     "passed": 3,
     "failed": 0,
-    "reverified": "30.08 2026-08-30T05:05Z re-dispatch re-verification at 66c45de: arch tests standalone 47/47 (1.7s); git harbor-check fast path 0.06s; release-notes coverage 5/5 done sprints (tasks+results+CHANGELOG+tags); zero code delta since build-verified tip 753d184 (metadata/docs only) — build gate conclusion carries; concurrent chain dispatches active, flock guard holds; hook wiring (core.hooksPath=.githooks, alias harbor-check) verified"
+    "reverified": "30.08 2026-08-30T05:20Z re-dispatch #2 re-verification at 59455e6 (pre-commit tip): DRY_RUN=1 sprint-chain.sh full queue plan rc=0; negative broken arch test → error MSB3073 (Directory.Build.props:226) build fails; staged broken arch test → harbor-check BLOCKED exit 1 «architecture tests regressed» (47 green + probe, 1.6s); git harbor-check fast path 0.13s; dotnet build Harbor.slnx -c Release exit 0, arch-gate in-build (harbor-arch-gate.log); standalone arch 47/47 (1.8s); safety grep: rm -rf/reset --hard only in fail-safe comments"
   },
   "name": "release-engineering",
   "title": "Release Engineering",
