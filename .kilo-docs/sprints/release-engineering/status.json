@@ -3,13 +3,13 @@
   "sprint": "release-engineering",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/release-engineering/prompt.md",
-  "head": "beb75e0",
-  "commits": 39,
+  "head": "4593b36",
+  "commits": 41,
   "created_at": "2026-08-28T14:38:08Z",
   "base": "5320515",
   "branch": "dev",
   "completed_at": "2026-08-30T02:13:23Z",
-  "last_activity": "2026-08-30T05:36:56Z",
+  "last_activity": "2026-08-30T05:48:26Z",
   "duration_seconds": 128115,
   "dispatch_exit_code": 0,
   "tests": {
@@ -26,7 +26,8 @@
     "passed": 3,
     "failed": 0,
     "reverified": "30.08 2026-08-30T05:20Z re-dispatch #2 re-verification at 59455e6 (pre-commit tip): DRY_RUN=1 sprint-chain.sh full queue plan rc=0; negative broken arch test → error MSB3073 (Directory.Build.props:226) build fails; staged broken arch test → harbor-check BLOCKED exit 1 «architecture tests regressed» (47 green + probe, 1.6s); git harbor-check fast path 0.13s; dotnet build Harbor.slnx -c Release exit 0, arch-gate in-build (harbor-arch-gate.log); standalone arch 47/47 (1.8s); safety grep: rm -rf/reset --hard only in fail-safe comments",
-    "reverified3": "30.08 2026-08-30T10:28+05 re-dispatch #3 re-verification at f09d6c3 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0, 0 errors, in-build arch-gate 47/47 (4.7s); standalone arch 47/47 (1.4s); git harbor-check instant fast path; live negative probe: broken arch test staged → commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) full-queue plan rc=0; CHANGELOG entry + 5 sprint/* tags + report.html synced to 75a2868"
+    "reverified3": "30.08 2026-08-30T10:28+05 re-dispatch #3 re-verification at f09d6c3 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0, 0 errors, in-build arch-gate 47/47 (4.7s); standalone arch 47/47 (1.4s); git harbor-check instant fast path; live negative probe: broken arch test staged → commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) full-queue plan rc=0; CHANGELOG entry + 5 sprint/* tags + report.html synced to 75a2868",
+    "reverified4": "30.08 2026-08-30T05:40-05:55Z re-dispatch #4 re-verification at 4593b36 (gate infra unchanged): bash -n 7/7 scripts OK; DRY_RUN=1 sprint-chain.sh (empty args) full queue plan rc=0 in 1s (5 skip done, 2 live-dispatch skip, 5 next planned); dotnet build Harbor.slnx -c Release exit 0, 0 errors, 41.7s, in-build arch-gate 47/47 (harbor-arch-gate.log, 2.5s); standalone arch 47/47 (1.6s); pre-commit hook on real docs commit 4593b36: instant pass 0.5s; live negative probe: staged broken arch test → hook runs 48 tests (1 fail) → BLOCKED «architecture tests regressed», commit refused, probe reverted; fail-safe grep: rm -rf/reset --hard/clean only in rule comments; release-notes.sh re-run idempotent (head=4593b36, 41 commits, CHANGELOG no dup, tag exists)"
   },
   "name": "release-engineering",
   "title": "Release Engineering",
@@ -37,9 +38,11 @@
     "Автоматические release notes."
   ],
   "results": {
-    "commit_count": 39,
+    "commit_count": 41,
     "range": "5320515..HEAD",
     "commits": [
+      "- 4593b36 chore(sprint): chain heartbeat timestamps (renderer-moat, testing-strategy, 30.08 10:41)",
+      "- 7d953ca docs(sprint): release-engineering re-verified at beb75e0 — build 0 err, arch 47/47 in-build+standalone, hook BLOCKED probe, chain DRY_RUN rc=0",
       "- beb75e0 docs(sprint): persist auto-generated dispatch report 30.08 10:22",
       "- b0af202 chore(sprint): chain heartbeat timestamps (renderer-moat, testing-strategy, 30.08 05:26)",
       "- 1b60595 chore(sprint): ide-integration dispatch failure metadata (failures=2, 30.08 10:22)",
@@ -77,8 +80,7 @@
       "- 9c4c62c feat(hooks): harbor-check — fast pre-commit verification gate",
       "- 6c6a32c feat(build): release arch-test gate — dotnet build fails when arch tests regress",
       "- e11a6e0 feat(cli): harbor ide — NDJSON JSON-RPC stdio bridge verb (attach mode, silent stdout)",
-      "- 6873d5a chore(sprint): queue names → slug form (status paths match sprint dirs), model kilo-auto/free",
-      "- 23070e8 feat(sprint-chain): fully automated dispatcher — branch, dispatch, status.json, fail-safe"
+      "- 6873d5a chore(sprint): queue names → slug form (status paths match sprint dirs), model kilo-auto/free"
     ]
   },
   "reverified4": "30.08 2026-08-30T10:36+05 re-dispatch #4 re-verification at beb75e0 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0 (44s), in-build arch-gate 47/47 (5.1s); standalone arch 47/47 (1.8s); git harbor-check instant fast path 0.04s; live negative probe: broken arch file staged → git commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) rc=0 full queue plan (3 next, 5 done skip, live-dispatch guard); report.html: re-verification #3+#4 block added"

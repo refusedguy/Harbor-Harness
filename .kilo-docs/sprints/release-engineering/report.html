@@ -59,7 +59,7 @@
 <h1>Sprint: Release Engineering — <span class="ok">DONE</span></h1>
 <div class="sub">Модель: openrouter/z-ai/glm-5.3-flash · Очередь: .kilo-docs/sprint-chain.md ·
 Создан: 28.08.2026 14:38 UTC · Завершён: 30.08.2026 02:10 UTC · Длительность (wall): ~35.5 ч ·
-Коммитов: 27 · Ветка: sprint/ide-integration (stacked; mainline — после merge-approval) · Тег: <code>sprint/release-engineering</code></div>
+Коммитов: 41 (head <code>4593b36</code>) · Ветка: sprint/ide-integration (stacked; mainline — после merge-approval) · Тег: <code>sprint/release-engineering</code></div>
 
 <h2>1. Deliverables</h2>
 
@@ -173,6 +173,22 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 <tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> → harbor-check.sh --all; пре-коммит флоу docs-коммитов = instant pass</td></tr>
 </table>
 Вывод: zero code delta с build-verified tip <code>753d184</code>; все 4 gate'а (RS0030, MSB3073, pre-commit, release-notes) воспроизводимы re-dispatch'ом.
+</div>
+<h3>Ре-верификация 30.08 10:40–10:55 (re-dispatch #4, модель glm-5.3-flash, head <code>4593b36</code>)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>bash -n</code> всех 7 скриптов .kilo-docs/scripts/</td><td class="ok">7/7 синтаксис OK</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0 за 1 c: 5 skip(done) + 2 skip(live dispatch: testing-strategy, renderer-moat) + план 5 next (ide-integration requeue, osc-expansion, mascot-brand, demo-gif, ci-cd-maturity)</td></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 41.7 c · arch-gate 47/47 in-build (harbor-arch-gate.log, 2.5 c)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.6 c</td></tr>
+<tr><td>Pre-commit hook на реальном docs-коммите (<code>4593b36</code>, heartbeat-метаданные)</td><td class="ok">instant pass 0.5 c («no build files in change»)</td></tr>
+<tr><td><span class="accent">Негатив:</span> сломанный arch-тест в staged diff + commit</td><td class="ok">hook пересобрал arch-проект, прогнал 48 тестов (47 green + 1 probe-fail) → <code>BLOCKED: architecture tests regressed (docs/ARCHITECTURE_LAYERS.md §2)</code>, commit отвергнут, зонд откачен</td></tr>
+<tr><td>Fail-safe аудит sprint-chain.sh (grep)</td><td class="ok">rm -rf / reset --hard / git clean / force-push — 0 в коде, только правило-комментарий (строка 13)</td></tr>
+<tr><td><code>release-notes.sh release-engineering</code> (идемпотентность)</td><td class="ok">head→4593b36, 41 коммит, CHANGELOG без дублей, тег <code>sprint/release-engineering</code> на месте</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> активны</td></tr>
+</table>
+Вывод: gate-инфраструктура не менялась с <code>87782c8</code>; все 4 acceptance-критерия воспроизводятся на актуальном tip; конкурентные диспетчи (renderer-moat, testing-strategy, osc-expansion) работают параллельно без взаимных помех (flock + live-dispatch guard + tolerated status.json dirt).
 </div>
 </div>
 
