@@ -55,6 +55,9 @@ PUSH_BRANCH="${HARBOR_CHAIN_PUSH:-1}"
 RUN_RELEASE_NOTES="${RELEASE_NOTES:-1}"
 MAX_DISPATCH_MINUTES="${HARBOR_CHAIN_MAX_MINUTES:-360}"
 DISPATCH_INTERVAL="${HARBOR_CHAIN_INTERVAL:-300}"
+# A crashed dispatcher leaves state=running with no live heartbeat; the chain
+# must self-heal (requeue) instead of skipping the sprint forever.
+STALE_RUNNING_MINUTES="${HARBOR_CHAIN_STALE_MINUTES:-15}"
 
 cd "$REPO" 2>/dev/null || { echo "[chain] FATAL: repo not found: $REPO"; exit 1; }
 
@@ -109,6 +112,25 @@ kilo_alive() { pgrep -fc '\bkilo run\b' 2>/dev/null || true; }
 if [[ "$(kilo_alive)" -gt 0 && "$DRY_RUN" != "1" ]]; then
   die "$(kilo_alive) kilo process(es) already running — refusing to interfere (no auto-kill)"
 fi
+
+running_stale() {
+  # running_stale <slug> <status_file> → rc 0 when the "running" dispatch has
+  # no live heartbeat: either the heartbeat file (written every 30 s while a
+  # dispatch runs) or the .progress.last_heartbeat status-ping must be fresher
+  # than STALE_RUNNING_MINUTES, otherwise the dispatcher is considered dead.
+  local slug="$1" status_file="$2" ts=0 le
+  local hb="/tmp/harbor-sprint-progress-${slug}.json"
+  [[ -f "$hb" ]] && ts=$(stat -c %Y "$hb" 2>/dev/null || echo 0)
+  le=$(jq -r '.progress.last_heartbeat // ""' "$status_file" 2>/dev/null || true)
+  if [[ -n "$le" ]]; then
+    le=$(date -u -d "$le" +%s 2>/dev/null) || le=0
+  else
+    le=0
+  fi
+  (( le > ts )) && ts=$le
+  (( ts == 0 )) && return 0
+  (( $(date +%s) - ts > STALE_RUNNING_MINUTES * 60 ))
+}
 
 start_status_server() {
   [[ "${HARBOR_CHAIN_STATUS_SERVER:-1}" == "1" ]] || return 0
@@ -251,7 +273,25 @@ while IFS= read -r line; do
     RETRIES=$(jq -r '.retries // 0' "$STATUS_FILE" 2>/dev/null || echo 0)
     case "$STATE" in
       done)    log "SKIP: $SLUG (state=done)"; continue ;;
-      running) log "SKIP: $SLUG (already running)"; continue ;;
+      running)
+        if [[ "$DRY_RUN" == "1" ]]; then
+          if running_stale "$SLUG" "$STATUS_FILE"; then
+            log "NOTE: $SLUG state=running but heartbeat is stale — would requeue and re-dispatch"
+          else
+            log "SKIP: $SLUG (live dispatch running)"
+          fi
+          continue
+        fi
+        if running_stale "$SLUG" "$STATUS_FILE"; then
+          RETRIES=$((RETRIES+1))
+          tmp=$(mktemp)
+          jq --argjson r "$RETRIES" --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+             '.state = "failed" | .retries = $r | .stale_requeued_at = $now' \
+             "$STATUS_FILE" > "$tmp" 2>/dev/null && mv -f "$tmp" "$STATUS_FILE" || rm -f "$tmp"
+          log "WARN: $SLUG state=running but no live heartbeat (${STALE_RUNNING_MINUTES}m) — requeued (retries=$RETRIES)"
+        else
+          log "SKIP: $SLUG (live dispatch running)"; continue
+        fi ;;
       failed)
         if [[ "$RETRIES" -ge 2 ]]; then log "SKIP: $SLUG (state=failed, retries=$RETRIES)"; continue; fi ;;
     esac
