@@ -148,8 +148,7 @@
     <NoWarn>$(NoWarn);RS0030</NoWarn>
   </PropertyGroup>
 
-  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
-  <ItemGroup>
+  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
     <!-- Code style + quality -->
     <PackageReference Include="Roslynator.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -193,5 +192,35 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!--
+    Release architecture gate (compile-time, not runtime):
+      `dotnet build Harbor.slnx -c Release` re-runs the Harbor.Architecture.Tests
+      suite (47 layer rules) against the freshly built assemblies as part of the
+      build itself. Any layering regression fails the build on CI immediately —
+      no PR review or separate test step needed. Works together with the
+      BannedApiAnalyzers gate above (banned symbol ⇒ RS0030 build error).
+
+      Scope: runs once, after tests/Harbor.Architecture.Tests is built (its
+      ProjectReferences are already fresh by then). Skipped for design-time /
+      IDE builds. A test-platform direct run with a no-build flag (no Build
+      target) never triggers it. Escape hatch: property HarborArchGate=false.
+  -->
+  <PropertyGroup>
+    <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
+    <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
+  </PropertyGroup>
+
+  <Target Name="HarborArchitectureGate"
+          AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true'
+                     AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'
+                     AND '$(DesignTimeBuild)' != 'true'
+                     AND '$(BuildingInsideVisualStudio)' != 'true'">
+    <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)" />
+    <Exec Command="dotnet exec &quot;$(TargetPath)&quot; > &quot;$(HarborArchGateLog)&quot; 2>&amp;1 || { tail -30 &quot;$(HarborArchGateLog)&quot;; exit 1; }"
+          IgnoreExitCode="false"
+          ConsoleToMSBuild="false" />
+  </Target>
 
 </Project>
