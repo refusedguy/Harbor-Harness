@@ -3,13 +3,13 @@
   "sprint": "release-engineering",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/release-engineering/prompt.md",
-  "head": "0945955",
-  "commits": 42,
+  "head": "69a593b",
+  "commits": 45,
   "created_at": "2026-08-28T14:38:08Z",
   "base": "5320515",
   "branch": "dev",
   "completed_at": "2026-08-30T02:13:23Z",
-  "last_activity": "2026-08-30T06:06:12Z",
+  "last_activity": "2026-08-30T06:22:46Z",
   "duration_seconds": 128115,
   "dispatch_exit_code": 0,
   "tests": {
@@ -39,9 +39,12 @@
     "Автоматические release notes."
   ],
   "results": {
-    "commit_count": 42,
+    "commit_count": 45,
     "range": "5320515..HEAD",
     "commits": [
+      "- 69a593b chore(sprint): chain metadata — osc-expansion running, renderer-moat failed, testing-strategy heartbeat (30.08 10:52)",
+      "- a0b3371 docs(sprint): release-engineering re-verified at 04025b0 — build 0 err, arch 47/47, hook BLOCKED probe, DRY_RUN rc=0; notes idempotency restored (SIGPIPE), /tmp disk-full incident closed",
+      "- 04025b0 fix(release-notes): truncate commit log in git, not via head — SIGPIPE killed re-runs over 40 commits",
       "- 0945955 docs(sprint): release-engineering re-verified at 4593b36 — build 0 err (41.7s), arch 47/47 in-build+standalone, hook BLOCKED probe (48 tests), chain DRY_RUN rc=0, notes idempotent",
       "- 4593b36 chore(sprint): chain heartbeat timestamps (renderer-moat, testing-strategy, 30.08 10:41)",
       "- 7d953ca docs(sprint): release-engineering re-verified at beb75e0 — build 0 err, arch 47/47 in-build+standalone, hook BLOCKED probe, chain DRY_RUN rc=0",
@@ -78,12 +81,10 @@
       "- ec299b0 docs(sprint): release-engineering — state done, 7 commits, gates verified; CHANGELOG entry",
       "- 7df1a55 fix(release-notes): emit extracted tasks (missing sed p-flag) + created_at range fallback",
       "- 4924202 feat(release-notes): automatic sprint release notes — status.json merge + CHANGELOG entry + sprint tags",
-      "- dccdc01 feat(git): install pre-commit hook (.githooks) + git alias harbor-check",
-      "- 9c4c62c feat(hooks): harbor-check — fast pre-commit verification gate",
-      "- 6c6a32c feat(build): release arch-test gate — dotnet build fails when arch tests regress",
-      "- e11a6e0 feat(cli): harbor ide — NDJSON JSON-RPC stdio bridge verb (attach mode, silent stdout)"
+      "- dccdc01 feat(git): install pre-commit hook (.githooks) + git alias harbor-check"
     ]
   },
   "reverified4": "30.08 2026-08-30T10:36+05 re-dispatch #4 re-verification at beb75e0 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0 (44s), in-build arch-gate 47/47 (5.1s); standalone arch 47/47 (1.8s); git harbor-check instant fast path 0.04s; live negative probe: broken arch file staged → git commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) rc=0 full queue plan (3 next, 5 done skip, live-dispatch guard); report.html: re-verification #3+#4 block added",
-  "reverified5": "30.08 2026-08-30T11:05+05 re-dispatch #5 re-verification at 0945955 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0, 0 errors, 46.5s, in-build arch-gate log fresh (obj/Release/net10.0); standalone arch 47/47 (1.3s); git harbor-check fast path 0.4s; live negative probe: staged broken arch .cs → commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) full-queue plan rc=0 (5 done skip, 2 live-dispatch skip, 4 next planned); bash -n 4/4 scripts OK; release-notes idempotency restored (fix: git --max-count replaces «| head -40» — SIGPIPE rc 141 aborted re-runs once range exceeded 40 commits); incident: /tmp tmpfs 100% (2.24GB stale .NET JIT .so scratch) blocked the status.json merge — cleaned to 42%, release-notes rc=0 ×3; concurrent testing-strategy dispatch active during verification — its heartbeat status.json files untouched (out of scope)"
+  "reverified5": "30.08 2026-08-30T11:05+05 re-dispatch #5 re-verification at 0945955 (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release exit 0, 0 errors, 46.5s, in-build arch-gate log fresh (obj/Release/net10.0); standalone arch 47/47 (1.3s); git harbor-check fast path 0.4s; live negative probe: staged broken arch .cs → commit BLOCKED «arch tests project does not build», HEAD unchanged, probe reverted; DRY_RUN=1 sprint-chain.sh (empty args) full-queue plan rc=0 (5 done skip, 2 live-dispatch skip, 4 next planned); bash -n 4/4 scripts OK; release-notes idempotency restored (fix: git --max-count replaces «| head -40» — SIGPIPE rc 141 aborted re-runs once range exceeded 40 commits); incident: /tmp tmpfs 100% (2.24GB stale .NET JIT .so scratch) blocked the status.json merge — cleaned to 42%, release-notes rc=0 ×3; concurrent testing-strategy dispatch active during verification — its heartbeat status.json files untouched (out of scope)",
+  "reverified6": "30.08 2026-08-30T11:22+05 re-dispatch #6 re-verification at 69a593b (gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release 0 errors (93s), in-build arch-gate 47/47 (harbor-arch-gate.log); standalone arch 47/47 (1.8s); DRY_RUN=1 sprint-chain.sh (empty args) rc=0 (5 done skip, 2 live-dispatch skip, 4 planned); negative probe: broken arch test staged → 48 tests (1 fail) → commit BLOCKED «architecture tests regressed», HEAD unchanged, probe reverted; banned-API probe: Thread.Sleep in src/Harbor.Logging → error RS0030 → build fails (tests/ NoWarn RS0030 — documented central exemption in Directory.Build.props); release-notes re-run rc=0 head=69a593b commits=45, CHANGELOG 1 entry no dup, tag intact; git harbor-check fast path 0.04s; bash -n 4/4 OK; /tmp 54% free"
 }

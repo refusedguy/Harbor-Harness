@@ -242,7 +242,8 @@ merge status.json молча уходил в WARN-ветку release-notes.sh (�
 <div class="card">
 <div class="title">status.json (сводка)</div>
 <ul>
-<li><span class="ok">state: done</span> · head <code>0945955</code> (re-verification #5, 30.08 11:05 +05) · 42 коммита · база <code>5320515</code></li>
+<li><span class="ok">state: done</span> · head <code>69a593b</code> (re-verification #6, 30.08 11:20 +05) · 45 коммитов · база <code>5320515</code></li>
+<li>Re-verification #6 (dispatch, 30.08 11:12–11:22 +05): dotnet build Harbor.slnx -c Release — 0 ошибок (93s), in-build arch-gate 47/47 (harbor-arch-gate.log); standalone arch 47/47 (1.8s); DRY_RUN=1 sprint-chain.sh rc=0 (5 done skip, 2 live-dispatch skip, 4 planned); negative probe: сломанный arch-тест staged → 48 тестов (1 fail) → commit BLOCKED «architecture tests regressed», HEAD неизменен; banned-API probe: Thread.Sleep в src/Harbor.Logging → error RS0030 → сборка падает (в tests/ — задокументированное центральное исключение NoWarn RS0030 в Directory.Build.props); release-notes re-run rc=0, head/commits 69a593b/45, CHANGELOG без дублей (1 запись), тег на месте; git harbor-check fast path 0.04s; скрипты bash -n 4/4 OK</li>
 <li>tests: arch 47 passed / 0 failed (standalone, at 75a2868); checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
 <li>Release-notes покрытие: 5/5 done-спринтов имеют title + tasks + results (commit range) + секцию в CHANGELOG.md + аннотированный тег <code>sprint/*</code> — legacy-спринты (renderer-unification 77c, multi-agent 64c, performance 20c, security 54c) дозаполнены 30.08</li>
 <li>DRY_RUN план (sprint-chain.sh без аргументов): rc=0, очередь парсится целиком, done-спринты SKIP, pending-спринты планируются на <code>sprint/&lt;name&gt;</code></li>
