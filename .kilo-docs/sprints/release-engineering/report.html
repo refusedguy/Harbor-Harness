@@ -176,6 +176,20 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 </div>
 </div>
 
+<h3>Ре-верификация 30.08 10:22–10:36 (re-dispatch #3 + #4, модель glm-5.3-flash, tip <code>beb75e0</code>)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 44 c · in-build arch-gate 47/47 (harbor-arch-gate.log, 5.1 c)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.8 c</td></tr>
+<tr><td><code>git harbor-check</code> — fast path (docs-only)</td><td class="ok">0.04 c, instant pass</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0: 3 next-sprint план + skip(done×5) + live-dispatch guard (testing-strategy, renderer-moat running)</td></tr>
+<tr><td><span class="accent">Негатив (live):</span> сломанный arch-файл staged + <code>git commit</code></td><td class="ok">BLOCKED: «arch tests project does not build», HEAD unchanged (<code>beb75e0</code>), зонд откачен</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> → <code>--all</code> — активны на tip</td></tr>
+</table>
+Вывод: gate-инфраструктура не менялась с <code>87782c8</code>; все 4 acceptance-критерия воспроизведены на актуальном tip (beb75e0).
+</div>
+
 <h2>4. Инциденты окружения (не код)</h2>
 <div class="card">
 <div class="finding">tmpfs /tmp (3.9 ГБ) был забит на 100%: 538 core-dump артефактов
