@@ -3,13 +3,13 @@
   "sprint": "release-engineering",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/release-engineering/prompt.md",
-  "head": "afe6628",
-  "commits": 19,
+  "head": "753d184",
+  "commits": 21,
   "created_at": "2026-08-28T14:38:08Z",
   "base": "5320515",
   "branch": "dev",
   "completed_at": "2026-08-30T02:13:23Z",
-  "last_activity": "2026-08-30T03:59:47Z",
+  "last_activity": "2026-08-30T04:22:05Z",
   "duration_seconds": 128115,
   "dispatch_exit_code": 0,
   "tests": {
@@ -25,7 +25,7 @@
     "pre_commit_hook": "harbor-check blocks on arch regression (verified)",
     "passed": 3,
     "failed": 0,
-    "reverified": "30.08 2026-08-30T04:07Z re-dispatch: arch 47/47 standalone; DRY_RUN no-args plan RC=0; git harbor-check pass; full-slnx Release build blocked by host OOM (MSB4166/SIGBUS) — tree unchanged vs 08:31 verified build 0 err"
+    "reverified": "30.08 2026-08-30T09:25Z re-dispatch: full slnx Release build 0 err (-m:1, 39s); arch gate in-build 47/47 + standalone 47/47; DRY_RUN no-args plan RC=0; git harbor-check pass; status head/commits refreshed to 753d184"
   },
   "name": "release-engineering",
   "title": "Release Engineering",
@@ -36,9 +36,11 @@
     "Автоматические release notes."
   ],
   "results": {
-    "commit_count": 19,
+    "commit_count": 21,
     "range": "5320515..HEAD",
     "commits": [
+      "- 753d184 docs(sprint): release-engineering re-verified (arch 47/47, plan+hook ok; slnx build 0 err after /tmp cleanup)",
+      "- d2b88ee docs(sprint): release-engineering re-verified at final tip — build 0 err, arch 47/47, hook ok",
       "- afe6628 docs(sprint): release-engineering report.html — head/commit count synced to final tip (87782c8)",
       "- 87782c8 fix(release-notes): refresh status.json head/commit_count on re-run",
       "- d6a28d4 docs(sprint): release-engineering re-verified at 86443f9 — gates green, self-heal added",
