@@ -621,9 +621,29 @@ internal sealed class CellForgeReplRunner(
                 break;
 
             case InputEventKind.Paste:
-                // Paste payload is verbatim by parser contract — never re-parsed.
-                _ = _composer.Buffer.InsertText(evt.Paste.Text);
+            {
+                // Paste payload is verbatim by parser contract — sanitize it
+                // BEFORE it reaches the composer and, through submit, the agent
+                // (osc-sprint): escape sequences and control bytes stripped, a
+                // sanitized preview lands in the timeline. No new permissions —
+                // after sanitization the paste is trusted input.
+                PasteSanitizeResult sanitized = PasteSanitizer.Sanitize(evt.Paste.Text);
+                if (sanitized.Modified)
+                {
+                    bridge.AppendSystemLine(
+                        $"⎘ paste: снято {sanitized.EscapeSequences} escape-последоват., {sanitized.ControlChars} control-символов");
+                }
+                else if (evt.Paste.Text.Contains('\n'))
+                {
+                    int lines = evt.Paste.Text.Count('\n') + 1;
+                    bridge.AppendSystemLine($"⎘ paste: {lines} строк — вставлено как текст, Enter не исполняется");
+                }
+
+                // The sanitized buffer IS the preview — the composer shows the
+                // cleaned text; submit routes exactly what the user sees.
+                _ = _composer.Buffer.InsertText(sanitized.Text);
                 break;
+            }
 
             case InputEventKind.Resize:
                 // Policy lives in ScreenSession: shrink ⇒ erase-in-display next frame.
