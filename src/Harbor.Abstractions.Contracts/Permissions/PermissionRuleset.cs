@@ -118,6 +118,7 @@ public sealed record PermissionRuleset
         new("ripgrep", "*", PermissionAction.Allow),
         new("notebook", "*", PermissionAction.Allow),
         new("mcp", "*", PermissionAction.Ask),
+        new("lsp", "*", PermissionAction.Allow),
         new("patch", "src/*", PermissionAction.Allow),
         new("patch", "*", PermissionAction.Ask),
         new("task", "*", PermissionAction.Allow)
