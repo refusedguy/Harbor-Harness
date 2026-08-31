@@ -1,14 +1,16 @@
 {
-  "state": "failed",
+  "state": "done",
   "sprint": "ide-integration",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/ide-integration/prompt.md",
-  "head": "f09d6c3db0c1109be680442a66ff2d1beba60c8d",
-  "commits": 0,
+  "head": "b398341",
+  "commits": 51,
   "created_at": "2026-08-28T14:38:08Z",
-  "last_activity": "2026-08-30T10:22:11+0500",
-  "started_at": "2026-08-30T07:12:22+0500",
-  "failures": 2,
-  "base": "269d2ee",
-  "name": "ide-integration"
+  "last_activity": "2026-08-31T08:52:00+05:00",
+  "started_at": "2026-08-31T06:23:51+0500",
+  "failures": 0,
+  "base": "8a79596",
+  "name": "ide-integration",
+  "retries": 0,
+  "finished_at": "2026-08-31T03:53:57Z"
 }
