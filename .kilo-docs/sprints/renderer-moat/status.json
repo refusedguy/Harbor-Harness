@@ -1,23 +1,30 @@
 {
   "name": "renderer-moat",
-  "state": "queued",
-  "head": "",
+  "state": "done",
+  "head": "630d399",
   "base": "59455e6",
-  "commits": 0,
-  "started_at": null,
-  "finished_at": null,
+  "commits": 3,
+  "started_at": "2026-08-31T13:53:04+0500",
+  "finished_at": "2026-08-31T20:05:00+0500",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": null,
   "report": null,
   "failures": 0,
   "retries": 0,
-  "last_activity": "2026-08-30T05:47:09Z",
+  "last_activity": "2026-08-31T20:05:00+0500",
   "progress": {
     "current_task": "",
-    "tasks_done": 0,
-    "tasks_total": 0,
+    "tasks_done": 3,
+    "tasks_total": 3,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-30T06:31:48Z"
+    "last_heartbeat": "2026-08-31T20:05:00+0500"
+  },
+  "summary": {
+    "task_1": "054a425 perf(cellforge): partial-scan diffs via DiffEngine.FrameHint damage contract — hinted diff 0.347 ms vs full 0.649 ms on 120x500 (budget <2 ms), 0 B steady-state allocs",
+    "task_2": "1ce16c7 perf(cellforge): lock-free hot-swap runtime — atomic double-buffer handoff (Interlocked-only swap chain, frame-boundary adoption, pinned-frame palette) — no torn frames, no locks",
+    "task_3": "630d399 perf(cellforge): shader-like post-render effects — composable glow pipeline (diff → transform → SGR encode), approval-gate warn bloom, armed-empty frames byte-identical + allocation-free",
+    "tests": "702 CellForge + 57 PTY golden + 78 CLI E2E + 47 architecture, all green",
+    "perf": "docs/BENCHMARKS.md §Renderer-moat probes (2026-08-31, Release)"
   }
 }
