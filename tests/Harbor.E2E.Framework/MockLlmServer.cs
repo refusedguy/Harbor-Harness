@@ -45,6 +45,13 @@ public sealed class MockLlmServer : IAsyncDisposable
     private readonly object _receivedLock = new();
     private readonly Dictionary<string, CannedResponse> _responses = new(StringComparer.Ordinal);
     private readonly object _responsesLock = new();
+    private readonly HashSet<string> _echoModels = new(StringComparer.Ordinal);
+    private readonly object _echoLock = new();
+    // Inter-chunk delay for streamed text responses. Defaults to the historical
+    // 50 ms provider cadence; load tests dilate it (e.g. 1-2 ms) via
+    // SetChunkDelay so N concurrent streams still interleave on the wire while
+    // wall-clock time stays compressed. Zero disables the delay entirely.
+    private TimeSpan _chunkDelay = TimeSpan.FromMilliseconds(50);
     // Recording: every served completion is appended to this JSONL file so a
     // later run can replay the exact sequence without re-scripting.
     private string? _recordingPath;
@@ -161,6 +168,33 @@ public sealed class MockLlmServer : IAsyncDisposable
         lock (_responsesLock)
         {
             _responses[model] = canned;
+        }
+    }
+
+    /// <summary>
+    ///     Set the inter-chunk delay for streamed text responses (time
+    ///     dilation). The default 50 ms emulates real provider cadence for
+    ///     single-stream E2E tests; load tests compress it to 0-2 ms so many
+    ///     concurrent SSE streams still interleave without wall-clock sleeps
+    ///     in the harness itself.
+    /// </summary>
+    public void SetChunkDelay(TimeSpan delay)
+    {
+        _chunkDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+    }
+
+    /// <summary>
+    ///     Put <paramref name="model" /> into echo mode: every request is
+    ///     answered with <c>echo-&lt;sha256-12-of-last-user-message&gt;</c>.
+    ///     Per-request deterministic output with zero per-request scripting —
+    ///     load tests use it to prove each session received exactly its own
+    ///     completion (cross-session bleed changes the echo).
+    /// </summary>
+    public void SetEchoResponse(string model)
+    {
+        lock (_echoLock)
+        {
+            _echoModels.Add(model);
         }
     }
 
@@ -398,7 +432,20 @@ public sealed class MockLlmServer : IAsyncDisposable
             _received.Add(new ChatCompletionRequest(model ?? "", requestBody));
         }
 
-        CannedResponse canned = ResolveNextResponse(model);
+        // Echo mode bypasses scripted responses entirely: the served text is
+        // derived from the request itself (see SetEchoResponse).
+        bool isEcho = false;
+        if (model is not null)
+        {
+            lock (_echoLock)
+            {
+                isEcho = _echoModels.Contains(model);
+            }
+        }
+
+        CannedResponse canned = isEcho
+            ? new CannedResponse(BuildEchoText(requestBody), false, null, null, false, null)
+            : ResolveNextResponse(model);
 
         if (_recordingPath is not null)
         {
@@ -441,13 +488,59 @@ public sealed class MockLlmServer : IAsyncDisposable
                 string slice = text.Substring(i, len);
                 string chunk = BuildTextDeltaChunk(model ?? "mock", slice);
                 await WriteSseAsync(outStream, chunk, ct).ConfigureAwait(false);
-                await Task.Delay(50, ct).ConfigureAwait(false);
+                if (_chunkDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(_chunkDelay, ct).ConfigureAwait(false);
+                }
             }
             string finishChunk = BuildFinishChunk(model ?? "mock", "stop");
             await WriteSseAsync(outStream, finishChunk, ct).ConfigureAwait(false);
         }
 
         await WriteSseDoneAsync(outStream, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Derive the echo reply for a request body: the LAST message with
+    ///     role "user" is hashed (SHA-256, first 12 hex chars) into
+    ///     <c>echo-&lt;hash&gt;</c>. Falls back to a fixed marker when the
+    ///     body carries no user message (fail loudly in the transcript).
+    /// </summary>
+    private static string BuildEchoText(string requestBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            if (doc.RootElement.TryGetProperty("messages", out var messages) &&
+                messages.ValueKind == JsonValueKind.Array)
+            {
+                string? lastUser = null;
+                foreach (var m in messages.EnumerateArray())
+                {
+                    if (m.TryGetProperty("role", out var role) &&
+                        role.ValueKind == JsonValueKind.String &&
+                        role.GetString() == "user" &&
+                        m.TryGetProperty("content", out var content) &&
+                        content.ValueKind == JsonValueKind.String)
+                    {
+                        lastUser = content.GetString();
+                    }
+                }
+
+                if (lastUser is not null)
+                {
+                    string hash = Convert.ToHexString(
+                        System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(lastUser)));
+                    return "echo-" + hash[..12].ToLowerInvariant();
+                }
+            }
+        }
+        catch
+        {
+            /* malformed body → loud marker below */
+        }
+
+        return "echo-<no-user-message>";
     }
 
     private static async Task WriteSseAsync(Stream s, string jsonPayload, CancellationToken ct)
