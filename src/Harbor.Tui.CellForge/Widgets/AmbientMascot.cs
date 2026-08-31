@@ -95,4 +95,34 @@ public static class AmbientMascot
 
     /// <summary>Display width of the frame (all frames are single-width runes).</summary>
     public static int Width(string frame) => frame.Length;
+
+    // ── Panel-mode rows (mascot-brand T2) ──────────────────────────────────
+    // The panel cat is 3 rows: ears / face / paws. The face row IS the footer
+    // frame — one source of face art — and ear/paw rows are indexed in
+    // lockstep via FrameIndex. Every row is exactly 8 cells wide.
+
+    /// <summary>Row count of the panel-mode mascot.</summary>
+    public const int PanelRows = 3;
+
+    /// <summary>Minimum panel width — the 8-cell art plus one pad column.</summary>
+    public const int PanelMinWidth = 9;
+
+    private static readonly string[] EarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
+    private static readonly string[] EarsFlat = [" \\___/  ", " \\___/  ", " \\___/  ", " \\___/  "];
+    private static readonly string[] PawsLoaf = [" (____) ", " (____) ", " (____) ", " (____) "];
+    private static readonly string[] PawsKnead = [" d  b   ", "  d  b  ", " d  b   ", "  d  b  "];
+    private static readonly string[] PawsReach = [" \\    / ", " (____) ", " \\    / ", " (____) "];
+    private static readonly string[] PawsWag = ["   /|   ", "  \\|    ", "   /|   ", "  \\|    "];
+
+    /// <summary>Ear row for the mood — flat when the cat sulks.</summary>
+    public static string[] PanelEars(MascotMood mood) => mood == MascotMood.Error ? EarsFlat : EarsUp;
+
+    /// <summary>Paw row for the mood — loaf / knead / reach / tail-wag.</summary>
+    public static string[] PanelPaws(MascotMood mood) => mood switch
+    {
+        MascotMood.Working or MascotMood.ToolCall => PawsKnead,
+        MascotMood.Awaiting => PawsReach,
+        MascotMood.Success => PawsWag,
+        _ => PawsLoaf,
+    };
 }

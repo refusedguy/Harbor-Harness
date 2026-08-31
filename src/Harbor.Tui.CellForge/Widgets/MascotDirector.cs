@@ -76,13 +76,16 @@ public sealed class MascotDirector
 
     /// <summary>
     /// Applies the mood-flip crossfade to <paramref name="region" /> — the
-    /// mascot cells ease in from the panel surface over the HDS micro fade.
+    /// mascot cells dip toward the panel surface and ease back over the HDS
+    /// micro fade (<see cref="PanelFx.AccentRamp" />). The detection frame
+    /// itself paints the new mood settled (<c>Progress</c> resolves to 1 for
+    /// <c>nowTick ≤ startTick</c>); blending runs on the frames after it.
     /// Returns false when settled (no blend work this frame).
     /// </summary>
     public bool BlendMoodCrossfade(ScreenBuffer buffer, Rect region, long tick)
     {
         long flip = _moodFlipTick;
-        if (flip == long.MinValue)
+        if (flip == long.MinValue || tick <= flip)
         {
             return false;
         }

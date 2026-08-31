@@ -63,9 +63,17 @@ internal sealed class SplitNode
     public SplitNode? A { get; set; }
     public SplitNode? B { get; set; }
 
+    /// <summary>
+    /// Minimum extent along a split axis. Along the node's own axis children
+    /// stack (sum + gap); along the cross axis they share the extent (max) —
+    /// this is what lets a horizontal mascot split nest inside the vertical
+    /// composer⇄status split without inflating the tree's row minimum.
+    /// </summary>
     public int MinAlong(SplitDir dir) => Leaf is not null
         ? Leaf.MinAlong(dir)
-        : A!.MinAlong(dir) + B!.MinAlong(dir) + GapSize;
+        : dir == Dir
+            ? A!.MinAlong(dir) + B!.MinAlong(dir) + GapSize
+            : Math.Max(A!.MinAlong(dir), B!.MinAlong(dir));
 
     public IEnumerable<Panel> Panels()
     {

@@ -516,6 +516,14 @@ internal sealed class CellForgeReplRunner(
             screenSession.Damage(new Rect(0, screen.Status.Rect.Y, cols, screen.Status.Rect.Height));
         }
 
+        // Panel-mode mascot (mascot-brand T2): 3 animated rows beside the
+        // composer — same rationale as the status row hint.
+        Rect mascotRect = screen.Mascot?.Rect ?? default;
+        if (mascotRect.Height > 0)
+        {
+            screenSession.Damage(mascotRect);
+        }
+
         if (_palette.Visible && screenSession.CurrentRows > 0)
         {
             int w = Math.Clamp(cols - 8, 20, 56);

@@ -111,10 +111,15 @@ public sealed class StatusPanel : Panel
 
     /// <summary>
     /// HARBOR_MASCOT=off disables the ambient cat (accessibility, CI determinism);
-    /// read once, never per-frame.
+    /// resolved once via <see cref="MascotModeEnv" />, never per-frame.
     /// </summary>
-    private static readonly bool MascotEnabled =
-        !string.Equals(Environment.GetEnvironmentVariable("HARBOR_MASCOT"), "off", StringComparison.OrdinalIgnoreCase);
+    private static readonly bool MascotEnabled = MascotModeEnv.Value is not MascotMode.Off;
+
+    /// <summary>
+    /// Footer-cat gate — <see cref="ChatScreen.Build" /> clears it when the
+    /// panel mode owns the cat or the mascot is off entirely.
+    /// </summary>
+    public bool FooterMascotEnabled { get; set; } = true;
 
     private readonly StatusSeg[] _compose = new StatusSeg[12];
     private readonly MascotDirector _director = new();
@@ -176,7 +181,7 @@ public sealed class StatusPanel : Panel
         }
 
         MascotMood mood = _director.Advance(Vm, Tick);
-        string? mascot = MascotEnabled && Rect.Width >= MascotMinWidth
+        string? mascot = MascotEnabled && FooterMascotEnabled && Rect.Width >= MascotMinWidth
             ? AmbientMascot.Frame(Tick, mood)
             : null;
 
@@ -262,19 +267,21 @@ public sealed class SideBarPanel : Panel
 }
 
 /// <summary>Assembled chat screen: timeline above, composer below, status footer.</summary>
-public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, ComposerPanel Composer, StatusPanel Status, SideBarPanel? Sidebar = null)
+public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, ComposerPanel Composer, StatusPanel Status, SideBarPanel? Sidebar = null, MascotPanel? Mascot = null)
 {
     public const string TimelineId = "chat.timeline";
     public const string ComposerId = "chat.composer";
     public const string StatusId = "chat.status";
     public const string SidebarId = SideBarPanel.DefaultId;
+    public const string MascotId = MascotPanel.DefaultId;
 
     public static ChatScreen Build(
         Rendering.ComposerController composer,
         StatusViewModel status,
         float timelineRatio = 0.82f,
         int minComposerRows = 3,
-        bool includeSidebar = true)
+        bool includeSidebar = true,
+        MascotMode? mascotMode = null)
     {
         var tree = new LayoutTree();
         // Pin the auto-show policy (SideBarLayout.AutoShowMinWidth = 120):
@@ -302,6 +309,23 @@ public sealed record ChatScreen(LayoutTree Tree, ChatTimelinePanel Timeline, Com
             tree.Split(TimelineId, SplitDir.Horizontal, 0.74f, sidebar, gap: 1);
         }
 
-        return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar);
+        // Panel-mode mascot (mascot-brand T2): sits beside the composer so it
+        // gets composer-height rows while the status row keeps the full width.
+        // The status row spans both because the horizontal split nests INSIDE
+        // the composer branch, below the composer⇄status vertical split.
+        MascotPanel? mascotPanel = null;
+        MascotMode resolved = mascotMode ?? MascotModeEnv.Value;
+        if (resolved is MascotMode.Panel && MascotModeEnv.Value is not MascotMode.Off)
+        {
+            mascotPanel = new MascotPanel(MascotId, status, priority: 4);
+            statusRow.FooterMascotEnabled = false;
+            tree.Split(ComposerId, SplitDir.Horizontal, 0.88f, mascotPanel, gap: 1);
+        }
+        else if (resolved is MascotMode.Off)
+        {
+            statusRow.FooterMascotEnabled = false;
+        }
+
+        return new ChatScreen(tree, timeline, composerPanel, statusRow, sidebar, mascotPanel);
     }
 }
