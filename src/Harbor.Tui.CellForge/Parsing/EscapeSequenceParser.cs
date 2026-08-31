@@ -927,7 +927,7 @@ public sealed class EscapeSequenceParser
             if (b == (byte)'\\')
             {
                 // ST terminator — an OSC string just completed.
-                EmitOsc11IfPresent("\u001B\\");
+                EmitOscReportIfPresent("\u001B\\");
                 _state = ParserState.Ground;
                 return;
             }
@@ -943,7 +943,7 @@ public sealed class EscapeSequenceParser
 
         if (belTerminates && b == Bel)
         {
-            EmitOsc11IfPresent("\u0007");
+            EmitOscReportIfPresent("\u0007");
             _state = ParserState.Ground;
             return;
         }
@@ -982,22 +982,34 @@ public sealed class EscapeSequenceParser
         }
     }
 
-    /// <summary>Decodes a just-terminated OSC string: only «11;rgb:…» reports
-    /// become capability events; every other OSC string stays discarded.</summary>
-    private void EmitOsc11IfPresent(string terminator)
+    /// <summary>Decodes a just-terminated OSC string: «11;rgb:…» background
+    /// reports and «99;…» kitty notification capability answers become
+    /// capability events; every other OSC string stays discarded.</summary>
+    private void EmitOscReportIfPresent(string terminator)
     {
         int len = _oscLength;
         _oscLength = 0;
-        if (_state != ParserState.OscString || len < 3 || _oscBuffer is null
-            || _oscBuffer[0] != (byte)'1' || _oscBuffer[1] != (byte)'1' || _oscBuffer[2] != (byte)';')
+        if (_state != ParserState.OscString || len < 3 || _oscBuffer is null)
         {
             return;
         }
 
-        string report = Encoding.ASCII.GetString(_oscBuffer, 0, len) + terminator;
-        if (TerminalBackgroundProbe.TryParseOsc11(report, out var background))
+        if (_oscBuffer[0] == (byte)'1' && _oscBuffer[1] == (byte)'1' && _oscBuffer[2] == (byte)';')
         {
-            EnqueueCapability(CapabilityEvent.Osc11Background(background.R, background.G, background.B));
+            string report = Encoding.ASCII.GetString(_oscBuffer, 0, len) + terminator;
+            if (TerminalBackgroundProbe.TryParseOsc11(report, out var background))
+            {
+                EnqueueCapability(CapabilityEvent.Osc11Background(background.R, background.G, background.B));
+            }
+
+            return;
+        }
+
+        if (_oscBuffer[0] == (byte)'9' && _oscBuffer[1] == (byte)'9' && _oscBuffer[2] == (byte)';')
+        {
+            // kitty desktop-notification capability answer (osc-sprint §777):
+            // the query OSC 99;i=harbor:p=? was answered — notifications exist.
+            EnqueueCapability(CapabilityEvent.Osc99Notify());
         }
     }
 

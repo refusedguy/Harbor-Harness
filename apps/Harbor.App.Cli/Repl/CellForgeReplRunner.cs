@@ -113,6 +113,18 @@ internal sealed class CellForgeReplRunner(
     /// → OSC 1337, everything else keeps the text description card.</summary>
     private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
 
+    /// <summary>Desktop-notification transport (osc-sprint §777): Osc99 once
+    /// the startup probe answer arrives; otherwise the 777 family via env
+    /// detection, resolved lazily at first fire. None suppresses entirely.</summary>
+    private DesktopNotifyKind _notify;
+
+    /// <summary>Long-turn notify hand-off: the 30 s timer thread stages the
+    /// sequence, the frame loop writes it — the backend stays single-threaded
+    /// (same discipline as <see cref="_themeReloadLine" />).</summary>
+    private volatile string? _pendingNotifySequence;
+
+    private Timer? _notifyTimer;
+
     /// <summary>True when a custom theme file exists — it owns the palette and
     /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
     private bool _themeFileApplied;
@@ -195,6 +207,12 @@ internal sealed class CellForgeReplRunner(
         // applied later always wins over the auto pick.
         await backend.WriteAsync(Utf8(TerminalBackgroundProbe.Query), ct).ConfigureAwait(false);
 
+        // OSC 99 notification capability probe (osc-sprint §777): terminals
+        // without the protocol ignore the query silently — answers flip the
+        // notify transport to kitty's native family; the urxvt 777 family is
+        // the env-detected fallback at fire time.
+        await backend.WriteAsync(Utf8(TerminalQueries.Osc99NotifyProbe), ct).ConfigureAwait(false);
+
         await PrintWelcomeAsync().ConfigureAwait(false);
         ArmThemeWatcher();
 
@@ -224,6 +242,7 @@ internal sealed class CellForgeReplRunner(
         }
         finally
         {
+            _notifyTimer?.Dispose();
             _themeWatcher?.Dispose();
             try
             {
@@ -303,6 +322,16 @@ internal sealed class CellForgeReplRunner(
                 _themeReloadLine = null;
                 bridge.AppendSystemLine(themeLine);
                 _broadDamageNextFrame = true; // live theme swap re-projects every style
+            }
+
+            // Long-turn notification (osc-sprint §777): staged by the timer
+            // thread, written here where backend ownership lives.
+            if (_pendingNotifySequence is { } notifySeq)
+            {
+                _pendingNotifySequence = null;
+                await backend.WriteAsync(Utf8(notifySeq), ct).ConfigureAwait(false);
+                bridge.AppendSystemLine("⏱ ход идёт дольше 30 с — уведомление отправлено");
+                _broadDamageNextFrame = true;
             }
 
             if (_usageDirty)
@@ -585,6 +614,10 @@ internal sealed class CellForgeReplRunner(
 
             case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc11BackgroundReport:
                 ApplyAutoTheme(evt.Capability);
+                break;
+
+            case InputEventKind.Capability when evt.Capability.Kind == CapabilityEventKind.Osc99NotifyReport:
+                _notify = DesktopNotifyKind.Osc99;
                 break;
 
             case InputEventKind.Paste:
@@ -957,7 +990,43 @@ internal sealed class CellForgeReplRunner(
         _wake.Writer.TryWrite(null);
 
         _promptInFlight = true;
+        ArmLongTurnNotify();
         _ = RunPromptAsync(text, ct);
+    }
+
+    /// <summary>
+    /// Long-turn desktop notification (osc-sprint §777): a run still active
+    /// after 30 s fires one notification through the terminal — kitty OSC 99
+    /// when the probe answered, OSC 777 for the urxvt family, nothing when
+    /// the terminal gave no signal (suppression is the conservative default).
+    /// </summary>
+    private void ArmLongTurnNotify()
+    {
+        _notifyTimer ??= new Timer(OnLongTurnNotifyFire, null, Timeout.Infinite, Timeout.Infinite);
+        _notifyTimer.Change(TimeSpan.FromSeconds(30), Timeout.InfiniteTimeSpan);
+    }
+
+    private void DisarmLongTurnNotify() => _notifyTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+
+    private void OnLongTurnNotifyFire(object? state)
+    {
+        DisarmLongTurnNotify();
+        if (!agent.State.IsRunning)
+        {
+            return; // turn finished inside the window — nothing to notify about
+        }
+
+        var kind = _notify is DesktopNotifyKind.Osc99 ? _notify : NotifyProbe.Detect();
+        _notify = kind;
+        if (kind is DesktopNotifyKind.None)
+        {
+            return;
+        }
+
+        _pendingNotifySequence = kind == DesktopNotifyKind.Osc99
+            ? Osc99Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)")
+            : Osc777Notify.Encode("Harbor", "ход всё ещё выполняется (дольше 30 с)");
+        _wake.Writer.TryWrite(null);
     }
 
     /// <summary>Fire-and-forget WITH full observation: every failure lands in
@@ -988,6 +1057,7 @@ internal sealed class CellForgeReplRunner(
         }
         finally
         {
+            DisarmLongTurnNotify();
             _promptInFlight = false;
             if (!agent.State.IsRunning)
             {

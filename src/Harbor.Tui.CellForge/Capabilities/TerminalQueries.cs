@@ -60,4 +60,11 @@ public static class TerminalQueries
     /// Feed the raw response to Harbor.DesignSystem's
     /// TerminalBackgroundProbe.Detect for theme auto-picking.</summary>
     public const string Osc11BackgroundQuery = "\u001B]11;?\u0007";
+
+    // ── OSC 99 desktop-notification capability probe (kitty) ─────────────
+
+    /// <summary>kitty desktop-notification support query: OSC 99 ; i=harbor :
+    /// p=? BEL (answer: OSC 99 ; i=… : p=&lt;payload types&gt; …). Terminals
+    /// without the protocol ignore the query silently — no timeout harm.</summary>
+    public const string Osc99NotifyProbe = "\u001B]99;i=harbor:p=?\u0007";
 }

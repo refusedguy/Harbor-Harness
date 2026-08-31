@@ -19,6 +19,10 @@ public enum CapabilityEventKind : byte
     /// <summary>OSC 11 background-color answer: <c>OSC 11 ; rgb:RR/GG/BB ST|BEL</c>
     /// — the auto-theme probe response (widgets §3.x).</summary>
     Osc11BackgroundReport = 4,
+
+    /// <summary>kitty desktop-notification capability answer: <c>OSC 99 ; i=… :
+    /// p=&lt;payload types&gt; … ST|BEL</c> — notifications supported (osc-sprint §777).</summary>
+    Osc99NotifyReport = 5,
 }
 
 /// <summary>A capability-probe response intercepted by the parser. Probe
@@ -52,4 +56,6 @@ public readonly struct CapabilityEvent(
     public static CapabilityEvent CursorPosition(int row, int column) => new(CapabilityEventKind.CursorPositionReport, 0, 0, 0, row, column);
     public static CapabilityEvent Osc11Background(int red, int green, int blue) =>
         new(CapabilityEventKind.Osc11BackgroundReport, 0, 0, 0, 0, 0, red, green, blue);
+
+    public static CapabilityEvent Osc99Notify() => new(CapabilityEventKind.Osc99NotifyReport, 0, 0, 0, 0, 0);
 }
