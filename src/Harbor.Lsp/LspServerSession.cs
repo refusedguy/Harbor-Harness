@@ -72,6 +72,7 @@ public sealed class LspServerSession : IAsyncDisposable
             definition.Language, definition.Command, process.Id, workspaceRoot);
 
         var client = new LspClient(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, logger);
+        client.Start();
         var session = new LspServerSession(definition, client, process, logger);
 
         try
