@@ -722,6 +722,17 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
                 // next test's screenshot (e.g. 02-input-typed showed a stale
                 // toast even though that test never opened Settings).
                 vm.Toasts.Clear();
+                // Reset the command palette itself. Opening the palette does
+                // NOT re-run Refilter unless Query actually CHANGES, so a
+                // SelectedIndex left by a previous test (the Enter test sets
+                // an explicit =1) survives into the next test's open
+                // assertion — an ordering-dependent failure that only shows
+                // up under full-suite test scheduling. Setting Query re-filters
+                // to the full command list and re-selects row 0 (dispatcher-
+                // posted); the direct SelectedIndex=0 covers the already-empty
+                // case where OnQueryChanged never fires.
+                vm.CommandPalette.Query = string.Empty;
+                vm.CommandPalette.SelectedIndex = 0;
                 // Clear the chat transcript + reset the UiStore so the next
                 // test starts from a clean status (idle, no agent running).
                 // Without this, a previous test that triggered the agent loop

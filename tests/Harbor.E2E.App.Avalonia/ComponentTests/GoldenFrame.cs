@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
+using Avalonia.Styling;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -74,6 +76,34 @@ internal static class GoldenFrame
     }
 
     /// <summary>
+    ///     Pin the app-level palette + theme variant so the captured frame is
+    ///     independent of which host ran last: other test classes and orphaned
+    ///     dispatcher continuations mutate <c>Application.Current</c> resources
+    ///     between tests (dark↔light flips), which would otherwise change every
+    ///     resolved brush. Mirrors <c>ThemeService.ApplyDark</c>: HDS palette
+    ///     slot replaced with CatppuccinMocha, variant forced to Dark.
+    ///
+    ///     MUST run on the UI thread in the SAME synchronous delegate as
+    ///     control construction and capture — the dispatcher cannot pump
+    ///     mid-delegate, so nothing can interleave between pin and pixels.
+    /// </summary>
+    public static void PinDarkTheme()
+    {
+        var app = global::Avalonia.Application.Current
+            ?? throw new InvalidOperationException("Application.Current not initialized.");
+        var merged = app.Resources.MergedDictionaries;
+        if (merged.Count > 1)
+        {
+            merged[1] = new ResourceInclude(new Uri("avares://Harbor.App.Avalonia/", UriKind.Absolute))
+            {
+                Source = new Uri("avares://Harbor.App.Avalonia/Themes/Hds/CatppuccinMocha.axaml", UriKind.Absolute),
+            };
+        }
+
+        app.RequestedThemeVariant = global::Avalonia.Styling.ThemeVariant.Dark;
+    }
+
+    /// <summary>
     ///     Build a fixed-size window hosting <paramref name="content" /> on the
     ///     app background — the deterministic canvas for component goldens.
     /// </summary>
@@ -85,10 +115,9 @@ internal static class GoldenFrame
             Height = height,
             CanResize = false,
             ShowInTaskbar = false,
-            SystemDecorations = Avalonia.Controls.SystemDecorations.None,
-            Background = Avalonia.Application.Current?.TryFindResource("BgAppBrush", out var brush) == true && brush is IBrush b
+            Background = global::Avalonia.Application.Current?.TryFindResource("BgAppBrush", out var brush) == true && brush is IBrush b
                 ? b
-                : Brushes.Black,
+                : global::Avalonia.Media.Brushes.Black,
             Content = content,
         };
         return window;
