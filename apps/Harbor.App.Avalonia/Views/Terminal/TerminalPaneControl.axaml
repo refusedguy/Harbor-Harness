@@ -37,7 +37,7 @@
       <Border Grid.Row="2" Background="#181825" Padding="6,4">
         <TextBox Name="InputBox"
                  Text="{Binding InputText}"
-                 Watermark="type a command…"
+                 PlaceholderText="type a command…"
                  FontFamily="Consolas, Menlo, DejaVu Sans Mono, monospace"
                  FontSize="12.5"
                  Background="Transparent"
