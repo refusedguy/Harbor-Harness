@@ -52,22 +52,24 @@ public class RegistrationCompositionTests
             .Select(t => t.Name.Value)
             .ToArray();
 
-    // ── Full14 preset (CLI default) ──────────────────────────────────────
+    // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersAll14Tools()
+    public async Task AddHarbor_Full14_RegistersAll15Tools()
     {
         using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
-        await Assert.That(names.Count).IsEqualTo(14);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree" })
+        // 14 classic tools + lsp (registered for both presets since the LSP
+        // integration landed — 2ddd6ee).
+        await Assert.That(names.Count).IsEqualTo(15);
+        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp" })
         {
             await Assert.That(names).Contains(full);
         }
     }
 
-    // ── Standard10 preset (desktop subset) ───────────────────────────────
+    // ── Standard preset (desktop subset) ─────────────────────────────────
 
     [Test]
     public async Task AddHarbor_Standard10_RegistersDesktopSubset_WithoutFullOnlyTools()
@@ -81,8 +83,9 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        await Assert.That(names.Count).IsEqualTo(10);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree" })
+        // 10 classic tools + lsp.
+        await Assert.That(names.Count).IsEqualTo(11);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp" })
         {
             await Assert.That(names).Contains(safe);
         }
@@ -138,7 +141,7 @@ public class RegistrationCompositionTests
 
         // The published snapshot already includes everything registered during
         // composition → Freeze ran after registration and before publication.
-        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(14);
+        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(15);
     }
 
     // ── Storage presets ──────────────────────────────────────────────────

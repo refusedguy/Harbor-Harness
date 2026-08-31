@@ -110,7 +110,7 @@ internal static class ToolsCatalog
         }
 
         registry.Freeze();
-        ctx.Logger.LogInformation("Registered {Count} tools", full ? 14 : 10);
+        ctx.Logger.LogInformation("Registered {Count} tools", registry.GetAllTools().Count);
         return registry;
     }
 }
