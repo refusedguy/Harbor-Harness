@@ -98,6 +98,7 @@
         <Project Path="tests/Harbor.Hosting.Tests/Harbor.Hosting.Tests.csproj"/>
         <Project Path="tests/Harbor.Transport.Remote.Tests/Harbor.Transport.Remote.Tests.csproj"/>
         <Project Path="tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj"/>
+        <Project Path="tests/Harbor.Lsp.Tests/Harbor.Lsp.Tests.csproj"/>
         <!-- Ipc.Tests re-included (sprint 5 A1): classes are [NotInParallel];
              the timing-flaky named-pipe event-stream class self-skips unless
              HARBOR_IPC_EVENTSTREAM=1 (same pattern as HARBOR_IPC_FUZZ). -->
