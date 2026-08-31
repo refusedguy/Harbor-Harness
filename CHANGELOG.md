@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint demo-gif — 31.08.2026
+
+
+**Commits since previous sprint tag** (3):
+- 3445993 merge: demo-gif into dev (assets + status)
+- 37e130e chore: demo-gif done — assets + CHANGELOG + report
+- b72bc52 chore: sync demo-gif progress — assets + status
+
 ### Sprint mascot-brand — 31.08.2026
 
 
