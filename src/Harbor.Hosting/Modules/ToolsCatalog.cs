@@ -73,7 +73,8 @@ internal static class ToolsCatalog
 
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
-        Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner)
+        Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
+        Harbor.Abstractions.Lsp.ILspService? lspService = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -99,6 +100,10 @@ internal static class ToolsCatalog
             tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));
         }
         tb.AddTool(lf => new TreeTool(lf.CreateLogger<TreeTool>()));
+        if (lspService is not null)
+        {
+            tb.AddTool(new LspTool(lspService, ctx.LoggerFactory.CreateLogger<LspTool>()));
+        }
         if (full)
         {
             tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));
