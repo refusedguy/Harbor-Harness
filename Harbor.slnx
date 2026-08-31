@@ -57,6 +57,7 @@
     <Folder Name="/src/Tools/">
         <Project Path="src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
         <Project Path="src/Harbor.Lsp/Harbor.Lsp.csproj"/>
+        <Project Path="src/Harbor.Terminal.Pty/Harbor.Terminal.Pty.csproj"/>
     </Folder>
 
     <Folder Name="/src/Plugins/">
