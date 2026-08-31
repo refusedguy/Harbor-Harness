@@ -1,0 +1,36 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="520"
+        x:Class="Harbor.App.Avalonia.Views.Terminal.FloatingTerminalPaneWindow"
+        x:DataType="vm:FloatingTerminalViewModel"
+        xmlns:vm="using:Harbor.App.Avalonia.ViewModels.Terminal"
+        Title="Harbor — Terminal"
+        Width="900" Height="520"
+        MinWidth="480" MinHeight="320"
+        Background="#11111B"
+        ShowInTaskbar="False">
+  <Grid RowDefinitions="Auto,*" Margin="6">
+    <!-- Toolbar: split / stack / new pane / close last -->
+    <Border Grid.Row="0" Background="#181825" CornerRadius="6" Padding="6,4" Margin="0,0,0,4">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Command="{Binding SingleCommand}" Content="Single" Padding="8,2"/>
+        <Button Command="{Binding SplitHorizontalCommand}" Content="Split ⬌" Padding="8,2"/>
+        <Button Command="{Binding SplitVerticalCommand}" Content="Stack ⬍" Padding="8,2"/>
+        <Button Command="{Binding OpenPaneCommand}" Content="+ Pane" Padding="8,2"/>
+        <Button Command="{Binding CloseLastPaneCommand}" Content="Close pane" Padding="8,2"/>
+        <TextBlock Text="panes: " Foreground="#6C7086" VerticalAlignment="Center" Margin="8,0,0,0"/>
+        <TextBlock Text="{Binding Panes.Count}" Foreground="#9399B2" VerticalAlignment="Center"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Pane surface: children are arranged by code-behind (OnLayoutChanged). -->
+    <Grid RowDefinitions="Auto,*" Grid.Row="1">
+      <Grid Name="PaneGrid" Grid.Row="1"/>
+      <TextBlock Name="EmptyState" Text="No terminal panes — press + Pane"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Foreground="#6C7086" IsVisible="False"/>
+    </Grid>
+  </Grid>
+</Window>

@@ -241,7 +241,11 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
             string method = methodEl.GetString()!;
             JsonElement? parameters = root.TryGetProperty("params", out JsonElement p) ? p : null;
 
-            Dispatch(method, parameters, id, serverCt);
+            // Dispatch is fire-and-forget: the JsonDocument is disposed when this
+            // method returns, so the dispatched work must own its data. Clone both
+            // the id and the params — a JsonElement view into a disposed document
+            // throws ObjectDisposedException on first access (GetRawText/Deserialize).
+            Dispatch(method, parameters?.Clone(), id.Clone(), serverCt);
         }
     }
 
@@ -252,39 +256,69 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
 
         var task = Task.Run(async () =>
         {
-            using (requestCts)
+            try
             {
-                try
+                Task<JsonElement?> handlerTask = _handler(method, parameters, requestCts.Token);
+
+                // Race the handler against the per-request budget — a handler
+                // that ignores its token (e.g. blocked on the host) still gets
+                // its timeout response instead of leaving the editor hanging.
+                Task completed = await Task.WhenAny(
+                    handlerTask,
+                    Task.Delay(_options.RequestTimeout, CancellationToken.None)).ConfigureAwait(false);
+                if (completed != handlerTask)
                 {
-                    JsonElement? result = await _handler(method, parameters, requestCts.Token)
+                    // The abandoned handler keeps running under requestCts; observe
+                    // it so a late fault is logged, not lost (§FP-003). Its CTS is
+                    // intentionally not disposed on this path — the handler's token
+                    // must stay cancelable; the CancelAfter timer already fired.
+                    _ = ObserveAbandonedAsync(handlerTask);
+                    await WriteErrorAsync(
+                        id, -32002, $"Request '{method}' timed out after {_options.RequestTimeout.TotalSeconds:F0}s.")
                         .ConfigureAwait(false);
-                    await WriteResultAsync(id, result, requestCts.Token).ConfigureAwait(false);
+                    return;
                 }
-                catch (OperationCanceledException) when (requestCts.IsCancellationRequested && !_cts.IsCancellationRequested)
-                {
-                    await WriteErrorAsync(id, -32002, $"Request '{method}' timed out after {_options.RequestTimeout.TotalSeconds:F0}s.")
-                        .ConfigureAwait(false);
-                }
-                catch (IdeRpcException ex)
-                {
-                    await WriteErrorAsync(id, ex.Code, ex.Message).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // Server shutdown — the editor will see the closed stdio.
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "IDE bridge handler '{Method}' failed", method);
-                    await WriteErrorAsync(id, IdeRpcException.HandlerError, ex.Message).ConfigureAwait(false);
-                }
+
+                JsonElement? result = await handlerTask.ConfigureAwait(false);
+                await WriteResultAsync(id, result, requestCts.Token).ConfigureAwait(false);
             }
+            catch (IdeRpcException ex)
+            {
+                await WriteErrorAsync(id, ex.Code, ex.Message).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Server shutdown — the editor will see the closed stdio.
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "IDE bridge handler '{Method}' failed", method);
+                await WriteErrorAsync(id, IdeRpcException.HandlerError, ex.Message).ConfigureAwait(false);
+            }
+
+            requestCts.Dispose();
         });
 
         lock (_inFlightLock)
         {
             _inFlight.RemoveAll(static t => t.IsCompleted);
             _inFlight.Add(task);
+        }
+    }
+
+    private async Task ObserveAbandonedAsync(Task<JsonElement?> handler)
+    {
+        try
+        {
+            await handler.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected once the server shuts down.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "IDE bridge abandoned handler faulted after its response was already sent");
         }
     }
 
@@ -297,7 +331,8 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var json = new Utf8JsonWriter(buffer))
         {
-            WriteEnvelopeStart(json, id, "result");
+            WriteEnvelopePrefix(json, id);
+            json.WritePropertyName("result");
             if (result is { ValueKind: not JsonValueKind.Undefined } r)
             {
                 json.WriteRawValue(r.GetRawText(), skipInputValidation: false);
@@ -319,7 +354,9 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         var buffer = new ArrayBufferWriter<byte>(256);
         using (var json = new Utf8JsonWriter(buffer))
         {
-            WriteEnvelopeStart(json, id, "error");
+            WriteEnvelopePrefix(json, id);
+            // WriteStartObject(name) emits the property name AND the object start —
+            // a preceding WritePropertyName("error") would be a protocol error.
             json.WriteStartObject("error");
             json.WriteNumber("code", code);
             json.WriteString("message", message);
@@ -330,7 +367,13 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         await WriteLineAsync(buffer, CancellationToken.None).ConfigureAwait(false);
     }
 
-    private static void WriteEnvelopeStart(Utf8JsonWriter json, JsonElement id, string memberName)
+    /// <summary>
+    ///     Writes <c>{"jsonrpc":"2.0","id":…}</c> — the envelope prefix. The
+    ///     caller writes its own member (<c>result</c> / <c>error</c>) next;
+    ///     do not pass a member name here — it must be written together with
+    ///     its value (<c>WriteStartObject(name)</c>, <c>WritePropertyName</c>…).
+    /// </summary>
+    private static void WriteEnvelopePrefix(Utf8JsonWriter json, JsonElement id)
     {
         json.WriteStartObject();
         json.WriteString("jsonrpc", "2.0");
@@ -344,7 +387,6 @@ public sealed class IdeJsonRpcServer : IAsyncDisposable
         {
             json.WriteRawValue(id.GetRawText(), skipInputValidation: false);
         }
-        json.WritePropertyName(memberName);
     }
 
     private async Task WriteLineAsync(ArrayBufferWriter<byte> buffer, CancellationToken ct)

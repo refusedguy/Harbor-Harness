@@ -74,6 +74,7 @@
 
     <!-- Tools (Mcp lives inside Harbor.Tools.Builtin: namespace Harbor.Tools.Mcp) -->
     <ProjectReference Include="..\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\Harbor.Lsp\Harbor.Lsp.csproj"/>
 
     <!-- IPC -->
     <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>

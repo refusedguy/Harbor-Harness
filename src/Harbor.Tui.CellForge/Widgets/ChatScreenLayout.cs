@@ -50,6 +50,12 @@ public sealed class ComposerPanel : Panel
             caretCol = 0;
         }
 
+        // Erase the previous frame's composer content first: the back buffer
+        // persists across frames and SetText("") is a no-op, so any shrink
+        // (Ctrl+C clear, Ctrl+U/K kill, backspace, shorter history recall)
+        // would otherwise leave ghost characters on the emulated grid.
+        buffer.Fill(Rect, Cell.Blank);
+
         for (int row = 0; row < Rect.Height; row++)
         {
             var text = row < logical.Length ? logical[row] : string.Empty;

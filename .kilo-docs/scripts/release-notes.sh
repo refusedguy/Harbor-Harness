@@ -59,7 +59,10 @@ else
   if [[ -n "$BASE_AT" ]]; then
     RANGE="${BASE_AT}..HEAD"
   else
-    RANGE="$(git rev-list --max-parents=0 HEAD | head -1)..HEAD"
+    # --max-count=1 BEFORE the range: truncating in git avoids a
+    # `| head -1` early-close SIGPIPE (rc 141) that would kill the
+    # script under `set -euo pipefail` once the range is long.
+    RANGE="$(git rev-list --max-count=1 --max-parents=0 HEAD)..HEAD"
   fi
 fi
 COMMIT_COUNT="$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)"
@@ -68,7 +71,10 @@ COMMIT_COUNT="$(git rev-list --count "$RANGE" 2>/dev/null || echo 0)"
 #    (.head / .commits are refreshed too: re-verification commits after the
 #    dispatch-completed write_status would otherwise leave a stale tip SHA)
 TMP_JSON="$(mktemp)"
-COMMITS_JSON="$(git log --format='- %h %s' "$RANGE" 2>/dev/null | head -40 \
+# --max-count=40 instead of `| head -40`: an early-closing reader turns
+# git's next flush into EPIPE/SIGPIPE (rc 141) — under `set -euo pipefail`
+# that aborts the script mid-run whenever the commit range exceeds 40.
+COMMITS_JSON="$(git log --max-count=40 --format='- %h %s' "$RANGE" 2>/dev/null \
   | jq -Rsc 'split("\n") | map(select(length > 0))')"
 HEAD_SHA="$(git rev-parse --short HEAD 2>/dev/null || echo "")"
 jq --arg title "$TITLE" \
@@ -99,7 +105,7 @@ if [[ -f "$CHANGELOG_FILE" ]] && ! grep -q "^### Sprint $SLUG — " "$CHANGELOG_
     awk '/^## Tasks/{f=1;next} /^## /{f=0} f' "$PROMPT_FILE" \
       | sed -nE 's/^[[:space:]]*[0-9]+\.[[:space:]]+\*\*([^*]+)\*\*.*/- \1/p'
     printf '\n**Commits since previous sprint tag** (%s):\n' "$COMMIT_COUNT"
-    git log --format='- %h %s' "$RANGE" 2>/dev/null | head -40
+    git log --max-count=40 --format='- %h %s' "$RANGE" 2>/dev/null
     printf '\n'
   } > "$BLOCK_FILE"
   awk -v bf="$BLOCK_FILE" '

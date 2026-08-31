@@ -59,7 +59,7 @@
 <h1>Sprint: Release Engineering — <span class="ok">DONE</span></h1>
 <div class="sub">Модель: openrouter/z-ai/glm-5.3-flash · Очередь: .kilo-docs/sprint-chain.md ·
 Создан: 28.08.2026 14:38 UTC · Завершён: 30.08.2026 02:10 UTC · Длительность (wall): ~35.5 ч ·
-Коммитов: 7 · Ветка: dev · Тег: <code>sprint/release-engineering</code></div>
+Коммитов: 42 (head <code>0945955</code>) · Ветка: sprint/ide-integration (stacked; mainline — после merge-approval) · Тег: <code>sprint/release-engineering</code></div>
 
 <h2>1. Deliverables</h2>
 
@@ -159,6 +159,67 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 <tr><td><span class="accent">Усиление:</span> self-heal stale <code>state=running</code></td><td class="ok"><code>86443f9</code> — running_stale(): heartbeat &lt; 15 мин → SKIP (нет double-dispatch), иначе requeue как failed (retries+1). Конкурентные диспетчи (3 шт. одновременно) не мешают друг другу</td></tr>
 </table>
 </div>
+<h3>Ре-верификация 30.08 10:12–10:20 (re-dispatch #2, модель glm-5.3-flash)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0, полный план очереди: 3 skip(done) + live-dispatch guard + stale-requeue notes + 4 next-sprint планируются</td></tr>
+<tr><td>Fail-safe аудит sprint-chain.sh (grep)</td><td class="ok">rm -rf / reset --hard / git clean / force-push — только в комментарии-правиле, 0 в коде</td></tr>
+<tr><td>Негатив: сломанный arch-тест + Release build</td><td class="ok">error MSB3073 из HarborArchitectureGate (Directory.Build.props:226) → build падает (зонд откачен)</td></tr>
+<tr><td>Негатив: сломанный arch-тест в staged diff + hook</td><td class="ok">BLOCKED, exit 1: «architecture tests regressed» (47 green + probe, тест-стадия 1.6 c)</td></tr>
+<tr><td><code>git harbor-check</code> — fast path (docs-only)</td><td class="ok">0.13 c (мемо-кэш зелёного результата работает)</td></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 57 c · <code>[arch-gate]</code> выполнен в составе build (harbor-arch-gate.log)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.8 c</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> → harbor-check.sh --all; пре-коммит флоу docs-коммитов = instant pass</td></tr>
+</table>
+Вывод: zero code delta с build-verified tip <code>753d184</code>; все 4 gate'а (RS0030, MSB3073, pre-commit, release-notes) воспроизводимы re-dispatch'ом.
+</div>
+<h3>Ре-верификация 30.08 10:40–10:55 (re-dispatch #4, модель glm-5.3-flash, head <code>4593b36</code>)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>bash -n</code> всех 7 скриптов .kilo-docs/scripts/</td><td class="ok">7/7 синтаксис OK</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0 за 1 c: 5 skip(done) + 2 skip(live dispatch: testing-strategy, renderer-moat) + план 5 next (ide-integration requeue, osc-expansion, mascot-brand, demo-gif, ci-cd-maturity)</td></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 41.7 c · arch-gate 47/47 in-build (harbor-arch-gate.log, 2.5 c)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.6 c</td></tr>
+<tr><td>Pre-commit hook на реальном docs-коммите (<code>4593b36</code>, heartbeat-метаданные)</td><td class="ok">instant pass 0.5 c («no build files in change»)</td></tr>
+<tr><td><span class="accent">Негатив:</span> сломанный arch-тест в staged diff + commit</td><td class="ok">hook пересобрал arch-проект, прогнал 48 тестов (47 green + 1 probe-fail) → <code>BLOCKED: architecture tests regressed (docs/ARCHITECTURE_LAYERS.md §2)</code>, commit отвергнут, зонд откачен</td></tr>
+<tr><td>Fail-safe аудит sprint-chain.sh (grep)</td><td class="ok">rm -rf / reset --hard / git clean / force-push — 0 в коде, только правило-комментарий (строка 13)</td></tr>
+<tr><td><code>release-notes.sh release-engineering</code> (идемпотентность)</td><td class="ok">head→4593b36, 41 коммит, CHANGELOG без дублей, тег <code>sprint/release-engineering</code> на месте</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> активны</td></tr>
+</table>
+Вывод: gate-инфраструктура не менялась с <code>87782c8</code>; все 4 acceptance-критерия воспроизводятся на актуальном tip; конкурентные диспетчи (renderer-moat, testing-strategy, osc-expansion) работают параллельно без взаимных помех (flock + live-dispatch guard + tolerated status.json dirt).
+</div>
+</div>
+
+<h3>Ре-верификация 30.08 10:22–10:36 (re-dispatch #3 + #4, модель glm-5.3-flash, tip <code>beb75e0</code>)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 44 c · in-build arch-gate 47/47 (harbor-arch-gate.log, 5.1 c)</td></tr>
+<tr><td><code>dotnet test tests/Harbor.Architecture.Tests -c Release --no-build</code></td><td class="ok">47/47 за 1.8 c</td></tr>
+<tr><td><code>git harbor-check</code> — fast path (docs-only)</td><td class="ok">0.04 c, instant pass</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0: 3 next-sprint план + skip(done×5) + live-dispatch guard (testing-strategy, renderer-moat running)</td></tr>
+<tr><td><span class="accent">Негатив (live):</span> сломанный arch-файл staged + <code>git commit</code></td><td class="ok">BLOCKED: «arch tests project does not build», HEAD unchanged (<code>beb75e0</code>), зонд откачен</td></tr>
+<tr><td>Wiring hook'а</td><td class="ok">core.hooksPath=<code>.githooks</code>, alias <code>harbor-check</code> → <code>--all</code> — активны на tip</td></tr>
+</table>
+Вывод: gate-инфраструктура не менялась с <code>87782c8</code>; все 4 acceptance-критерия воспроизведены на актуальном tip (beb75e0).
+</div>
+
+<h3>Ре-верификация 30.08 10:54–11:10 (re-dispatch #5, модель glm-5.3-flash, tip <code>0945955</code>)</h3>
+<div class="card">
+<table>
+<tr><th>Проверка</th><th>Результат</th></tr>
+<tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td class="ok">exit 0 · ошибок 0 · 46.5 c · in-build arch-gate log свежий (obj/Release/net10.0/harbor-arch-gate.log)</td></tr>
+<tr><td>standalone arch (MTP host, <code>dotnet exec</code>)</td><td class="ok">47/47 за 1.3 c, сбой 0</td></tr>
+<tr><td><code>git harbor-check</code> — fast path (docs-only)</td><td class="ok">0.4 c, instant pass</td></tr>
+<tr><td><span class="accent">Негатив (live):</span> сломанный arch-файл staged + <code>git commit</code></td><td class="ok">BLOCKED: «arch tests project does not build», HEAD unchanged, зонд откачен</td></tr>
+<tr><td><code>DRY_RUN=1 sprint-chain.sh</code> (без аргументов)</td><td class="ok">rc=0: 4 next-sprint план + skip(done×5) + live-dispatch guard (testing-strategy, osc-expansion running)</td></tr>
+<tr><td><code>bash -n</code> 4 скриптов</td><td class="ok">sprint-chain.sh, harbor-check.sh, release-notes.sh, setup-git-hooks.sh — syntax OK</td></tr>
+<tr><td><code>release-notes.sh</code> идемпотентность ×3</td><td class="ok">rc=0 ×3, head→0945955, 42 коммита, CHANGELOG без дублей (1 entry), тег на месте</td></tr>
+</table>
+<div class="finding"><b>Исправлено в этом раунде (код):</b> <code>release-notes.sh</code> падал при ре-ране с rc 141 (SIGPIPE): <code>git log &lt;range&gt; | head -40</code> под <code>set -euo pipefail</code> — head закрывает пайп после 40 строки, git получает EPIPE на следующей записи, как только диапазон превышает 40 коммитов (сейчас 42). Фикс: усечение на источнике (<code>--max-count=40</code>, <code>--max-count=1 --max-parents=0</code>) вместо раннего закрытия читателя — 3 место (строки 62, 71, 102). Проявление было скрытым: WARN-ветка глотала rc, head/commits в status.json оставались stale.</div>
+Вывод: gate-инфраструктура не менялась с <code>87782c8</code>; все 4 acceptance-критерия воспроизведены на tip 0945955; конкурентный диспетч testing-strategy (kilo pid жив, heartbeat 5 c) не помешал верификации — его heartbeat-status.json не тронуты (вне scope спринта).
 </div>
 
 <h2>4. Инциденты окружения (не код)</h2>
@@ -169,13 +230,21 @@ Acceptance: <span class="ok">PASS</span> — для этого спринта: s
 <code>MSB4166</code> (краш child-нод) и <code>SIGBUS/exit 135</code>. Лечение: shutdown
 build-серверов + очистка артефактов + <code>-m:1</code>. К продуктовым gate'ам отношения не имеет;
 в CI с нормальной памятью <code>dotnet build -c Release</code> работает штатно.</div>
+<div class="finding">30.08 ~10:55 (re-dispatch #5): tmpfs /tmp снова 100% — те же <code>.*-00000000.so</code>
+артефакты, 192 файла / 2.24 ГБ. Проявление другое: <code>jq</code> не мог писать temp в /tmp →
+merge status.json молча уходил в WARN-ветку release-notes.sh («could not update», stderr подавлен).
+Лечение: точечная очистка по паттерну (<code>find /tmp -maxdepth 1 -name '.*-00000000.so' -delete</code>,
+192 файла, не рекурсивно) → 42% занято. Урок: SIGPIPE-фикс выше + disk-full дали один симптом
+(stale head/commits), но две разные причины — обе закрыты.</div>
 </div>
 
 <h2>5. Статус</h2>
 <div class="card">
 <div class="title">status.json (сводка)</div>
 <ul>
-<li><span class="ok">state: done</span> · head <code>75a2868</code> (final re-verification 30.08 04:36 UTC) · 27 коммит · база <code>5320515</code> (21 код + 4 backfill + 2 meta; кодовый tip <code>753d184</code>)</li>
+<li><span class="ok">state: done</span> · head <code>9c87314</code> (re-verification #7, 30.08 11:32 +05) · 48 коммитов · база <code>5320515</code></li>
+<li>Re-verification #7 (dispatch, 30.08 11:28–11:32 +05, gate infra unchanged since 87782c8): dotnet build Harbor.slnx -c Release — 0 ошибок (44.5s); standalone arch 47/47 (1.9s); DRY_RUN=1 sprint-chain.sh (пустой аргумент) rc=0 (4 done skip, 2 live-dispatch skip, 4 planned); pre-commit hook на 2 реальных heartbeat-коммитах — instant docs fast-pass; worktree clean; negative probes (MSB3073 arch build-fail, RS0030 banned-API build-fail, hook BLOCKED) verified в #2–#6, файлы гейтов в этом прогоне не менялись</li>
+<li>Re-verification #6 (dispatch, 30.08 11:12–11:22 +05): dotnet build Harbor.slnx -c Release — 0 ошибок (93s), in-build arch-gate 47/47 (harbor-arch-gate.log); standalone arch 47/47 (1.8s); DRY_RUN=1 sprint-chain.sh rc=0 (5 done skip, 2 live-dispatch skip, 4 planned); negative probe: сломанный arch-тест staged → 48 тестов (1 fail) → commit BLOCKED «architecture tests regressed», HEAD неизменен; banned-API probe: Thread.Sleep в src/Harbor.Logging → error RS0030 → сборка падает (в tests/ — задокументированное центральное исключение NoWarn RS0030 в Directory.Build.props); release-notes re-run rc=0, head/commits 69a593b/45, CHANGELOG без дублей (1 запись), тег на месте; git harbor-check fast path 0.04s; скрипты bash -n 4/4 OK</li>
 <li>tests: arch 47 passed / 0 failed (standalone, at 75a2868); checks: dispatch_ok, head_advanced, worktree_clean, RS0030-gate, MSB3073-gate, pre-commit-gate — все verified</li>
 <li>Release-notes покрытие: 5/5 done-спринтов имеют title + tasks + results (commit range) + секцию в CHANGELOG.md + аннотированный тег <code>sprint/*</code> — legacy-спринты (renderer-unification 77c, multi-agent 64c, performance 20c, security 54c) дозаполнены 30.08</li>
 <li>DRY_RUN план (sprint-chain.sh без аргументов): rc=0, очередь парсится целиком, done-спринты SKIP, pending-спринты планируются на <code>sprint/&lt;name&gt;</code></li>

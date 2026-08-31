@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+             x:Class="Harbor.App.Avalonia.Views.Terminal.TerminalPaneControl"
+             x:DataType="vm:TerminalPaneViewModel"
+             xmlns:vm="using:Harbor.App.Avalonia.ViewModels.Terminal">
+  <Border CornerRadius="6" BorderBrush="#45475A" BorderThickness="1" Background="#1E1E2E" ClipToBounds="True">
+    <Grid RowDefinitions="Auto,*,Auto">
+      <!-- Header: shell + working directory -->
+      <Border Grid.Row="0" Background="#313244" Padding="8,4">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="▲ " Foreground="#A6E3A1" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <TextBlock Text="·" Foreground="#6C7086" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding WorkingDirectory}" Foreground="#9399B2" VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="(exited)" Foreground="#F38BA8" VerticalAlignment="Center" IsVisible="{Binding IsClosed}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- Output history (read-only, monospace) -->
+      <TextBox Grid.Row="1" Name="OutputBox"
+               Text="{Binding OutputText}"
+               IsReadOnly="True"
+               FontFamily="Consolas, Menlo, DejaVu Sans Mono, monospace"
+               FontSize="12.5"
+               Background="Transparent"
+               BorderThickness="0"
+               TextWrapping="NoWrap"
+               AcceptsReturn="True"
+               Padding="6,4"
+               CaretBrush="Transparent"/>
+
+      <!-- Input line -->
+      <Border Grid.Row="2" Background="#181825" Padding="6,4">
+        <TextBox Name="InputBox"
+                 Text="{Binding InputText}"
+                 PlaceholderText="type a command…"
+                 FontFamily="Consolas, Menlo, DejaVu Sans Mono, monospace"
+                 FontSize="12.5"
+                 Background="Transparent"
+                 BorderThickness="0,1,0,0"
+                 BorderBrush="#45475A"
+                 Foreground="#CDD6F4"
+                 KeyDown="OnInputKeyDown"/>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

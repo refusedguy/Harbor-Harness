@@ -1,0 +1,14 @@
+{
+  "name": "@harbor/ide-client",
+  "version": "0.1.0",
+  "description": "Attach to a running Harbor harness from any editor — NDJSON JSON-RPC over the `harbor ide` stdio bridge. Zero dependencies.",
+  "type": "module",
+  "main": "harbor-ide.mjs",
+  "bin": {
+    "harbor-ide": "harbor-ide.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
