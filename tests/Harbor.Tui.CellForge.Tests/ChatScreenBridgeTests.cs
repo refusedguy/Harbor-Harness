@@ -374,6 +374,45 @@ public class ChatScreenBridgeTests
         await Assert.That(bridge.TryRouteApprovalKey(KeyEvent.Char(new Rune('y')))).IsFalse();
     }
 
+    [Test]
+    public async Task ImageAttachment_QueuesInlinePayload_AlongsideTextCard()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        await bus.PublishAsync(new ToolExecutionEndEvent(
+            "tc1",
+            new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("shots/ok.png", "image/png", [1, 2, 3, 4])]),
+            IsError: false));
+
+        var tl = panel.Timeline;
+        await Assert.That(tl.BlockAt(tl.Count - 1).Kind).IsEqualTo("image");
+
+        await Assert.That(bridge.TryTakePendingImage(out var image)).IsTrue();
+        await Assert.That(image.Path).IsEqualTo("shots/ok.png");
+        await Assert.That(image.MimeType).IsEqualTo("image/png");
+        await Assert.That(image.Data.Length).IsEqualTo(4);
+        await Assert.That(bridge.TryTakePendingImage(out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task NonImageAttachment_NoInlinePayloadQueued()
+    {
+        var bus = new FakeEventBus();
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
+
+        await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        await bus.PublishAsync(new ToolExecutionEndEvent(
+            "tc1",
+            new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("report.pdf", "application/pdf", [1, 2, 3])]),
+            IsError: false));
+
+        await Assert.That(bridge.TryTakePendingImage(out _)).IsFalse();
+    }
+
     private static int VisibleChars(ChatTimelinePanel panel)
     {
         int total = 0;

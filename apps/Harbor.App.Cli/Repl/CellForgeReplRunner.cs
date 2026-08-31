@@ -9,6 +9,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
+using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Tui.CellForge.Rendering;
@@ -106,6 +107,11 @@ internal sealed class CellForgeReplRunner(
     /// writes the line, the frame loop drains and appends it — the bridge is
     /// touched from the frame thread only.</summary>
     private volatile string? _themeReloadLine;
+
+    /// <summary>Inline-image protocol for this session (osc-sprint §1337):
+    /// detected once at startup — kitty → APC, iTerm2/WezTerm/Konsole/mintty
+    /// → OSC 1337, everything else keeps the text description card.</summary>
+    private readonly InlineImageKind _inlineImage = InlineImageProbe.Detect();
 
     /// <summary>True when a custom theme file exists — it owns the palette and
     /// the OSC 11 auto-detect must not override it (file wins, P3.2 > P3.3).</summary>
@@ -281,6 +287,13 @@ internal sealed class CellForgeReplRunner(
             {
                 ObserveRetrySignal(agentEvt);
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
+            }
+
+            // Inline images (osc-sprint §1337): attachments drained on the
+            // frame thread — the only thread allowed to write the backend.
+            while (bridge.TryTakePendingImage(out var image))
+            {
+                await EmitInlineImageAsync(image, ct).ConfigureAwait(false);
             }
 
             bridge.Tick(Environment.TickCount64);
@@ -507,6 +520,32 @@ internal sealed class CellForgeReplRunner(
 
         await backend.WriteAsync(Utf8(Osc52Clipboard.Encode(text)), ct).ConfigureAwait(false);
         bridge.AppendSystemLine($"⧉ скопировано {text.Length} симв.");
+        _wake.Writer.TryWrite(null);
+    }
+
+    /// <summary>
+    /// Inline-image emission (osc-sprint §1337): routes the attachment bytes
+    /// through the session's detected protocol — kitty APC for PNG, OSC 1337
+    /// for the iTerm2 family. Unsupported protocol/format/oversize → no
+    /// emission; the timeline keeps the text description card as fallback.
+    /// </summary>
+    private async Task EmitInlineImageAsync(ChatScreenBridge.InlineImage image, CancellationToken ct)
+    {
+        string name = Path.GetFileName(image.Path);
+        byte[]? bytes = _inlineImage switch
+        {
+            InlineImageKind.KittyApc when image.MimeType.EndsWith("png", StringComparison.OrdinalIgnoreCase)
+                => Graphics.KittyPngInline(image.Data),
+            InlineImageKind.Osc1337 => Osc1337Image.Encode(name, image.Data),
+            _ => null,
+        };
+        if (bytes is null)
+        {
+            return;
+        }
+
+        await backend.WriteAsync(bytes, ct).ConfigureAwait(false);
+        bridge.AppendSystemLine($"◆ inline {name} ({_inlineImage})");
         _wake.Writer.TryWrite(null);
     }
 

@@ -398,7 +398,23 @@ public sealed class ChatScreenBridge : IDisposable
     private void AppendImageCard(string path, string mime, long sizeBytes, byte[]? data)
     {
         _panel.Timeline.Append(new ImageBlock(path, mime, sizeBytes, data));
+        if (data is { Length: > 0 })
+        {
+            // Inline-image hand-off (osc-sprint §1337): the host frame loop
+            // drains payloads and emits them through the terminal backend —
+            // the bridge itself never touches I/O.
+            _pendingImages.Enqueue(new InlineImage(path, mime, data));
+        }
     }
+
+    /// <summary>One drained attachment for the inline-image pipeline.</summary>
+    public readonly record struct InlineImage(string Path, string MimeType, byte[] Data);
+
+    private readonly Queue<InlineImage> _pendingImages = new();
+
+    /// <summary>Dequeues the next image attachment awaiting inline emission
+    /// (kitty APC / OSC 1337 per terminal capability); false when drained.</summary>
+    public bool TryTakePendingImage(out InlineImage image) => _pendingImages.TryDequeue(out image!);
 
     /// <summary>Typed-ish diff extraction (widgets §5): tools that attach a
     /// unified diff in Metadata win; otherwise a raw diff-shaped Output is
