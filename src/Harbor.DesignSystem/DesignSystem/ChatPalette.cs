@@ -65,72 +65,98 @@ public static class ChatPalette
 
     private static volatile Catalog _catalog = _initialCatalog;
 
+    // Frame-boundary snapshot (renderer-moat T2 hot-swap): the render thread
+    // pins the catalog for one frame, so a theme published mid-paint cannot
+    // tear it — cells painted before and after the publish resolve against
+    // one coherent projection. Per-thread: N concurrent render loops (CellForge,
+    // Avalonia, Blazor mirrors) pin independently; unpinned readers always
+    // see the live catalog.
+    [ThreadStatic]
+    private static Catalog? _framePinned;
+
     private static Catalog BuildInitial()
     {
         TerminalColorPalette.ThemeChanged += (_, _) => _catalog = new Catalog(TerminalColorPalette.Current);
         return new Catalog(TerminalColorPalette.Current);
     }
 
+    /// <summary>
+    /// Frame-boundary snapshot (renderer-moat hot-swap): pins the current
+    /// catalog for the CALLING render thread until <see cref="UnpinFrame"/>.
+    /// A concurrent <see cref="TerminalColorPalette.Apply"/> publishes a new
+    /// catalog but cannot tear the pinned frame; the new catalog is picked up
+    /// by the next pin. Lock-free — a volatile field read plus a ThreadStatic
+    /// assignment; callers on other threads are unaffected.
+    /// </summary>
+    public static void PinFrame() => _framePinned = _catalog;
+
+    /// <summary>Ends the pinned-frame scope for the calling thread.</summary>
+    public static void UnpinFrame() => _framePinned = null;
+
+    /// <summary>Active projection for the calling thread: the pinned frame
+    /// snapshot when one is armed, the live catalog otherwise.</summary>
+    private static Catalog C => _framePinned ?? _catalog;
+
     // ── HDS v1 raw color tokens (truecolor 24-bit) ─────────────────────────
     /// <summary>Accent — primary actions, active states (dark: #39BAE6).</summary>
-    public static PackedColor Accent => _catalog._accent;
+    public static PackedColor Accent => C._accent;
     /// <summary>Success — tool success, approved gates (dark: #7FD962).</summary>
-    public static PackedColor Success => _catalog._success;
+    public static PackedColor Success => C._success;
     /// <summary>Warning — pending approvals, running tools (dark: #FFB454).</summary>
-    public static PackedColor Warning => _catalog._warning;
+    public static PackedColor Warning => C._warning;
     /// <summary>Error — tool errors, denied gates (dark: #FF6B6B).</summary>
-    public static PackedColor Error => _catalog._error;
+    public static PackedColor Error => C._error;
     /// <summary>Tool — tool-call cards / role label (dark: #D2A6FF).</summary>
-    public static PackedColor Tool => _catalog._tool;
+    public static PackedColor Tool => C._tool;
     /// <summary>System — system notices role accent (dark: #F29668).</summary>
-    public static PackedColor SystemToken => _catalog._systemToken;
+    public static PackedColor SystemToken => C._systemToken;
     /// <summary>Primary text on the active surfaces.</summary>
-    public static PackedColor Text => _catalog._text;
+    public static PackedColor Text => C._text;
     /// <summary>Muted / secondary text and hints (dark: #5C6773).</summary>
-    public static PackedColor Muted => _catalog._muted;
+    public static PackedColor Muted => C._muted;
 
     // Surfaces — used by cell-diff rendering (borders, fills) when a block
     // needs an explicit background instead of the terminal default.
     /// <summary>BG — app background surface (dark: #0A0E14).</summary>
-    public static PackedColor Bg => _catalog._bg;
+    public static PackedColor Bg => C._bg;
     /// <summary>PANEL — elevated panel surface (dark: #0D1117).</summary>
-    public static PackedColor Panel => _catalog._panel;
+    public static PackedColor Panel => C._panel;
     /// <summary>SURFACE — card body surface (dark: #131820).</summary>
-    public static PackedColor Surface => _catalog._surface;
+    public static PackedColor Surface => C._surface;
     /// <summary>SURFACE2 — hover/active surface (dark: #1A1F2B).</summary>
-    public static PackedColor Surface2 => _catalog._surface2;
+    public static PackedColor Surface2 => C._surface2;
     /// <summary>BORDER — hairline separators (dark: #1F2430).</summary>
-    public static PackedColor Border => _catalog._border;
+    public static PackedColor Border => C._border;
 
     // ── Semantic cell styles (HDS v1 §1.3/§4.2 role map) ───────────────────
     /// <summary>User prompt prefix — accent + bold.</summary>
-    public static CellStyle UserPrefix => _catalog.UserPrefixStyle;
+    public static CellStyle UserPrefix => C.UserPrefixStyle;
 
     /// <summary>User message body — bold default foreground.</summary>
-    public static CellStyle UserText => _catalog.UserTextStyle;
+    public static CellStyle UserText => C.UserTextStyle;
 
     /// <summary>System notices — muted, dim italic.</summary>
-    public static CellStyle System => _catalog.SystemStyle;
+    public static CellStyle System => C.SystemStyle;
 
     /// <summary>Tool header name — tool token + bold.</summary>
-    public static CellStyle ToolName => _catalog.ToolNameStyle;
+    public static CellStyle ToolName => C.ToolNameStyle;
 
     /// <summary>Tool argument preview — primary text tone.</summary>
-    public static CellStyle ToolArgs => _catalog.ToolArgsStyle;
+    public static CellStyle ToolArgs => C.ToolArgsStyle;
 
     /// <summary>Running tool state — warning.</summary>
-    public static CellStyle ToolRunning => _catalog.ToolRunningStyle;
+    public static CellStyle ToolRunning => C.ToolRunningStyle;
 
     /// <summary>Successful tool state — success green.</summary>
-    public static CellStyle ToolOk => _catalog.ToolOkStyle;
+    public static CellStyle ToolOk => C.ToolOkStyle;
 
     /// <summary>Failed tool state — error red.</summary>
-    public static CellStyle ToolError => _catalog.ToolErrorStyle;
+    public static CellStyle ToolError => C.ToolErrorStyle;
 
     /// <summary>Tool output body — primary text tone.</summary>
-    public static CellStyle ToolBody => _catalog.ToolBodyStyle;
+    public static CellStyle ToolBody => C.ToolBodyStyle;
 
     /// <summary>Gutters, hints, secondary metadata — SGR dim (terminal-level
     /// muted rendering; keeps goldens stable across truecolor capability).</summary>
-    public static CellStyle Dim => _catalog.DimStyle;
+    public static CellStyle Dim => C.DimStyle;
 }

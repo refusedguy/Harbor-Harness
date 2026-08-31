@@ -24,7 +24,7 @@ public sealed class DiffEngine
     /// <summary>Hints above this share of the screen fall back to full scan.</summary>
     public const double HintAreaThreshold = 0.25;
 
-    private readonly ScreenBuffer _front;
+    private ScreenBuffer _front;
     private readonly List<Rect> _hints = new(16);
 
     public DiffEngine(int cols, int rows) => _front = new ScreenBuffer(cols, rows);
@@ -33,6 +33,19 @@ public sealed class DiffEngine
 
     /// <summary>The terminal-mirror buffer.</summary>
     public ScreenBuffer Front => _front;
+
+    /// <summary>
+    /// Hot-swap hook (renderer-moat T2): replaces the terminal-mirror buffer
+    /// without touching the hint ledger. The caller must reconcile geometry
+    /// with the paired BACK buffer before the next <see cref="Flush" /> —
+    /// <see cref="ScreenSession.AdoptPendingSwap"/> does this by resizing and
+    /// invalidating both grids as part of the atomic frame-boundary adoption.
+    /// </summary>
+    public void SwapFront(ScreenBuffer front)
+    {
+        ArgumentNullException.ThrowIfNull(front);
+        _front = front;
+    }
 
     /// <summary>
     /// Registers a damaged region for the next flush. The rect is clipped to
