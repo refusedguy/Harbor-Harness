@@ -1,5 +1,5 @@
 {
-  "state": "running",
+  "state": "done",
   "sprint": "demo-gif",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/demo-gif/prompt.md",
@@ -7,10 +7,10 @@
   "commits": 0,
   "created_at": "2026-08-28T19:00:00Z",
   "failures": 0,
-  "retries": 0,
+  "retries": 1,
   "started_at": null,
-  "finished_at": null,
+  "finished_at": "2026-08-31T23:45:05Z",
   "last_activity": "2026-09-01T02:18:44+0500",
-  "base": "d90d7bf",
+  "base": "24f9a03",
   "name": "demo-gif"
 }

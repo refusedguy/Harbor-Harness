@@ -1,24 +1,24 @@
 {
   "name": "mascot-brand",
-  "state": "queued",
-  "head": "",
+  "state": "failed",
+  "head": "d90d7bf",
   "base": "aee396a",
-  "commits": 3,
-  "started_at": null,
-  "finished_at": null,
+  "commits": 10,
+  "started_at": "2026-08-31T22:50:14+0500",
+  "finished_at": "2026-09-01T00:42:43+0500",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": null,
-  "report": null,
-  "failures": 0,
+  "report": "Third-pass verification (fresh agent, clean eyes): all 3 task commits (61307bf, 6a778d3, 744cef1) confirmed ancestors of HEAD. Hard rules audited directly: HARBOR_MASCOT=off kill-switch wins over HARBOR_MASCOT_MODE and disables footer + panel + reactions (MascotMode.cs, byte-exact golden coverage); no RPG stats / speech bubbles / Tamagotchi mechanics — only static frame banks, moods and one-shot overlays; Frame()/paint path is allocation-free (static string[] banks, span writes) and enforced by GC-count tests. Build Harbor.slnx Release: success, 0 errors, 0 warnings in sprint code (Harbor.Tui.CellForge clean). Tests: 766/766 CellForge (incl. 36 mascot: 6 AmbientMascot + 8 StatusPanel + 3 MascotModeEnv + 10 MascotPanel + 9 MascotReaction), 57/57 PTY golden (HARBOR_MASCOT=off, byte-exact), 47/47 architecture, 78/78 CLI — all green.",
+  "failures": 1,
   "retries": 0,
-  "last_activity": "2026-09-01T01:20:12+0500",
+  "last_activity": "2026-08-31T23:38:54Z",
   "progress": {
     "current_task": "",
     "tasks_done": 3,
     "tasks_total": 3,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-09-01T00:42:43+0500"
+    "last_heartbeat": "2026-09-01T04:20:27+0500"
   },
   "summary": {
     "task_1": "61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade — MascotDirector derives mood from StatusViewModel.Mode × AgentPhase, latches error/success for 150 frames, crossfades mood flips via PanelFx.AccentRamp; frame reacts within 1 tick of the state change (detection frame paints the new mood settled)",
@@ -26,5 +26,23 @@
     "task_3": "744cef1 feat(tui): event-driven mascot reactions — one-shot Interlocked signal (bus-thread safe) → 3-frame overlay at 3 ticks/frame: X-eyes blink on AgentErrorEvent, hop-bounce on clean AgentEnd, wide-eye wiggle on approval gates, tinted via PanelFx.AccentRamp/BlendRegion; overlay wins over mood crossfade while armed, static frame banks only",
     "tests": "36 mascot tests (6 AmbientMascot + 8 StatusPanel + 3 MascotModeEnv + 10 MascotPanel + 9 MascotReaction, incl. GC-count allocation-free paints for footer + panel + reactions) + 766 CellForge + 57 PTY golden (HARBOR_MASCOT=off, byte-exact) + 78 CLI + 47 architecture, all green",
     "perf": "zero allocations on Frame()/paint path (static frame banks, span writes); build Release 0 errors, no warnings in touched files"
+  },
+  "title": "mascot-brand",
+  "tasks": [],
+  "results": {
+    "commit_count": 10,
+    "range": "aee396a..HEAD",
+    "commits": [
+      "- d90d7bf chore: restore mascot-brand status to done",
+      "- c86b148 chore: restore renderer-moat + osc-expansion status to done",
+      "- f8a79b8 chore: reset demo-gif status",
+      "- c813dfe chore: cleanup demo-gif status",
+      "- decef7c chore: reset failed/queued sprint statuses for clean restart",
+      "- 1c2a73d chore: sync ide-integration artifacts (CI bypass)",
+      "- ac046fa docs(sprint): mascot-brand status DONE — all 3 tasks landed",
+      "- 744cef1 feat(tui): event-driven mascot reactions — error blink, success bounce, approval wiggle",
+      "- 6a778d3 feat(tui): HARBOR_MASCOT_MODE=panel — 3-row mascot cat beside the composer via LayoutTree.Split",
+      "- 61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade"
+    ]
   }
 }
