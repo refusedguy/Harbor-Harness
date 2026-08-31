@@ -40,6 +40,15 @@ public sealed class ScreenSession
     /// <see cref="AdoptPendingSwap"/> (renderer-moat hot-swap runtime).</summary>
     public BufferSwapChain SwapChain => _swapChain;
 
+    /// <summary>
+    /// Post-render effect pipeline (renderer-moat T3). Fill its slots before
+    /// the flush; <see cref="FlushFrame"/>/<see cref="FlushFrameAsync"/> arm it
+    /// on the engine when non-empty — the diff then re-styles selected cells
+    /// after selection and before SGR encoding, and FRONT keeps mirroring the
+    /// terminal through the transform.
+    /// </summary>
+    public PostFxPipeline Effects { get; } = new();
+
     public int CurrentCols { get; private set; }
     public int CurrentRows { get; private set; }
 
@@ -174,6 +183,7 @@ public sealed class ScreenSession
     /// <summary>Diffs BACK against FRONT and ships the frame in one write.</summary>
     public async ValueTask FlushFrameAsync(CancellationToken cancellationToken = default)
     {
+        ArmEffects();
         _engine.Flush(_back, _writer);
         await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
         ChatPalette.UnpinFrame();
@@ -186,8 +196,15 @@ public sealed class ScreenSession
     /// </summary>
     public void FlushFrame()
     {
+        ArmEffects();
         _engine.Flush(_back, _writer);
         _writer.EndFrame();
         ChatPalette.UnpinFrame();
     }
+
+    /// <summary>Arms the effect pipeline only when it holds active effects —
+    /// the empty pipeline keeps the engine on its exact classic path
+    /// (zero perf regression on non-effect frames).</summary>
+    private void ArmEffects() =>
+        _engine.Effects = Effects.Count > 0 ? Effects : null;
 }

@@ -198,4 +198,80 @@ public class RendererMoatPerfTests
         Console.WriteLine($"renderer-moat frame: {avg:F3} ms average over {frames} hinted frames (budget 16 ms)");
         await Assert.That(avg).IsLessThan(16.0 * 4); // pathological-regression guard only
     }
+
+    // ── Post-render effects (renderer-moat T3) ─────────────────────────────
+
+    /// <summary>
+    /// Acceptance "zero perf regression on non-effect frames": an ARMED but
+    /// EMPTY pipeline must keep the hinted steady frame allocation-free and
+    /// inside the same pathological guard as the plain path.
+    /// </summary>
+    [Test]
+    public async Task ArmedEmptyPipeline_NonEffect_Frames_AllocationFree()
+    {
+        const int cols = 120;
+        const int rows = 500;
+        var probe = new Probe(cols, rows);
+        probe.Populate(cols, rows);
+
+        // Armed with two never-updated (intensity 0, empty-region) effects —
+        // the exact "pipeline on, nothing glowing" steady state.
+        probe.Screen.Effects.Set(0, new GlowEffect());
+        probe.Screen.Effects.Set(1, new GlowEffect());
+
+        for (int i = 0; i < 2_000; i++)
+        {
+            probe.SteadyFrame(cols, hint: true);
+        }
+
+        GC.WaitForPendingFinalizers();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+
+        const int frames = 2_000;
+        for (int i = 0; i < frames; i++)
+        {
+            probe.SteadyFrame(cols, hint: true);
+        }
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        await Assert.That(allocated).IsEqualTo(0);
+    }
+
+    /// <summary>Benchmark report: full-scan diff with the glow pipeline armed
+    /// over the status row (the REPL's gate-glow worst case is a narrow region)
+    /// versus the plain path — reported for docs/BENCHMARKS.md, guarded only
+    /// against pathological regressions.</summary>
+    [Test]
+    public async Task Glow_Frame_Report()
+    {
+        const int cols = 120;
+        const int rows = 500;
+        var probe = new Probe(cols, rows);
+        probe.Populate(cols, rows);
+
+        // Arm a real glow over the status row (the frame's animated strip).
+        var statusRect = probe.Chat.Status.Rect;
+        var accent = ChatPalette.Warning;
+        var glow = new GlowEffect();
+        probe.Screen.Effects.Set(0, glow);
+
+        for (int i = 0; i < 300; i++)
+        {
+            glow.Update(new GlowRegion(new Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
+            probe.SteadyFrame(cols, hint: true);
+        }
+
+        const int frames = 300;
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < frames; i++)
+        {
+            glow.Update(new GlowRegion(new Rect(0, Math.Max(0, statusRect.Y), cols, Math.Max(1, statusRect.Height)), accent, 0.5 + (0.5 * Math.Sin(i / 10.0))));
+            probe.SteadyFrame(cols, hint: true);
+        }
+
+        sw.Stop();
+        double glowAvg = sw.Elapsed.TotalMilliseconds / frames;
+        Console.WriteLine($"renderer-moat glow frame: {glowAvg:F3} ms average over {frames} hinted frames with armed glow (budget 16 ms)");
+        await Assert.That(glowAvg).IsLessThan(16.0 * 4); // pathological-regression guard only
+    }
 }

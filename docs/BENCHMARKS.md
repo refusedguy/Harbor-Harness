@@ -231,6 +231,27 @@ Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 —
 
 > All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` is the biggest allocation hot spot — the `Utf8JsonReader` rewrite (planned) will cut this by ~80%.
 
+### Renderer-moat probes (`RendererMoatPerfTests`, 2026-08-31, Release)
+
+Live probes over a real 120×500 chat timeline (virtualized feed, spinner tick, ~2× viewport of content) — not synthetic grids. Run:
+```bash
+dotnet exec tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/Harbor.Tui.CellForge.Tests.dll \
+  --treenode-filter "/*/*/RendererMoatPerfTests/*"
+```
+
+| Probe | Before (pre-sprint full scan) | After (T1 partial scan + T3 effects) | Budget |
+|---|--:|--:|--:|
+| Diff time, full scan, 120×500 | 0.65–0.72 ms | 0.717 ms | < 2 ms ✅ |
+| Diff time, hinted steady frame, 120×500 | — (always full) | **0.317 ms** (T1: 0.347 ms) | < 2 ms ✅ |
+| Frame time (solve+paint+hinted diff+encode) | 0.433 ms (T1) | **0.805 ms**¹ | 16 ms ✅ |
+| Frame time with armed post-fx glow (status row) | — | **0.671 ms**² | 16 ms ✅ |
+| Steady-frame allocations, 2 000 hinted frames | 0 B (T1) | **0 B** (armed-empty pipeline) | 0 B ✅ |
+
+¹ Frame time varies with feed width/machine load across probe runs (0.43→0.81 ms between sprints); the hard acceptance is the diff budget (< 2 ms), which holds with 6× headroom.
+² Armed pipeline over an animated glow region measures within noise of the disarmed path — the armed-empty steady state stays byte-identical and allocation-free (test-enforced).
+
+Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
+
 ## 6. Test suite
 
 ### 6.1 Per-project results (Debug, no-build)

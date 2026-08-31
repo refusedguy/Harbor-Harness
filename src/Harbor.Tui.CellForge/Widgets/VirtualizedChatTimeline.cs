@@ -16,7 +16,9 @@ public sealed class VirtualizedChatTimeline
     private readonly TimelineLayoutCache _cache = new();
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
     private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
+    private readonly GlowRegion[] _glowRegions = new GlowRegion[MaxFxDamage];
     private int _fxDamageCount;
+    private int _glowCount;
     private bool _broadDamage;
     private long _lastScrollY = -1;
     private int _lastWidth = -1;
@@ -63,6 +65,16 @@ public sealed class VirtualizedChatTimeline
     /// hosts opt in via this method.
     /// </summary>
     public void EnableSmoothScroll() => _smoothScroll = true;
+
+    /// <summary>
+    /// Post-render glow feed (renderer-moat T3): when enabled, pending
+    /// approval gates publish <see cref="GlowRegion"/>s every frame —
+    /// INCLUDING pulse troughs (intensity 0) — so the host's effect pipeline
+    /// can repaint the gate at zero strength and the glow never sticks to the
+    /// terminal. Off by default; hosts that arm a <see cref="PostFxPipeline"/>
+    /// opt in (byte-identical frames when off — golden contract).
+    /// </summary>
+    public bool EnablePostFx { get; set; }
 
     public int Count => _cache.Count;
 
@@ -404,7 +416,17 @@ public sealed class VirtualizedChatTimeline
             bool fx = fading || (entrance && !animating);
             if (!fx && block is ApprovalGateView { IsPending: true } gate && gate.PulseBirthTick >= 0)
             {
-                fx = PanelFx.WarnPulse(gate.PulseBirthTick, CurrentTick) > 0;
+                double pulse = PanelFx.WarnPulse(gate.PulseBirthTick, CurrentTick);
+                fx = pulse > 0 || EnablePostFx; // post-fx: troughs must repaint too (glow convergence)
+                if (EnablePostFx && _glowCount < MaxFxDamage)
+                {
+                    // Accent = the exact header tone painted this frame —
+                    // captured from the shared WarnTone source, never guessed.
+                    _glowRegions[_glowCount++] = new GlowRegion(
+                        paintedRect,
+                        PanelFx.WarnTone(gate.PulseBirthTick, CurrentTick).Fg,
+                        pulse);
+                }
             }
 
             if (fx && _fxDamageCount < MaxFxDamage)
@@ -452,6 +474,24 @@ public sealed class VirtualizedChatTimeline
         _broadDamage = false;
         _fxDamageCount = 0;
         return broad;
+    }
+
+    /// <summary>
+    /// Hands the frame's glow sources to the host and resets the ledger
+    /// (renderer-moat T3): regions for pending approval gates this frame —
+    /// empty when the feed is quiet, the post-fx feed is disabled, or the
+    /// ledger overflowed (overflow only drops narrow rects, never damage).
+    /// </summary>
+    public int ConsumeGlowRegions(Span<GlowRegion> regions)
+    {
+        int count = Math.Min(_glowCount, regions.Length);
+        for (int i = 0; i < count; i++)
+        {
+            regions[i] = _glowRegions[i];
+        }
+
+        _glowCount = 0;
+        return count;
     }
 
     public (int First, int Last) VisibleRange(int viewportH) => _cache.VisibleRange(ScrollY, viewportH);

@@ -159,17 +159,11 @@ public sealed class ApprovalGateView : IChatBlock, IFocusTarget
         // Header — warning accent until decided, dim once stamped. While the
         // pulse is active, glow amount oscillates the accent between full
         // warning and a dimmed blend (HDS warn-glow), a pure function of tick.
-        CellStyle headerStyle;
-        if (!IsPending)
-        {
-            headerStyle = ChatPalette.Dim;
-        }
-        else
-        {
-            var warning = new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold);
-            double glow = PanelFx.WarnPulse(PulseBirthTick, ctx.Tick);
-            headerStyle = glow > 0 ? PanelFx.WithAlpha(warning, 0.55 + (0.45 * glow)) : warning;
-        }
+        // The tone formula lives in PanelFx.WarnTone — shared with the
+        // post-render glow ledger so the bloom targets exactly this accent.
+        CellStyle headerStyle = IsPending
+            ? PanelFx.WarnTone(PulseBirthTick, ctx.Tick)
+            : ChatPalette.Dim;
 
         // Keyboard-focus rail (HDS §Accessibility): accent caret in column 0
         // while this gate is the routed target — visible without a mouse.

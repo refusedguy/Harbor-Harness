@@ -48,6 +48,17 @@ public sealed class DiffEngine
     }
 
     /// <summary>
+    /// Armed post-render effect pipeline (renderer-moat T3, internal hook —
+    /// hosts arm it through <see cref="ScreenSession.Effects"/>). While
+    /// active, the scan compares and mirrors cells THROUGH the effect
+    /// transform: FRONT keeps mirroring what the terminal actually shows, so
+    /// glow converges by construction — the frame the effect disappears, the
+    /// plain cell differs from the mirrored glow and is repainted once.
+    /// Null/empty pipeline → the exact classic scan (byte-identical).
+    /// </summary>
+    public PostFxPipeline? Effects { get; set; }
+
+    /// <summary>
     /// Registers a damaged region for the next flush. The rect is clipped to
     /// the screen and merged into any hint it overlaps — the union may cover
     /// cells neither rect damaged (conservative), never fewer. Damage outside
@@ -138,18 +149,29 @@ public sealed class DiffEngine
 
     // ── Core scan ──────────────────────────────────────────────────────────
 
-    /// <summary>Fused compare-and-emit over [x1..x2) × [y1..y2).</summary>
+    /// <summary>
+    /// Fused compare-and-emit over [x1..x2) × [y1..y2). With an armed effect
+    /// pipeline the comparison runs against the TRANSFORMED next cell and
+    /// FRONT mirrors the transformed cell (it mirrors the terminal, which the
+    /// effects have recolored) — so disarming converges in one plain repaint.
+    /// The unarmed path is the exact classic scan: same compares, same bytes,
+    /// zero added work.
+    /// </summary>
     private void ScanRange(int x1, int y1, int x2, int y2, ScreenBuffer next, AnsiWriter writer)
     {
         int cols = _front.Cols;
         int rows = _front.Rows;
         int right = Math.Min(x2, cols);
         int bottom = Math.Min(y2, rows);
+        var pipeline = Effects;
+        bool armed = pipeline is { Count: > 0 };
 
         for (int y = Math.Max(0, y1); y < bottom; y++)
         {
             // Row-hash fast path: both sides validated & identical → nothing
-            // to do; adopt next's hash into front (they are equal).
+            // to do; adopt next's hash into front (they are equal). Safe with
+            // effects armed too: equal hashes mean FRONT's transformed cells
+            // already equal BACK's raw cells (identity transform on the row).
             if (_front.IsRowHashValid(y) && next.IsRowHashValid(y)
                 && _front.RowHash[y] == next.RowHash[y])
             {
@@ -176,12 +198,13 @@ public sealed class DiffEngine
                     if (x > 0)
                     {
                         ref readonly Cell leadNext = ref next.At(x - 1, y);
-                        if (_front.At(x - 1, y) != leadNext)
+                        var leadTarget = Fx(pipeline, x - 1, y, in leadNext);
+                        if (_front.At(x - 1, y) != leadTarget)
                         {
                             writer.MoveTo(x - 1, y);
-                            writer.SetStyle(leadNext.Style);
-                            writer.PutRune(new Rune(leadNext.Rune));
-                            _front.At(x - 1, y) = leadNext;
+                            writer.SetStyle(leadTarget.Style);
+                            writer.PutRune(new Rune(leadTarget.Rune));
+                            _front.At(x - 1, y) = leadTarget;
                             if (leadNext.Width == Cell.Wide)
                             {
                                 _front.At(x, y) = Cell.WideTail;
@@ -193,17 +216,23 @@ public sealed class DiffEngine
                     continue;
                 }
 
-                if (f == n)
+                // Post-render stage (renderer-moat T3): the diff-selected cell
+                // passes through the effect transform — after cell selection,
+                // before SGR encoding. Identity results emit no bytes (SGR
+                // automaton dedupes).
+                var target = Fx(pipeline, x, y, in n);
+
+                if (f == target)
                 {
                     x += width;
                     continue;
                 }
 
                 writer.MoveTo(x, y);
-                writer.SetStyle(n.Style);
-                writer.PutRune(new Rune(n.Rune));
+                writer.SetStyle(target.Style);
+                writer.PutRune(new Rune(target.Rune));
 
-                _front.At(x, y) = n;
+                _front.At(x, y) = target;
                 if (width == Cell.Wide)
                 {
                     _front.At(x + 1, y) = Cell.WideTail;
@@ -216,8 +245,10 @@ public sealed class DiffEngine
             // next's authoritative hash only when the span covered the whole
             // row; a partial-row (hinted) scan must invalidate FRONT's cache
             // instead — cells outside the span may still differ, and next's
-            // stored hash may be stale from before this frame's paint.
-            if (x1 <= 0 && right >= cols)
+            // stored hash may be stale from before this frame's paint. With
+            // effects armed FRONT holds transformed cells whose hashes differ
+            // from BACK's raw hashes — invalidate instead of adopting.
+            if (x1 <= 0 && right >= cols && !armed)
             {
                 _front.AdoptRowHash(next, y);
             }
@@ -227,6 +258,11 @@ public sealed class DiffEngine
             }
         }
     }
+
+    /// <summary>Applies the armed pipeline (null → identity) to one cell.
+    /// JIT-inlined null check keeps the unarmed hot path at zero added cost.</summary>
+    private static Cell Fx(PostFxPipeline? pipeline, int x, int y, in Cell cell) =>
+        pipeline is null ? cell : pipeline.Transform(x, y, in cell);
 
     /// <summary>Smallest rect covering both inputs (hint-union merge).</summary>
     private static Rect Union(Rect a, Rect b)
@@ -241,7 +277,9 @@ public sealed class DiffEngine
     // ── Verification helpers ───────────────────────────────────────────────
 
     /// <summary>True when FRONT equals NEXT cell-for-cell over the whole screen
-    /// (the post-flush invariant; also the paranoid hint check).</summary>
+    /// (the post-flush invariant; also the paranoid hint check). With an armed
+    /// effect pipeline FRONT holds transformed (terminal-view) cells, so the
+    /// comparison is against the transformed look, not the raw paint.</summary>
     public bool FrontMatches(ScreenBuffer next)
     {
         if (next.Cols != _front.Cols || next.Rows != _front.Rows)

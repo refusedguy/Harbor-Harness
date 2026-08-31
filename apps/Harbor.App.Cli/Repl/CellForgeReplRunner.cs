@@ -120,6 +120,12 @@ internal sealed class CellForgeReplRunner(
     private bool _broadDamageNextFrame = true;
     private readonly Rect[] _fxDamageScratch = new Rect[VirtualizedChatTimeline.MaxFxDamage];
 
+    /// <summary>Post-render glow slots (renderer-moat T3): preallocated effect
+    /// instances + the frame's glow-region scratch — the pipeline itself lives
+    /// on the <see cref="ScreenSession"/> and is refreshed per frame.</summary>
+    private readonly GlowEffect[] _glowEffects = new GlowEffect[VirtualizedChatTimeline.MaxFxDamage];
+    private readonly GlowRegion[] _glowScratch = new GlowRegion[VirtualizedChatTimeline.MaxFxDamage];
+
     /// <summary>Width the sidebar spring policy was last applied for (P1.6
     /// spring resize): 0 until the first frame so cold start snaps instead
     /// of replaying the static geometry as motion.</summary>
@@ -188,6 +194,11 @@ internal sealed class CellForgeReplRunner(
 
         var inputTask = inputSource.RunAsync(ct);
         BindLeaderKeys();
+
+        // Renderer-moat T3: approval-gate warn pulses bloom through the
+        // post-render effect pipeline (diff → transform → SGR encode).
+        _timeline.EnablePostFx = true;
+
         using var busPump = services.GetRequiredService<IEventBus>()
             .Subscribe((evt, _) =>
             {
@@ -403,8 +414,31 @@ internal sealed class CellForgeReplRunner(
         // the diff to the rects that can actually have changed; every other
         // frame — input, events, layout animation, theme swap — full scan.
         ApplyFrameDamageHints(cols);
+        ArmGateGlow();
 
         await screenSession.FlushFrameAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Post-render glow (renderer-moat T3): translates the timeline's gate
+    /// glow ledger into the session's effect pipeline — warning accents on
+    /// pending approval gates bloom toward a hot tone after the diff selects
+    /// them and before SGR encoding. Zero pending gates → empty pipeline →
+    /// frames byte-identical to the plain path.
+    /// </summary>
+    private void ArmGateGlow()
+    {
+        int count = _timeline.ConsumeGlowRegions(_glowScratch);
+        for (int i = 0; i < count; i++)
+        {
+            (_glowEffects[i] ??= new GlowEffect()).Update(_glowScratch[i]);
+            screenSession.Effects.Set(i, _glowEffects[i]);
+        }
+
+        for (int i = count; i < VirtualizedChatTimeline.MaxFxDamage; i++)
+        {
+            screenSession.Effects.Set(i, null);
+        }
     }
 
     /// <summary>

@@ -93,6 +93,19 @@ public static class PanelFx
         return Math.Max(0.0, w);
     }
 
+    /// <summary>
+    /// Header tone for a pending gate: full warning, eased toward a dimmed
+    /// blend while the warn-glow pulse oscillates. Single source for the gate
+    /// painter and the post-fx glow ledger's accent capture (renderer-moat
+    /// T3) — the two can never drift apart.
+    /// </summary>
+    public static CellStyle WarnTone(long birthTick, long nowTick)
+    {
+        var warning = new CellStyle(ChatPalette.Warning, attrs: StyleAttr.Bold);
+        double glow = WarnPulse(birthTick, nowTick);
+        return glow > 0 ? WithAlpha(warning, 0.55 + (0.45 * glow)) : warning;
+    }
+
     /// <summary>Linear RGB channel interpolation (mirrors ColorTransition.Interpolate).</summary>
     public static PackedColor Lerp(PackedColor from, PackedColor to, double t)
     {
