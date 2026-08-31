@@ -114,6 +114,8 @@ public static class Program
             }
 
         string command = args[0].ToLowerInvariant();
+        if (command == "--demo")
+            command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
         _logger.LogInformation("Command: {Command}", command);
 
         var cliCommands = new ICommand[]
@@ -122,6 +124,7 @@ public static class Program
             new DaemonCommand(Console.Out, Console.Error),
             new StatusCommand(Console.Out, Console.Error),
             new PluginsCommand(Console.Out, Console.Error),
+            new DemoCommand(Console.Out, Console.Error),
         };
         if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
@@ -856,7 +859,12 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+
+                          demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
+                                            Scripted demo with an in-process mock LLM — no API keys.
+                                            The GIF recorder (tests/Harbor.E2E.Framework/TuiDemoRecorder)
+                                            and the VHS tapes (demo/*.tape) drive this command.
 
                           --script <path>   Run a .js or .ts script at startup (registers tools via Harbor.registerTool).
                                             See docs/SCRIPTING.md for the full comparison of CS / Jint / SharpTS / MCP.

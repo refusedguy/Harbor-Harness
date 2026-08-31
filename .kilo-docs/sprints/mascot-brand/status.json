@@ -1,7 +1,7 @@
 {
   "name": "mascot-brand",
-  "state": "done",
-  "head": "744cef1",
+  "state": "failed",
+  "head": "ac046fa717ec6a6a99a48a6f1dad4e806d44dc67",
   "base": "aee396a",
   "commits": 3,
   "started_at": "2026-08-31T22:50:14+0500",
@@ -10,9 +10,9 @@
   "kilo_session": null,
   "findings": null,
   "report": null,
-  "failures": 0,
+  "failures": 1,
   "retries": 0,
-  "last_activity": "2026-09-01T00:42:43+0500",
+  "last_activity": "2026-09-01T01:20:12+0500",
   "progress": {
     "current_task": "",
     "tasks_done": 3,

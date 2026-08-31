@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.App.Cli.Configuration;
+using Harbor.App.Cli.Demo;
 using Harbor.Application.Configuration;
 using Harbor.Registries.Events;
 using Harbor.Desktop.Abstractions.Configuration;
@@ -44,6 +45,14 @@ internal static partial class HostBuilder
         // CE-4: второй путь рендера. Регистрации ленивые — резолв только
         // когда интерактивный REPL выбрал CellForge; legacy-путь не меняется.
         builder.Services.AddCellForge(TryReadCellForgeUi());
+
+        // `harbor demo` (HARBOR_DEMO=1, set by DemoCommand): override the
+        // fail-closed default asker with the scripted auto-approving gate.
+        // Last IPermissionService registration wins (same trick as AddCellForge).
+        if (Environment.GetEnvironmentVariable("HARBOR_DEMO") is "1")
+        {
+            builder.Services.AddDemoRuntime();
+        }
 
         return builder.Build();
     }
