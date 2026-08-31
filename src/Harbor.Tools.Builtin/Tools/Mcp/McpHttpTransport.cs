@@ -6,6 +6,16 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
+/// <summary>Round-trip contract shared by the remote MCP transports (streamable HTTP and legacy SSE).</summary>
+internal interface IMcpRemoteTransport : IAsyncDisposable
+{
+    /// <summary>Send one JSON-RPC request and return the matching response (caller disposes), or null when none arrived.</summary>
+    Task<JsonDocument?> RoundTripAsync(
+        JsonElement request,
+        int? expectedId = null,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 ///     MCP "Streamable HTTP" client transport (MCP spec 2025-03-26): every JSON-RPC
 ///     message is POSTed to the server endpoint; the response comes back either as a
@@ -18,7 +28,7 @@ namespace Harbor.Tools.Mcp;
 ///     OAuth token provider result is attached as <c>Bearer</c>. The provider is a
 ///     placeholder for the full OAuth2 authorization-code flow (deferred).
 /// </summary>
-public sealed class McpHttpTransport : IAsyncDisposable
+public sealed class McpHttpTransport : IMcpRemoteTransport
 {
     private const int MaxAttempts = 3;
     private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMilliseconds(200);

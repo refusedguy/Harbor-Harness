@@ -19,7 +19,7 @@ namespace Harbor.Tools.Mcp;
 ///     <c>Authorization</c> header wins, else the OAuth token provider result
 ///     is attached as <c>Bearer</c> (placeholder for the full OAuth2 flow).
 /// </summary>
-public sealed class McpSseTransport : IAsyncDisposable
+public sealed class McpSseTransport : IMcpRemoteTransport
 {
     private const int MaxAttempts = 3;
     private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMilliseconds(200);
