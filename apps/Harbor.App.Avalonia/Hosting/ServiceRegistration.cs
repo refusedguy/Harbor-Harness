@@ -5,6 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Services;
+using Harbor.App.Avalonia.ViewModels.Terminal;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -85,6 +86,16 @@ internal static class ServiceRegistration
         services.AddSingleton<IOverlayStack>(sp => sp.GetRequiredService<OverlayStackService>());
         services.AddSingleton<WindowChromeService>();
         services.AddSingleton<KeyboardShortcutService>();
+        services.AddSingleton<IFloatingTerminals>(sp => new FloatingTerminalService(
+            sp.GetRequiredService<IDispatcherAdapter>(),
+            () => new FloatingTerminalViewModel(
+                sp.GetRequiredService<IDispatcherAdapter>(),
+                sp.GetRequiredService<ILogger<FloatingTerminalViewModel>>(),
+                cwd => new TerminalPaneViewModel(
+                    sp.GetRequiredService<IDispatcherAdapter>(),
+                    sp.GetRequiredService<ILogger<TerminalPaneViewModel>>(),
+                    cwd)),
+            sp.GetRequiredService<ILogger<FloatingTerminalService>>()));
         services.AddSingleton<IShellChrome, AvaloniaShellChrome>();
         services.AddSingleton<IWorkspaceCommands, AvaloniaWorkspaceCommands>();
         services.AddSingleton<DefaultUiProjector>();
