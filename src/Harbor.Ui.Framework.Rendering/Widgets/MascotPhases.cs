@@ -24,3 +24,24 @@ public enum AgentPhase : byte
     /// <summary>The last run finished clean — presentation may react briefly.</summary>
     Succeeded,
 }
+
+/// <summary>
+/// One-shot event reaction for the mascot (sprint mascot-brand T3): a short
+/// overlay sequence the mascot plays when a notable event lands — error blink,
+/// success bounce, approval wiggle. Not a mood: it overrides the current mood
+/// frames for a few ticks, then the mood resumes.
+/// </summary>
+public enum MascotReaction : byte
+{
+    /// <summary>No reaction armed.</summary>
+    None = 0,
+
+    /// <summary>An error event fired — X-eyes blink sequence.</summary>
+    ErrorBlink,
+
+    /// <summary>The run finished clean — bounce sequence.</summary>
+    SuccessBounce,
+
+    /// <summary>An approval gate opened — wide-eyes wiggle sequence.</summary>
+    ApprovalWiggle,
+}

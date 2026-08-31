@@ -101,6 +101,95 @@ public sealed class MascotDirector
         return true;
     }
 
+    // ── Event reactions (mascot-brand T3) ──────────────────────────────────
+
+    /// <summary>Ticks each reaction frame stays on screen — 3 frames × 3 ticks ≈ 150 ms.</summary>
+    public const int ReactionFrameTicks = 3;
+
+    /// <summary>Frames in every reaction sequence (blink / bounce / wiggle).</summary>
+    public const int ReactionFrames = 3;
+
+    private int _reaction;
+    private long _reactionStartTick;
+
+    /// <summary>Arms a per-event overlay — the reaction frames override the
+    /// mood frames for the sequence duration. Latest notification wins.</summary>
+    public void Notify(MascotReaction reaction, long tick)
+    {
+        if (reaction == MascotReaction.None)
+        {
+            return;
+        }
+
+        _reaction = (int)reaction;
+        _reactionStartTick = tick;
+    }
+
+    /// <summary>
+    /// True while an event overlay is playing; <paramref name="frameIndex" />
+    /// walks [0..<see cref="ReactionFrames" />), each frame held for
+    /// <see cref="ReactionFrameTicks" /> ticks. Expiry clears the overlay —
+    /// the mood resumes without a fresh notification.
+    /// </summary>
+    public bool TryReactionFrame(long tick, out MascotReaction reaction, out int frameIndex)
+    {
+        int armed = _reaction;
+        if (armed == 0)
+        {
+            reaction = MascotReaction.None;
+            frameIndex = 0;
+            return false;
+        }
+
+        int idx = (int)((tick - _reactionStartTick) / ReactionFrameTicks);
+        if (idx < 0 || idx >= ReactionFrames)
+        {
+            _reaction = 0;
+            reaction = MascotReaction.None;
+            frameIndex = 0;
+            return false;
+        }
+
+        reaction = (MascotReaction)armed;
+        frameIndex = idx;
+        return true;
+    }
+
+    /// <summary>
+    /// Blends the reaction region with the accent ramp — same detection-frame
+    /// semantics as the mood crossfade: the notify frame paints settled, the
+    /// frames after it dip and ease back. Returns true while the overlay owns
+    /// the region (mood crossfades stay suppressed meanwhile).
+    /// </summary>
+    public bool BlendReaction(ScreenBuffer buffer, Rect region, long tick)
+    {
+        int armed = _reaction;
+        if (armed == 0)
+        {
+            return false;
+        }
+
+        long start = _reactionStartTick;
+        if (tick > start)
+        {
+            double ramp = PanelFx.AccentRamp(start, tick);
+            if (ramp < 1.0)
+            {
+                PanelFx.BlendRegion(buffer, region, ramp);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Event tint: the blink burns red, the bounce glows green, the wiggle warns.</summary>
+    public static CellStyle ReactionStyle(MascotReaction reaction) => reaction switch
+    {
+        MascotReaction.ErrorBlink => ChatPalette.ToolError,
+        MascotReaction.SuccessBounce => ChatPalette.ToolOk,
+        _ => ChatPalette.ToolRunning,
+    };
+
     private MascotMood Derive(StatusViewModel vm) => vm.Mode switch
     {
         StatusBarMode.Running => vm.Phase switch

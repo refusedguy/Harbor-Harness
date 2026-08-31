@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Threading;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Ui.Framework.Rendering.Widgets;
@@ -32,6 +33,19 @@ public sealed class StatusViewModel
     /// Running into thinking / tool-call and flags end-of-run outcomes for the
     /// mascot. <see cref="AgentPhase.Auto" /> derives from <see cref="Mode" /> alone.</summary>
     public AgentPhase Phase { get; set; }
+
+    private int _mascotSignal;
+
+    /// <summary>Arms a one-shot mascot reaction (mascot-brand T3). Thread-safe:
+    /// events arrive on bus threads while the render thread consumes. Latest
+    /// signal wins; the panel that renders the mascot owns the consume.</summary>
+    public void SignalMascot(MascotReaction reaction) =>
+        Interlocked.Exchange(ref _mascotSignal, (int)reaction);
+
+    /// <summary>Render-thread consume — exactly one caller receives each
+    /// armed reaction; everyone else sees <see cref="MascotReaction.None" />.</summary>
+    public MascotReaction ConsumeMascotSignal() =>
+        (MascotReaction)Interlocked.Exchange(ref _mascotSignal, 0);
 
     public int? ContextTokensUsed { get; private set; }
 

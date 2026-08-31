@@ -38,19 +38,42 @@ public sealed class MascotPanel : Panel
             return;
         }
 
-        MascotMood mood = _director.Advance(Vm, Tick);
-        int idx = AmbientMascot.FrameIndex(Tick, mood);
-        string face = AmbientMascot.Frame(Tick, mood);
-        string ears = AmbientMascot.PanelEars(mood)[idx];
-        string paws = AmbientMascot.PanelPaws(mood)[idx];
-
-        buffer.SetText(Rect.X, Rect.Y, ears, ChatPalette.Dim);
-        buffer.SetText(Rect.X, Rect.Y + 1, face, ChatPalette.Dim);
-        if (Rect.Height > 2)
+        // Panel mode: the panel owns the one-shot event signal.
+        MascotReaction signal = Vm.ConsumeMascotSignal();
+        if (signal != MascotReaction.None)
         {
-            buffer.SetText(Rect.X, Rect.Y + 2, paws, ChatPalette.Dim);
+            _director.Notify(signal, Tick);
         }
 
-        _ = _director.BlendMoodCrossfade(buffer, Rect, Tick);
+        MascotMood mood = _director.Advance(Vm, Tick);
+        string ears, face, paws;
+        var style = ChatPalette.Dim;
+        if (_director.TryReactionFrame(Tick, out MascotReaction active, out int ridx))
+        {
+            face = AmbientMascot.ReactionFramesOf(active)[ridx];
+            ears = AmbientMascot.ReactionEars(active)[ridx];
+            paws = AmbientMascot.ReactionPaws(active)[ridx];
+            style = MascotDirector.ReactionStyle(active);
+        }
+        else
+        {
+            int idx = AmbientMascot.FrameIndex(Tick, mood);
+            face = AmbientMascot.Frame(Tick, mood);
+            ears = AmbientMascot.PanelEars(mood)[idx];
+            paws = AmbientMascot.PanelPaws(mood)[idx];
+        }
+
+        buffer.SetText(Rect.X, Rect.Y, ears, style);
+        buffer.SetText(Rect.X, Rect.Y + 1, face, style);
+        if (Rect.Height > 2)
+        {
+            buffer.SetText(Rect.X, Rect.Y + 2, paws, style);
+        }
+
+        // Reaction overlay wins over the mood crossfade while it owns the cat.
+        if (!_director.BlendReaction(buffer, Rect, Tick))
+        {
+            _ = _director.BlendMoodCrossfade(buffer, Rect, Tick);
+        }
     }
 }

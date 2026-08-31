@@ -190,12 +190,18 @@ public sealed class ChatScreenBridge : IDisposable
                 AppendSystem("! " + error.Message);
                 _runHadError = true;
                 _status.Phase = AgentPhase.Errored;
+                _status.SignalMascot(MascotReaction.ErrorBlink);
                 _status.Mode = StatusBarMode.Idle;
                 break;
 
             case AgentEndEvent:
                 FlushStreamNow();
                 _status.Phase = _runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
+                if (!_runHadError)
+                {
+                    _status.SignalMascot(MascotReaction.SuccessBounce);
+                }
+
                 _status.Mode = StatusBarMode.Idle;
                 break;
         }
@@ -487,6 +493,7 @@ public sealed class ChatScreenBridge : IDisposable
     {
         var gate = new ApprovalGateView(toolName, detail);
         _gateQueue.Enqueue(gate);
+        _status.SignalMascot(MascotReaction.ApprovalWiggle);
         return gate;
     }
 
@@ -501,6 +508,7 @@ public sealed class ChatScreenBridge : IDisposable
         _panel.Timeline.Append(gate);
         EnqueuePendingGate(gate);
         _panel.Timeline.MarkLastDirty();
+        _status.SignalMascot(MascotReaction.ApprovalWiggle);
         return gate;
     }
 

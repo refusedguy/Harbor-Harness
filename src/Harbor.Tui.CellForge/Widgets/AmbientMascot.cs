@@ -125,4 +125,44 @@ public static class AmbientMascot
         MascotMood.Success => PawsWag,
         _ => PawsLoaf,
     };
+
+    // ── Event reactions (mascot-brand T3) ──────────────────────────────────
+    // Short overlay sequences: the reaction overrides the mood frames for a
+    // few ticks, then the mood resumes. Faces are 8 cells; panel rows match.
+
+    /// <summary>Error blink — X-eyes flash, close, flash (3 frames).</summary>
+    public static readonly string[] ErrorBlinkFrames = ["( X..X )", "( -..- )", "( X..X )"];
+
+    /// <summary>Success bounce — happy squint pop (3 frames).</summary>
+    public static readonly string[] SuccessBounceFrames = ["( ^..^ )", "( ^w^  )", "( ^..^ )"];
+
+    /// <summary>Approval wiggle — wide eyes asking (3 frames).</summary>
+    public static readonly string[] ApprovalWiggleFrames = ["( O..O )", "( o..o )", "( O..O )"];
+
+    /// <summary>Face bank for a reaction.</summary>
+    public static string[] ReactionFramesOf(MascotReaction reaction) => reaction switch
+    {
+        MascotReaction.SuccessBounce => SuccessBounceFrames,
+        MascotReaction.ApprovalWiggle => ApprovalWiggleFrames,
+        _ => ErrorBlinkFrames,
+    };
+
+    private static readonly string[] ReactionEarsFlat = [" \\___/  ", " /\\_/\\  ", " \\___/  "];
+    private static readonly string[] ReactionEarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
+    private static readonly string[] ReactionPawsLoaf = [" (____) ", " (____) ", " (____) "];
+    private static readonly string[] ReactionPawsHop = [" (____) ", "  (__)  ", " (____) "];
+    private static readonly string[] ReactionPawsWave = [" \\    / ", " /    \\ ", " \\    / "];
+
+    /// <summary>Panel ear row for a reaction — ears flatten on the blink.</summary>
+    public static string[] ReactionEars(MascotReaction reaction) => reaction == MascotReaction.ErrorBlink
+        ? ReactionEarsFlat
+        : ReactionEarsUp;
+
+    /// <summary>Panel paw row for a reaction — hop on the bounce, wave on the wiggle.</summary>
+    public static string[] ReactionPaws(MascotReaction reaction) => reaction switch
+    {
+        MascotReaction.SuccessBounce => ReactionPawsHop,
+        MascotReaction.ApprovalWiggle => ReactionPawsWave,
+        _ => ReactionPawsLoaf,
+    };
 }

@@ -180,10 +180,29 @@ public sealed class StatusPanel : Panel
             _compose[0] = new StatusSeg(SpinnerStrip.FrameString(Tick, rhythm.Value), StatusAccent.Accent, FixedPriority: true);
         }
 
-        MascotMood mood = _director.Advance(Vm, Tick);
-        string? mascot = MascotEnabled && FooterMascotEnabled && Rect.Width >= MascotMinWidth
-            ? AmbientMascot.Frame(Tick, mood)
-            : null;
+        bool footerMascot = MascotEnabled && FooterMascotEnabled && Rect.Width >= MascotMinWidth;
+        string? mascot = null;
+        var mascotStyle = ChatPalette.Dim;
+        if (footerMascot)
+        {
+            // Footer mode: the footer owns the one-shot event signal.
+            MascotReaction signal = Vm.ConsumeMascotSignal();
+            if (signal != MascotReaction.None)
+            {
+                _director.Notify(signal, Tick);
+            }
+
+            MascotMood mood = _director.Advance(Vm, Tick);
+            if (_director.TryReactionFrame(Tick, out MascotReaction active, out int ridx))
+            {
+                mascot = AmbientMascot.ReactionFramesOf(active)[ridx];
+                mascotStyle = MascotDirector.ReactionStyle(active);
+            }
+            else
+            {
+                mascot = AmbientMascot.Frame(Tick, mood);
+            }
+        }
 
         Span<StatusSeg> span = _compose;
         int budget = Rect.Width - 1 - (mascot is null ? 0 : AmbientMascot.Width(mascot) + MascotGap);
@@ -192,7 +211,7 @@ public sealed class StatusPanel : Panel
 
         if (mascot is not null)
         {
-            buffer.SetText(Rect.Right - mascot.Length, Rect.Y, mascot, ChatPalette.Dim);
+            buffer.SetText(Rect.Right - mascot.Length, Rect.Y, mascot, mascotStyle);
         }
 
         long flip = _modeFlipTick;
@@ -211,11 +230,16 @@ public sealed class StatusPanel : Panel
             }
         }
 
-        // Mood flips crossfade only the mascot cells (mascot-brand T1) —
-        // skipped while the whole-row mode crossfade already covers them.
+        // Mascot-region crossfades (mascot-brand T1/T3) — skipped while the
+        // whole-row mode crossfade already covers them; the reaction overlay
+        // wins over the mood crossfade while it owns the cells.
         if (!rowCrossfading && mascot is not null)
         {
-            _ = _director.BlendMoodCrossfade(buffer, new Rect(Rect.Right - mascot.Length, Rect.Y, mascot.Length, 1), Tick);
+            var mascotRect = new Rect(Rect.Right - mascot.Length, Rect.Y, mascot.Length, 1);
+            if (!_director.BlendReaction(buffer, mascotRect, Tick))
+            {
+                _ = _director.BlendMoodCrossfade(buffer, mascotRect, Tick);
+            }
         }
     }
 
