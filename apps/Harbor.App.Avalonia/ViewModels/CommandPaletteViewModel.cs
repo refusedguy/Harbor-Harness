@@ -1,3 +1,4 @@
+using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.State;
@@ -16,6 +17,7 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     private readonly IWorkspaceCommands _workspaceCommands;
     private readonly TuiEffectHost _effects;
     private readonly ILogger<CommandPaletteViewModel> _logger;
+    private readonly IFloatingTerminals? _floatingTerminals;
 
     /// <summary>Construct the palette view-model.</summary>
     public CommandPaletteViewModel(
@@ -23,13 +25,15 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
         ILogger<CommandPaletteViewModel> logger,
         IShellChrome shellChrome,
         IWorkspaceCommands workspaceCommands,
-        TuiEffectHost effects)
+        TuiEffectHost effects,
+        IFloatingTerminals? floatingTerminals = null)
         : base(dispatcher, logger)
     {
         _shellChrome = shellChrome;
         _workspaceCommands = workspaceCommands;
         _effects = effects;
         _logger = logger;
+        _floatingTerminals = floatingTerminals;
         // Build the command list (platform callbacks) and run the initial filter.
         AllCommands.AddRange(new CommandResultViewModel[]
         {
@@ -41,6 +45,7 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
             new("command", "Open token usage chart", "TokenUsageView", OpenTokenUsage),
             new("command", "Toggle sidebar (Ctrl+B)", "SidebarToggle", ToggleSidebar),
             new("command", "Toggle theme (Ctrl+Shift+T)", "ThemeToggle", ToggleTheme),
+            new("command", "Floating terminal pane (Ctrl+`)", "TerminalPane", ToggleTerminalPane),
             new("command", "New session", "SessionNew", NewSession),
             new("command", "Branch active session", "SessionBranch", BranchSession),
             new("command", "Open file (Ctrl+O)", "FileOpen", OpenFile),
@@ -72,6 +77,13 @@ public sealed partial class CommandPaletteViewModel : CommandPaletteViewModelBas
     private void OpenTokenUsage() => _shellChrome.OpenOverlay(OverlayIds.TokenUsage);
     private void ToggleSidebar() => _shellChrome.ToggleSidebar();
     private void ToggleTheme() => _shellChrome.ToggleTheme();
+    private void ToggleTerminalPane()
+    {
+        if (_floatingTerminals is { } terminals)
+        {
+            terminals.TogglePane();
+        }
+    }
     private void NewSession() => _workspaceCommands.NewSession();
     private void BranchSession() => _workspaceCommands.BranchSession();
     private void OpenFile() => _ = _workspaceCommands.OpenFileAsync();
