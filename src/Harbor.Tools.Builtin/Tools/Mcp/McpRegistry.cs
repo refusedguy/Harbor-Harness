@@ -8,6 +8,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
+/// <summary>A remote MCP endpoint served over HTTP instead of a stdio subprocess.</summary>
+internal sealed record McpRemoteEndpoint(
+    string Url,
+    string Transport,
+    IReadOnlyDictionary<string, string>? Headers);
+
 public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, ServerEntry> _servers = new();
@@ -33,7 +39,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         // ROP-A Z1 п.7: passthrough failure → Bind; no intermediate .Value read.
         return McpArgvParser.ParseCommand(stdioCommand)
             .Map(tokens => new McpServerStartInfo { Command = tokens[0], Args = tokens[1..] })
-            .Bind(startInfo => RegisterInternal(name, startInfo));
+            .Bind(startInfo => Register(name, startInfo));
     }
 
     /// <summary>
@@ -50,16 +56,38 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (string.IsNullOrWhiteSpace(startInfo.Command))
             return Result.Failure("startInfo.Command cannot be empty.");
 
-        return RegisterInternal(name, startInfo);
+        return RegisterInternal(name, startInfo, null);
     }
 
-    private Result RegisterInternal(string name, McpServerStartInfo startInfo)
+    /// <summary>
+    ///     Register a remote MCP server reachable over HTTP (streamable HTTP, or the
+    ///     legacy HTTP+SSE transport when <paramref name="transport" /> is <c>"sse"</c>).
+    ///     Nothing is connected until the first call — transports connect lazily.
+    /// </summary>
+    public Result Register(string name, string url, string transport = "http", IReadOnlyDictionary<string, string>? headers = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return Result.Failure("Server name cannot be empty.");
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return Result.Failure($"Server url '{url}' is not a valid absolute http(s) URL.");
+        if (!string.Equals(transport, "http", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase))
+            return Result.Failure($"MCP transport '{transport}' is not supported (expected 'http' or 'sse').");
+
+        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers));
+    }
+
+    private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
     {
         if (_servers.ContainsKey(name))
             return Result.Failure($"MCP server '{name}' is already registered.");
 
-        _servers[name] = new ServerEntry(startInfo);
-        _logger?.LogInformation("Registered MCP server: {Name} -> {Command}", name, startInfo.Command);
+        _servers[name] = new ServerEntry(startInfo, remote);
+        _logger?.LogInformation(
+            "Registered MCP server: {Name} -> {Target}",
+            name,
+            remote is not null ? $"{remote.Transport}:{remote.Url}" : startInfo!.Command);
         return Result.Success();
     }
 
@@ -120,12 +148,6 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                     continue;
                 }
 
-                if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
-                {
-                    _logger?.LogWarning("MCP server '{Name}' missing 'command' string in config", name);
-                    continue;
-                }
-
                 if (value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
                 {
                     _logger?.LogInformation("MCP server '{Name}' is disabled; skipping", name);
@@ -134,42 +156,70 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
                 // Static instructions hint (ROP-D Z3): surfaced to the system
                 // prompt via IMcpRegistry.GetInstructions() without any
-                // process spawn — the dynamic source is the `initialize`
+                // connection — the dynamic source is the `initialize`
                 // response harvested in InvokeAsync.
                 string? staticInstructions =
                     value.TryGetProperty("instructions", out var insEl) && insEl.ValueKind == JsonValueKind.String
                         ? insEl.GetString()
                         : null;
 
-                var command = commandEl.GetString() ?? string.Empty;
-                var args = new List<string>();
-                if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
-                    foreach (var a in argsEl.EnumerateArray())
-                        if (a.ValueKind == JsonValueKind.String) args.Add(a.GetString()!);
-
-                string? cwd = value.TryGetProperty("cwd", out var cwdEl) && cwdEl.ValueKind == JsonValueKind.String
-                    ? cwdEl.GetString()
-                    : null;
-
-                Dictionary<string, string>? env = null;
-                if (value.TryGetProperty("env", out var envEl) && envEl.ValueKind == JsonValueKind.Object)
+                Result registration;
+                if (value.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
                 {
-                    env = new Dictionary<string, string>(StringComparer.Ordinal);
-                    foreach (var e in envEl.EnumerateObject())
-                        if (e.Value.ValueKind == JsonValueKind.String)
-                            env[e.Name] = e.Value.GetString()!;
+                    // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}}
+                    string? transport =
+                        value.TryGetProperty("transport", out var transportEl) && transportEl.ValueKind == JsonValueKind.String
+                            ? transportEl.GetString()
+                            : "http";
+
+                    Dictionary<string, string>? headers = null;
+                    if (value.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
+                    {
+                        headers = new Dictionary<string, string>(StringComparer.Ordinal);
+                        foreach (var h in headersEl.EnumerateObject())
+                            if (h.Value.ValueKind == JsonValueKind.String)
+                                headers[h.Name] = h.Value.GetString()!;
+                    }
+
+                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers);
+                }
+                else
+                {
+                    if (!value.TryGetProperty("command", out var commandEl) || commandEl.ValueKind != JsonValueKind.String)
+                    {
+                        _logger?.LogWarning("MCP server '{Name}' config has neither 'url' nor 'command'", name);
+                        continue;
+                    }
+
+                    var command = commandEl.GetString() ?? string.Empty;
+                    var args = new List<string>();
+                    if (value.TryGetProperty("args", out var argsEl) && argsEl.ValueKind == JsonValueKind.Array)
+                        foreach (var a in argsEl.EnumerateArray())
+                            if (a.ValueKind == JsonValueKind.String) args.Add(a.GetString()!);
+
+                    string? cwd = value.TryGetProperty("cwd", out var cwdEl) && cwdEl.ValueKind == JsonValueKind.String
+                        ? cwdEl.GetString()
+                        : null;
+
+                    Dictionary<string, string>? env = null;
+                    if (value.TryGetProperty("env", out var envEl) && envEl.ValueKind == JsonValueKind.Object)
+                    {
+                        env = new Dictionary<string, string>(StringComparer.Ordinal);
+                        foreach (var e in envEl.EnumerateObject())
+                            if (e.Value.ValueKind == JsonValueKind.String)
+                                env[e.Name] = e.Value.GetString()!;
+                    }
+
+                    registration = Register(name, new McpServerStartInfo
+                    {
+                        Command = command,
+                        Args = args,
+                        WorkingDirectory = cwd,
+                        Environment = env
+                    });
                 }
 
-                var startInfo = new McpServerStartInfo
-                {
-                    Command = command,
-                    Args = args,
-                    WorkingDirectory = cwd,
-                    Environment = env
-                };
-
-                var result = RegisterInternal(name, startInfo);
-                if (result.IsSuccess)
+                if (registration.IsSuccess)
                 {
                     loaded++;
                     if (!string.IsNullOrWhiteSpace(staticInstructions))
@@ -177,7 +227,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 }
                 else
                 {
-                    _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, result.Error);
+                    _logger?.LogWarning("Failed to register MCP server '{Name}': {Error}", name, registration.Error);
                 }
             }
 
@@ -236,6 +286,9 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (!_servers.TryGetValue(server, out var entry))
             return Result.Failure<string>($"MCP server '{server}' is not registered.");
 
+        if (entry.IsRemote)
+            return await InvokeRemoteAsync(entry, server, method, args, cancellationToken).ConfigureAwait(false);
+
         var process = entry.GetProcess();
         if (process is null)
             return Result.Failure<string>($"MCP server '{server}' process is not running.");
@@ -252,25 +305,10 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             if (response is null)
                 return Result.Failure<string>($"MCP server '{server}' returned no response.");
 
-            if (response.RootElement.TryGetProperty("error", out var error))
+            using (response)
             {
-                string msg = error.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
-                return Result.Failure<string>($"MCP error from '{server}': {msg}");
+                return ProcessResponse(response, server, method, entry);
             }
-
-            var resultElement = response.RootElement.GetProperty("result");
-            // ROP-D Z3: harvest the `instructions` field of an `initialize`
-            // result so later turns can surface it in the system prompt.
-            if (method == "initialize"
-                && resultElement.ValueKind == JsonValueKind.Object
-                && resultElement.TryGetProperty("instructions", out var initIns)
-                && initIns.ValueKind == JsonValueKind.String
-                && entry.TrySetInstructions(initIns.GetString()))
-            {
-                _logger?.LogDebug("Captured MCP instructions from '{Server}' initialize", server);
-            }
-
-            return Result.Success(resultElement.GetRawText());
         }
         catch (Exception ex)
         {
@@ -280,6 +318,63 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
             return Result.Failure<string>($"MCP call to '{server}.{method}' failed: {ex.Message}");
         }
+    }
+
+    /// <summary>Remote (HTTP/SSE) call path: per-entry cached transport, same JSON-RPC framing as the stdio path.</summary>
+    private async Task<Result<string>> InvokeRemoteAsync(
+        ServerEntry entry,
+        string server,
+        string method,
+        JsonElement args,
+        CancellationToken cancellationToken)
+    {
+        IMcpRemoteTransport? transport = entry.GetTransport(_logger);
+        if (transport is null)
+            return Result.Failure<string>($"MCP server '{server}' transport could not be created.");
+
+        try
+        {
+            int id = ++_nextId;
+            using var requestDoc = JsonDocument.Parse($"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{args.GetRawText()}}}");
+            JsonDocument? response = await transport
+                .RoundTripAsync(requestDoc.RootElement.Clone(), id, cancellationToken)
+                .ConfigureAwait(false);
+            if (response is null)
+                return Result.Failure<string>($"MCP server '{server}' returned no response.");
+
+            using (response)
+            {
+                return ProcessResponse(response, server, method, entry);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (ex is OperationCanceledException) throw;
+
+            return Result.Failure<string>($"MCP call to '{server}.{method}' failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Shared JSON-RPC response handling: error mapping + `instructions` harvest (ROP-D Z3).</summary>
+    private Result<string> ProcessResponse(JsonDocument response, string server, string method, ServerEntry entry)
+    {
+        if (response.RootElement.TryGetProperty("error", out var error))
+        {
+            string msg = error.TryGetProperty("message", out var m) ? m.GetString() ?? "unknown" : "unknown";
+            return Result.Failure<string>($"MCP error from '{server}': {msg}");
+        }
+
+        var resultElement = response.RootElement.GetProperty("result");
+        if (method == "initialize"
+            && resultElement.ValueKind == JsonValueKind.Object
+            && resultElement.TryGetProperty("instructions", out var initIns)
+            && initIns.ValueKind == JsonValueKind.String
+            && entry.TrySetInstructions(initIns.GetString()))
+        {
+            _logger?.LogDebug("Captured MCP instructions from '{Server}' initialize", server);
+        }
+
+        return Result.Success(resultElement.GetRawText());
     }
 
     public async ValueTask DisposeAsync()
@@ -296,13 +391,52 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
     private sealed class ServerEntry : IAsyncDisposable
     {
-        private readonly McpServerStartInfo _startInfo;
+        private readonly McpServerStartInfo? _startInfo;
+        private readonly McpRemoteEndpoint? _remote;
+        private readonly object _transportGate = new();
         private McpProcessClient? _process;
+        private IMcpRemoteTransport? _transport;
         private volatile string? _instructions;
 
-        public ServerEntry(McpServerStartInfo startInfo) => _startInfo = startInfo;
+        public ServerEntry(McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
+        {
+            _startInfo = startInfo;
+            _remote = remote;
+        }
+
+        public bool IsRemote => _remote is not null;
 
         public string? Instructions => _instructions;
+
+        /// <summary>
+        ///     Lazily create the remote transport (first writer wins under the gate);
+        ///     the instance is cached so streamable-HTTP session ids survive across calls.
+        ///     OAuth placeholder: the full OAuth2 authorization-code flow is deferred —
+        ///     until then hosts may export the <c>HARBOR_MCP_OAUTH_TOKEN</c> environment
+        ///     variable, which is attached as a Bearer token by the transports.
+        /// </summary>
+        public IMcpRemoteTransport? GetTransport(ILogger? logger)
+        {
+            if (_remote is null)
+            {
+                return null;
+            }
+
+            lock (_transportGate)
+            {
+                if (_transport is { } cached)
+                {
+                    return cached;
+                }
+
+                Uri endpoint = new(_remote.Url, UriKind.Absolute);
+                Func<string?> oauthTokenProvider = static () => Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN");
+                _transport = string.Equals(_remote.Transport, "sse", StringComparison.OrdinalIgnoreCase)
+                    ? new McpSseTransport(endpoint, _remote.Headers, oauthTokenProvider, logger)
+                    : new McpHttpTransport(endpoint, _remote.Headers, oauthTokenProvider, logger);
+                return _transport;
+            }
+        }
 
         public void SetInstructions(string? instructions) => _instructions = instructions;
 
@@ -320,6 +454,11 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         public McpProcessClient? GetProcess()
         {
+            if (_startInfo is null)
+            {
+                return null; // remote entries have no subprocess
+            }
+
             if (_process is { HasExited: false }) return _process;
             _process?.DisposeSync();
 
@@ -359,9 +498,20 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         {
             if (_process is not null)
                 return _process.DisposeAsync();
+            if (_transport is not null)
+                return _transport.DisposeAsync();
             return ValueTask.CompletedTask;
         }
 
-        public void DisposeSync() => _process?.DisposeSync();
+        /// <summary>
+        ///     Synchronous teardown for sync contracts (e.g. <c>IMcpRegistry.Unregister</c>).
+        ///     The stdio process is torn down synchronously; the remote transport is
+        ///     abandoned (its HttpClient is finalized) — no sync-over-async bridging.
+        /// </summary>
+        public void DisposeSync()
+        {
+            _process?.DisposeSync();
+            _transport = null;
+        }
     }
 }
