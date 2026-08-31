@@ -133,5 +133,6 @@
         <Project Path="tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj"/>
         <Project Path="tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj"/>
         <Project Path="tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj"/>
+        <Project Path="tests/Harbor.LoadTests/Harbor.LoadTests.csproj"/>
     </Folder>
 </Solution>

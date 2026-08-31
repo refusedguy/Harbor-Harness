@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="../Harbor.E2E.Framework/Harbor.E2E.Framework.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
+  </ItemGroup>
+
+</Project>
