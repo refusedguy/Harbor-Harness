@@ -174,7 +174,7 @@ public sealed class LspManager : ILspService
     }
 
     /// <summary>Nearest ancestor directory containing <c>.git</c>, else the file's directory.</summary>
-    internal static string FindWorkspaceRoot(string filePath)
+    public static string FindWorkspaceRoot(string filePath)
     {
         DirectoryInfo? dir = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "/");
         while (dir is not null)
