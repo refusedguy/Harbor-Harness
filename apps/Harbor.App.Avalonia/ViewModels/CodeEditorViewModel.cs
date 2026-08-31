@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.App.Avalonia.Services;
+using Harbor.Abstractions.Lsp;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
@@ -9,7 +11,10 @@ namespace Harbor.App.Avalonia.ViewModels;
 /// <summary>
 ///     Multi-tab code editor view-model. Uses AvaloniaEdit under the hood (the
 ///     <c>CodeEditorView</c> hosts the <c>TextEditor</c>); this VM owns the tab list,
-///     the active tab, and file open/save orchestration.
+///     the active tab, and file open/save orchestration. When an
+///     <see cref="ILspService" /> is available, opened files are pushed to the
+///     matching builtin language server and its published diagnostics surface
+///     for the active tab.
 /// </summary>
 public sealed partial class CodeEditorViewModel : ObservableObject
 {
@@ -17,24 +22,57 @@ public sealed partial class CodeEditorViewModel : ObservableObject
     private readonly ILogger<CodeEditorViewModel> _logger;
     private readonly AvaloniaFilePicker _picker;
     private readonly IToastService _toasts;
+    private readonly ILspService? _lsp;
+
+    /// <summary>Files already announced to the language server (didOpen sent).</summary>
+    private readonly HashSet<string> _lspOpened = new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
     private EditorTabViewModel? _activeTab;
+
+    [ObservableProperty]
+    private IReadOnlyList<LspDiagnostic> _activeDiagnostics = [];
 
     /// <summary>Construct the code editor view-model.</summary>
     public CodeEditorViewModel(
         AvaloniaFilePicker picker,
         ILogger<CodeEditorViewModel> logger,
         IToastService toasts,
-        IDispatcherAdapter dispatcher)
+        IDispatcherAdapter dispatcher,
+        ILspService? lspService = null)
     {
         _picker = picker;
         _logger = logger;
         _toasts = toasts;
         _dispatcher = dispatcher;
+        _lsp = lspService;
+        if (_lsp is not null)
+        {
+            _lsp.DiagnosticsChanged += OnLspDiagnosticsChanged;
+        }
     }
 
     public ObservableCollection<EditorTabViewModel> Tabs { get; } = new();
+
+    /// <summary>LSP auto-spawn hook: when the active tab changes, announce it to the language server and refresh diagnostics.</summary>
+    partial void OnActiveTabChanged(EditorTabViewModel? oldValue, EditorTabViewModel? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= OnTabPropertyChanged;
+        }
+
+        if (newValue is not null)
+        {
+            newValue.PropertyChanged += OnTabPropertyChanged;
+        }
+
+        RefreshDiagnostics(newValue);
+        if (newValue is not null && _lsp is not null && !_lspOpened.Contains(newValue.FilePath))
+        {
+            OpenWithLsp(newValue.FilePath, newValue.Content);
+        }
+    }
 
     [RelayCommand]
     private async Task OpenFileAsync()
@@ -111,6 +149,106 @@ public sealed partial class CodeEditorViewModel : ObservableObject
         if (ActiveTab == tab)
         {
             ActiveTab = Tabs.LastOrDefault();
+        }
+        if (_lsp is not null && _lspOpened.Remove(tab.FilePath))
+        {
+            _ = CloseWithLspAsync(tab.FilePath);
+        }
+    }
+
+    // ── LSP bridge ─────────────────────────────────────────────────────────
+
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // User edits flow here: push the new text to the language server.
+        if (e.PropertyName == nameof(EditorTabViewModel.Content)
+            && sender is EditorTabViewModel { } tab
+            && ActiveTab == tab
+            && _lsp is not null
+            && _lspOpened.Contains(tab.FilePath))
+        {
+            _ = NotifyLspChangeAsync(tab.FilePath, tab.Content);
+        }
+    }
+
+    /// <summary>didOpen in the background — spawn + handshake must never block file loading.</summary>
+    private void OpenWithLsp(string filePath, string content)
+    {
+        if (_lsp is null || !_lsp.SupportsFile(filePath)) return;
+        _lspOpened.Add(filePath);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _lsp.OpenFileAsync(filePath, content).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "LSP open failed for {Path}", filePath);
+            }
+        });
+    }
+
+    private async Task NotifyLspChangeAsync(string filePath, string content)
+    {
+        if (_lsp is null) return;
+        try
+        {
+            await _lsp.NotifyChangeAsync(filePath, content).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LSP change notification failed for {Path}", filePath);
+        }
+    }
+
+    private async Task CloseWithLspAsync(string filePath)
+    {
+        try
+        {
+            await _lsp!.CloseFileAsync(filePath).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LSP close failed for {Path}", filePath);
+        }
+    }
+
+    private void OnLspDiagnosticsChanged(object? sender, LspDiagnosticsChangedEventArgs args)
+    {
+        RefreshDiagnostics(ActiveTab);
+    }
+
+    private void RefreshDiagnostics(EditorTabViewModel? tab)
+    {
+        if (_lsp is null || tab is null || !_lsp.SupportsFile(tab.FilePath))
+        {
+            SetDiagnostics([]);
+            return;
+        }
+
+        _ = ReadDiagnosticsAsync(tab.FilePath);
+    }
+
+    private void SetDiagnostics(IReadOnlyList<LspDiagnostic> diagnostics)
+        => _dispatcher.Post(() => ActiveDiagnostics = diagnostics);
+
+    private async Task ReadDiagnosticsAsync(string filePath)
+    {
+        try
+        {
+            IReadOnlyList<LspDiagnostic> diagnostics = await _lsp!.GetDiagnosticsAsync(filePath).ConfigureAwait(false);
+            _dispatcher.Post(() =>
+            {
+                if (ActiveTab?.FilePath == filePath)
+                {
+                    ActiveDiagnostics = diagnostics;
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LSP diagnostics read failed for {Path}", filePath);
         }
     }
 }
