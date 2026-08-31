@@ -1,23 +1,30 @@
 {
   "name": "osc-expansion",
-  "state": "queued",
-  "head": "",
+  "state": "done",
+  "head": "aee396a",
   "base": "4593b36",
-  "commits": 0,
-  "started_at": null,
-  "finished_at": null,
+  "commits": 3,
+  "started_at": "2026-09-01T02:49:23+0500",
+  "finished_at": "2026-09-01T03:22:52+0500",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": null,
-  "report": null,
+  "report": "Re-dispatch after the prior run died post-landing: all 3 task commits (da1c5a0, 318d597, aee396a) verified present in shared history; full re-verification executed fresh — build Release 0 errors 0 warnings (single-node -m:1 -p:UseSharedCompilation=false; concurrent dispatch process was evicting MSBuild nodes — MSB4166/MSB6003 — not a code issue), 766/766 CellForge unit, 57/57 PTY golden, 78/78 CLI, 47/47 architecture (in-build HarborArchitectureGate). Hard rules audited against commit diffs: (1) OSC 11/52 regression suites green and sprint parser edit (318d597, EscapeSequenceParser +32/−10) touches only OSC 99/777 interception; (2) PasteSanitizer is SearchValues<char>+ReadOnlySpan<char> stack-only — clean path returns the original string reference (zero alloc), dirty path one string.Create; AllocationBudgetTests green; (3) PermissionRuleset untouched — no new paste permission surface. Sprint-title errata documented in docs/OSC_PROTOCOL_MATRIX.md §errata so nobody 'fixes' them back: kitty does not speak OSC 1337 (its graphics protocol is APC ESC_G — Harbor routes kitty→APC PNG via pre-existing Graphics.KittyPngInline) and kitty's notification protocol is OSC 99 (wire-probed), OSC 777 being the urxvt-family fallback. Protocol compliance matrix (kitty/iTerm2/Windows Terminal/xterm) lives in docs/OSC_PROTOCOL_MATRIX.md.",
   "failures": 0,
   "retries": 0,
-  "last_activity": "2026-08-31T22:19:26+0500",
+  "last_activity": "2026-09-01T03:22:52+0500",
   "progress": {
     "current_task": "",
-    "tasks_done": 0,
-    "tasks_total": 0,
+    "tasks_done": 3,
+    "tasks_total": 3,
     "eta_minutes": 0,
-    "last_heartbeat": "2026-08-30T06:31:40Z"
+    "last_heartbeat": "2026-09-01T03:22:52+0500"
+  },
+  "summary": {
+    "task_1": "da1c5a0 feat(tui): OSC 1337 inline images — iTerm2-family envelope (Osc1337Image, name-sanitized key=value) + capability-routed emission (InlineImageProbe env detection, HARBOR_INLINE_IMAGE override, multiplexer guard): kitty→APC PNG (Graphics.KittyPngInline), iTerm2/WezTerm/Konsole/mintty→OSC 1337, unsupported→text card fallback. Tests: Osc1337ImageTests 6 + InlineImageProbeTests 5 + ChatScreenBridgeTests 17 = 28 green",
+    "task_2": "318d597 feat(tui): desktop notifications — kitty OSC 99 wire probe (NotifyProbe + parser Osc99NotifyReport interception) with urxvt OSC 777 env-family fallback, 30 s long-turn timer fires only while agent.State.IsRunning, fully suppressed when probe silent and env undetected; timer thread stages sequence, frame loop writes (single-threaded backend). Tests: Osc777NotifyTests 11 green",
+    "task_3": "aee396a feat(tui): bracketed-paste anti-injection sanitizer — span-based PasteSanitizer (strip CSI/OSC/DCS/Fe/C1/DEL, keep \\n\\t+printable; zero-alloc clean path) + sanitized preview lines in REPL; multi-line paste inserts as text, Enter never executes. Tests: PasteSanitizerTests 13 green + PTY paste-injection/multiline/chunked scenarios within 57 green",
+    "tests": "28 (1337) + 11 (777/99) + 13 (paste) per-commit, aggregate 766 CellForge + 57 PTY golden + 78 CLI + 47 architecture, all green (re-verified 2026-09-01, build 0 err 0 warn)",
+    "perf": "docs/BENCHMARKS.md unaffected — no hot-path changes outside PasteSanitizer (clean path alloc-free by test contract)"
   }
 }
