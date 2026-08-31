@@ -43,8 +43,10 @@ public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
         await Assert.That(lines.Any(x => x.Contains("🚀", StringComparison.Ordinal))).IsTrue();
 
         // Exact content reached the model (non-ASCII is \uXXXX-escaped on wire).
+        // Signal on recorded chat-completions, not RequestCount — see the
+        // /models race note in KittyKeysScenarioTests.
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
         await Assert.That(LastUserContent(Server.ReceivedRequests[^1].RawBody)).IsEqualTo(MixedText);
     }

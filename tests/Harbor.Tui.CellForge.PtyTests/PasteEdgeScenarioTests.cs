@@ -36,9 +36,11 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
         await Assert.That(lines.Any(x => x.Contains("bravo", StringComparison.Ordinal))).IsTrue();
 
         // Plain Enter submits ONE message with the embedded newline intact.
+        // Signal on recorded chat-completions, not RequestCount — see the
+        // /models race note in KittyKeysScenarioTests.
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
 
         var body = Server.ReceivedRequests[^1].RawBody;
@@ -78,7 +80,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
         // Submit → the FULL 2.5 KB reaches the model byte-exact.
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
 
         string received = LastUserContent(Server.ReceivedRequests[^1].RawBody);

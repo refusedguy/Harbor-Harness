@@ -35,16 +35,19 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
         await Assert.That(bb).IsGreaterThan(aa);
 
         // Ctrl+Enter (ctrl bit = 2): neither submit nor newline — the buffer
-        // keeps both lines.
-        int before = Server.RequestCount;
+        // keeps both lines. Signal on recorded chat-completions, not
+        // RequestCount: the registry's lazy /models fetch bumps the total
+        // request count without adding to ReceivedRequests, which races the
+        // [^1] index below (ArgumentOutOfRangeException on an empty snapshot).
+        int before = Server.ReceivedRequests.Count;
         Session.SendKey("\x1b[13;3u");
         await Task.Delay(400).ConfigureAwait(false);
-        await Assert.That(Server.RequestCount).IsEqualTo(before);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(before);
 
         // Plain Enter submits the accumulated draft as one message.
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > before, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > before, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
         await Assert.That(Server.ReceivedRequests[^1].RawBody).Contains("AA\\nBB");
     }

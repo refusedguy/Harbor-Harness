@@ -78,11 +78,13 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
         await Assert.That(NormalizedLines().Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal))).IsFalse();
 
         // Yank again, then submit proves the buffer is functional.
+        // Signal on recorded chat-completions, not RequestCount — see the
+        // /models race note in KittyKeysScenarioTests.
         Session.SendKey("\x19");
         await Task.Delay(200).ConfigureAwait(false);
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
         await Assert.That(Server.ReceivedRequests[^1].RawBody).Contains("KILLTEXT");
     }

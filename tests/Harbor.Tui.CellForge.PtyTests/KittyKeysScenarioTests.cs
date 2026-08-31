@@ -36,9 +36,12 @@ public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
         await Assert.That(bb).IsGreaterThan(aa);
 
         // Plain Enter now submits ONE message carrying the embedded newline.
+        // Signal on recorded chat-completions, not RequestCount: the lazy
+        // /models fetch bumps the total without adding to ReceivedRequests,
+        // which races the [^1] index below.
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
-            _ => Server.RequestCount > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(submitted).IsTrue();
 
         var body = Server.ReceivedRequests[^1].RawBody;
