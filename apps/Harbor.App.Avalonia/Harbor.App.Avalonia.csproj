@@ -91,6 +91,7 @@
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Terminal.Pty\Harbor.Terminal.Pty.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
 
