@@ -46,6 +46,10 @@ public sealed class ChatScreenBridge : IDisposable
     /// already-rendered prefix or turn 2+ would duplicate every block.</summary>
     private int _replayedMessages;
 
+    /// <summary>AgentErrorEvent seen since the last AgentStart — decides
+    /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
+    private bool _runHadError;
+
     private readonly record struct PendingLine(string Text, long AtMs);
 
     private sealed class ToolCard
@@ -128,6 +132,8 @@ public sealed class ChatScreenBridge : IDisposable
         {
             case AgentStartEvent started:
                 ReplayHistory(started.Messages);
+                _runHadError = false;
+                _status.Phase = AgentPhase.Auto;
                 _status.Mode = StatusBarMode.Running;
                 break;
 
@@ -152,6 +158,7 @@ public sealed class ChatScreenBridge : IDisposable
                 {
                     var card = EnsureCard(execStart.ToolCallId, execStart.ToolName, Summarize(execStart.Args));
                     card.StartedMs = _nowMs;
+                    _status.Phase = AgentPhase.ToolCall;
                     _status.Mode = StatusBarMode.Running;
                     break;
                 }
@@ -181,11 +188,14 @@ public sealed class ChatScreenBridge : IDisposable
             case AgentErrorEvent error:
                 FlushStreamNow();
                 AppendSystem("! " + error.Message);
+                _runHadError = true;
+                _status.Phase = AgentPhase.Errored;
                 _status.Mode = StatusBarMode.Idle;
                 break;
 
             case AgentEndEvent:
                 FlushStreamNow();
+                _status.Phase = _runHadError ? AgentPhase.Errored : AgentPhase.Succeeded;
                 _status.Mode = StatusBarMode.Idle;
                 break;
         }
@@ -254,6 +264,7 @@ public sealed class ChatScreenBridge : IDisposable
         _pending.Clear();
         _stream = new StreamingMarkdownBlock();
         _panel.Timeline.Append(_stream);
+        _status.Phase = AgentPhase.Thinking;
         _status.Mode = StatusBarMode.Running;
     }
 

@@ -14,6 +14,18 @@ public enum MascotMood : byte
 
     /// <summary>Sleep — session untouched for a long while.</summary>
     Sleeping = 3,
+
+    /// <summary>Brow sway — the LLM is streaming text (mascot-brand T1).</summary>
+    Thinking = 4,
+
+    /// <summary>Tail flick — a tool is executing.</summary>
+    ToolCall = 5,
+
+    /// <summary>Flat X stare — the last run failed.</summary>
+    Error = 6,
+
+    /// <summary>Purr whisker wiggle — the last run finished clean.</summary>
+    Success = 7,
 }
 
 /// <summary>
@@ -36,21 +48,51 @@ public static class AmbientMascot
     /// <summary>Sleeping — slow breath, drifting zzz (constant 8-cell width).</summary>
     public static readonly string[] SleepingFrames = ["( -.-  )", "( -.- z)", "( -.-  )", "( z-.- )"];
 
+    /// <summary>Thinking — brows sway while the LLM streams (constant 8-cell width).</summary>
+    public static readonly string[] ThinkingFrames = ["( ^..^ )", "( ~..^ )", "( ^..^ )", "( ^..~ )"];
+
+    /// <summary>Tool call — tail flicks left/right while the paws are busy (constant 8-cell width).</summary>
+    public static readonly string[] ToolCallFrames = ["( ^..^)|", "( ^..^ )", "(|^..^ )", "( ^..^ )"];
+
+    /// <summary>Error — flat X stare, then a squeeze (constant 8-cell width).</summary>
+    public static readonly string[] ErrorFrames = ["( X..X )", "( >..< )"];
+
+    /// <summary>Success — purr whisker wiggle (constant 8-cell width).</summary>
+    public static readonly string[] SuccessFrames = ["(=^w^= )", "( =^w^=)"];
+
     /// <summary>Sleeping advances once per this many ticks (slow breath).</summary>
     public const int SleepPeriod = 8;
 
-    /// <summary>Frame for the given monotonic tick and mood. Deterministic.</summary>
-    public static string Frame(long monotonicTick, MascotMood mood = MascotMood.Idle) => mood switch
+    /// <summary>Frame bank for a mood — static arrays, never copied.</summary>
+    public static string[] FramesOf(MascotMood mood) => mood switch
     {
-        MascotMood.Working => WorkingFrames[IndexOf(WorkingFrames, monotonicTick)],
-        MascotMood.Awaiting => AwaitingFrames[IndexOf(AwaitingFrames, monotonicTick)],
-        MascotMood.Sleeping => SleepingFrames[IndexOf(SleepingFrames, monotonicTick / SleepPeriod)],
-        _ => IdleFrames[IndexOf(IdleFrames, monotonicTick)],
+        MascotMood.Working => WorkingFrames,
+        MascotMood.Awaiting => AwaitingFrames,
+        MascotMood.Sleeping => SleepingFrames,
+        MascotMood.Thinking => ThinkingFrames,
+        MascotMood.ToolCall => ToolCallFrames,
+        MascotMood.Error => ErrorFrames,
+        MascotMood.Success => SuccessFrames,
+        _ => IdleFrames,
     };
+
+    /// <summary>
+    /// Index into the mood's frame bank for the given monotonic tick — the
+    /// panel-mode renderer uses it to keep ear/paw rows in lockstep with the
+    /// face row. Deterministic; negative ticks wrap.
+    /// </summary>
+    public static int FrameIndex(long monotonicTick, MascotMood mood)
+    {
+        string[] frames = FramesOf(mood);
+        long period = mood == MascotMood.Sleeping ? SleepPeriod : 1;
+        int i = (int)((monotonicTick / period) % frames.Length);
+        return i >= 0 ? i : i + frames.Length;
+    }
+
+    /// <summary>Frame for the given monotonic tick and mood. Deterministic.</summary>
+    public static string Frame(long monotonicTick, MascotMood mood = MascotMood.Idle) =>
+        FramesOf(mood)[FrameIndex(monotonicTick, mood)];
 
     /// <summary>Display width of the frame (all frames are single-width runes).</summary>
     public static int Width(string frame) => frame.Length;
-
-    private static int IndexOf(string[] frames, long tick) =>
-        (int)(tick % frames.Length) is int i && i >= 0 ? i : i + frames.Length;
 }

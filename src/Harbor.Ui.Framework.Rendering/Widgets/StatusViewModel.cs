@@ -28,6 +28,11 @@ public sealed class StatusViewModel
 
     public StatusBarMode Mode { get; set; }
 
+    /// <summary>Fine-grained agent phase (mascot-brand T1): disambiguates
+    /// Running into thinking / tool-call and flags end-of-run outcomes for the
+    /// mascot. <see cref="AgentPhase.Auto" /> derives from <see cref="Mode" /> alone.</summary>
+    public AgentPhase Phase { get; set; }
+
     public int? ContextTokensUsed { get; private set; }
 
     public int ContextWindow { get; private set; }
