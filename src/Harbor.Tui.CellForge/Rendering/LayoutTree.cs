@@ -106,6 +106,19 @@ public sealed class LayoutTree
 
     public IReadOnlyCollection<Panel> Panels => _panels.Values;
 
+    /// <summary>
+    /// Paints every registered panel in registration order through the
+    /// dictionary's struct enumerator — the steady-state frame path must not
+    /// box an enumerator (the <see cref="Panels" /> interface foreach does).
+    /// </summary>
+    public void PaintAll(ScreenBuffer buffer)
+    {
+        foreach (var panel in _panels.Values)
+        {
+            panel.Paint(buffer);
+        }
+    }
+
     public void AddRoot(Panel panel)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(panel.Id);
@@ -291,10 +304,17 @@ public sealed class LayoutTree
 
     private void ApplyCached()
     {
-        var panels = Ordered().ToArray();
-        for (int i = 0; i < panels.Length && i < _solvedOrder.Count; i++)
+        // Reuse the shared collect buffer — this runs every steady-state frame
+        // and must not allocate (an ToArray here costs per panel per frame).
+        _orderedBuffer.Clear();
+        if (_root is not null)
         {
-            panels[i].Rect = _solvedOrder[i];
+            Collect(_root, _orderedBuffer);
+        }
+
+        for (int i = 0; i < _orderedBuffer.Count && i < _solvedOrder.Count; i++)
+        {
+            _orderedBuffer[i].Rect = _solvedOrder[i];
         }
 
         if (_focusedId is not null && _panels.TryGetValue(_focusedId, out var focused))

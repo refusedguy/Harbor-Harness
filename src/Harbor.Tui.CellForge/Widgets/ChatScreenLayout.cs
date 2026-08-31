@@ -29,24 +29,32 @@ public sealed class ComposerPanel : Panel
             return;
         }
 
-        var snapshot = Composer.Buffer.SnapshotText();
-        var logical = snapshot.Split('\n');
+        // Zero-alloc steady-state paint (renderer-moat): iterate the live
+        // buffer span instead of SnapshotText()+Split, which allocated a
+        // string plus an array every frame.
+        ReadOnlySpan<char> snapshot = Composer.Buffer.AsSpan();
         int caret = Composer.Buffer.Cursor;
 
         // Locate the caret row/col inside the logical lines.
         int caretRow = 0, caretCol = 0, seen = 0;
-        for (int i = 0; i < logical.Length; i++)
+        while (true)
         {
-            int len = logical[i].Length;
+            int newline = snapshot[seen..].IndexOf('\n');
+            int len = newline < 0 ? snapshot.Length - seen : newline;
             if (caret <= seen + len)
             {
-                caretRow = i;
                 caretCol = caret - seen;
                 break;
             }
 
-            seen += len + 1; // '\n'
-            caretRow = Math.Min(i + 1, Rect.Height - 1);
+            if (newline < 0)
+            {
+                caretCol = snapshot.Length - seen;
+                break;
+            }
+
+            seen += newline + 1; // '\n'
+            caretRow = Math.Min(caretRow + 1, Rect.Height - 1);
             caretCol = 0;
         }
 
@@ -56,15 +64,25 @@ public sealed class ComposerPanel : Panel
         // would otherwise leave ghost characters on the emulated grid.
         buffer.Fill(Rect, Cell.Blank);
 
+        int rowStart = 0;
         for (int row = 0; row < Rect.Height; row++)
         {
-            var text = row < logical.Length ? logical[row] : string.Empty;
+            int newline = snapshot[rowStart..].IndexOf('\n');
+            int lineLen = newline < 0 ? snapshot.Length - rowStart : newline;
+            var text = snapshot.Slice(rowStart, lineLen);
             buffer.SetText(Rect.X, Rect.Y + row, text, CellStyle.Plain);
 
-            if (text.Length == 0 && logical.Length == 1 && !string.IsNullOrEmpty(Placeholder))
+            if (text.Length == 0 && snapshot.Length == 0 && !string.IsNullOrEmpty(Placeholder))
             {
                 buffer.SetText(Rect.X, Rect.Y, Placeholder, PlaceholderStyle);
             }
+
+            if (newline < 0)
+            {
+                break;
+            }
+
+            rowStart += newline + 1;
         }
 
         if (caretRow < Rect.Height && caretCol <= Rect.Width)

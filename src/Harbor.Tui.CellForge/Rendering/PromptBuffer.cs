@@ -78,6 +78,13 @@ public sealed class PromptBuffer
     public string SnapshotText() => new(_buf, 0, _length);
 
     /// <summary>
+    /// Live view over current content — zero-alloc read for the every-frame
+    /// composer paint. Valid until the next edit (edits may grow/reorder the
+    /// backing array); painters consume the span within the frame.
+    /// </summary>
+    public ReadOnlySpan<char> AsSpan() => _buf.AsSpan(0, _length);
+
+    /// <summary>
     /// Text of the last completed readline kill (Ctrl+U/W/K, Alt+D).
     /// Backspace/DeleteForward are not kills; a no-op kill never clobbers the
     /// previous entry. Single-slot kill ring backing the composer's Ctrl+Y yank.

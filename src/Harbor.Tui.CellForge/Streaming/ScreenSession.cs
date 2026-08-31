@@ -58,6 +58,22 @@ public sealed class ScreenSession
         ApplyResize(cols, rows);
     }
 
+    /// <summary>
+    /// Marks a screen region damaged for the next flush — the diff then
+    /// rescans only hinted regions (partial-scan mode) instead of the whole
+    /// grid. Damage is CONSERVATIVE by contract: every region a frame might
+    /// have touched must be hinted, or callers fall back to
+    /// <see cref="DamageAll"/> / no hints (plain full scan).
+    /// </summary>
+    public void Damage(in Rect rect) => _engine.FrameHint(in rect);
+
+    /// <summary>
+    /// Forces the next flush to a full scan (the no-hints path) — used when
+    /// damage is broad or untrackable: resize, theme swap, layout animation,
+    /// appends that shift whole viewports.
+    /// </summary>
+    public void DamageAll() => _engine.ClearHints();
+
     private void ApplyResize(int cols, int rows)
     {
         if (cols == CurrentCols && rows == CurrentRows)
@@ -95,5 +111,16 @@ public sealed class ScreenSession
     {
         _engine.Flush(_back, _writer);
         await _writer.EndFrameAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Synchronous twin of <see cref="FlushFrameAsync"/> for sync render
+    /// contexts and perf probes: same diff + empty-frame + sync-update
+    /// semantics, no async machinery on the steady-state path.
+    /// </summary>
+    public void FlushFrame()
+    {
+        _engine.Flush(_back, _writer);
+        _writer.EndFrame();
     }
 }

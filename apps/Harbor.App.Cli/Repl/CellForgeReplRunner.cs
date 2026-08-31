@@ -113,6 +113,13 @@ internal sealed class CellForgeReplRunner(
 
     private int _timelineViewportH;
 
+    /// <summary>Partial-scan damage ledger (renderer-moat sprint): frames
+    /// triggered by user input or event-driven state changes repaint via the
+    /// plain full scan; only quiet animation frames (spinner, gate pulse,
+    /// entrance fades) narrow the diff to hinted rects.</summary>
+    private bool _broadDamageNextFrame = true;
+    private readonly Rect[] _fxDamageScratch = new Rect[VirtualizedChatTimeline.MaxFxDamage];
+
     /// <summary>Width the sidebar spring policy was last applied for (P1.6
     /// spring resize): 0 until the first frame so cold start snaps instead
     /// of replaying the static geometry as motion.</summary>
@@ -271,6 +278,7 @@ internal sealed class CellForgeReplRunner(
             {
                 _themeReloadLine = null;
                 bridge.AppendSystemLine(themeLine);
+                _broadDamageNextFrame = true; // live theme swap re-projects every style
             }
 
             if (_usageDirty)
@@ -373,10 +381,7 @@ internal sealed class CellForgeReplRunner(
         _ = _timeline.PrepareFrame(tlRect.Width > 0 ? tlRect.Width : cols, _timelineViewportH);
 
         screenSession.BeginFrame();
-        foreach (var panel in screen.Tree.Panels)
-        {
-            panel.Paint(screenSession.Back);
-        }
+        screen.Tree.PaintAll(screenSession.Back);
 
         // Copy-on-select highlight (P6.4): transient Reverse overlay — the
         // next repaint without an active selection clears it for free.
@@ -394,7 +399,60 @@ internal sealed class CellForgeReplRunner(
             _palette.Paint(screenSession.Back, new Rect(x, y, w, h));
         }
 
+        // Partial-scan damage (renderer-moat): quiet animation frames narrow
+        // the diff to the rects that can actually have changed; every other
+        // frame — input, events, layout animation, theme swap — full scan.
+        ApplyFrameDamageHints(cols);
+
         await screenSession.FlushFrameAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Translates the frame's change sources into diff hints. Conservative by
+    /// construction: narrow hints only while the frame was NOT triggered by
+    /// input/events, and only for regions with clock-driven animation. Any
+    /// doubt falls back to the full scan (empty hints — the engine's default).
+    /// </summary>
+    private void ApplyFrameDamageHints(int cols)
+    {
+        bool broad = _broadDamageNextFrame || screen.Tree.IsAnimating;
+        int fxCount = 0;
+        if (!broad)
+        {
+            broad = _timeline.ConsumeFrameDamage(_fxDamageScratch, out fxCount);
+        }
+        else
+        {
+            _timeline.ConsumeFrameDamage(_fxDamageScratch, out _);
+        }
+
+        _broadDamageNextFrame = false;
+        if (broad)
+        {
+            return; // hints empty → engine runs the fused full scan
+        }
+
+        // Status bar: 1 row — spinner frames, mascot animation, mode
+        // crossfades and the retry countdown all live here. Hinting one row
+        // is negligible next to the 500-row feed it protects.
+        if (screen.Status.Rect.Height > 0)
+        {
+            screenSession.Damage(new Rect(0, screen.Status.Rect.Y, cols, screen.Status.Rect.Height));
+        }
+
+        if (_palette.Visible && screenSession.CurrentRows > 0)
+        {
+            int w = Math.Clamp(cols - 8, 20, 56);
+            int h = Math.Min(_palette.Results.Count + 5, Math.Max(5, screenSession.CurrentRows - 4));
+            int x = Math.Max(0, (cols - w) / 2);
+            int y = Math.Max(0, (screenSession.CurrentRows - h) / 3);
+            screenSession.Damage(new Rect(x, y, w, h));
+        }
+
+        for (int i = 0; i < fxCount; i++)
+        {
+            screenSession.Damage(_fxDamageScratch[i]);
+        }
     }
 
     /// <summary>Copy-on-select release (killer features §P6.4): extracts the
@@ -443,6 +501,9 @@ internal sealed class CellForgeReplRunner(
 
     private async Task HandleInputAsync(InputEvent evt, CancellationToken ct)
     {
+        // Any user input can mutate composer, palette, scroll or selection —
+        // the next frame takes the conservative full-scan path.
+        _broadDamageNextFrame = true;
         switch (evt.Kind)
         {
             case InputEventKind.Key:
@@ -504,6 +565,10 @@ internal sealed class CellForgeReplRunner(
 
     private async Task HandleKeyAsync(KeyEvent key, CancellationToken ct)
     {
+        // Key routing can mutate gates, palette, vim state or the composer —
+        // the next frame takes the conservative full-scan path.
+        _broadDamageNextFrame = true;
+
         // Command palette: ctrl+p toggles; a visible palette claims keys first
         // so Enter/Esc/letters never leak into the approval gate or composer.
         if (key.Key == KeyCode.Char && key.Modifiers == KeyModifiers.Ctrl
@@ -867,6 +932,7 @@ internal sealed class CellForgeReplRunner(
     /// preserved when a richer source already reported it.</summary>
     private void RefreshUsage()
     {
+        _broadDamageNextFrame = true; // status + sidebar both re-render
         if (_tokens?.GetStats() is not { } stats)
         {
             return;

@@ -231,4 +231,99 @@ public class DiffEngineTests
         await Assert.That(engine.FrontMatches(back)).IsTrue();
         await Assert.That(backend.Text.Count(c => c == '*')).IsEqualTo(40);
     }
+
+    [Test]
+    public async Task FrameHint_OverlappingRects_MergeIntoOne()
+    {
+        var (engine, backend, writer) = Make(20, 10);
+        var back = new ScreenBuffer(20, 10);
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        back.SetText(2, 2, "abcdefgh", CellStyle.Plain);
+        engine.FrameHint(new Rect(0, 2, 4, 1)); // x ∈ [0..4)
+        engine.FrameHint(new Rect(3, 2, 4, 1)); // overlaps → merged into x ∈ [0..7)
+        engine.FrameHint(new Rect(100, 100, 5, 5)); // fully off-screen → dropped
+        await Assert.That(engine.HintArea()).IsEqualTo(7); // union width 7, not 4+4
+
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        await Assert.That(backend.Text.Contains("abcde")).IsTrue();
+        await Assert.That(backend.Text.Contains('h')).IsFalse(); // x=9 sits outside the union
+    }
+
+    [Test]
+    public async Task FrameHint_ClipsToScreen()
+    {
+        var (engine, backend, writer) = Make(10, 5);
+        var back = new ScreenBuffer(10, 5);
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        back.SetText(8, 4, "tail", CellStyle.Plain);
+        engine.FrameHint(new Rect(5, 3, 50, 50)); // extends past the bottom-right corner
+        await Assert.That(engine.HintArea()).IsEqualTo(10); // 5×2 clipped window, not 2500
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        await Assert.That(engine.FrontMatches(back)).IsTrue();
+    }
+
+    [Test]
+    public async Task HintedFullWidthRow_AdoptsHash_PartialRow_Invalidates()
+    {
+        var engine = new DiffEngine(10, 2);
+        var back = new ScreenBuffer(10, 2);
+        var writer = new AnsiWriter(new RecordingBackend(), syncUpdates: true);
+
+        // Full-width hint → FRONT row hash cache must be adopted (authoritative).
+        back.SetText(0, 0, "full", CellStyle.Plain);
+        engine.FrameHint(new Rect(0, 0, 10, 1));
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+        bool adoptedAfterFullRow = engine.Front.IsRowHashValid(0);
+
+        // Partial-width hint → cells outside the span are unscanned; FRONT's
+        // cache must be invalidated instead of adopted, or a later flush could
+        // skip the row on a stale hash.
+        back.SetText(6, 1, "part", CellStyle.Plain);
+        engine.FrameHint(new Rect(4, 1, 4, 1));
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        await Assert.That(adoptedAfterFullRow).IsTrue();
+        await Assert.That(engine.Front.IsRowHashValid(1)).IsFalse();
+        await Assert.That(engine.FrontMatches(back)).IsFalse(); // cols [0..4) of row 1 unscanned
+    }
+
+    [Test]
+    public async Task HintBoundary_SplittingWidePair_RepairsLeadHalf()
+    {
+        var (engine, backend, writer) = Make(10, 1);
+        var back = new ScreenBuffer(10, 1);
+        var cjk = new Rune(0x4E2D); // wide: lead + tail pair
+
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+        backend.ResetForTests();
+
+        // Paint the pair at columns 2..3 but hint ONLY the tail half.
+        back.SetRune(2, 0, cjk, CellStyle.Plain);
+        engine.FrameHint(new Rect(3, 0, 7, 1));
+        writer.BeginFrame();
+        engine.Flush(back, writer);
+        await writer.EndFrameAsync();
+
+        // The lead half must have been repaired — no ghost glyph survives.
+        await Assert.That(engine.FrontMatches(back)).IsTrue();
+        await Assert.That(backend.Text.Contains((char)0x4E2D)).IsTrue();
+    }
 }

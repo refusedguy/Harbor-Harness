@@ -10,8 +10,15 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// </summary>
 public sealed class VirtualizedChatTimeline
 {
+    /// <summary>Upper bound on narrow (per-widget) damage rects reported per frame.</summary>
+    public const int MaxFxDamage = 8;
+
     private readonly TimelineLayoutCache _cache = new();
     private readonly Dictionary<IChatBlock, long> _entranceStarts = new();
+    private readonly Rect[] _fxDamage = new Rect[MaxFxDamage];
+    private int _fxDamageCount;
+    private bool _broadDamage;
+    private long _lastScrollY = -1;
     private int _lastWidth = -1;
     private bool _dirtyGeometry = true;
     private bool _entranceFx;
@@ -82,6 +89,7 @@ public sealed class VirtualizedChatTimeline
         MarkEntrance(block);
         _budgetUsed += Math.Max(0, block.BudgetBytes);
         _dirtyGeometry = true;
+        _broadDamage = true;
 
         EvictOverBudget();
         MarkLastDirty();
@@ -107,6 +115,7 @@ public sealed class VirtualizedChatTimeline
             _ = _cache.EvictFirst();
             _ = _entranceStarts.Remove(evicted);
             _dirtyGeometry = true;
+            _broadDamage = true;
         }
     }
 
@@ -123,6 +132,7 @@ public sealed class VirtualizedChatTimeline
         _budgetUsed += Math.Max(0, block.BudgetBytes) - Math.Max(0, old.BudgetBytes);
         _cache.Replace(_cache.Count - 1, block);
         _dirtyGeometry = true;
+        _broadDamage = true;
         MarkLastDirty();
     }
 
@@ -141,14 +151,21 @@ public sealed class VirtualizedChatTimeline
                 _budgetUsed += Math.Max(0, replacement.BudgetBytes) - Math.Max(0, existing.BudgetBytes);
                 _cache.Replace(i, replacement);
                 _dirtyGeometry = true;
+                _broadDamage = true;
                 _cache.MarkHeightsDirty(i);
                 return;
             }
         }
     }
 
-    /// <summary>Streaming tail grew — last block's cached height is stale.</summary>
-    public void MarkLastDirty() => _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
+    /// <summary>Streaming tail grew — last block's cached height is stale.
+    /// Height changes can reflow every row below the block, so the next
+    /// frame's damage is treated as viewport-wide (partial-scan contract).</summary>
+    public void MarkLastDirty()
+    {
+        _cache.MarkHeightsDirty(Math.Max(0, _cache.Count - 1));
+        _broadDamage = true;
+    }
 
     public void ScrollUp(int lines) => ScrollBy(-lines);
 
@@ -244,7 +261,9 @@ public sealed class VirtualizedChatTimeline
         }
     }
 
-    /// <summary>Runs layout for this frame; resolves follow-tail and anchors.</summary>
+    /// <summary>Runs layout for this frame; resolves follow-tail and anchors.
+    /// Any scroll shift, rewrap or full rebuild flags viewport-wide damage —
+    /// partial-scan hints must never miss content that moved.</summary>
     public LayoutOutcome PrepareFrame(int width, int viewportH)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(width);
@@ -252,6 +271,7 @@ public sealed class VirtualizedChatTimeline
 
         if (_lastWidth != width && _cache.Count > 0)
         {
+            _broadDamage = true;
             _cache.PinAnchor(ScrollY);
         }
 
@@ -266,6 +286,7 @@ public sealed class VirtualizedChatTimeline
 
         if (outcome == LayoutOutcome.FullRebuild && _cache.Count > 0)
         {
+            _broadDamage = true;
             ScrollY = Math.Max(0, _cache.RestoreAnchor());
         }
 
@@ -288,6 +309,13 @@ public sealed class VirtualizedChatTimeline
                 _scrollAnimating = false;
                 _visualScrollY = _scrollTarget;
             }
+        }
+
+        // Any visible scroll movement re-homes every row — viewport-wide.
+        if (EffectiveScrollY != _lastScrollY)
+        {
+            _broadDamage = true;
+            _lastScrollY = EffectiveScrollY;
         }
 
         return outcome;
@@ -333,7 +361,8 @@ public sealed class VirtualizedChatTimeline
 
             double alpha = 1.0;
             var block = _cache.BlockAt(i);
-            bool animating = _entranceStarts.TryGetValue(block, out long startTick);
+            bool entrance = _entranceStarts.TryGetValue(block, out long startTick);
+            bool animating = entrance;
             if (animating)
             {
                 alpha = PanelFx.Progress(startTick, CurrentTick, PanelFx.FadeFrames);
@@ -365,11 +394,64 @@ public sealed class VirtualizedChatTimeline
             var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick);
             block.Paint(ctx);
 
-            if (animating && alpha < 1.0)
+            // Narrow (per-widget) damage bookkeeping: entrance fades and
+            // pending approval-gate pulses are the only blocks whose cells
+            // mutate between user events — everything else repaints identically.
+            // The settle frame (fade ends this frame) counts too: styles jump
+            // from the faded blend to the final ones exactly once.
+            var paintedRect = new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH));
+            bool fading = animating && alpha < 1.0;
+            bool fx = fading || (entrance && !animating);
+            if (!fx && block is ApprovalGateView { IsPending: true } gate && gate.PulseBirthTick >= 0)
             {
-                PanelFx.BlendRegion(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), alpha);
+                fx = PanelFx.WarnPulse(gate.PulseBirthTick, CurrentTick) > 0;
+            }
+
+            if (fx && _fxDamageCount < MaxFxDamage)
+            {
+                // Slide corridor (partial-scan contract): during entrance a
+                // block paints up to SlideMaxRows BELOW its final slot, so
+                // rows vacated since the previous frame sit under the painted
+                // rect — extend the damage down or ghosts survive the scan.
+                _fxDamage[_fxDamageCount++] = fading
+                    ? new Rect(paintedRect.X, paintedRect.Y, paintedRect.Width, paintedRect.Height + PanelFx.SlideMaxRows)
+                    : paintedRect;
+            }
+            else if (fx)
+            {
+                _broadDamage = true; // ledger overflow — don't drop damage silently
+            }
+
+            if (fading)
+            {
+                PanelFx.BlendRegion(buffer, paintedRect, alpha);
             }
         }
+    }
+
+    /// <summary>
+    /// Hands the frame's damage to the host and resets the ledger. Returns
+    /// true when damage is viewport-wide (appends, scroll, rewrap, streaming
+    /// reflow) — the host must then run a plain full scan. When false, the
+    /// <paramref name="fxOut"/> span receives the narrow per-widget rects that
+    /// may have changed (empty = the feed was quiet this frame); everything
+    /// outside those rects is known-identical.
+    /// </summary>
+    public bool ConsumeFrameDamage(Span<Rect> fxOut, out int fxCount)
+    {
+        bool broad = _broadDamage;
+        fxCount = broad ? 0 : Math.Min(_fxDamageCount, fxOut.Length);
+        if (!broad)
+        {
+            for (int i = 0; i < fxCount; i++)
+            {
+                fxOut[i] = _fxDamage[i];
+            }
+        }
+
+        _broadDamage = false;
+        _fxDamageCount = 0;
+        return broad;
     }
 
     public (int First, int Last) VisibleRange(int viewportH) => _cache.VisibleRange(ScrollY, viewportH);

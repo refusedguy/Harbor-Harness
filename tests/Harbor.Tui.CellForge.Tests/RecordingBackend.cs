@@ -53,4 +53,11 @@ internal sealed class RecordingBackend : ITerminalBackend
         _writes.Add(bytes.ToArray());
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>Sync twin used by <see cref="AnsiWriter.EndFrame"/> (sync render
+    /// contexts and perf probes) — same capture semantics.</summary>
+    public void Write(ReadOnlySpan<byte> bytes)
+    {
+        _writes.Add(bytes.ToArray());
+    }
 }

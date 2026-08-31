@@ -25,7 +25,7 @@ public sealed class DiffEngine
     public const double HintAreaThreshold = 0.25;
 
     private readonly ScreenBuffer _front;
-    private readonly List<Rect> _hints = [];
+    private readonly List<Rect> _hints = new(16);
 
     public DiffEngine(int cols, int rows) => _front = new ScreenBuffer(cols, rows);
 
@@ -34,8 +34,33 @@ public sealed class DiffEngine
     /// <summary>The terminal-mirror buffer.</summary>
     public ScreenBuffer Front => _front;
 
-    /// <summary>Registers a damaged region for the next flush.</summary>
-    public void FrameHint(in Rect damage) => _hints.Add(damage);
+    /// <summary>
+    /// Registers a damaged region for the next flush. The rect is clipped to
+    /// the screen and merged into any hint it overlaps — the union may cover
+    /// cells neither rect damaged (conservative), never fewer. Damage outside
+    /// registered hints is NOT scanned: callers must hint every region a
+    /// frame might have touched, or skip hints entirely for that frame.
+    /// </summary>
+    public void FrameHint(in Rect damage)
+    {
+        var clipped = damage.Intersect(new Rect(0, 0, _front.Cols, _front.Rows));
+        if (clipped.Width <= 0 || clipped.Height <= 0)
+        {
+            return;
+        }
+
+        var hints = _hints;
+        for (int i = 0; i < hints.Count; i++)
+        {
+            if (hints[i].Intersect(clipped) != default)
+            {
+                hints[i] = Union(hints[i], clipped);
+                return;
+            }
+        }
+
+        hints.Add(clipped);
+    }
 
     /// <summary>Drops accumulated hints (e.g. on resize).</summary>
     public void ClearHints() => _hints.Clear();
@@ -55,7 +80,10 @@ public sealed class DiffEngine
 
     /// <summary>
     /// Syncs the terminal to <paramref name="next"/>: emits the changed cells
-    /// through the writer and advances FRONT. Geometry must match.
+    /// through the writer and advances FRONT. Geometry must match. When hints
+    /// are registered and their clipped area stays under
+    /// <see cref="HintAreaThreshold"/> of the screen, only hinted regions are
+    /// scanned; any other frame runs the fused full scan.
     /// </summary>
     public void Flush(ScreenBuffer next, AnsiWriter writer)
     {
@@ -67,8 +95,23 @@ public sealed class DiffEngine
 
         if (useHints)
         {
-            foreach (var rect in _hints)
+            // ScanRange never re-enters FrameHint, so the live list can be
+            // scanned directly and dropped afterwards — no snapshot alloc.
+            // Sorting row-major keeps the hinted emission order identical to
+            // the fused full scan (top→bottom, left→right per row), so both
+            // paths serialize the same changed cells into the same ANSI
+            // stream — the byte-identical golden contract.
+            var hints = _hints;
+            if (hints.Count > 1)
             {
+                hints.Sort(static (a, b) => a.Y != b.Y
+                    ? a.Y.CompareTo(b.Y)
+                    : a.X.CompareTo(b.X));
+            }
+
+            for (int i = 0; i < hints.Count; i++)
+            {
+                var rect = hints[i];
                 ScanRange(rect.X, rect.Y, rect.Right, rect.Bottom, next, writer);
             }
         }
@@ -109,10 +152,28 @@ public sealed class DiffEngine
                 if (width == Cell.WSkip)
                 {
                     // Tail half: never emitted (terminal advances by itself),
-                    // but FRONT must mirror it silently.
+                    // but FRONT must mirror it silently. A hint boundary can
+                    // enter the row ON the tail half; repair the lead too so
+                    // a wide pair is never half-mirrored (no ghost glyphs).
                     if (f != n)
                     {
                         _front.At(x, y) = n;
+                    }
+
+                    if (x > 0)
+                    {
+                        ref readonly Cell leadNext = ref next.At(x - 1, y);
+                        if (_front.At(x - 1, y) != leadNext)
+                        {
+                            writer.MoveTo(x - 1, y);
+                            writer.SetStyle(leadNext.Style);
+                            writer.PutRune(new Rune(leadNext.Rune));
+                            _front.At(x - 1, y) = leadNext;
+                            if (leadNext.Width == Cell.Wide)
+                            {
+                                _front.At(x, y) = Cell.WideTail;
+                            }
+                        }
                     }
 
                     x += 1;
@@ -138,9 +199,30 @@ public sealed class DiffEngine
                 x += width;
             }
 
-            // Row is now identical to next — adopt its authoritative hash.
-            _front.AdoptRowHash(next, y);
+            // Row is now identical to next across the scanned span. Adopt
+            // next's authoritative hash only when the span covered the whole
+            // row; a partial-row (hinted) scan must invalidate FRONT's cache
+            // instead — cells outside the span may still differ, and next's
+            // stored hash may be stale from before this frame's paint.
+            if (x1 <= 0 && right >= cols)
+            {
+                _front.AdoptRowHash(next, y);
+            }
+            else
+            {
+                _front.MarkRowDirty(y);
+            }
         }
+    }
+
+    /// <summary>Smallest rect covering both inputs (hint-union merge).</summary>
+    private static Rect Union(Rect a, Rect b)
+    {
+        int left = Math.Min(a.X, b.X);
+        int top = Math.Min(a.Y, b.Y);
+        int right = Math.Max(a.Right, b.Right);
+        int bottom = Math.Max(a.Bottom, b.Bottom);
+        return new Rect(left, top, right - left, bottom - top);
     }
 
     // ── Verification helpers ───────────────────────────────────────────────

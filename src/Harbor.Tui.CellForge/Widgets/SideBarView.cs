@@ -93,33 +93,37 @@ public static class SideBarView
 
         // ── Session ────────────────────────────────────────────────────────
         y = Section(buffer, rect, labelX, y, "SESSION", headingStyle);
-        y = ValueLine(buffer, rect, labelX, y, innerW, state.SessionTitle ?? "(no session)", valueStyle);
+        y = ValueLine(buffer, rect, labelX, y, innerW, (state.SessionTitle ?? "(no session)").AsSpan(), valueStyle);
         y = ValueLine(buffer, rect, labelX, y, innerW, ShortId(state.SessionId), labelStyle);
 
         // ── Model ──────────────────────────────────────────────────────────
         y = Section(buffer, rect, labelX, y, "MODEL", headingStyle);
-        y = ValueLine(buffer, rect, labelX, y, innerW, state.Model ?? "—", valueStyle);
+        y = ValueLine(buffer, rect, labelX, y, innerW, (state.Model ?? "—").AsSpan(), valueStyle);
 
         // ── Tokens ─────────────────────────────────────────────────────────
         y = Section(buffer, rect, labelX, y, "TOKENS", headingStyle);
         var tokenStyle = new CellStyle(ChatPalette.Muted);
-        y = ValueLine(buffer, rect, labelX, y, innerW,
-            $"{FormatTokens(state.TokensIn)}↑ {FormatTokens(state.TokensOut)}↓", tokenStyle);
+        Span<char> tokenBuf = stackalloc char[24];
+        int tokenLen = FormatTokensLine(state.TokensIn, state.TokensOut, tokenBuf);
+        y = ValueLine(buffer, rect, labelX, y, innerW, tokenBuf[..tokenLen], tokenStyle);
         if (state.CostUsd > 0)
         {
-            y = ValueLine(buffer, rect, labelX, y, innerW,
-                "$" + state.CostUsd.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture), tokenStyle);
+            Span<char> costBuf = stackalloc char[16];
+            int costLen = FormatCostUsd(state.CostUsd, costBuf);
+            y = ValueLine(buffer, rect, labelX, y, innerW, costBuf[..costLen], tokenStyle);
         }
 
         // ── Modified files ─────────────────────────────────────────────────
         var files = state.ModifiedFiles;
         if (files is { Count: > 0 })
         {
-            y = Section(buffer, rect, labelX, y, $"MODIFIED ({files.Count})", headingStyle);
+            Span<char> modBuf = stackalloc char[32];
+            int modLen = FormatSectionTitle("MODIFIED (", files.Count, ')', modBuf);
+            y = SectionSpan(buffer, rect, labelX, y, modBuf[..modLen], headingStyle);
             int fileRows = Math.Min(files.Count, Math.Max(0, rect.Bottom - 2 - y));
             for (int i = 0; i < fileRows; i++)
             {
-                y = ValueLine(buffer, rect, labelX, y, innerW, files[i], valueStyle);
+                y = ValueLine(buffer, rect, labelX, y, innerW, files[i].AsSpan(), valueStyle);
             }
         }
 
@@ -129,8 +133,11 @@ public static class SideBarView
             y = Section(buffer, rect, labelX, y, "DIAGNOSTICS", headingStyle);
             var errStyle = new CellStyle(state.LspErrors > 0 ? ChatPalette.Error : ChatPalette.Muted);
             var warnStyle = new CellStyle(state.LspWarnings > 0 ? ChatPalette.Warning : ChatPalette.Muted);
-            y = ValueLine(buffer, rect, labelX, y, innerW, $"{state.LspErrors} errors", errStyle);
-            y = ValueLine(buffer, rect, labelX, y, innerW, $"{state.LspWarnings} warnings", warnStyle);
+            Span<char> diagBuf = stackalloc char[24];
+            int errLen = FormatWithSuffix(state.LspErrors, " errors", diagBuf);
+            y = ValueLine(buffer, rect, labelX, y, innerW, diagBuf[..errLen], errStyle);
+            int warnLen = FormatWithSuffix(state.LspWarnings, " warnings", diagBuf);
+            y = ValueLine(buffer, rect, labelX, y, innerW, diagBuf[..warnLen], warnStyle);
         }
 
         // ── MCP ────────────────────────────────────────────────────────────
@@ -139,6 +146,7 @@ public static class SideBarView
         {
             y = Section(buffer, rect, labelX, y, "MCP", headingStyle);
             int serverRows = Math.Min(servers.Count, Math.Max(0, rect.Bottom - 2 - y));
+            Span<char> glyphBuf = stackalloc char[2];
             for (int i = 0; i < serverRows; i++)
             {
                 var server = servers[i];
@@ -149,8 +157,14 @@ public static class SideBarView
                     _ => (ServerError, ChatPalette.Error),
                 };
                 var style = new CellStyle(color);
-                var text = $"{glyph} {server.Name}";
-                ValueLine(buffer, rect, labelX, y, innerW, text, style);
+                if (y < rect.Bottom - 1)
+                {
+                    glyphBuf[0] = glyph;
+                    glyphBuf[1] = ' ';
+                    buffer.SetText(labelX + 1, y, glyphBuf, style);
+                    ValueLine(buffer, rect, labelX + 3, y, innerW - 3, server.Name.AsSpan(), style);
+                }
+
                 y++;
             }
         }
@@ -206,31 +220,221 @@ public static class SideBarView
             return y;
         }
 
+        // Glyph + literal written as two spans — an interpolated string here
+        // would allocate on every frame (sidebar paints each frame).
         int innerW = rect.Width - 3;
-        var text = $"{SectionDot} {title}".AsSpan(0, Math.Min(title.Length + 2, innerW));
-        buffer.SetText(x, y, text, style);
+        Span<char> dot = [SectionDot, ' '];
+        buffer.SetText(x, y, dot, style);
+        buffer.SetText(x + 2, y, title.AsSpan(0, Math.Min(title.Length, Math.Max(0, innerW - 2))), style);
         return y + 1;
     }
 
-    private static int ValueLine(ScreenBuffer buffer, Rect rect, int x, int y, int innerW, string value, CellStyle style)
+    private static int SectionSpan(ScreenBuffer buffer, Rect rect, int x, int y, ReadOnlySpan<char> title, CellStyle style)
     {
         if (y >= rect.Bottom - 1)
         {
             return y;
         }
 
-        buffer.SetText(x + 1, y, value.AsSpan(0, Math.Min(value.Length, innerW - 1)), style);
+        int innerW = rect.Width - 3;
+        Span<char> dot = [SectionDot, ' '];
+        buffer.SetText(x, y, dot, style);
+        buffer.SetText(x + 2, y, title[..Math.Min(title.Length, Math.Max(0, innerW - 2))], style);
         return y + 1;
     }
 
-    private static string ShortId(string? id)
+    private static int ValueLine(ScreenBuffer buffer, Rect rect, int x, int y, int innerW, ReadOnlySpan<char> value, CellStyle style)
+    {
+        if (y >= rect.Bottom - 1)
+        {
+            return y;
+        }
+
+        buffer.SetText(x + 1, y, value[..Math.Min(value.Length, Math.Max(0, innerW - 1))], style);
+        return y + 1;
+    }
+
+    private static ReadOnlySpan<char> ShortId(string? id)
     {
         if (string.IsNullOrEmpty(id))
         {
-            return string.Empty;
+            return ReadOnlySpan<char>.Empty;
         }
 
-        return id.Length <= 8 ? id : id[..8];
+        return id.AsSpan(0, Math.Min(8, id.Length));
+    }
+
+    /// <summary>Writes «<paramref name="prefix" /><paramref name="value" /><paramref name="suffix" />» into the buffer; returns length.</summary>
+    private static int FormatSectionTitle(string prefix, int value, char suffix, Span<char> into)
+    {
+        int len = 0;
+        prefix.AsSpan().CopyTo(into[len..]);
+        len += prefix.Length;
+        len += AppendDigits(value, into[len..]);
+        if (len < into.Length)
+        {
+            into[len++] = suffix;
+        }
+
+        return Math.Min(len, into.Length);
+    }
+
+    /// <summary>Writes digits followed by a literal suffix («12 errors»); returns length.</summary>
+    private static int FormatWithSuffix(int value, string suffix, Span<char> into)
+    {
+        int len = AppendDigits(value, into);
+        suffix.AsSpan().CopyTo(into[len..]);
+        len += suffix.Length;
+        return Math.Min(len, into.Length);
+    }
+
+    /// <summary>
+    /// Allocation-free twin of the interpolated token line
+    /// «<c>{in}↑ {out}↓</c>»: both figures formatted into one buffer so the
+    /// every-frame sidebar paint stays zero-alloc. Returns the written length.
+    /// </summary>
+    private static int FormatTokensLine(long tokensIn, long tokensOut, Span<char> into)
+    {
+        int len = FormatTokensTo(tokensIn, into);
+        if (len < into.Length)
+        {
+            into[len++] = '\u2191';
+        }
+
+        if (len < into.Length)
+        {
+            into[len++] = ' ';
+        }
+
+        len += FormatTokensTo(tokensOut, into[len..]);
+        if (len < into.Length)
+        {
+            into[len++] = '\u2193';
+        }
+
+        return len;
+    }
+
+    /// <summary>Span twin of <see cref="FormatTokens" /> — same figures, no string.</summary>
+    private static int FormatTokensTo(long tokens, Span<char> into)
+    {
+        if (into.Length == 0)
+        {
+            return 0;
+        }
+
+        if (tokens < 1_000)
+        {
+            return AppendDigits(tokens, into);
+        }
+
+        double scaled;
+        char suffix;
+        if (tokens < 1_000_000)
+        {
+            scaled = tokens / 1000.0;
+            suffix = 'k';
+        }
+        else
+        {
+            scaled = tokens / 1_000_000.0;
+            suffix = 'M';
+        }
+
+        // "0.#": one decimal, dropped when integral.
+        long whole = (long)scaled;
+        int len = AppendDigits(whole, into);
+        int tenth = (int)Math.Round((scaled - whole) * 10);
+        if (tenth > 0 && len < into.Length)
+        {
+            into[len++] = '.';
+            into[len++] = (char)('0' + Math.Min(9, tenth));
+        }
+
+        if (len < into.Length)
+        {
+            into[len++] = suffix;
+        }
+
+        return len;
+    }
+
+    /// <summary>Writes <paramref name="value" /> in decimal digits; returns length.</summary>
+    private static int AppendDigits(long value, Span<char> into)
+    {
+        if (value == 0)
+        {
+            if (into.Length > 0)
+            {
+                into[0] = '0';
+                return 1;
+            }
+
+            return 0;
+        }
+
+        int len = 0;
+        while (value > 0 && len < into.Length)
+        {
+            into[len++] = (char)('0' + value % 10);
+            value /= 10;
+        }
+
+        into[..len].Reverse();
+        return len;
+    }
+
+    /// <summary>
+    /// Span twin of <c>cost.ToString("0.####")</c> prefixed with «$»: integer
+    /// part plus up to four decimals without trailing zeros, invariant style.
+    /// </summary>
+    private static int FormatCostUsd(double cost, Span<char> into)
+    {
+        if (into.Length == 0)
+        {
+            return 0;
+        }
+
+        into[0] = '$';
+        double clamped = Math.Max(0, cost);
+        long whole = (long)clamped;
+        long frac = (long)Math.Round((clamped - whole) * 10_000);
+        if (frac >= 10_000)
+        {
+            whole++; // rounding carried into the integer part
+            frac = 0;
+        }
+
+        int len = 1 + AppendDigits(whole, into[1..]);
+        if (frac <= 0)
+        {
+            return len;
+        }
+
+        Span<char> fracDigits = stackalloc char[4];
+        for (int i = 3; i >= 0; i--)
+        {
+            fracDigits[i] = (char)('0' + frac % 10);
+            frac /= 10;
+        }
+
+        int significant = 4;
+        while (significant > 0 && fracDigits[significant - 1] == '0')
+        {
+            significant--;
+        }
+
+        if (len < into.Length)
+        {
+            into[len++] = '.';
+        }
+
+        for (int i = 0; i < significant && len < into.Length; i++)
+        {
+            into[len++] = fracDigits[i];
+        }
+
+        return len;
     }
 }
 

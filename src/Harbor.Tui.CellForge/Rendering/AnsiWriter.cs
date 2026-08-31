@@ -107,6 +107,29 @@ public sealed class AnsiWriter
         _len = 0;
     }
 
+    /// <summary>
+    /// Synchronous twin of <see cref="EndFrameAsync"/> for sync render
+    /// contexts (backends implementing <see cref="ITerminalBackend.Write"/>):
+    /// identical empty-frame and sync-update semantics, no async machinery.
+    /// </summary>
+    public void EndFrame()
+    {
+        int wrapperBytes = _syncUpdates ? 8 : 0;
+        if (_len <= wrapperBytes)
+        {
+            _len = 0;
+            return;
+        }
+
+        if (_syncUpdates)
+        {
+            AppendAscii("\x1B[?2026l");
+        }
+
+        _backend.Write(_buf.AsSpan(0, _len));
+        _len = 0;
+    }
+
     /// <summary>Absolute cursor positioning with elision.</summary>
     public void MoveTo(int x, int y)
     {
