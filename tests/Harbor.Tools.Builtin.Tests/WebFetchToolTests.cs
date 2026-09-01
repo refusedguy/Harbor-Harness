@@ -128,7 +128,14 @@ public class WebFetchToolTests
     // ── Helpers ────────────────────────────────────────────────────────────
 
     private static WebFetchTool NewTool(Func<HttpRequestMessage, HttpResponseMessage> responder)
-        => new(NullLogger<WebFetchTool>.Instance, () => new HttpClient(new StubHandler(responder)));
+        => new(
+            NullLogger<WebFetchTool>.Instance,
+            () => new HttpClient(new StubHandler(responder)),
+            // The StubHandler never touches the network, but the SSRF gate
+            // resolves DNS for every target regardless of the injected
+            // client — fail-closed on hosts that don't resolve (CI runners).
+            // "*" disables the address check for the whole mock harness.
+            allowedHosts: ["*"]);
 
     private static ToolContext CreateContext() => new(
         "test-session",
