@@ -1,0 +1,2 @@
+[31mred[96mbright-cyan[44mon-blue[49m[39m[0m[38;2;12;34;56mrgb-fg[48;2;255;128;0mrgb-bg[0m[3Aup3[7Dback7[12;40Hcup[2K
+[1;4mbold-underline[9;7mstrike-reverse[2;3mitalic-dim[0m[?25lhidden[?25h[?1049h[2J[Halt-screen[?1049l
