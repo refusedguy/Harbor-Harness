@@ -56,10 +56,12 @@ matching generated API section):
 public enum Color8Bit { Default = 0, Red = 31, Green = 32, /* 30–37 / 90–97 */ }
 
 [TerminalEscape]
-public enum CursorDirection { Up, Down, Forward, Back }
+public enum CursorDirection { Up, Down, Forward, Backward }
 
+// Member values are distinct bits; the emitted SGR codes (1/2/3/4/7/9) are
+// fixed by the generated FormatStyle table, keyed by member name.
 [TerminalEscape]
-public enum StyleFlag { None = 0, Bold = 1, Dim = 2, Italic = 3, Underline = 4, Reverse = 7, Strike = 9 }
+public enum StyleFlag { None = 0, Bold = 1, Dim = 2, Italic = 4, Underline = 8, Reverse = 16, Strike = 32 }
 ```
 
 The generated `EscapeCodes` static class (same namespace as the enums)

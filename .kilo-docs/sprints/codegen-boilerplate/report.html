@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sprint Report — CodeGen Boilerplate Reduction</title>
+<style>
+  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; margin: 2rem auto; max-width: 960px; color: #1f2430; line-height: 1.55; }
+  h1 { border-bottom: 3px solid #39bae6; padding-bottom: .4rem; }
+  h2 { margin-top: 2rem; border-bottom: 1px solid #d5d9e0; padding-bottom: .2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #d5d9e0; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #f0f4f8; }
+  code { background: #f0f4f8; padding: .1rem .3rem; border-radius: 3px; font-size: .92em; }
+  .ok { color: #1a7f37; font-weight: 600; }
+  .warn { color: #b45309; font-weight: 600; }
+  .meta { color: #5a6472; font-size: .9rem; }
+  .commit { font-family: ui-monospace, monospace; font-size: .88em; }
+</style>
+</head>
+<body>
+
+<h1>Sprint Report — CodeGen Boilerplate Reduction</h1>
+<p class="meta">Branch <code>sprint/codegen-boilerplate</code> · base <code class="commit">07577fc</code> · 2026-09-01 · generators <code>Harbor.CodeGen</code></p>
+
+<h2>Outcome</h2>
+<table>
+  <tr><th>Task</th><th>Deliverable</th><th>Status</th><th>Commits</th></tr>
+  <tr>
+    <td>Task 1 — EscapeCodeGenerator</td>
+    <td><code>[TerminalEscape]</code> → zero-alloc <code>EscapeCodes</code> span tables + stackalloc CSI/SGR formatters; <code>AnsiEscapeStrategy</code> + <code>AnsiPlainRenderContext</code> emission paths refactored off hand-written <code>\x1b[…]</code> literals; golden test <code>escapecodes-tables.golden.txt</code></td>
+    <td class="ok">done</td>
+    <td class="commit">35157eb, b3e4de4, 8b92ed5, 06b3f44, 5c8c56f</td>
+  </tr>
+  <tr>
+    <td>Task 2 — RendererAdapterGenerator</td>
+    <td><code>[TuiRenderer]</code> → partial-class companion (<code>BackendId</code>, <code>CursorFrameBoundary</code>, frame prologue/epilogue writers) + per-namespace <code>TuiRendererFrameBoundaries</code> lookup; annotated <code>ansi</code>, <code>plain</code>, <code>cellforge</code>, <code>nickconsoleex</code>; adapter golden frames</td>
+    <td class="ok">done</td>
+    <td class="commit">worktree-verified; committed by the concurrent session (see §Concurrency)</td>
+  </tr>
+  <tr>
+    <td>Task 3 — MoodFrameGenerator</td>
+    <td><code>[MoodFrame]</code> → generated <code>MascotMoodFrames</code> dispatch (<code>FramesOf</code>/<code>FrameIndex</code>/<code>Frame</code>/<code>FrameCount</code>); hand-written switch removed from <code>AmbientMascot</code>; golden <code>mascot-mood-frames.golden.txt</code> (25-tick × 8-mood matrix)</td>
+    <td class="ok">done</td>
+    <td class="commit">051ec21, c3a738e</td>
+  </tr>
+  <tr>
+    <td>Docs</td>
+    <td><code>docs/CODEGEN_BOILERPLATE.md</code> — wiring recipe, generated API reference, golden conventions, AOT guardrails</td>
+    <td class="ok">done</td>
+    <td class="commit">aef4e50</td>
+  </tr>
+</table>
+
+<h2>Verification</h2>
+<table>
+  <tr><th>Gate</th><th>Result</th></tr>
+  <tr><td><code>dotnet build</code> (CodeGen, AnsiPlain, CellForge, RendererTests, Architecture.Tests)</td><td class="ok">0 errors / 0 new warnings</td></tr>
+  <tr><td><code>tests/Harbor.Tui.RendererTests</code> — all golden frames (Task 1 + 2 + 3)</td><td class="ok">17/17 pass, zero golden regeneration needed for refactors</td></tr>
+  <tr><td><code>tests/Harbor.Tui.CellForge.Tests</code> — incl. AmbientMascot parity</td><td class="ok">766/766 pass</td></tr>
+  <tr><td><code>tests/Harbor.Architecture.Tests</code></td><td class="ok">47 rules green (pre-commit hook gate on every commit)</td></tr>
+  <tr><td>AOT / zero-alloc</td><td class="ok">generated dispatch returns static <code>string[]</code> banks by reference; escape formatters are stackalloc/<code>Span&lt;char&gt;</code>-only; no reflection at runtime</td></tr>
+</table>
+
+<h2>Design notes</h2>
+<ul>
+  <li><b>Attribute delivery:</b> <code>Attributes/HarborCodeGenAttributes.cs</code> is excluded from the analyzer assembly (<code>netstandard2.0</code> per RS1041) and shared-source linked into consumers; generators match by fully-qualified metadata name — no assembly coupling.</li>
+  <li><b>Escape semantics preserved:</b> SGR param order (1;2;3;4;9;7), 24-bit fg/bg encoding, CUP clamping — byte-identical output pinned by pre-existing golden frames; none regenerated.</li>
+  <li><b>FrameIndex semantics preserved:</b> truncating division (not floor) replicated exactly — <code>(-5/8)==0 → index 0</code>; negative-tick wrap only via negative modulo; Sleeping advances 1 frame per 8 ticks.</li>
+  <li><b>RendererAdapterGenerator:</b> literal-false boundary backends emit no-op bodies instead of runtime <code>if</code> — avoids CS0162 under warnings-as-errors.</li>
+  <li><b>Sprint prompt vs reality:</b> names in the prompt (<code>MoodBrain</code>, <code>IRoundRobinRenderer</code>, <code>IP-ProtocolCodec</code>, <code>AnsiPlain/EscapeCodes.cs</code>) map to real code: <code>MascotDirector</code>/<code>AmbientMascot</code>, the four <code>BaseTuiRenderer</code> backends, <code>EscapeCodes/EscapeCodeStrategy.cs</code>. Acceptance criteria were applied to the real targets.</li>
+</ul>
+
+<h2>Concurrency incident &amp; mitigations</h2>
+<p>This worktree was simultaneously processed by <b>two agents on this same sprint</b> (dispatched 08:57 and 09:28) plus a third on <code>ci-cd-maturity</code>. Incidents and the rules adopted:</p>
+<ul>
+  <li><span class="warn">Vacuum commit:</span> a pathspec-less <code>git commit</code> swept the other session's staged test files into <code class="commit">5c8c56f</code> (content correct, message mislabeled; history left untouched — no amend/reset under concurrency).</li>
+  <li><b>Rule adopted:</b> stage explicitly, commit with explicit pathspecs only; re-check <code>git status</code> immediately before every commit.</li>
+  <li><b>Work partitioning:</b> per-file claim tracking via <code>git log</code>/<code>git status</code> — this session claimed Task 3 + docs (untouched by the other session), Task 1 was the other session's, Task 2 left to its owner.</li>
+  <li><span class="warn">MSBuild node crashes (MSB4166):</span> concurrent hook builds (2 agents × per-commit gates) exhausted build nodes; mitigated with <code>-m:1</code> builds, <code>dotnet build-server shutdown</code> between collisions, and pre-commit retry after settling.</li>
+</ul>
+
+<h2>Commit chain (this session)</h2>
+<table>
+  <tr><th>Commit</th><th>Files</th><th>Subject</th></tr>
+  <tr><td class="commit">5c8c56f</td><td>2 (test + golden)</td><td>EscapeCodeTests + escapecodes golden (swept from concurrent session's staging; content is the Task 1 deliverable)</td></tr>
+  <tr><td class="commit">051ec21</td><td>3</td><td>feat(codegen): MoodFrameGenerator — mood→frame dispatch from [MoodFrame]</td></tr>
+  <tr><td class="commit">c3a738e</td><td>2</td><td>test(codegen): mood-frame golden coverage</td></tr>
+  <tr><td class="commit">aef4e50</td><td>1</td><td>docs: CODEGEN_BOILERPLATE usage guide</td></tr>
+</table>
+
+<p class="meta">Report generated 2026-09-01 by the codegen-boilerplate dispatch (09:28, 55-min budget). Task 2 attribution belongs to the concurrent 08:57 dispatch.</p>
+
+</body>
+</html>
