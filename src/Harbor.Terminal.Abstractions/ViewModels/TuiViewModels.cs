@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Abstractions.Events;
@@ -49,11 +50,16 @@ public sealed partial class StatusBarViewModel : ObservableObject, ITuiViewModel
     public int ContextPct => ContextWindow > 0 ? Math.Min(100, ContextTokens * 100 / ContextWindow) : 0;
 
     /// <summary>
-    ///     Formatted status line for rendering.
+    ///     Formatted status line for rendering. Cost is formatted with the
+    ///     invariant culture: golden-frame tests pin exact strings, and a
+    ///     locale decimal separator (ru-RU "$0,0000") must not leak into
+    ///     renderer output.
     /// </summary>
     public string Formatted => ContextWindow > 0
-        ? $"{Provider}/{Model} | agent: {Agent} | ${Cost:F4} | {TokensIn}↑ {TokensOut}↓ | ctx: {ContextTokens / 1000}k/{ContextPct}% | {Status}"
-        : $"{Provider}/{Model} | agent: {Agent} | ${Cost:F4} | {TokensIn}↑ {TokensOut}↓ | {Status}";
+        ? $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | ctx: {ContextTokens / 1000}k/{ContextPct}% | {Status}"
+        : $"{Provider}/{Model} | agent: {Agent} | {CostText} | {TokensIn}↑ {TokensOut}↓ | {Status}";
+
+    private string CostText => "$" + Cost.ToString("F4", CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     public string Id => "status-bar";

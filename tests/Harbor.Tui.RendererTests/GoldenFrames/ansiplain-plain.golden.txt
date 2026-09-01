@@ -1,7 +1,7 @@
-/ | agent: code | $0,0000 | 0↑ 0↓ | running
+/ | agent: code | $0.0000 | 0↑ 0↓ | running
 [assistant] Hello, world!
 
 → read {"path":"README.md","limit":10}
 [assistant] Done.
-/ | agent: code | $0,0000 | 0↑ 0↓ | idle
+/ | agent: code | $0.0000 | 0↑ 0↓ | idle
 
