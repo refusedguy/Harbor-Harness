@@ -1,0 +1,141 @@
+# Harbor release — tag-driven GitHub Release with binaries.
+#
+# Triggered by pushing a v* tag. Publishes self-contained single-file
+# Harbor.App.Cli for linux-x64, linux-arm64 and win-x64 — ALL from
+# ubuntu-latest (runtime packs come from NuGet; non-AOT cross-OS publish
+# is fully supported by the SDK) — archives them and creates a GitHub
+# Release with extracted changelog notes + commit list.
+#
+# Local dry run of the publish recipe:
+#   dotnet publish apps/Harbor.App.Cli -c Release -r <rid> --self-contained true \
+#     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+#     -p:IncludeAllContentForSelfExtract=true -o out/<rid>
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: linux-arm64
+            archive: tar.gz
+          - rid: win-x64
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Publish Harbor.App.Cli (${{ matrix.rid }})
+        run: >-
+          dotnet publish apps/Harbor.App.Cli -c Release -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
+          -o publish/${{ matrix.rid }}
+
+      - name: Smoke — published binary runs (linux-x64 only)
+        if: matrix.rid == 'linux-x64'
+        run: ./publish/linux-x64/Harbor.App.Cli --version
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: >-
+          tar -czf "harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.tar.gz"
+          -C publish/${{ matrix.rid }} .
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        run: >-
+          zip -r "harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.zip"
+          publish/${{ matrix.rid }}
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: harbor-cli-${{ matrix.rid }}
+          path: harbor-cli-${{ github.ref_name }}-${{ matrix.rid }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  github-release:
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags for the commit list / previous tag
+
+      - name: Download all archives
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          PREV="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          {
+            echo "## Harbor ${TAG}"
+            echo
+            # Extract the matching CHANGELOG.md section if present.
+            if [ -f CHANGELOG.md ] && grep -q "## \[.*${VERSION}" CHANGELOG.md; then
+              awk -v pat="## \\[.*${VERSION}" 'BEGIN{p=0} $0 ~ pat {p=1; print; next} /^## / && p {exit} p {print}' CHANGELOG.md
+              echo
+            fi
+            echo "### Commits"
+            echo
+            if [ -n "$PREV" ]; then
+              git log --oneline --no-decorate "${PREV}..${TAG}"
+            else
+              git log --oneline --no-decorate "${TAG}"
+            fi
+          } > notes.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          --title "Harbor ${GITHUB_REF_NAME}"
+          --notes-file notes.md
+          dist/*
