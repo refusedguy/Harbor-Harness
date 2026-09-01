@@ -61,12 +61,13 @@ public class HostBuilderDiTests
     {
         // Isolate test runs: point HOME to a temp directory so ~/.harbor/config.json
         // on the dev machine (e.g. DefaultProvider="kilocode") doesn't leak into
-        // these pure-DI assertions — same pattern as AppHostDiTests. Without
-        // this, Build_Registers_CommonConfig fails on any machine whose saved
-        // config differs from the code default ("anthropic").
+        // these pure-DI assertions — same pattern as E2eTestBase. Without this,
+        // Build_Registers_CommonConfig fails on any machine whose saved config
+        // differs from the code default ("anthropic").
         var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
-        Environment.SetEnvironmentVariable("HOME", tempHome);
         Directory.CreateDirectory(tempHome);
+        Environment.SetEnvironmentVariable("HOME", tempHome);
+        Environment.SetEnvironmentVariable("USERPROFILE", tempHome);
 
         var host = HostBuilder.Build("--log-level", "Warning");
         return host;
