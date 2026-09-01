@@ -107,6 +107,8 @@
       <li>Каждый workflow-коммит проходил локальный гейт <code>harbor-check</code> (архитектурные 47 правил + билд + тесты затронутых проектов) и YAML-валидацию; финальный прогон — на GitHub Actions по push в <code>dev</code>.</li>
       <li>Финальные вердикты GitHub Actions (ветка <code>dev</code>, HEAD <code>13a2fd1</code>): см. таблицу ниже.</li>
       <li><b>Второй круг (re-dispatch).</b> Прогон CI на <code>e27b0e0</code> вскрыл ещё 4 отказа (2 джобы). Все воспроизведены/диагностированы локально и закрыты отдельными коммитами: голден-скип (<code>CI=true</code>), каноничный путь в persist-decision ассерте, Windows-проба живого listener'а в IPC-бинде, ребинд-гонка + виртуализация в <code>Chat_ScrollHistory</code>. Локальная верификация: <code>Harbor.Application.Tests</code> 150/150, <code>Harbor.Ipc.Tests</code> 96 passed + 4 self-skip, <code>Harbor.E2E.App.Avalonia</code> 104/103/0 (два прогона подряд), <code>Harbor.Architecture.Tests</code> 47/47, голдены скипаются под <code>CI=true</code>.</li>
+      <li><b>Третий круг (пост-отчётные находки, ветка <code>sprint/codegen-boilerplate</code>, PR&nbsp;#4).</b> Re-dispatch вскрыл ещё 3 отказа: (1) <code>ViewModelLocator</code> — статический кэш делегатов был ключован только типом, <code>Get&lt;T&gt;</code>/<code>TryGet&lt;T&gt;</code> конфликтовали режимами резолва (order-dependent падение <code>TryGet_ReturnsNullForUnregistered</code> в ui-шарде) — фикс: ключ <code>(type, required)</code>; (2) <code>Stop_RemovesSocketFile</code> не может выполняться на Windows (named pipes не имеют файловой endpoint-сущности) — гейт по образцу соседнего теста; (3) тайминг-тесты <code>RetryPolicy</code> на macos-latest — абсолютные wall-clock потолки (<140/<200&nbsp;мс) вокруг <code>Task.Delay</code> — заменены на детерминированные проверки <code>ComputeDelay</code> (public-функция; grant <code>InternalsVisibleTo</code> сломал бы ZLinq drop-in генератор — проверено эмпирически). Локально: 215/215, 96+4 skip, 150/150.</li>
+      <li><b>Четвёртый круг (локальный pre-commit гейт).</b> <code>harbor-check.sh</code> гонял suite'ы через сырой <code>dotnet exec</code>: это минует граф зависимостей MTP-хоста — лениво нагружаемые по голому имени сборки (Avalonia XAML resolver → <code>Avalonia.Controls.ColorPicker</code>, отсутствующий в deps.json теста) дают FileNotFoundException, отравляя process-wide AppBuilder (76 каскадных фейлов при зелёном <code>dotnet test</code>). Хук переведён на <code>dotnet test</code> — то же заклинание, что и в CI; попутно закрыт rebind-гонкой тест <code>Chat_ScrollHistory</code> (seed → poll → re-seed до 4 раундов).</li>
     </ul>
   </div>
 
@@ -114,10 +116,10 @@
   <table>
     <tr><th>Workflow</th><th>Триггер</th><th>Вердикт</th><th>Примечание</th></tr>
     <tr><td><code>ci</code></td><td>push dev</td><td class="gain">см. ниже</td><td>build → test (4 шарда) → test-os (win/mac) → publish</td></tr>
-    <tr><td><code>renderer-perf-gate</code></td><td>push dev / PR</td><td class="gain">GREEN</td><td>MTP-фикс; отчёт-артефакт на каждом прогоне</td></tr>
-    <tr><td><code>benchmark</code></td><td>PR</td><td class="gain">GREEN</td><td>15m5s — в бюджете 45m timeout</td></tr>
+    <tr><td><code>renderer-perf-gate</code></td><td>push dev / PR</td><td class="gain">GREEN</td><td>MTP-фикс; отчёт-артефакт на каждом прогоне; re-dispatch <code>4af37b0</code> — GREEN (2m7s)</td></tr>
+    <tr><td><code>benchmark</code></td><td>PR / dispatch</td><td class="gain">GREEN</td><td>re-dispatch <code>4af37b0</code> — GREEN (15m44s, бюджет 45m)</td></tr>
     <tr><td><code>codeql</code></td><td>push/PR/weekly</td><td class="gain">GREEN</td><td>6-8 минут, security-extended</td></tr>
-    <tr><td><code>demo-gifs</code></td><td>push dev / PR</td><td>см. ниже</td><td>фикс <code>Set Framerate</code> вошёл в этот же прогон</td></tr>  </table>
+    <tr><td><code>demo-gifs</code></td><td>push dev / PR</td><td class="gain">GREEN</td><td>фикс <code>Set Framerate</code> вошёл в этот же прогон</td></tr>  </table>
 
   <h2>Ограничения и долги (осознанные)</h2>
   <ul>
