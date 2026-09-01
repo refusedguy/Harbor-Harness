@@ -6,6 +6,7 @@ using SharpConsoleUI.Core;
 using SharpConsoleUI.Drivers;
 using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
+using Point = System.Drawing.Point;
 using Size = SharpConsoleUI.Helpers.Size;
 
 /// <summary>
@@ -124,11 +125,20 @@ public sealed class RecordingConsoleDriver : IConsoleDriver
 
     // Event plumbing: the window system subscribes on the instance it is
     // given (this decorator). Headless input simulation is not exercised by
-    // golden-frame tests, so the events are declared but not forwarded.
+    // golden-frame tests, so no event is forwarded to the inner driver; the
+    // raisers below exist so future input tests can drive them directly.
     public event EventHandler<ConsoleKeyInfo>? KeyPressed;
     public event EventHandler<string>? Paste;
     public event IConsoleDriver.MouseEventHandler? MouseEvent;
     public event EventHandler<Size>? ScreenResized;
+
+    public void SimulateKey(ConsoleKeyInfo key) => KeyPressed?.Invoke(this, key);
+
+    public void SimulatePaste(string text) => Paste?.Invoke(this, text);
+
+    public void SimulateResize(Size newSize) => ScreenResized?.Invoke(this, newSize);
+
+    public void SimulateMouse(List<MouseFlags> flags, Point point) => MouseEvent?.Invoke(this, flags, point);
 
     private bool InBounds(int x, int y) =>
         x >= 0 && y >= 0 && x < _grid.GetLength(0) && y < _grid.GetLength(1);
