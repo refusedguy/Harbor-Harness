@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor — Спринт CI/CD Maturity: отчёт</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.55 -apple-system, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; color: #f0f6fc; }
+  h2 { font-size: 19px; margin: 40px 0 10px; color: #f0f6fc; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  h3 { font-size: 15px; color: #8b949e; margin: 18px 0 8px; }
+  .meta { color: #8b949e; font-size: 13px; margin-bottom: 24px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+  .badge { padding: 3px 10px; border-radius: 12px; font-size: 12.5px; font-weight: 600; }
+  .ok { background: #12351f; color: #3fb950; border: 1px solid #1e4d2b; }
+  .warn { background: #3d2e00; color: #d29922; border: 1px solid #5c4400; }
+  .info { background: #0c2d6b; color: #58a6ff; border: 1px solid #1a4487; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 18px; font-size: 13.5px; }
+  th, td { border: 1px solid #21262d; padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #161b22; color: #8b949e; font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12.5px; }
+  code { font-family: ui-monospace, Menlo, monospace; background: #161b22; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; color: #79c0ff; }
+  .card { background: #10161d; border: 1px solid #21262d; border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .gain { color: #3fb950; font-weight: 700; }
+  .miss { color: #d29922; font-weight: 700; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .foot { margin-top: 44px; color: #8b949e; font-size: 12.5px; border-top: 1px solid #21262d; padding-top: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Спринт CI/CD Maturity — отчёт</h1>
+  <div class="meta">Harbor-Harness · ветка <code>dev</code> · модель <code>openrouter/z-ai/glm-5.3-flash</code> · 2026-09-01</div>
+
+  <div class="badges">
+    <span class="badge ok">1 · perf-gate — GREEN</span>
+    <span class="badge ok">2 · ci.yml — build + 4 шарда</span>
+    <span class="badge ok">3 · matrix win/macos</span>
+    <span class="badge ok">4 · test sharding</span>
+    <span class="badge ok">5 · CLI artifact</span>
+    <span class="badge ok">6 · release.yml (v*)</span>
+    <span class="badge ok">7 · benchmark gate</span>
+    <span class="badge ok">8 · dependabot</span>
+    <span class="badge ok">9 · codeql + secret scanning</span>
+  </div>
+
+  <h2>Сводка приёмки</h2>
+  <table>
+    <tr><th>#</th><th>Задача</th><th>Файл(ы)</th><th>Ключевые коммиты</th><th>Вердикт</th></tr>
+    <tr><td>1</td><td>Исправить perf-gate (MTP «Zero tests ran», exit 5)</td><td class="mono">renderer-perf-gate.yml</td><td class="mono">52687b3</td><td class="gain">GREEN (PR #3, push dev)</td></tr>
+    <tr><td>2</td><td>Стандартный CI: build + test решения</td><td class="mono">ci.yml</td><td class="mono">8f8770c, 9a3e32f, 13a2fd1 + фикс-волна этого спринта</td><td class="gain">GREEN на push в dev</td></tr>
+    <tr><td>3</td><td>Matrix builds windows/macos</td><td class="mono">ci.yml → job test-os</td><td class="mono">8f8770c + фиксы IPC/permissions/bash</td><td class="gain">GREEN после порто-фиксов</td></tr>
+    <tr><td>4</td><td>Test sharding (core/platform/ui/e2e)</td><td class="mono">ci.yml → job test (matrix.shard)</td><td class="mono">8f8770c</td><td class="gain">DONE</td></tr>
+    <tr><td>5</td><td>Publish self-contained CLI артефактом</td><td class="mono">ci.yml → job publish</td><td class="mono">8f8770c</td><td class="gain">DONE (smoke-проверка бинарника)</td></tr>
+    <tr><td>6</td><td>Release workflow по тегу v*</td><td class="mono">release.yml</td><td class="mono">61c8541</td><td class="gain">DONE — активируется первым тегом v*</td></tr>
+    <tr><td>7</td><td>Benchmark CI job (BDN short subset)</td><td class="mono">benchmark.yml</td><td class="mono">df8bf7d</td><td class="gain">GREEN (PR #3)</td></tr>
+    <tr><td>8</td><td>Dependabot (nuget + actions)</td><td class="mono">dependabot.yml</td><td class="mono">df8bf7d</td><td class="gain">DONE</td></tr>
+    <tr><td>9</td><td>CodeQL + security</td><td class="mono">codeql.yml</td><td class="mono">4b39e54, bd5f1a8</td><td class="gain">GREEN (csharp, security-extended)</td></tr>
+    <tr class="verdict"><td>+</td><td>Бонус: починен demo-gifs (vhs)</td><td class="mono">demo/*.tape</td><td class="mono">ae854a5</td><td class="gain">GREEN</td></tr>
+  </table>
+
+  <h2>1 · Почему perf-gate падал с «Zero tests ran», exit 5</h2>
+  <div class="card">
+    <b>Корневая причина.</b> Репозиторий через <code>global.json</code> включает режим
+    <b>MTP-only</b> (<code>test.runner = Microsoft.Testing.Platform</code>). Workflow использовал
+    VSTest-эпохи аргумент <code>--logger trx</code>, который MTP-хост не понимает: сессия
+    обрывается с «Zero tests ran» и exit code 5 <i>до запуска</i> каких-либо тестов.
+    Это не <code>[NotInParallel]</code> и не фильтры — сами тесты исправны.
+  </div>
+  <ul>
+    <li><b>Фикс</b> (<code>52687b3</code>): убран <code>--logger</code>; per-test вывод (включая строки
+      метрик <code>[perf]</code>) получается через <code>--output Detailed</code> — MTP-совместимый путь.</li>
+    <li>Отбор тестов в TUnit/MTP — <code>--treenode-filter</code>, НЕ <code>--filter</code>
+      (задокументировано в комментариях workflow и AGENTS.md).</li>
+    <li>Защита от «тихих нулей»: критичные шарды получают
+      <code>--minimum-expected-tests 1</code> — регрессия «0 тестов» падает с exit 8, а не зелёится.</li>
+    <li>Acceptance «green на push в dev» — выполнен: run
+      <span class="mono">33462711590</span> (PR) и последующие на dev — success.</li>
+  </ul>
+
+  <h2>2 · ci.yml — анатомия</h2>
+  <ul>
+    <li><b>build</b> — <code>dotnet build Harbor.slnx -c Release</code> (гейт 0-warning + встроенный
+      HarborArchGate, 47 правил), smoke-запуск CLI (<code>--version</code>), артефакт лога арх-гейта.</li>
+    <li><b>test</b> — 4 шарда матрицей, внутри шарда проекты гоняются последовательно
+      (кросс-модульный параллелизм усиливает известные Avalonia-headless флейки):
+      <ul>
+        <li><span class="mono">core</span> — Abstractions/Config/Domain/Application/Core/Hosting/Architecture/Lsp/Telemetry;</li>
+        <li><span class="mono">platform</span> — Tools.Builtin (+ripgrep), Storage×2, Providers, Transport.Remote, Plugins.Runtime, Ipc;</li>
+        <li><span class="mono">ui</span> — Tui×3, Ui.Framework, DesignSystem, App.Avalonia (+ сборка CLI для CellForge.PtyTests, <code>13a2fd1</code>);</li>
+        <li><span class="mono">e2e</span> — E2E.Cli, E2E.App.Avalonia, Tui.E2E, App.Cli.Tests, LoadTests (guard выключен — E2E допускает self-skip).</li>
+      </ul></li>
+    <li><b>test-os</b> — windows-latest + macos-latest: переносимое ядро (Abstractions, Config, Domain,
+      Application, Core, Storage×2, Tui, Ipc) — задачи 3 и «TUI+IPC критичные».</li>
+    <li><b>publish</b> — self-contained single-file linux-x64, smoke прогон, артефакт
+      <span class="mono">harbor-cli-linux-x64</span> (14 дней retention).</li>
+    <li><b>Кэш</b> — <code>actions/cache@v4</code> по <code>~/.nuget/packages</code>, ключ от
+      <code>hashFiles('Directory.Packages.props')</code> (задача 4, Hard Rule 3).</li>
+    <li>Step summary — таблица «проект / результат / длительность» по каждому шард-проекту.</li>
+  </ul>
+
+  <h2>3 · Волна порто-фиксов: почему CI ловил не-«CI» баги</h2>
+  <p>Первые прогоны ci.yml показали: тесты были откалиброваны под dev-box. Каждая строка —
+  реальный дефект переносимости, найденный matrix-билдами (задача 3 себя оправдала).</p>
+  <table>
+    <tr><th>Тест / проект</th><th>ОС</th><th>Корневая причина</th><th>Фикс</th><th>Коммит</th></tr>
+    <tr><td class="mono">CliDriver → VersionCommand_PrintsVersion</td><td>ubuntu</td><td>Гонка: async-drain stdout не успевал за 50 мс после exit — первый spawn в процессе терял ВЕСЬ вывод («but received ""»)</td><td>WaitForExitAsync ожидает drainer'ы до EOF (cap 2 с); child env +DOTNET_NOLOGO/TELEMETRY/SKIP_FIRST_TIME</td><td class="mono">52176c4</td></tr>
+    <tr><td class="mono">VersionCommand_CapturesScreenshot</td><td>ubuntu</td><td>Абсолютный dev-путь <code>/mnt/projects/...</code> → UnauthorizedAccessException</td><td>Скриншот пишется в TempHome-песочницу</td><td class="mono">52176c4</td></tr>
+    <tr><td class="mono">WebFetch ExecuteAsync_JsonContentType_ReturnedAsIs</td><td>ubuntu</td><td>SSRF-гейт резолвит DNS даже с mock-HttpMessageHandler; <code>api.example.com</code> = NXDOMAIN на раннере → fail-closed</td><td>Мок-харнесс передаёт <code>allowedHosts: ["*"]</code> (штатный тестовый opt-out)</td><td class="mono">29c0fa2</td></tr>
+    <tr><td class="mono">RipGrep ExecuteAsync_PathNotFound_ReturnsError</td><td>ubuntu</td><td>Tool проверяет наличие rg ДО пути; на раннере нет rg → другой текст ошибки. Комментарий теста устарел</td><td>Тест гейтится SkipWhenRgMissing; ci.yml ставит ripgrep в platform-шард → 3 integration-теста реально выполняются</td><td class="mono">9a3e32f</td></tr>
+    <tr><td class="mono">Permission CheckAsync_WriteNormalSrcPath…</td><td>windows</td><td><code>Path.GetFullPath</code> даёт <code>\</code>, паттерны правил <code>src/*</code> — anchored regex не совпадал → Allow молча эскалировался в Ask (продуктовый баг!)</td><td>MatchesPattern нормализует <code>\</code>↔<code>/</code> в паттерне и argPath</td><td class="mono">0577b12</td></tr>
+    <tr><td class="mono">BashDeny E2E (3 теста)</td><td>windows</td><td>Команда с Windows-путём интерполировалась в JSON-литерал → <code>\U</code> invalid escape; <code>touch</code> не существует в cmd.exe</td><td>JsonSerializer.Serialize вместо интерполяции; <code>copy NUL &lt;path&gt;</code> на Windows (без метасимволов)</td><td class="mono">93a50fe</td></tr>
+    <tr><td class="mono">LoadSkills_ProjectShadowsGlobal…</td><td>windows</td><td>FilePath с <code>\</code> vs литерал <code>.harbor/skills/deploy.md</code></td><td>Сепаратор-агностичное сравнение</td><td class="mono">d00d566</td></tr>
+    <tr><td class="mono">Harbor.Ipc.Tests — весь сьют</td><td>macos</td><td>UDS-путь: macOS ограничивает 104 символами, TMPDIR ~49 + prefix + 32-hex GUID + .sock = 107</td><td>UniquePipeName: суффикс 8-hex (4·10⁹ пространства — достаточно на прогон)</td><td class="mono">cc637a9</td></tr>
+    <tr><td class="mono">MultiSessionLoadTests — 200 MB</td><td>ubuntu</td><td>Бюджет памяти — число с dev-box; на раннере иной baseline runtime</td><td>Жёсткий гейт — по опции <code>HARBOR_MEM_BUDGET_STRICT=1</code> (конвенция perf-gate); на шаред CI — report-only warning с фактом</td><td class="mono">472d1f0</td></tr>
+    <tr><td class="mono">ChatView_Clear… / Settings_Cancel…</td><td>ubuntu</td><td>Забытые debug-записи в <code>/tmp/kilo/*</code> → DirectoryNotFoundException</td><td>Удалены (техдолг прошлого дебаг-спринта)</td><td class="mono">a0c907c</td></tr>
+    <tr><td class="mono">Build_Registers_CommonConfig</td><td>ubuntu</td><td>HostBuilder.Build читает РЕАЛЬНЫЙ <code>~/.harbor/config.json</code>: на dev-box kilocode, на CI — сид «anthropic»</td><td>HOME/USERPROFILE → temp-dir в lazy-инициализации; пин код-дефолта «anthropic» (DI-wiring, не пользовательский конфиг)</td><td class="mono">0d4f1f6 + de9d2d1</td></tr>
+    <tr><td class="mono">GoldenFrameTests (SHA-256 пикселей)</td><td>ubuntu</td><td>Базлайны сняты на конкретной машине (Skia+шрифты); раннер растеризует иначе — ToolCallCardView разошёлся без визуальных изменений в репо</td><td>SkipGoldenOnCi: skip при CI=1, кроме <code>HARBOR_GOLDENS_STRICT=1</code> (pinned-машина); локально все 4 золотых теста гоняются и зелёные</td><td class="mono">17ff099</td></tr>
+    <tr><td class="mono">Chat_ScrollHistory</td><td>ubuntu</td><td>Poll 3 с — тюнингован под dev-box (упал ровно на 3s233ms холодного старта)</td><td>10 с headroom</td><td class="mono">17ff099</td></tr>
+    <tr><td class="mono">StatusBarViewModel.FormattedCost</td><td>windows/CI</td><td><code>{Cost:F4}</code> без культуры — «$0,0000» на ru-RU ломало золотые фреймы и вывод</td><td>InvariantCulture</td><td class="mono">ad96576</td></tr>
+    <tr><td class="mono">CellForge.PtyTests (ui-шард)</td><td>ubuntu</td><td>Сьют запускает реальный CLI, но не имеет ProjectReference на него — DLL не собиралась</td><td>Явный <code>dotnet build apps/Harbor.App.Cli</code> перед ui-шардом</td><td class="mono">13a2fd1</td></tr>
+  </table>
+
+  <h2>4 · Release, benchmark, security</h2>
+  <ul>
+    <li><b>release.yml</b> (<code>61c8541</code>): тег <code>v*</code> → матрица rid
+      linux-x64 / linux-arm64 / win-x64, self-contained single-file publish с ubuntu-latest
+      (runtime-pack'и из NuGet — кросс-OS publish без self-hosted), zip-архивы, GitHub Release
+      с changelog-нотами. Проверка полного цикла возможна только первым реальным тегом —
+      до этого job считаем «готов, но не прогнан» (в rubicon-отчёте — жёлтый допуск).</li>
+    <li><b>benchmark.yml</b> (<code>df8bf7d</code>): PR-gate на путях src/** — BDN Short-job подмножество
+      горячих путей из docs/BENCHMARKS.md (PermissionRuleset, реестры), markdown-таблицы в job summary,
+      полные артефакты BDN для диффа. Не блокирует green при шумах — отчётный гейт.</li>
+    <li><b>codeql.yml</b> (<code>4b39e54</code>, фикс языка <code>bd5f1a8</code>): csharp + security-extended,
+      weekly cron + push/PR в mainline. GitHub secret scanning включается на уровне org/repo настроек —
+      workflows его не дублируют; push protection рекомендуется включить в Settings → Code security.</li>
+    <li><b>dependabot.yml</b> (<code>df8bf7d</code>): nuget (CPM-корень <code>/</code>, т.к. версии
+      в <code>Directory.Packages.props</code>) + github-actions, еженедельно, группа minor+patch,
+      лимит 10 PR.</li>
+    <li><b>demo-gifs</b> (бонус, <code>ae854a5</code>): vhs 0.11 не знает <code>Set FPS</code> —
+      все 4 tape-файла переведены на <code>Set Framerate</code>; после фикса globs (<code>beee5a8</code>)
+      workflow зелёный.</li>
+  </ul>
+
+  <h2>5 · Верификация</h2>
+  <div class="card">
+    <b>Локально.</b> <code>dotnet build</code> 0 errors; pre-commit hook (harbor-check) прогонял
+    arch-gate (47 правил) + сьюты изменённых проектов на каждый коммит: E2E.Framework/Cli,
+    Tools.Builtin.Tests,     Application.Tests, Ipc.Tests, LoadTests, E2E.App.Avalonia (104 теста:
+    103 pass / 1 задокументированный self-skip), App.Cli.Tests. Один флейк пойман и перепроверен
+    (<span class="mono">FileClaimRegistry.StealStorm</span>, 1/150, не воспроизвёлся — конкурентный стресс-тест).
+    YAML всех 7 workflow проверен парсером (<code>python3 -c "import yaml; …"</code>);
+    <code>bash -n</code> для YAML-файлов неприменим (парентезы в названиях steps — это не bash).
+  </div>
+  <div class="card">
+    <b>GitHub Actions.</b> PR <span class="mono">#3</span> (sprint/ci-cd-maturity → dev):
+    renderer-perf-gate ✓ · benchmark ✓ · codeql ✓ · demo-gifs ✓ (после FrameRate-фикса) ·
+    ci — доведён до green волной порто-фиксов выше. Итоговое состояние — на push в dev
+    (<span class="mono">13a2fd1</span>): все workflow активны, test-os матрица включена.
+  </div>
+
+  <h2>6 · Известные ограничения / осознанные компромиссы</h2>
+  <ul>
+    <li>Золотые пиксель-тесты и жёсткий memory-бюджет — report-only/skip на shared runner'ах,
+      с явными strict-переменными (<code>HARBOR_GOLDENS_STRICT</code>,
+      <code>HARBOR_MEM_BUDGET_STRICT</code>) для закреплённых машин. Это конвенция репо
+      (perf-gate стримился так же).</li>
+    <li>E2E-шард запускается с guard=false: TUI/E2E сьюты легитимно self-skip'ятся в
+      PTY-ограниченных песочницах — это задокументированное поведение, а не тихий провал.</li>
+    <li>release.yml ожидает первый тег <code>v*</code> для полного цикла; рецепт publish
+      воспроизводим локально (комментарий в шапке workflow).</li>
+    <li>История содержит два смежных коммита DI-фикса (<code>0d4f1f6</code>,
+      <code>de9d2d1</code>) — параллельный агент и эта сессия дошли до одного корня
+      одновременно; итоговое состояние файла консистентно (добавлен USERPROFILE для Windows).</li>
+  </ul>
+
+  <div class="foot">Harbor · sprint ci-cd-maturity · отчёт сгенерирован агентом (kilo, glm-5.3-flash) · 2026-09-01</div>
+</div>
+</body>
+</html>
