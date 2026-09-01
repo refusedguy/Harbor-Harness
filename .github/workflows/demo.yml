@@ -43,10 +43,30 @@ jobs:
       - name: Build CLI (tapes run the Release binary)
         run: dotnet build apps/Harbor.App.Cli -c Release
 
-      - name: Record demo GIFs via VHS
+      # vhs-action@v2 does NOT expand globs (fs.existsSync on the literal
+      # string fails; @actions/exec never shells out) — pass concrete paths.
+      - name: Record hero demo GIF
         uses: charmbracelet/vhs-action@v2
         with:
-          path: "demo/*.tape"
+          path: demo/hero.tape
+          install-fonts: true
+
+      - name: Record markdown demo GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/markdown.tape
+          install-fonts: true
+
+      - name: Record approval demo GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/approval.tape
+          install-fonts: true
+
+      - name: Record plain demo GIF
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/plain.tape
           install-fonts: true
 
       - name: Validate GIFs (<5 MB each, all four present)
