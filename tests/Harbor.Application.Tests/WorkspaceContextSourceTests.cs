@@ -100,7 +100,8 @@ public class WorkspaceContextSourceTests : IDisposable
             _dir, Path.Combine(_dir, "global-home", ".harbor", "skills"));
 
         await Assert.That(skills.Count).IsEqualTo(1);
-        await Assert.That(skills[0].FilePath).Contains(".harbor/skills/deploy.md");
+        // Path.Combine emits '\' on Windows — compare separator-agnostically.
+        await Assert.That(skills[0].FilePath.Replace('\\', '/')).Contains(".harbor/skills/deploy.md");
         await Assert.That(File.ReadAllText(skills[0].FilePath)).DoesNotContain("Global");
     }
 
