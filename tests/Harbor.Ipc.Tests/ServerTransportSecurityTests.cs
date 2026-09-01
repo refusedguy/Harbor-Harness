@@ -135,6 +135,11 @@ public class ServerTransportSecurityTests
     [Test]
     public async Task Stop_RemovesSocketFile()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Windows named pipes have no filesystem endpoint to remove.
+        }
+
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-cleanup");
         string socketPath = Path.Combine(Path.GetTempPath(), pipe + ".sock");
