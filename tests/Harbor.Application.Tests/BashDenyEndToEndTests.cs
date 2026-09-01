@@ -46,7 +46,10 @@ public class BashDenyEndToEndTests
     }
 
     private static JsonElement Args(string command) =>
-        JsonDocument.Parse($"{{\"command\":\"{command}\"}}").RootElement.Clone();
+        // Serialize properly: interpolated Windows paths (C:\Users\…) into a
+        // raw JSON string literal produce invalid \U escapes and blow up
+        // JsonDocument.Parse on windows-latest.
+        JsonDocument.Parse(JsonSerializer.Serialize(new { command })).RootElement.Clone();
 
     /// <summary>Mirror of ToolDispatcher's decision gate: check → refuse-or-execute.</summary>
     private static async Task<ToolResult> DispatchLike(
@@ -150,9 +153,14 @@ public class BashDenyEndToEndTests
             var agent = AgentWith();
             var (permissions, tool) = Build(agent);
 
+            // BashTool runs cmd.exe on Windows — `touch` does not exist there.
+            // `copy NUL <path>` creates the file with no shell metacharacters
+            // (a `>` redirect would escalate to Ask).
+            string create = OperatingSystem.IsWindows()
+                ? $"copy NUL {probe}"
+                : $"touch {probe}";
             var result = await DispatchLike(
-                permissions, tool,
-                $"touch {probe}").ConfigureAwait(false);
+                permissions, tool, create).ConfigureAwait(false);
 
             // Positive control: the allow path REALLY executes a process.
             // (No shell metacharacters here — `>` would escalate to Ask.)
