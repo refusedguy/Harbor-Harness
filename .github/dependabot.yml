@@ -1,0 +1,27 @@
+# Dependabot — NuGet (Central Package Management root) + workflow actions.
+#
+# NuGet versions are pinned in Directory.Packages.props (CPM), so the root
+# directory "/" is the only relevant directory for the nuget ecosystem:
+# Dependabot opens PRs bumping <PackageVersion> entries there and the
+# per-project <PackageReference> entries stay version-less.
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      nuget-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10

@@ -1,0 +1,84 @@
+# Harbor benchmark gate — BenchmarkDotNet subset on every PR.
+#
+# Runs a curated hot-path subset (PermissionRuleset evaluation, provider +
+# tool registry lookups — the numbers quoted in docs/BENCHMARKS.md) with
+# BenchmarkDotNet's Short job, publishes the markdown tables into the job
+# summary and uploads the full BDN artifacts for diffing.
+#
+# The full 220+ benchmark suite is too slow for CI; run it locally:
+#   dotnet run -c Release --project tests/Harbor.Benchmarks
+# NOTE: BDN writes BenchmarkDotNet.Artifacts/ relative to the PROCESS CWD —
+# this workflow runs from tests/Harbor.Benchmarks so artifacts stay scoped.
+# Only one --filter glob is supported per invocation.
+name: benchmark
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/Harbor.Benchmarks/**"
+      - ".github/workflows/benchmark.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # Fresh Release build so BDN's optimizations validator sees optimized
+      # dependency assemblies for every benchmark.
+      - name: Build benchmarks (Release)
+        run: dotnet build tests/Harbor.Benchmarks -c Release
+
+      - name: Bench PermissionRuleset
+        working-directory: tests/Harbor.Benchmarks
+        run: dotnet run -c Release --no-build -- --filter '*PermissionRuleset*' --job Short
+
+      - name: Bench Provider/Tool registries
+        working-directory: tests/Harbor.Benchmarks
+        run: dotnet run -c Release --no-build -- --filter '*Registry*' --job Short
+
+      - name: Publish results to job summary
+        if: always()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for f in tests/Harbor.Benchmarks/BenchmarkDotNet.Artifacts/results/*-report-github.md; do
+            echo "### $(basename "$f" -report-github.md)" >> "$GITHUB_STEP_SUMMARY"
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload BDN artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarkdotnet-results
+          path: tests/Harbor.Benchmarks/BenchmarkDotNet.Artifacts/results/
+          if-no-files-found: error
+          retention-days: 30
