@@ -20,6 +20,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Test.Sdk is the dotnet-test host adapter (see Harbor.Tui.CellForge.Tests);
+         TUnit + MTP wiring is auto-included via tests/Directory.Build.props. -->
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 

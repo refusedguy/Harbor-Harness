@@ -93,15 +93,25 @@ public class RendererAdapterGoldenFrameTests
     [Test]
     public async Task BackendIds_AndBoundaryTable_AreGenerated()
     {
-        await Assert.That(AnsiTuiRenderer.BackendId).IsEqualTo("ansi");
-        await Assert.That(PlainTuiRenderer.BackendId).IsEqualTo("plain");
-        await Assert.That(CellForgeTuiRenderer.BackendId).IsEqualTo("cellforge");
-        await Assert.That(NickConsoleExTuiRenderer.BackendId).IsEqualTo("nickconsoleex");
+        // Local copies: TUnitAssertions0005 forbids asserting on constants,
+        // and the generated BackendId / CursorFrameBoundary members are const.
+        string ansiBackendId = AnsiTuiRenderer.BackendId;
+        string plainBackendId = PlainTuiRenderer.BackendId;
+        string cellForgeBackendId = CellForgeTuiRenderer.BackendId;
+        string nickConsoleExBackendId = NickConsoleExTuiRenderer.BackendId;
+        await Assert.That(ansiBackendId).IsEqualTo("ansi");
+        await Assert.That(plainBackendId).IsEqualTo("plain");
+        await Assert.That(cellForgeBackendId).IsEqualTo("cellforge");
+        await Assert.That(nickConsoleExBackendId).IsEqualTo("nickconsoleex");
 
-        await Assert.That(AnsiTuiRenderer.CursorFrameBoundary).IsTrue();
-        await Assert.That(PlainTuiRenderer.CursorFrameBoundary).IsFalse();
-        await Assert.That(CellForgeTuiRenderer.CursorFrameBoundary).IsTrue();
-        await Assert.That(NickConsoleExTuiRenderer.CursorFrameBoundary).IsTrue();
+        bool ansiOwnsCursor = AnsiTuiRenderer.CursorFrameBoundary;
+        bool plainOwnsCursor = PlainTuiRenderer.CursorFrameBoundary;
+        bool cellForgeOwnsCursor = CellForgeTuiRenderer.CursorFrameBoundary;
+        bool nickConsoleExOwnsCursor = NickConsoleExTuiRenderer.CursorFrameBoundary;
+        await Assert.That(ansiOwnsCursor).IsTrue();
+        await Assert.That(plainOwnsCursor).IsFalse();
+        await Assert.That(cellForgeOwnsCursor).IsTrue();
+        await Assert.That(nickConsoleExOwnsCursor).IsTrue();
 
         // Per-namespace boundary tables.
         await Assert.That(Harbor.Tui.AnsiPlain.TuiRendererFrameBoundaries.HasCursorFrameBoundary("ansi")).IsTrue();
