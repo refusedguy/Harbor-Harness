@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint mascot-brand — 31.08.2026
+
+
+**Commits since previous sprint tag** (10):
+- d90d7bf chore: restore mascot-brand status to done
+- c86b148 chore: restore renderer-moat + osc-expansion status to done
+- f8a79b8 chore: reset demo-gif status
+- c813dfe chore: cleanup demo-gif status
+- decef7c chore: reset failed/queued sprint statuses for clean restart
+- 1c2a73d chore: sync ide-integration artifacts (CI bypass)
+- ac046fa docs(sprint): mascot-brand status DONE — all 3 tasks landed
+- 744cef1 feat(tui): event-driven mascot reactions — error blink, success bounce, approval wiggle
+- 6a778d3 feat(tui): HARBOR_MASCOT_MODE=panel — 3-row mascot cat beside the composer via LayoutTree.Split
+- 61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade
+
 ### Sprint renderer-unification — 28.08.2026
 
 **Renderer Unification.**
