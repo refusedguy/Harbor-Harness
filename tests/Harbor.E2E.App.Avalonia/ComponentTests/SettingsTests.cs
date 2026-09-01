@@ -151,13 +151,6 @@ public sealed class SettingsTests : ComponentTestBase
         // Capture the ACTUAL persisted theme instead of assuming "dark" —
         // CommonConfig defaults to "system" when config.json has no key.
         var themeBefore = UI(() => Vm.Settings.ThemeSettings.Theme);
-        System.IO.File.AppendAllText("/tmp/kilo/cancel-diag.txt",
-            $"[cd] before: vmTheme={themeBefore} persisted={Vm.Settings.DebugPersistedTheme} " +
-            $"dir={Vm.Settings.DebugConfigDirectory}\n" +
-            "disk=" + (File.Exists(Path.Combine(Vm.Settings.DebugConfigDirectory, "config.json"))
-                ? File.ReadAllText(Path.Combine(Vm.Settings.DebugConfigDirectory, "config.json"))
-                    .Substring(0, Math.Min(200, File.ReadAllText(Path.Combine(Vm.Settings.DebugConfigDirectory, "config.json")).Length))
-                : "MISSING") + "\n");
 
         UI(() =>
         {

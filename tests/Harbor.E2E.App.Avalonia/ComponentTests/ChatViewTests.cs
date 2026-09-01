@@ -218,7 +218,6 @@ public sealed class ChatViewTests : ComponentTestBase
         await Assert.That(stillThere).IsFalse();
 
         var path = await CaptureAsync("chat-cleared").ConfigureAwait(false);
-        System.IO.File.AppendAllText("/tmp/kilo/clear-trace.log", "[clear-diag] " + DateTime.Now.ToString("HH:mm:ss.fff") + "  step10 captured");
     }
 
     /// <summary>
