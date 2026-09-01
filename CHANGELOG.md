@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint ci-cd-maturity — 01.09.2026
+
+**GitHub Actions до production-качества.**
+
+- `renderer-perf-gate.yml` — убран VSTest-era `--logger` (MTP-only режим: «Zero tests ran», exit 5), per-test вывод через `--output Detailed`; green на push в dev.
+- `ci.yml` — build Harbor.slnx (0-warning + HarborArchGate), тесты шардами core/platform/ui/e2e с `--minimum-expected-tests` guard'ом, test-os матрица windows/macos для переносимого ядра (TUI + IPC включены), self-contained single-file publish Harbor.App.Cli артефактом, NuGet cache@v4 по Directory.Packages.props, step summary по каждому проекту.
+- Волна порто-фиксов, найденных matrix-билдами: гонка stdout-drain в CliDriver (потеря вывода на холодном runner'е), SSRF DNS-гейт в WebFetch-моках, разделители путей в permission-паттернах (продуктовый баг Windows), JSON-экранирование + `copy NUL` в bash-deny E2E, UDS-имена IPC под лимит macOS 104 символа, memory-бюджет load-тестов по `HARBOR_MEM_BUDGET_STRICT=1`, skip золотых пиксель-фреймов на CI (`HARBOR_GOLDENS_STRICT=1` для pinned-машины), изоляция HOME в HostBuilderDiTests, ripgrep в platform-шарде.
+- `release.yml` — тег `v*` → self-contained binaries linux-x64/linux-arm64/win-x64 + GitHub Release с changelog.
+- `benchmark.yml` — BDN short-job subset горячих путей на каждый PR, таблицы в job summary.
+- `codeql.yml` — csharp + security-extended, weekly + mainline. `dependabot.yml` — nuget (CPM) + actions, еженедельно.
+- `demo-gifs` починен: vhs 0.11 — `Set Framerate` вместо `Set FPS`.
+
 ### Sprint demo-gif — 31.08.2026
 
 
