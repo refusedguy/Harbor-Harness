@@ -21,7 +21,12 @@ namespace Harbor.Desktop.Shared.Locators;
 /// </remarks>
 public sealed class ViewModelLocator : IViewModelLocator
 {
-    private static readonly ConcurrentDictionary<Type, Func<IServiceProvider, object?>> Cache = new();
+    // Cache key must include the resolution mode: <see cref="Get{T}" /> binds
+    // sp.GetRequiredService while <see cref="TryGet{T}" /> binds sp.GetService.
+    // Keying on the type alone leaked the required-delegate into TryGet (and
+    // vice versa), making an unregistered TryGet throw on any process where
+    // Get for the same type ran first — order-dependent test/UX breakage.
+    private static readonly ConcurrentDictionary<(Type Type, bool Required), Func<IServiceProvider, object?>> Cache = new();
 
     private readonly IServiceProvider _services;
 
@@ -34,12 +39,12 @@ public sealed class ViewModelLocator : IViewModelLocator
 
     /// <inheritdoc />
     public T Get<T>() where T : class =>
-        Cache.GetOrAdd(typeof(T), ResolveRequired)(_services) as T
+        Cache.GetOrAdd((typeof(T), true), static key => ResolveRequired(key.Type))(_services) as T
         ?? throw new InvalidOperationException($"Service '{typeof(T).FullName}' resolved to null.");
 
     /// <inheritdoc />
     public T? TryGet<T>() where T : class =>
-        Cache.GetOrAdd(typeof(T), ResolveQuery)(_services) as T;
+        Cache.GetOrAdd((typeof(T), false), static key => ResolveQuery(key.Type))(_services) as T;
 
     /// <inheritdoc />
     public T GetFromSingleton<T>() where T : class
