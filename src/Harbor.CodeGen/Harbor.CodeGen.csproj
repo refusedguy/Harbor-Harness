@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Roslyn components target netstandard2.0 (RS1041): they load into the
+         compiler process, which may run on a framework older than the SDK. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <IsRoslynComponentPackage>true</IsRoslynComponentPackage>
     <RoslynComponent>Harbor.CodeGen</RoslynComponent>
@@ -9,7 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.9.2" PrivateAssets="all"/>
+    <!-- Attribute surface is linked (shared source) into consuming projects;
+         it must not compile into the analyzer assembly itself. -->
+    <Compile Remove="Attributes/**"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
   </ItemGroup>
 
 </Project>
