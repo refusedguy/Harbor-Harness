@@ -22,6 +22,12 @@ on:
       - ".github/workflows/renderer-perf-gate.yml"
   push:
     branches: [dev, master]
+  workflow_dispatch:
+
+# Superseded runs on the same PR/branch are noise — cancel them.
+concurrency:
+  group: renderer-perf-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   perf-gate:
@@ -41,11 +47,22 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
       - name: Build
         run: dotnet build tests/Harbor.Tui.PerfTests -c Release
 
+      # MTP-only dotnet test (opted in via global.json): VSTest-era arguments
+      # such as --logger abort the session with "Zero tests ran", exit 5.
+      # Per-test output (including the [perf] metric lines) comes from
+      # --output Detailed instead.
       - name: Run renderer performance gate
-        run: dotnet test tests/Harbor.Tui.PerfTests -c Release --no-build --logger "console;verbosity=normal"
+        run: dotnet test tests/Harbor.Tui.PerfTests -c Release --no-build --output Detailed
 
       - name: Enforce relative 5% regression rule (strict mode only)
         if: env.HARBOR_PERF_BASELINE_STRICT == '1'
