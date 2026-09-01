@@ -28,13 +28,22 @@ public class TuiDemoRecorderTests
             Skip.Test(TuiDriver.NoPtySkipReason);
         }
 
-        foreach (string scene in new[] { "hero", "markdown", "approval" })
+        // The 4 README GIFs — mirrors demo/*.tape (plain = renderer-switch variant).
+        var recordings = new (string Scene, string Tui, string Output)[]
+        {
+            ("hero", "ansi", "assets/demo/hero-compressed.gif"),
+            ("markdown", "ansi", "assets/demo/markdown-compressed.gif"),
+            ("approval", "ansi", "assets/demo/approval-compressed.gif"),
+            ("hero", "plain", "assets/demo/plain-compressed.gif"),
+        };
+
+        foreach (var (scene, tui, output) in recordings)
         {
             TuiDemoRecording recording = await TuiDemoRecorder.RecordAsync(new TuiDemoRecordingOptions
             {
                 Scene = scene,
-                TuiName = "ansi",
-                OutputGif = $"assets/demo/{scene}-compressed.gif"
+                TuiName = tui,
+                OutputGif = output
             }).ConfigureAwait(false);
 
             await Assert.That(File.Exists(recording.GifPath)).IsTrue();
