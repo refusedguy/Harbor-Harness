@@ -210,25 +210,45 @@ public class RetryPolicyTests
     [Test]
     public async Task ExecuteAsync_Jitter_DelayNeverExceedsBaseDelay()
     {
-        var policy = new RetryPolicy();
-        var options = Opts(max: 4, delayMs: 40, jitter: true);
-        var delays = new List<double>();
-        long lastTicks = 0;
+        // Jitter bound: full jitter draws uniformly from [0, target) where
+        // target = BaseDelay·2^(attempt−1) capped at MaxBackoff (30 s). Assert
+        // the distribution property on the computation itself — absolute
+        // wall-clock per-gap ceilings flake on loaded CI runners (Task.Delay
+        // scheduling slack is unbounded), so the timing probe below only
+        // verifies that retries actually sleep.
+        var options = new RetryOptions(4, TimeSpan.FromMilliseconds(40), UseJitter: true);
+        foreach (int attempt in new[] { 1, 2, 3 })
+        {
+            double target = Math.Min(40 * Math.Pow(2, attempt - 1), 30_000);
+            List<double> outOfRange = [];
+            double maxSeen = 0;
+            for (int i = 0; i < 128; i++)
+            {
+                double ms = RetryPolicy.ComputeDelay(options, attempt).TotalMilliseconds;
+                if (ms < 0 || ms >= target)
+                {
+                    outOfRange.Add(ms);
+                }
 
+                maxSeen = Math.Max(maxSeen, ms);
+            }
+
+            await Assert.That(outOfRange.Count).IsEqualTo(0);
+            // 128 uniform samples never ALL fall in the lower half of the
+            // range (P = 2^−128): the draw really spans [0, target).
+            await Assert.That(maxSeen).IsGreaterThan(target / 2);
+        }
+
+        // Wall-clock sanity: a jittered retry loop still retries exactly
+        // MaxAttempts−1 times before propagating the last transient error.
+        var policy = new RetryPolicy();
+        int retries = 0;
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
                 _ => throw new HttpRequestException("reset", inner: null, HttpStatusCode.ServiceUnavailable),
                 options,
-                onRetry: (_, _) =>
-                {
-                    long now = Environment.TickCount64;
-                    if (lastTicks != 0)
-                    {
-                        delays.Add(now - lastTicks);
-                    }
-                    lastTicks = now;
-                },
+                onRetry: (_, _) => retries++,
                 CancellationToken.None);
         }
         catch (HttpRequestException)
@@ -236,27 +256,33 @@ public class RetryPolicyTests
             // expected exhaustion
         }
 
-        // Every observed inter-retry gap must stay under baseDelay + slack
-        // (jitter draws from [0, BaseDelay)); scheduling adds a little slack.
-        foreach (double ms in delays)
-        {
-            await Assert.That(ms).IsLessThanOrEqualTo(40 * 2 + 60);
-        }
-        await Assert.That(delays.Count).IsGreaterThanOrEqualTo(2);
+        await Assert.That(retries).IsEqualTo(3); // max=4 attempts → 3 retries
     }
 
     [Test]
     public async Task ExecuteAsync_NoJitter_DelayApproximatesBaseDelay()
     {
+        // Deterministic: without jitter the computed delay is exactly the
+        // exponential target BaseDelay·2^(n−1), capped at MaxBackoff. The old
+        // wall-clock ceiling (<200 ms) flaked on cold CI runners where
+        // Task.Delay scheduling stretches gaps arbitrarily; the probe below
+        // therefore only asserts the safe direction — Task.Delay never fires
+        // early, so gaps can only be longer, never shorter.
+        var options = new RetryOptions(3, TimeSpan.FromMilliseconds(80), UseJitter: false);
+        await Assert.That(RetryPolicy.ComputeDelay(options, 1)).IsEqualTo(TimeSpan.FromMilliseconds(80));
+        await Assert.That(RetryPolicy.ComputeDelay(options, 2)).IsEqualTo(TimeSpan.FromMilliseconds(160));
+        await Assert.That(RetryPolicy.ComputeDelay(options, 3)).IsEqualTo(TimeSpan.FromMilliseconds(320));
+        // Cap: attempt 12 → 80·2^11 = 163840 ms → clamped to MaxBackoff.
+        await Assert.That(RetryPolicy.ComputeDelay(options, 12)).IsEqualTo(TimeSpan.FromMilliseconds(30_000));
+
         var policy = new RetryPolicy();
         var gaps = new List<long>();
         long last = 0;
-
         try
         {
             await policy.ExecuteAsync<HttpResponseMessage>(
                 _ => throw new HttpRequestException("timeout", inner: null, HttpStatusCode.RequestTimeout),
-                Opts(max: 3, delayMs: 80),
+                options,
                 onRetry: (_, _) =>
                 {
                     long now = Environment.TickCount64;
@@ -267,13 +293,11 @@ public class RetryPolicyTests
         }
         catch (HttpRequestException) { /* exhausted */ }
 
-        // Without jitter the delay is exactly BaseDelay; timer granularity is
-        // coarse but never shorter and rarely more than +50ms.
         foreach (long g in gaps)
         {
             await Assert.That(g).IsGreaterThanOrEqualTo(75);
-            await Assert.That(g).IsLessThan(200);
         }
+
         // max=3 attempts → 2 retries → the FIRST callback primes the clock,
         // only the SECOND yields a measurable gap.
         await Assert.That(gaps.Count).IsEqualTo(1);

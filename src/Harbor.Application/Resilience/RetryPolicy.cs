@@ -89,7 +89,10 @@ public sealed class RetryPolicy : IRetryPolicy
     ///     <c>[0, target)</c> — full jitter — so concurrent callers that fail
     ///     together de-synchronize instead of forming retry waves.
     /// </summary>
-    private static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
+    // Public (not private) so tests can assert the jitter/backoff bounds
+    // deterministically instead of via wall-clock gaps that flake on loaded
+    // CI runners. Pure function of (options, failedAttempt) — no state.
+    public static TimeSpan ComputeDelay(RetryOptions options, int failedAttempt)
     {
         double target = Math.Min(
             options.BaseDelay.TotalMilliseconds * Math.Pow(2, failedAttempt - 1),
