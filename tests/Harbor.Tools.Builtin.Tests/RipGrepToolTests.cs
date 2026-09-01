@@ -121,10 +121,14 @@ public class RipGrepToolTests
     }
 
     [Test]
+    [SkipWhenRgMissing]
     public async Task ExecuteAsync_PathNotFound_ReturnsError()
     {
-        // Path-not-found is checked before the rg availability guard, so this test runs
-        // even when rg is missing.
+        // The tool checks rg availability BEFORE the path, so without rg the
+        // call returns the "not installed" hint (covered by
+        // ExecuteAsync_MissingRg_ReturnsHelpfulError) and this test would
+        // assert against the wrong error. Gate on rg so the path branch is
+        // deterministic on runners without ripgrep.
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
         var args = JsonDocument.Parse(
             $$"""{"pattern":"foo","path":"/tmp/harbor-rg-missing-{{Guid.NewGuid():N}}"}""").RootElement;

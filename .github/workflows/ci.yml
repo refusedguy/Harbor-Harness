@@ -142,6 +142,16 @@ jobs:
           key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props') }}
           restore-keys: ${{ runner.os }}-nuget-
 
+      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
+      # integration tests self-skip and the platform shard silently runs
+      # three fewer real tests.
+      - name: Install ripgrep (platform shard)
+        if: matrix.shard == 'platform'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ripgrep
+          rg --version | head -1
+
       - name: Run shard ${{ matrix.shard }}
         shell: bash
         run: |
