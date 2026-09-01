@@ -23,6 +23,7 @@ sprint|testing-strategy|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/testing
 sprint|renderer-moat|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/renderer-moat/prompt.md
 sprint|osc-expansion|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/osc-expansion/prompt.md
 sprint|design-system-product|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/design-system-product/prompt.md
+sprint|codegen-boilerplate|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/codegen-boilerplate/prompt.md
 sprint|mascot-brand|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/mascot-brand/prompt.md
 sprint|demo-gif|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/demo-gif/prompt.md
 sprint|ci-cd-maturity|openrouter/z-ai/glm-5.3-flash|.kilo-docs/sprints/ci-cd-maturity/prompt.md

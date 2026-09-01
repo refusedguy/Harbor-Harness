@@ -1,5 +1,5 @@
 {
-  "state": "running",
+  "state": "done",
   "sprint": "ci-cd-maturity",
   "model": "openrouter/z-ai/glm-5.3-flash",
   "prompt": ".kilo-docs/sprints/ci-cd-maturity/prompt.md",
@@ -10,5 +10,5 @@
   "retries": 0,
   "started_at": "2026-09-01T06:38:35+0500",
   "finished_at": null,
-  "last_activity": "2026-09-01T06:38:35+0500"
+  "last_activity": "2026-09-01T08:30:00Z"
 }
