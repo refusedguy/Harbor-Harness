@@ -1269,7 +1269,9 @@ public sealed class AvaloniaUiTests
         }
 
         // Poll for the chat lines to render instead of a fixed delay.
-        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(3))
+        // 3 s was dev-box tuned: a cold CI runner booting the headless app
+        // plus the event→store→projection roundtrip needs more headroom.
+        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(10))
             .ConfigureAwait(false);
         await Assert.That(sawLines).IsTrue();
 
