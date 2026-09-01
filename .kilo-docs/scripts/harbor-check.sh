@@ -102,11 +102,16 @@ while IFS= read -r proj; do
   pdir="$(dirname "$proj")"
   if [[ "$proj" == tests/* ]]; then
     name="$(basename "$pdir")"
-    dll="$pdir/bin/Release/net10.0/${name}.dll"
     say "$name: build + test suite"
     dotnet build "$proj" -c Release --no-restore -v q -p:HarborArchGate=false > /dev/null 2>&1 \
       || { say "build FAILED: $proj"; FAIL=1; continue; }
-    if [[ -f "$dll" ]] && ! timeout 120 dotnet exec "$dll" \
+    # Run via `dotnet test` — the SAME invocation CI uses — not `dotnet exec`.
+    # Rationale: raw exec skips the MTP host's dependency graph; suites that
+    # lazy-load transitively-required assemblies by bare name at runtime
+    # (Avalonia XAML resolver → Avalonia.Controls.ColorPicker) then fail with
+    # FileNotFoundException under exec while staying green under dotnet test,
+    # poisoning the rest of the run (AppBuilder double-setup cascade).
+    if ! timeout 300 dotnet test "$proj" -c Release --no-build -p:HarborArchGate=false \
          > "${TMPDIR:-/tmp}/kilo/harbor-check-${name}.log" 2>&1; then
       tail -25 "${TMPDIR:-/tmp}/kilo/harbor-check-${name}.log"
       say "tests FAILED in $name"

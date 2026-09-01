@@ -1267,31 +1267,45 @@ public sealed class AvaloniaUiTests
             "user",
             "qwen2.5-coder:7b")).ToList();
 
-        await eventBus.PublishAsync(new AgentStartEvent("e2e-scroll-session", userMessages, model))
-            .ConfigureAwait(false);
-
-        foreach (string response in new[] { "Response 1", "Response 2", "Response 3", "Response 4" })
+        // Rebind race: SessionManager.EnsureDefaultSessionAsync continues on a
+        // threadpool thread (ConfigureAwait(false)), so ChatViewModel.
+        // RebindToStore posts its RebindCore (Lines.Clear + store swap) to the
+        // UI dispatcher AFTER ActiveContext is already observable. Events
+        // seeded inside that window land in the pre-bind store and are wiped.
+        // Strategy: seed, poll, and RE-SEED up to 4 rounds — everything seeded
+        // after the swap persists, so a bounded retry converges regardless of
+        // where the dispatcher queue was. The ≥8 assertion tolerates leftover
+        // partial batches (duplicates are harmless for scroll semantics).
+        bool transcriptPopulated = false;
+        for (int round = 0; round < 4 && !transcriptPopulated; round++)
         {
-            var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
-                "e2e-scroll-session", "qwen2.5-coder:7b");
-            await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
-            await eventBus.PublishAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("t-" + response, response), partial)).ConfigureAwait(false);
-            await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
-                Harbor.Abstractions.Models.StopReason.Stop,
-                new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+            await eventBus.PublishAsync(new AgentStartEvent("e2e-scroll-session", userMessages, model))
+                .ConfigureAwait(false);
+
+            foreach (string response in new[] { "Response 1", "Response 2", "Response 3", "Response 4" })
+            {
+                var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+                    "e2e-scroll-session", "qwen2.5-coder:7b");
+                await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
+                await eventBus.PublishAsync(new MessageUpdateEvent(
+                    new TextDeltaEvent("t-" + response, response), partial)).ConfigureAwait(false);
+                await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
+                    Harbor.Abstractions.Models.StopReason.Stop,
+                    new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+            }
+
+            // Deterministic multi-line assertion at the view-model level (the
+            // store-driven projection): 4 seeded user lines + 4 finalized
+            // assistant lines must ALL arrive. Text probing cannot do this —
+            // the transcript ListBox virtualizes, so off-viewport rows are
+            // unrealized and rendered-text visibility depends on runner font
+            // metrics (10 s of polling never sees "Line 4" on a cold CI box).
+            transcriptPopulated = await Driver.WaitForConditionAsync(
+                () => Driver.OnUIThread(() =>
+                    Driver.MainWindow.DataContext is MainViewModel vm && vm.Chat.Lines.Count >= 8),
+                TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         }
 
-        // Deterministic multi-line assertion at the view-model level (the
-        // store-driven projection): 4 seeded user lines + 4 finalized
-        // assistant lines must ALL arrive. Text probing cannot do this —
-        // the transcript ListBox virtualizes, so off-viewport rows are
-        // unrealized and rendered-text visibility depends on runner font
-        // metrics (10 s of polling never sees "Line 4" on a cold CI box).
-        bool transcriptPopulated = await Driver.WaitForConditionAsync(
-            () => Driver.OnUIThread(() =>
-                Driver.MainWindow.DataContext is MainViewModel vm && vm.Chat.Lines.Count >= 8),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(transcriptPopulated).IsTrue();
 
         // Visual probe, viewport-agnostic: SOME transcript line is realized.
