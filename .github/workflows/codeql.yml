@@ -1,0 +1,56 @@
+# CodeQL security & quality analysis for C#.
+#
+# Autobuild-driven (the repo's zero-warning Release gate is unrelated here —
+# CodeQL builds Debug to observe the compiler). Weekly schedule + pushes to
+# mainline branches + PRs targeting them. Secret scanning itself is a repo
+# setting (enabled in Settings → Code security); push protection covers
+# leaks in commits.
+name: codeql
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC — off-peak
+
+permissions:
+  security-events: write
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-codeql-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: ${{ runner.os }}-nuget-codeql-
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: c-sharp
+          build-mode: autobuild
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:c-sharp"
