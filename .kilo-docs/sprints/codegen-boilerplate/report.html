@@ -88,6 +88,16 @@
   <tr><td class="commit">aef4e50</td><td>1</td><td>docs: CODEGEN_BOILERPLATE usage guide</td></tr>
 </table>
 
+<h2>Final verification pass (10:33–11:00, independent re-check)</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Full-solution <code>dotnet build -c Release</code></td><td class="ok">0 errors; sprint-touched projects contribute 0 warnings (baseline test-project warnings unchanged; 4 sprint-added <code>TUnitAssertions0005</code> fixed)</td></tr>
+  <tr><td>Fix: <code>RendererAdapterGoldenFrameTests</code> const assertions</td><td class="ok">generated <code>const</code> members captured into locals before <code>Assert.That</code> — analyzer clean</td></tr>
+  <tr><td>Fix: <code>Harbor.Tui.RendererTests.csproj</code></td><td class="ok"><code>Microsoft.NET.Test.Sdk</code> added — aligns the project with the host-adapter convention used by every sibling test project</td></tr>
+  <tr><td><code>dotnet test</code> (MTP host)</td><td class="warn">returns "zero tests / exit 5" for <b>all</b> test projects on this machine (SDK 10.0.302) — pre-existing environment issue, consistent with the AGENTS.md MTP warning; not sprint-caused</td></tr>
+  <tr><td>Apphost verification (MTP-native direct run)</td><td class="ok">RendererTests 17/17 · CellForge.Tests 766/766 · Tui.Tests 118/118 · Architecture.Tests 47/47</td></tr>
+</table>
+
 <p class="meta">Report generated 2026-09-01 by the codegen-boilerplate dispatch (09:28, 55-min budget). Task 2 attribution belongs to the concurrent 08:57 dispatch.</p>
 
 </body>
