@@ -158,8 +158,12 @@ public class CliE2ETests : E2eTestBase
 
         await Assert.That(exit).IsEqualTo(0);
 
-        // Capture the output to docs/screenshots/cli/
-        string screenshotPath = "/mnt/projects/Harbor-Harness/docs/screenshots/cli/01-version.txt";
+        // Capture the output inside the per-test sandbox. The historic
+        // absolute dev-box path (/mnt/projects/...) does not exist on other
+        // machines and made the test CI-hostile; the capture itself is what
+        // this test demonstrates.
+        string screenshotPath = Path.Combine(
+            this.TempHome, "docs", "screenshots", "cli", "01-version.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(screenshotPath)!);
         await driver.CaptureScreenAsync(screenshotPath).ConfigureAwait(false);
 
