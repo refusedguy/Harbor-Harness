@@ -87,6 +87,10 @@
     <tr><td>e2e · App.Cli.Tests</td><td>Expected "kilocode", получено "anthropic"</td><td>тест читал реальный <code>~/.harbor/config.json</code> dev-box; на CI конфига нет → сид CommonConfig</td><td><code>0d4f1f6</code> + <code>de9d2d1</code> — HOME/USERPROFILE в temp-песочницу, ассерт кодового дефолта; килокод-лестница остаётся запиненной в Harbor.Config.Tests</td></tr>
     <tr><td>e2e · LoadTests</td><td>Expected "200.0 MB", получено "249.6 MB"</td><td>приватный байт-бюджет — число с dev-box; на CI-раннере другой runtime-бейзлайн</td><td><code>472d1f0</code> — строгий гейт только под <code>HARBOR_MEM_BUDGET_STRICT=1</code>, на shared-раннерах — warning-строка с замером</td></tr>
     <tr><td>demo-gifs</td><td><code>Unknown setting: FPS</code></td><td>VHS 0.11.0 удалил <code>Set FPS</code> (замена — <code>Set Framerate</code>)</td><td><code>ae854a5</code> — все 4 tape-файла переведены на <code>Set Framerate 12</code></td></tr>
+    <tr><td>ui/e2e · GoldenFrameTests</td><td>ToolCallCardView_GoldenFrame запустился на GitHub и не совпал по пикселям (3 соседних голдена — прошли)</td><td><code>SkipGoldenOnCi</code> проверял <code>CI == "1"</code>, а GitHub Actions экспортирует <code>CI=true</code> — атрибут никогда не срабатывал; сам кадр содержит юникод-глиф ✎ (U+270E), отсутствующий в шрифтах раннера</td><td>атрибут принимает <code>"true"</code> и <code>"1"</code>; при <code>CI=true</code> все 4 голдена скипаются (проверено локально)</td></tr>
+    <tr><td>test-os win · PermissionPersistDecisionTests</td><td><code>ruleset.Evaluate("write", "/repo/file.txt")</code> → Ask вместо Allow</td><td>сервис канонизирует пути через <code>Path.GetFullPath</code>: на Windows корневой <code>/repo/file.txt</code> резолвится в <code>C:\repo\file.txt</code> — персистированное литеральное правило не совпадает с сырой строкой, которую подавал тест (сам сервис всегда evaluates каноничную форму)</td><td>тест ассертит через <code>Path.GetFullPath("/repo/file.txt")</code> — ту же форму, что проходит через сервис</td></tr>
+    <tr><td>test-os win · ServerTransportSecurityTests</td><td><code>Bind_WhenAnotherListenerAlive_RefusesInsteadOfStealing</code>: вор не получил отказ и утащил endpoint</td><td>Windows named pipes нативно допускают несколько серверных инстансов на одно имя — «refuse if alive»-проба была реализована только для Unix-сокета</td><td><code>BindAsync</code> на Windows гейтится пробой <code>WaitNamedPipeW</code> (не потребляет pending-connection) — отказ с тем же сообщением «already served by another listener»</td></tr>
+    <tr><td>e2e · AvaloniaUiTests.Chat_ScrollHistory</td><td>10 с опроса никогда не видит «Line 4»; локально — флейк 1/6</td><td>две гонки: (1) <code>SessionManager.EnsureDefaultSessionAsync</code> асинхронно перепривязывает ChatViewModel к per-session store — события, опубликованные до ребинда, падают в pre-bind store; (2) транскрипт — виртуализированный ListBox: невидимые строки не материализуются, текст-проба зависит от метрик шрифтов раннера</td><td>тест ждёт <code>ActiveContext != null</code> до публикации; детерминированный ассерт на уровне VM (8 строк: 4 user + 4 assistant) + viewport-агностичная визуальная проба</td></tr>
   </table>
 
   <h2>Почему шардирование устроено именно так</h2>
@@ -102,6 +106,7 @@
     <ul>
       <li>Каждый workflow-коммит проходил локальный гейт <code>harbor-check</code> (архитектурные 47 правил + билд + тесты затронутых проектов) и YAML-валидацию; финальный прогон — на GitHub Actions по push в <code>dev</code>.</li>
       <li>Финальные вердикты GitHub Actions (ветка <code>dev</code>, HEAD <code>13a2fd1</code>): см. таблицу ниже.</li>
+      <li><b>Второй круг (re-dispatch).</b> Прогон CI на <code>e27b0e0</code> вскрыл ещё 4 отказа (2 джобы). Все воспроизведены/диагностированы локально и закрыты отдельными коммитами: голден-скип (<code>CI=true</code>), каноничный путь в persist-decision ассерте, Windows-проба живого listener'а в IPC-бинде, ребинд-гонка + виртуализация в <code>Chat_ScrollHistory</code>. Локальная верификация: <code>Harbor.Application.Tests</code> 150/150, <code>Harbor.Ipc.Tests</code> 96 passed + 4 self-skip, <code>Harbor.E2E.App.Avalonia</code> 104/103/0 (два прогона подряд), <code>Harbor.Architecture.Tests</code> 47/47, голдены скипаются под <code>CI=true</code>.</li>
     </ul>
   </div>
 
@@ -112,8 +117,7 @@
     <tr><td><code>renderer-perf-gate</code></td><td>push dev / PR</td><td class="gain">GREEN</td><td>MTP-фикс; отчёт-артефакт на каждом прогоне</td></tr>
     <tr><td><code>benchmark</code></td><td>PR</td><td class="gain">GREEN</td><td>15m5s — в бюджете 45m timeout</td></tr>
     <tr><td><code>codeql</code></td><td>push/PR/weekly</td><td class="gain">GREEN</td><td>6-8 минут, security-extended</td></tr>
-    <tr><td><code>demo-gifs</code></td><td>push dev / PR</td><td>см. ниже</td><td>фикс <code>Set Framerate</code> вошёл в этот же прогон</td></tr>
-  </table>
+    <tr><td><code>demo-gifs</code></td><td>push dev / PR</td><td>см. ниже</td><td>фикс <code>Set Framerate</code> вошёл в этот же прогон</td></tr>  </table>
 
   <h2>Ограничения и долги (осознанные)</h2>
   <ul>

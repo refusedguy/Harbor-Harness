@@ -50,7 +50,14 @@ public class PermissionPersistDecisionTests
         await Assert.That(second.Value.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(prompts).IsEqualTo(1);
         var ruleset = svc.GetRuleset("code");
-        await Assert.That(ruleset.Evaluate("write", "/repo/file.txt")).IsEqualTo(PermissionAction.Allow);
+        // The service canonicalizes paths before rule matching
+        // (PermissionService.NormalizePath → Path.GetFullPath). On Windows a
+        // rooted "/repo/file.txt" resolves against the current drive
+        // (e.g. C:\repo\file.txt), so the persisted literal rule pattern only
+        // matches the canonical form the service itself evaluates — assert
+        // with that same form, not the raw argument string.
+        string canonicalPath = Path.GetFullPath("/repo/file.txt");
+        await Assert.That(ruleset.Evaluate("write", canonicalPath)).IsEqualTo(PermissionAction.Allow);
     }
 
     [Test]

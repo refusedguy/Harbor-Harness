@@ -24,13 +24,16 @@ public sealed class TerminalEscapeAttribute : Attribute
 ///     the <c>BackendId</c> constant and the generated frame-boundary table
 ///     entry. Opt-in per backend; unknown backend ids get empty boundaries.
 /// </summary>
-/// <param name="backend">
-///     Stable backend id (e.g. <c>ansi</c>, <c>plain</c>, <c>cellforge</c>,
-///     <c>nickconsoleex</c>).
-/// </param>
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class TuiRendererAttribute : Attribute
 {
+    /// <summary>
+    ///     Declares the annotated class as a TUI renderer backend.
+    /// </summary>
+    /// <param name="backend">
+    ///     Stable backend id (e.g. <c>ansi</c>, <c>plain</c>, <c>cellforge</c>,
+    ///     <c>nickconsoleex</c>).
+    /// </param>
     public TuiRendererAttribute(string backend)
     {
         Backend = backend;
@@ -53,10 +56,13 @@ public sealed class TuiRendererAttribute : Attribute
 ///     mood to its frame bank (naming convention: <c>{Mood}Frames</c>) and
 ///     its tick period, replacing the hand-written switch.
 /// </summary>
-/// <param name="moods">Moods that participate in the frame dispatch.</param>
 [AttributeUsage(AttributeTargets.Enum, Inherited = false)]
 public sealed class MoodFrameAttribute : Attribute
 {
+    /// <summary>
+    ///     Marks the annotated enum as a mascot mood with a frame bank.
+    /// </summary>
+    /// <param name="moods">Moods that participate in the frame dispatch.</param>
     public MoodFrameAttribute(params object[] moods)
     {
         Moods = moods;

@@ -1,4 +1,5 @@
 namespace Harbor.Ipc.Transport;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 /// <summary>
 ///     Server-side transport that accepts inbound connections over a Named
@@ -112,6 +113,18 @@ public sealed class ServerPipeTransport : IIpcServerTransport
         }
         else
         {
+            // Single-owner endpoint policy (mirrors the Unix stale-file
+            // probe): Windows named pipes natively allow multiple server
+            // instances on the same name — a naive second bind would
+            // silently share (steal) the endpoint. Refuse when a listener
+            // is already serving it.
+            if (IsPipeListenerAlive(Endpoint))
+            {
+                throw new IOException(
+                    $"IPC endpoint '{Endpoint}' is already served by another listener; refusing to steal it. " +
+                    "Stop the other instance or choose a different pipe name.");
+            }
+
             _acceptLoopTask = AcceptLoopWindowsAsync(_cts.Token);
         }
 
@@ -263,6 +276,39 @@ public sealed class ServerPipeTransport : IIpcServerTransport
             var stream = new NetworkStream(client, true);
             await _acceptChannel.Writer.WriteAsync(stream, ct).ConfigureAwait(false);
         }
+    }
+
+    // ── Windows: single-owner endpoint probe ────────────────────────────────
+
+    // WaitNamedPipe reports whether the pipe name has a listening server
+    // instance WITHOUT consuming the pending connection a client connect()
+    // probe would steal from the live server's WaitForConnection.
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool WaitNamedPipeW(string lpNamedPipeName, int nTimeOut);
+
+    private const int ErrorFileNotFound = 2;
+
+    /// <summary>
+    ///     Returns <see langword="true" /> when a listening server instance
+    ///     exists for the Windows named pipe <paramref name="pipeName" />.
+    ///     An unregistered pipe name (ERROR_FILE_NOT_FOUND) means nothing is
+    ///     listening; any other outcome — including the name existing but
+    ///     being briefly busy in the mid-handoff window — is treated
+    ///     conservatively as alive so the caller never steals an endpoint
+    ///     it does not own.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static bool IsPipeListenerAlive(string pipeName)
+    {
+        string fullName = pipeName.StartsWith(@"\\.\pipe\", StringComparison.Ordinal)
+            ? pipeName
+            : @"\\.\pipe\" + pipeName;
+        if (WaitNamedPipeW(fullName, 50))
+        {
+            return true;
+        }
+
+        return Marshal.GetLastWin32Error() != ErrorFileNotFound;
     }
 
     /// <summary>

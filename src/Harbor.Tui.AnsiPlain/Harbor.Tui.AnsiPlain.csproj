@@ -14,6 +14,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Build-time only: the analyzer generates EscapeCodes.g.cs from the
+         [TerminalEscape] enums in EscapeCodes/TerminalVocabularies.cs. -->
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared-source attribute surface for the Harbor.CodeGen generators
+         (matched by fully-qualified metadata name, no assembly reference). -->
+    <Compile Include="..\Harbor.CodeGen\Attributes\HarborCodeGenAttributes.cs"
+             Link="CodeGen\HarborCodeGenAttributes.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 

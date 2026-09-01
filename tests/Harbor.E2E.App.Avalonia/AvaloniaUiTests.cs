@@ -1232,6 +1232,20 @@ public sealed class AvaloniaUiTests
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
+        // The app boots asynchronously: SessionManager.EnsureDefaultSessionAsync
+        // creates the default session and REBINDS the ChatViewModel to the
+        // per-session UiStore. Events published before that rebind land in
+        // the pre-bind store; the rebind then swaps in an empty store and
+        // the seeded lines never render — a cold/CI machine loses that race,
+        // a warm dev box wins it. Wait for the session context to exist so
+        // the events below are routed to the store the view actually renders.
+        var sessionManager = (Harbor.Ui.Framework.Sessions.SessionManager)
+            Driver.Host.Services.GetRequiredService<Harbor.Ui.Framework.Sessions.ISessionManager>();
+        bool sessionReady = await Driver.WaitForConditionAsync(
+            () => sessionManager.ActiveContext is not null,
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        await Assert.That(sessionReady).IsTrue();
+
         // Add chat lines through the REAL event path: directly mutating
         // vm.Chat.Lines is overwritten by the store-driven projection on the
         // next transition (the app fully boots now). AgentStart seeds the
@@ -1268,12 +1282,28 @@ public sealed class AvaloniaUiTests
                 new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
         }
 
-        // Poll for the chat lines to render instead of a fixed delay.
-        // 3 s was dev-box tuned: a cold CI runner booting the headless app
-        // plus the event→store→projection roundtrip needs more headroom.
-        bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(10))
-            .ConfigureAwait(false);
-        await Assert.That(sawLines).IsTrue();
+        // Deterministic multi-line assertion at the view-model level (the
+        // store-driven projection): 4 seeded user lines + 4 finalized
+        // assistant lines must ALL arrive. Text probing cannot do this —
+        // the transcript ListBox virtualizes, so off-viewport rows are
+        // unrealized and rendered-text visibility depends on runner font
+        // metrics (10 s of polling never sees "Line 4" on a cold CI box).
+        bool transcriptPopulated = await Driver.WaitForConditionAsync(
+            () => Driver.OnUIThread(() =>
+                Driver.MainWindow.DataContext is MainViewModel vm && vm.Chat.Lines.Count >= 8),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        await Assert.That(transcriptPopulated).IsTrue();
+
+        // Visual probe, viewport-agnostic: SOME transcript line is realized.
+        // A top-anchored scroll realizes the head rows ("Line 1"); a tail-
+        // pinned scroll realizes the last assistant response.
+        bool sawRenderedLine = await Driver.WaitForConditionAsync(() =>
+        {
+            string rendered = Driver.GetAllVisibleText();
+            return rendered.Contains("Line 1: Hello", StringComparison.Ordinal)
+                || rendered.Contains("Response 4", StringComparison.Ordinal);
+        }, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        await Assert.That(sawRenderedLine).IsTrue();
 
         await Driver.ScreenshotAsync("31-chat-scroll").ConfigureAwait(false);
     }
