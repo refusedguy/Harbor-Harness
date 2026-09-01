@@ -59,6 +59,15 @@ public class HostBuilderDiTests
     /// </summary>
     private static readonly Lazy<IHost> _hostLazy = new(() =>
     {
+        // Isolate test runs: point HOME to a temp directory so ~/.harbor/config.json
+        // on the dev machine (e.g. DefaultProvider="kilocode") doesn't leak into
+        // these pure-DI assertions — same pattern as AppHostDiTests. Without
+        // this, Build_Registers_CommonConfig fails on any machine whose saved
+        // config differs from the code default ("anthropic").
+        var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
+        Environment.SetEnvironmentVariable("HOME", tempHome);
+        Directory.CreateDirectory(tempHome);
+
         var host = HostBuilder.Build("--log-level", "Warning");
         return host;
     });
@@ -166,7 +175,11 @@ public class HostBuilderDiTests
         var config = Services.GetService<CommonConfig>();
         await Assert.That(config).IsNotNull();
         await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
-        await Assert.That(config.DefaultProvider).IsEqualTo("kilocode");
+        // Code default from the CommonConfig store seed (see CommonConfig.DefaultProvider).
+        // The effective agent-side provider ladders to "kilocode" via
+        // IdentityConfig.FallbackProvider — that contract is pinned in
+        // Harbor.Config.Tests, not here: this is a pure-DI wiring assertion.
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
         // Persisted StorageBackend is empty-unset by default; the CLI preset
         // supplies "jsonl" at composition time (pinned by the ISessionStore
         // type assertion above).
