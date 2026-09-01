@@ -4,6 +4,9 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
+// Alias: the type `EscapeCodes` lives in namespace `EscapeCodes` — outside that
+// namespace the simple name binds to the namespace, so the class needs an alias.
+using EscapeTables = Harbor.Tui.AnsiPlain.EscapeCodes.EscapeCodes;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
@@ -259,7 +262,15 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
         _writer.Write(codes.Length == 0 ? text : $"\x1b[{codes}m{text}{Strategy.Reset}");
     }
 
-    public void SetCursorPosition(int row, int col) => _writer.Write($"\x1b[{row};{col}H");
+    public void SetCursorPosition(int row, int col)
+    {
+        // Generated zero-alloc CUP formatter (ESC[row;colH); clamps to the
+        // ECMA-48 1-based domain — matches the literal bytes the old
+        // interpolation emitted for all valid (row, col).
+        Span<char> buf = stackalloc char[EscapeTables.CsiFormatLength + 1];
+        int n = EscapeTables.FormatPosition(row, col, buf);
+        _writer.Write(buf[..n]);
+    }
 
     public void ClearLine() => _writer.Write(Strategy.ClearLine);
 

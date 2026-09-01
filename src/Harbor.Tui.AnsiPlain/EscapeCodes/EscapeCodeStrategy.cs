@@ -59,7 +59,9 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
     public bool SupportsColor => true;
 
     // Reset / decoration (kept as named constants for callers that compose
-    // raw sequences, e.g. QR/OSC emission paths).
+    // raw sequences, e.g. QR/OSC emission paths). These are compile-time
+    // constants by contract; the runtime emission paths below source their
+    // sequences from the generated EscapeCodes tables instead.
     public const string ResetSeq = "\x1b[0m";
     public const string Bold = "\x1b[1m";
     public const string Dim = "\x1b[2m";
@@ -77,28 +79,51 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     public string Reset => ResetSeq;
 
-    public string Foreground(TuiColor color) => $"\x1b[38;2;{color.R};{color.G};{color.B}m";
+    public string Foreground(TuiColor color)
+    {
+        Span<char> buf = stackalloc char[EscapeCodes.RgbFormatLength];
+        int n = EscapeCodes.FormatForeground(color.R, color.G, color.B, buf);
+        return new string(buf[..n]);
+    }
 
-    public string Background(TuiColor color) => $"\x1b[48;2;{color.R};{color.G};{color.B}m";
+    public string Background(TuiColor color)
+    {
+        Span<char> buf = stackalloc char[EscapeCodes.RgbFormatLength];
+        int n = EscapeCodes.FormatBackground(color.R, color.G, color.B, buf);
+        return new string(buf[..n]);
+    }
 
     public string Style(TuiStyle style)
     {
-        var codes = new List<string>(6);
-        if (style.HasFlag(TuiStyle.Bold)) codes.Add("1");
-        if (style.HasFlag(TuiStyle.Dim)) codes.Add("2");
-        if (style.HasFlag(TuiStyle.Italic)) codes.Add("3");
-        if (style.HasFlag(TuiStyle.Underline)) codes.Add("4");
-        if (style.HasFlag(TuiStyle.Strike)) codes.Add("9");
-        if (style.HasFlag(TuiStyle.Reverse)) codes.Add("7");
-        return codes.Count == 0 ? string.Empty : string.Join(';', codes);
+        StyleFlag flag = StyleFlag.None;
+        if ((style & TuiStyle.Bold) != 0) flag |= StyleFlag.Bold;
+        if ((style & TuiStyle.Dim) != 0) flag |= StyleFlag.Dim;
+        if ((style & TuiStyle.Italic) != 0) flag |= StyleFlag.Italic;
+        if ((style & TuiStyle.Underline) != 0) flag |= StyleFlag.Underline;
+        if ((style & TuiStyle.Strike) != 0) flag |= StyleFlag.Strike;
+        if ((style & TuiStyle.Reverse) != 0) flag |= StyleFlag.Reverse;
+
+        Span<char> buf = stackalloc char[EscapeCodes.StyleFormatLength];
+        int n = EscapeCodes.FormatStyle(flag, buf);
+        return n == 0 ? string.Empty : new string(buf[..n]);
     }
 
-    public string HideCursor => "\x1b[?25l";
-    public string ShowCursor => "\x1b[?25h";
-    public string ClearLine => "\x1b[2K\r";
-    public string ClearScreen => "\x1b[2J\x1b[H";
-    public string EnterAlternateScreen => "\x1b[?1049h";
-    public string ExitAlternateScreen => "\x1b[?1049l";
+    // ── Generated-table-sourced control sequences ─────────────────────────
+    // Cached once from the EscapeCodeGenerator's [TerminalEscape] tables —
+    // the generated class is the single source of truth for these bytes.
+    private static readonly string s_hideCursor = new string(EscapeCodes.HideCursor);
+    private static readonly string s_showCursor = new string(EscapeCodes.ShowCursor);
+    private static readonly string s_clearLine = new string(EscapeCodes.ClearLine);
+    private static readonly string s_clearScreen = new string(EscapeCodes.ClearScreen);
+    private static readonly string s_enterAltScreen = new string(EscapeCodes.EnterAlternateScreen);
+    private static readonly string s_exitAltScreen = new string(EscapeCodes.ExitAlternateScreen);
+
+    public string HideCursor => s_hideCursor;
+    public string ShowCursor => s_showCursor;
+    public string ClearLine => s_clearLine;
+    public string ClearScreen => s_clearScreen;
+    public string EnterAlternateScreen => s_enterAltScreen;
+    public string ExitAlternateScreen => s_exitAltScreen;
 }
 
 /// <summary>
