@@ -2,6 +2,7 @@ using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Tui;
+using Harbor.CodeGen;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
@@ -29,7 +30,8 @@ namespace Harbor.Tui.NickConsoleEx;
 ///         is used; on a real terminal, their <see cref="NetConsoleDriver"/>.
 ///     </para>
 /// </summary>
-public sealed class NickConsoleExTuiRenderer : BaseTuiRenderer
+[TuiRenderer("nickconsoleex", CursorFrameBoundary = true)]
+public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
 {
     private readonly Lock _gate = new();
     private readonly List<string> _lines = [];

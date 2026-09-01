@@ -21,6 +21,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Build-time only: the analyzer generates the renderer-backend adapter
+         from the [TuiRenderer] annotation on NickConsoleExTuiRenderer. -->
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared-source attribute surface for the Harbor.CodeGen generators. -->
+    <Compile Include="..\Harbor.CodeGen\Attributes\HarborCodeGenAttributes.cs"
+             Link="CodeGen\HarborCodeGenAttributes.cs"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 

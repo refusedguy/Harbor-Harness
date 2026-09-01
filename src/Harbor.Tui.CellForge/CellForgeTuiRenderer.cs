@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Tui;
+using Harbor.CodeGen;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.Views;
@@ -21,7 +22,8 @@ namespace Harbor.Tui.CellForge;
 ///     automaton: styles are diffed against the writer's tracked state, so
 ///     redundant escape codes are never emitted.
 /// </summary>
-public sealed class CellForgeTuiRenderer : BaseTuiRenderer
+[TuiRenderer("cellforge", CursorFrameBoundary = true)]
+public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 {
     public CellForgeTuiRenderer(ILogger<CellForgeTuiRenderer> logger) : base(logger)
     {
