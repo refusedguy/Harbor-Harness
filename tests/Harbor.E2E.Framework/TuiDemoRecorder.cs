@@ -46,6 +46,10 @@ public sealed record TuiDemoRecording(
 /// </remarks>
 public sealed class TuiDemoRecorder
 {
+    private TuiDemoRecorder()
+    {
+    }
+
     /// <summary>CLI project driven by the recorder, relative to the repo root.</summary>
     public const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
 
@@ -59,7 +63,8 @@ public sealed class TuiDemoRecorder
         string outputGif = Path.IsPathRooted(options.OutputGif)
             ? options.OutputGif
             : Path.Combine(repoRoot, options.OutputGif.Replace('\\', Path.DirectorySeparatorChar));
-        string outputDir = Path.GetDirectoryName(outputGif);
+        string outputDir = Path.GetDirectoryName(outputGif)
+                           ?? throw new InvalidOperationException($"Cannot determine output directory for '{outputGif}'.");
         Directory.CreateDirectory(outputDir);
 
         string framesDir = Path.Combine(outputDir, "frames", options.Scene);
