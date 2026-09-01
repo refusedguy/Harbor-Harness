@@ -152,6 +152,14 @@ jobs:
           sudo apt-get install -y -qq ripgrep
           rg --version | head -1
 
+      # CellForge.PtyTests spawn the real CLI binary through a PTY. The
+      # suite has no ProjectReference on the app (runtime independence),
+      # so `dotnet test tests/...` alone never produces its DLL — build it
+      # explicitly before the ui shard runs.
+      - name: Build Harbor.App.Cli (ui shard — required by CellForge.PtyTests)
+        if: matrix.shard == 'ui'
+        run: dotnet build apps/Harbor.App.Cli -c Release
+
       - name: Run shard ${{ matrix.shard }}
         shell: bash
         run: |
