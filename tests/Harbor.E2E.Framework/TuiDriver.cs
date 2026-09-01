@@ -549,10 +549,11 @@ public sealed class TuiDriver : IE2eDriver
 
     /// <summary>
     ///     Capture a sequence of PNG frames of the live TUI — the building
-    ///     block for GIF/MP4 demo recordings. Each frame is a full
-    ///     <see cref="CapturePngAsync" /> render of the current
-    ///     <see cref="AnsiTerminalBuffer" /> grid, spaced
-    ///     <paramref name="frameIntervalMs" /> apart.
+    ///     block for GIF/MP4 demo recordings. Frames are timed snapshots of the
+    ///     current <see cref="AnsiTerminalBuffer" /> grid spaced
+    ///     <paramref name="frameIntervalMs" /> apart; PNG rendering happens
+    ///     after capture so the slow per-frame browser render cannot skew the
+    ///     recording cadence.
     /// </summary>
     /// <param name="framesDir">Output directory for <c>frame_NNNN.png</c> files. Created on demand.</param>
     /// <param name="frameIntervalMs">Delay between frames; 100 ms yields a 10 fps GIF.</param>
@@ -595,19 +596,32 @@ public sealed class TuiDriver : IE2eDriver
             }
         }
 
-        // Phase 2: capture until the child exits or the cap is hit. The last
-        // frame is always taken even when the child already exited, so the
-        // final screen state lands in the recording.
-        while (frames.Count < maxFrames)
+        // Phase 2: snapshot the live grid on the frame cadence. Snapshots are
+        // pure in-memory HTML (microseconds) — PNG rendering is decoupled into
+        // phase 3 because one Chromium/ImageMagick render costs ~1-3s and would
+        // otherwise blow past the lifetime of a short demo scene (2 frames max).
+        var snapshots = new List<(string Html, string Path)>();
+        while (snapshots.Count < maxFrames)
         {
             ct.ThrowIfCancellationRequested();
-            string path = Path.Combine(framesDir, $"frame_{frames.Count:D4}.png");
-            await CapturePngAsync(path, ct).ConfigureAwait(false);
-            frames.Add(path);
+            string html;
+            lock (_terminalBuffer)
+            {
+                html = _terminalBuffer.ToHtml();
+            }
+            snapshots.Add((html, Path.Combine(framesDir, $"frame_{snapshots.Count:D4}.png")));
 
             if (!IsRunning)
                 break;
             await Task.Delay(frameIntervalMs, ct).ConfigureAwait(false);
+        }
+
+        // Phase 3: materialize the snapshots as PNGs. The last frame is always
+        // included, so the final screen state lands in the recording.
+        foreach ((string html, string path) in snapshots)
+        {
+            await TerminalScreenshotRenderer.RenderHtmlToPngAsync(html, path, ct).ConfigureAwait(false);
+            frames.Add(path);
         }
 
         return frames;
