@@ -1,0 +1,80 @@
+# Regenerates the README demo GIFs whenever the TUI renderers, the demo
+# command or the VHS tapes change. Local equivalent:  vhs demo/hero.tape
+# (or HARBOR_DEMO=1 dotnet test tests/Harbor.Tui.E2E.Tests — TuiDemoRecorder).
+#
+# PRs: GIFs are built and uploaded as an artifact for review.
+# Push to dev/master: the regenerated GIFs are committed straight back to
+# assets/demo/ so the README always shows the current renderer output.
+name: demo-gifs
+
+on:
+  pull_request:
+    paths:
+      - "src/Harbor.Tui.**"
+      - "src/Harbor.Terminal.Abstractions/**"
+      - "apps/Harbor.App.Cli/**"
+      - "demo/*.tape"
+      - ".github/workflows/demo.yml"
+  push:
+    branches: [dev, master]
+    paths:
+      - "src/Harbor.Tui.**"
+      - "src/Harbor.Terminal.Abstractions/**"
+      - "apps/Harbor.App.Cli/**"
+      - "demo/*.tape"
+      - ".github/workflows/demo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  demo-gifs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build CLI (tapes run the Release binary)
+        run: dotnet build apps/Harbor.App.Cli -c Release
+
+      - name: Record demo GIFs via VHS
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: "demo/*.tape"
+          install-fonts: true
+
+      - name: Validate GIFs (<5 MB each, all four present)
+        run: |
+          set -euo pipefail
+          for gif in hero markdown approval plain; do
+            file="assets/demo/${gif}-compressed.gif"
+            if [ ! -f "$file" ]; then
+              echo "::error::missing demo GIF: $file"; exit 1
+            fi
+            bytes=$(stat -c%s "$file")
+            if [ "$bytes" -gt 5242880 ]; then
+              echo "::error::$file is ${bytes} bytes (>5 MiB budget)"; exit 1
+            fi
+            echo "$file: $bytes bytes"
+          done
+
+      - name: Upload demo GIFs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-gifs
+          path: assets/demo/*-compressed.gif
+          if-no-files-found: error
+
+      - name: Commit regenerated GIFs (push to dev/master only)
+        if: github.event_name == 'push'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(demo): regenerate README GIFs [skip ci]"
+          file_pattern: "assets/demo/*-compressed.gif"
