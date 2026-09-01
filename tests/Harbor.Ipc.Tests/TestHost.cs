@@ -39,6 +39,17 @@ internal static class TestHost
     ///     Build a unique pipe name per test to avoid collisions when tests
     ///     run in parallel.
     /// </summary>
-    public static string UniquePipeName(string prefix) =>
-        $"{prefix}-{Guid.NewGuid():N}".ToLowerInvariant();
+    /// <remarks>
+    ///     The transport appends <c>.sock</c> and binds the name as a Unix
+    ///     domain socket path under the OS temp dir. macOS caps socket paths
+    ///     at 104 chars and its default TMPDIR already eats ~49, so the old
+    ///     full 32-hex GUID suffix threw ArgumentOutOfRangeException on
+    ///     macos-latest. An 8-hex suffix (4·10⁹ space) is collision-proof
+    ///     for a test run.
+    /// </remarks>
+    public static string UniquePipeName(string prefix)
+    {
+        string id = Guid.NewGuid().ToString("N")[..8];
+        return $"{prefix}-{id}".ToLowerInvariant();
+    }
 }

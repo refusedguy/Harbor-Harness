@@ -105,10 +105,6 @@ namespace Harbor.Ipc.Tests;
             await client.ConnectAsync();
 
             var result = await client.ListProvidersAsync();
-            if (result.IsFailure)
-            {
-                System.IO.File.WriteAllText("/tmp/kilo/lp-err.txt", result.Error);
-            }
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value).IsNotNull();
         }
