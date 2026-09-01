@@ -1,6 +1,19 @@
 namespace Harbor.Tui.CellForge.Widgets;
 
+using Harbor.CodeGen;
+
 /// <summary>Mascot mood — the host derives it from agent state (SpinnerStrip rhythm, approval gate, …).</summary>
+[MoodFrame(
+    MascotMood.Idle,
+    MascotMood.Working,
+    MascotMood.Awaiting,
+    MascotMood.Sleeping,
+    MascotMood.Thinking,
+    MascotMood.ToolCall,
+    MascotMood.Error,
+    MascotMood.Success,
+    BankContainer = "AmbientMascot",
+    SleepPeriodTicks = AmbientMascot.SleepPeriod)]
 public enum MascotMood : byte
 {
     /// <summary>Calm blink — agent idle.</summary>
@@ -63,35 +76,25 @@ public static class AmbientMascot
     /// <summary>Sleeping advances once per this many ticks (slow breath).</summary>
     public const int SleepPeriod = 8;
 
-    /// <summary>Frame bank for a mood — static arrays, never copied.</summary>
-    public static string[] FramesOf(MascotMood mood) => mood switch
-    {
-        MascotMood.Working => WorkingFrames,
-        MascotMood.Awaiting => AwaitingFrames,
-        MascotMood.Sleeping => SleepingFrames,
-        MascotMood.Thinking => ThinkingFrames,
-        MascotMood.ToolCall => ToolCallFrames,
-        MascotMood.Error => ErrorFrames,
-        MascotMood.Success => SuccessFrames,
-        _ => IdleFrames,
-    };
+    /// <summary>
+    /// Frame bank for a mood — static arrays, never copied. Dispatch is
+    /// generated (<see cref="MascotMoodFrames"/>, from [MoodFrame] on
+    /// <see cref="MascotMood"/>) — the hand-written switch is gone.
+    /// </summary>
+    public static string[] FramesOf(MascotMood mood) => MascotMoodFrames.FramesOf(mood);
 
     /// <summary>
     /// Index into the mood's frame bank for the given monotonic tick — the
     /// panel-mode renderer uses it to keep ear/paw rows in lockstep with the
-    /// face row. Deterministic; negative ticks wrap.
+    /// face row. Deterministic; negative ticks wrap. Delegates to the
+    /// generated <see cref="MascotMoodFrames.FrameIndex"/> table.
     /// </summary>
     public static int FrameIndex(long monotonicTick, MascotMood mood)
-    {
-        string[] frames = FramesOf(mood);
-        long period = mood == MascotMood.Sleeping ? SleepPeriod : 1;
-        int i = (int)((monotonicTick / period) % frames.Length);
-        return i >= 0 ? i : i + frames.Length;
-    }
+        => MascotMoodFrames.FrameIndex(monotonicTick, mood);
 
     /// <summary>Frame for the given monotonic tick and mood. Deterministic.</summary>
-    public static string Frame(long monotonicTick, MascotMood mood = MascotMood.Idle) =>
-        FramesOf(mood)[FrameIndex(monotonicTick, mood)];
+    public static string Frame(long monotonicTick, MascotMood mood = MascotMood.Idle)
+        => MascotMoodFrames.Frame(monotonicTick, mood);
 
     /// <summary>Display width of the frame (all frames are single-width runes).</summary>
     public static int Width(string frame) => frame.Length;

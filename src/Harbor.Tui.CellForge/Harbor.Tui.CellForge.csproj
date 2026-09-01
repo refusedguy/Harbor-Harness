@@ -22,4 +22,18 @@
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Build-time only: the analyzer generates renderer-backend adapters
+         from the [TuiRenderer] annotation on CellForgeTuiRenderer. -->
+    <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared-source attribute surface for the Harbor.CodeGen generators. -->
+    <Compile Include="..\Harbor.CodeGen\Attributes\HarborCodeGenAttributes.cs"
+             Link="CodeGen\HarborCodeGenAttributes.cs"/>
+  </ItemGroup>
+
 </Project>
