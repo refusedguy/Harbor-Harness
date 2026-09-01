@@ -347,7 +347,11 @@ public sealed record PermissionRule(
     {
         // Fast path: wildcard matches everything.
         if (Pattern == "*") return true;
-        return GetOrCompileRegex(Pattern).IsMatch(argPath);
+        // Rule patterns are authored with '/' separators, but Path.GetFullPath
+        // emits '\' on Windows (see PermissionService.NormalizePath). Compare
+        // on a canonical forward-slash form so a ruleset is portable across
+        // operating systems.
+        return GetOrCompileRegex(Pattern.Replace('\\', '/')).IsMatch(argPath.Replace('\\', '/'));
     }
 
     private static Regex GetOrCompileRegex(string pattern)
