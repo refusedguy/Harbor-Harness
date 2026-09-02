@@ -1066,12 +1066,7 @@ internal sealed class CellForgeReplRunner(
             var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
-                // AgentLoop converts an aborted run into Result.Failure (the
-                // AgentEndEvent must stay Cancelled=true for renderers), so
-                // cancelled turns land HERE, not in the OCE handler below.
-                bridge.AppendSystemLine(IsCancellation(result.Error)
-                    ? "ход прерван"
-                    : "! " + result.Error);
+                bridge.AppendSystemLine("! " + result.Error);
             }
         }
         catch (OperationCanceledException)

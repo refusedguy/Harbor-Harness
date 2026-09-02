@@ -289,12 +289,7 @@ internal sealed class ReplRunner
             }
 
             _logger.LogDebug("User prompt ({Length} chars)", trimmed.Length);
-            var promptResult = await agent.PromptAsync(trimmed).ConfigureAwait(false);
-            if (promptResult.IsFailure)
-            {
-                _logger.LogWarning("Prompt failed: {Error}", promptResult.Error);
-                await renderer.WriteLineAsync($"Error: {promptResult.Error}").ConfigureAwait(false);
-            }
+            await agent.PromptAsync(trimmed).ConfigureAwait(false);
         }
 
         _logger.LogInformation("Line REPL ended");
