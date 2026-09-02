@@ -353,6 +353,8 @@ internal sealed class BenchPermissionService : IPermissionService
         => Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
 
     public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
+
+    public Task<Result> SaveAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
 }
 
 /// <summary>
