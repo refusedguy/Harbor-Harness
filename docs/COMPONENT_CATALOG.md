@@ -12,13 +12,17 @@
 1. [StatusBadge](#statusbadge)
 2. [ChatBubble](#chatbubble)
 3. [SessionRow](#sessionrow)
-4. [ToolCallCardView](#toolcallcardview)
-5. [Sparkline](#sparkline)
-6. [TypewriterStreamingText](#typewriterstreamingtext)
-7. [CodeBlock](#codeblock)
-8. [MarkdownRenderer](#markdownrenderer)
-9. [ProviderModelPicker](#providermodelpicker)
-10. [Platform-agnostic helpers](#platform-agnostic-helpers)
+4. [StatusDot](#statusdot)
+5. [Kbd](#kbd)
+6. [SegmentedControl](#segmentedcontrol)
+7. [EmptyState](#emptystate)
+8. [ToolCallCardView](#toolcallcardview)
+9. [Sparkline](#sparkline)
+10. [TypewriterStreamingText](#typewriterstreamingtext)
+11. [CodeBlock](#codeblock)
+12. [MarkdownRenderer](#markdownrenderer)
+13. [ProviderModelPicker](#providermodelpicker)
+14. [Platform-agnostic helpers](#platform-agnostic-helpers)
 
 ---
 
@@ -110,6 +114,50 @@
 - Avalonia: `apps/Harbor.App.Avalonia/Views/Components/SessionRow.axaml(.cs)`
 - Blazor: `contrib/apps/Harbor.App.Blazor/Components/Shared/SessionRow.razor`
 - WPF: `contrib/apps/Harbor.App.Wpf/Controls/SessionRow.xaml(.cs)`
+
+---
+
+## StatusDot
+
+**Purpose:** Minimal colored ellipse for inline status indication (e.g., streaming indicator in chat).
+
+**Avalonia only:**
+`apps/Harbor.App.Avalonia/Views/Components/StatusDot.axaml(.cs)`
+
+**Props:** `ColorKey` (`string`), `Size` (`double`).
+
+---
+
+## Kbd
+
+**Purpose:** Keyboard shortcut chip (monospace pill) used in placeholders and hints.
+
+**Avalonia only:**
+`apps/Harbor.App.Avalonia/Views/Components/Kbd.axaml(.cs)`
+
+**Props:** `Text` (`string`) — the key label (e.g. `"⏎"`, `"Ctrl+O"`).
+
+---
+
+## SegmentedControl
+
+**Purpose:** Horizontal tab strip with single-selection semantics, backed by a `ListBox`.
+
+**Avalonia only:**
+`apps/Harbor.App.Avalonia/Views/Components/SegmentedControl.axaml(.cs)`
+
+**Binds to:** `ItemsSource` (list of options), `SelectedItem` (two-way).
+
+---
+
+## EmptyState
+
+**Purpose:** Centered placeholder when a panel has no content (CTA + description + optional icon).
+
+**Avalonia only:**
+`apps/Harbor.App.Avalonia/Views/Components/EmptyState.axaml(.cs)`
+
+**Props:** `Icon` (`string`), `Title` (`string`), `Description` (`string`), `Command` (`ICommand?`), `CtaText` (`string?`).
 
 ---
 

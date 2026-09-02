@@ -164,6 +164,7 @@
                     CornerRadius="12"
                     Padding="4">
                 <TextBox x:Name="HeroInputBox"
+                         AutomationProperties.Name="Chat input"
                          Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          PlaceholderText="Ask Harbor anything…  ⏎ send · ⇧⏎ newline"
                          AcceptsReturn="True"
@@ -251,6 +252,7 @@
             <Grid ColumnDefinitions="*,Auto,Auto">
                 <TextBox Grid.Column="0"
                          x:Name="InputBox"
+                         AutomationProperties.Name="Message input"
                          Text="{Binding InputText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          PlaceholderText="Message Harbor…"
                          AcceptsReturn="True"
@@ -260,11 +262,13 @@
                          Padding="12,10"
                          KeyDown="InputBox_KeyDown" />
                 <Button Grid.Column="1" Classes="Primary" Content="Send ▶"
+                        AutomationProperties.Name="Send message"
                         Command="{Binding SendCommand}"
                         Margin="8,0,0,0"
                         Padding="20,12"
                         VerticalAlignment="Bottom" />
                 <Button Grid.Column="1" Classes="Secondary" Content="Stop ■"
+                        AutomationProperties.Name="Stop generation"
                         Command="{Binding StopCommand}"
                         Margin="8,0,0,0"
                         Padding="16,12"

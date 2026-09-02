@@ -184,6 +184,8 @@ internal sealed class SkipGoldenOnCiAttribute : SkipAttribute
     /// <inheritdoc />
     public override Task<bool> ShouldSkip(TestRegisteredContext context)
         => Task.FromResult(
-            Environment.GetEnvironmentVariable("CI") == "1"
+            (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CI"))
+             && Environment.GetEnvironmentVariable("CI") != "0"
+             && Environment.GetEnvironmentVariable("CI") != "false")
             && Environment.GetEnvironmentVariable("HARBOR_GOLDENS_STRICT") != "1");
 }

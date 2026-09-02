@@ -49,10 +49,13 @@
                         Background="{DynamicResource BgRailBrush}"
                         Spacing="2" Margin="6,4" x:Name="TabStrip">
                 <RadioButton Classes="TabButton" Content="Chat" GroupName="MainView"
+                             AutomationProperties.Name="Chat tab"
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}" />
                 <RadioButton Classes="TabButton" Content="Code" GroupName="MainView"
+                             AutomationProperties.Name="Code tab"
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}" />
                 <RadioButton Classes="TabButton" Content="Sessions" GroupName="MainView"
+                             AutomationProperties.Name="Sessions tab"
                              IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=board}" />
             </StackPanel>
 
