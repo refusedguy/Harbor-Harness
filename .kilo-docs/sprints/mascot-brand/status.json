@@ -1,18 +1,18 @@
 {
   "name": "mascot-brand",
-  "state": "queued",
-  "head": "d90d7bf",
+  "state": "done",
+  "head": "171907d43822d3ca9a1f9189d86e1ea4d4bd5a43",
   "base": "aee396a",
-  "commits": 10,
+  "commits": 2,
   "started_at": "2026-08-31T22:50:14+0500",
   "finished_at": "2026-09-01T00:42:43+0500",
   "kilo_pid": null,
   "kilo_session": null,
   "findings": null,
   "report": "Third-pass verification (fresh agent, clean eyes): all 3 task commits (61307bf, 6a778d3, 744cef1) confirmed ancestors of HEAD. Hard rules audited directly: HARBOR_MASCOT=off kill-switch wins over HARBOR_MASCOT_MODE and disables footer + panel + reactions (MascotMode.cs, byte-exact golden coverage); no RPG stats / speech bubbles / Tamagotchi mechanics — only static frame banks, moods and one-shot overlays; Frame()/paint path is allocation-free (static string[] banks, span writes) and enforced by GC-count tests. Build Harbor.slnx Release: success, 0 errors, 0 warnings in sprint code (Harbor.Tui.CellForge clean). Tests: 766/766 CellForge (incl. 36 mascot: 6 AmbientMascot + 8 StatusPanel + 3 MascotModeEnv + 10 MascotPanel + 9 MascotReaction), 57/57 PTY golden (HARBOR_MASCOT=off, byte-exact), 47/47 architecture, 78/78 CLI — all green.",
-  "failures": 1,
+  "failures": 2,
   "retries": 0,
-  "last_activity": "2026-08-31T23:38:54Z",
+  "last_activity": "2026-09-03T03:10:12+0500",
   "progress": {
     "current_task": "",
     "tasks_done": 3,
@@ -44,5 +44,6 @@
       "- 6a778d3 feat(tui): HARBOR_MASCOT_MODE=panel — 3-row mascot cat beside the composer via LayoutTree.Split",
       "- 61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade"
     ]
-  }
+  },
+  "finished": "2026-09-03T03:10:00Z"
 }
