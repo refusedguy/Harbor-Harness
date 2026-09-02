@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 ///         streaming token feed while adding image-emission hooks.
 ///     </para>
 /// </remarks>
-public class AnsiPlainTuiRenderer : BaseTuiRenderer
+public partial class AnsiPlainTuiRenderer : BaseTuiRenderer
 {
     private readonly bool _ownsWriter;
     private readonly TextWriter _writer;
@@ -259,7 +259,7 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
         _writer.Write(codes.Length == 0 ? text : $"\x1b[{codes}m{text}{Strategy.Reset}");
     }
 
-    public void SetCursorPosition(int row, int col) => _writer.Write($"\x1b[{row};{col}H");
+    public void SetCursorPosition(int row, int col) => _writer.Write(EscapeCodes.Position(row, col));
 
     public void ClearLine() => _writer.Write(Strategy.ClearLine);
 

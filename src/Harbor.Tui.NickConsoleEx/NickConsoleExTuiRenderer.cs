@@ -29,7 +29,8 @@ namespace Harbor.Tui.NickConsoleEx;
 ///         is used; on a real terminal, their <see cref="NetConsoleDriver"/>.
 ///     </para>
 /// </summary>
-public sealed class NickConsoleExTuiRenderer : BaseTuiRenderer
+[Harbor.CodeGen.TuiRenderer("nickconsoleex")]
+public sealed partial class NickConsoleExTuiRenderer : BaseTuiRenderer
 {
     private readonly Lock _gate = new();
     private readonly List<string> _lines = [];

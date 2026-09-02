@@ -21,7 +21,8 @@ namespace Harbor.Tui.CellForge;
 ///     automaton: styles are diffed against the writer's tracked state, so
 ///     redundant escape codes are never emitted.
 /// </summary>
-public sealed class CellForgeTuiRenderer : BaseTuiRenderer
+[Harbor.CodeGen.TuiRenderer("cellforge")]
+public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 {
     public CellForgeTuiRenderer(ILogger<CellForgeTuiRenderer> logger) : base(logger)
     {

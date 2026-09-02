@@ -58,16 +58,14 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     public bool SupportsColor => true;
 
-    // Reset / decoration (kept as named constants for callers that compose
-    // raw sequences, e.g. QR/OSC emission paths).
-    public const string ResetSeq = "\x1b[0m";
+    public static readonly string ResetSeq = EscapeCodes.Reset.ToString();
+    public const int DEBUG_MARKER_ESCAPE_CODES_VISIBLE = 1;
     public const string Bold = "\x1b[1m";
     public const string Dim = "\x1b[2m";
     public const string Italic = "\x1b[3m";
     public const string Underline = "\x1b[4m";
     public const string Strike = "\x1b[9m";
 
-    // 16-color foreground palette (legacy callers).
     public const string Red = "\x1b[31m";
     public const string Green = "\x1b[32m";
     public const string Yellow = "\x1b[33m";
@@ -77,28 +75,30 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     public string Reset => ResetSeq;
 
-    public string Foreground(TuiColor color) => $"\x1b[38;2;{color.R};{color.G};{color.B}m";
+    public string Foreground(TuiColor color) => EscapeCodes.ForegroundRgb(color.R, color.G, color.B);
 
-    public string Background(TuiColor color) => $"\x1b[48;2;{color.R};{color.G};{color.B}m";
+    public string Background(TuiColor color) => EscapeCodes.BackgroundRgb(color.R, color.G, color.B);
 
-    public string Style(TuiStyle style)
+    public string Style(TuiStyle style) => EscapeCodes.Style(MapStyle(style));
+
+    public string HideCursor => EscapeCodes.HideCursor.ToString();
+    public string ShowCursor => EscapeCodes.ShowCursor.ToString();
+    public string ClearLine => EscapeCodes.ClearLine.ToString();
+    public string ClearScreen => EscapeCodes.ClearScreen.ToString();
+    public string EnterAlternateScreen => EscapeCodes.EnterAlternateScreen.ToString();
+    public string ExitAlternateScreen => EscapeCodes.ExitAlternateScreen.ToString();
+
+    private static StyleFlag MapStyle(TuiStyle style)
     {
-        var codes = new List<string>(6);
-        if (style.HasFlag(TuiStyle.Bold)) codes.Add("1");
-        if (style.HasFlag(TuiStyle.Dim)) codes.Add("2");
-        if (style.HasFlag(TuiStyle.Italic)) codes.Add("3");
-        if (style.HasFlag(TuiStyle.Underline)) codes.Add("4");
-        if (style.HasFlag(TuiStyle.Strike)) codes.Add("9");
-        if (style.HasFlag(TuiStyle.Reverse)) codes.Add("7");
-        return codes.Count == 0 ? string.Empty : string.Join(';', codes);
+        StyleFlag flags = StyleFlag.None;
+        if (style.HasFlag(TuiStyle.Bold)) flags |= StyleFlag.Bold;
+        if (style.HasFlag(TuiStyle.Dim)) flags |= StyleFlag.Dim;
+        if (style.HasFlag(TuiStyle.Italic)) flags |= StyleFlag.Italic;
+        if (style.HasFlag(TuiStyle.Underline)) flags |= StyleFlag.Underline;
+        if (style.HasFlag(TuiStyle.Strike)) flags |= StyleFlag.Strike;
+        if (style.HasFlag(TuiStyle.Reverse)) flags |= StyleFlag.Reverse;
+        return flags;
     }
-
-    public string HideCursor => "\x1b[?25l";
-    public string ShowCursor => "\x1b[?25h";
-    public string ClearLine => "\x1b[2K\r";
-    public string ClearScreen => "\x1b[2J\x1b[H";
-    public string EnterAlternateScreen => "\x1b[?1049h";
-    public string ExitAlternateScreen => "\x1b[?1049l";
 }
 
 /// <summary>
