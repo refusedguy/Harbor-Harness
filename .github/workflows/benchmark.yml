@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload BDN artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmarkdotnet-results
           path: tests/Harbor.Benchmarks/BenchmarkDotNet.Artifacts/results/
