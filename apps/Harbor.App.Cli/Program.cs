@@ -126,7 +126,7 @@ public static class Program
             new PluginsCommand(Console.Out, Console.Error),
             new DemoCommand(Console.Out, Console.Error),
         };
-        if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
+        if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
 
         return command switch

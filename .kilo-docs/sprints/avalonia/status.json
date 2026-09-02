@@ -1,1 +1,35 @@
-{"sprint":"avalonia","state":"completed","retries":0,"base":"master","base_sha":"1d86c61","model":"kilo/DeepSeek/deepseek-v4-flash-latest","created_at":"2026-09-02T14:35:00Z","updated_at":"2026-09-02T15:00:00Z","tasks":[{"name":"accessibility-audit","status":"completed","eta_minutes":0,"last_heartbeat":null},{"name":"component-catalog","status":"completed","eta_minutes":0,"last_heartbeat":null},{"name":"e2e-flake-cleanup","status":"completed","eta_minutes":0,"last_heartbeat":null}],"name":"avalonia"}
+{
+  "sprint": "avalonia",
+  "state": "queued",
+  "retries": 0,
+  "base": "master",
+  "base_sha": "1d86c61",
+  "model": "kilo/DeepSeek/deepseek-v4-flash-latest",
+  "created_at": "2026-09-02T14:35:00Z",
+  "updated_at": "2026-09-02T15:00:00Z",
+  "tasks": [
+    {
+      "name": "accessibility-audit",
+      "status": "completed",
+      "eta_minutes": 0,
+      "last_heartbeat": null
+    },
+    {
+      "name": "component-catalog",
+      "status": "completed",
+      "eta_minutes": 0,
+      "last_heartbeat": null
+    },
+    {
+      "name": "e2e-flake-cleanup",
+      "status": "completed",
+      "eta_minutes": 0,
+      "last_heartbeat": null
+    }
+  ],
+  "name": "avalonia",
+  "head": "babde7e11e7f39d7ca1fe1fba8a39c05a1cf77d7",
+  "last_activity": "2026-09-02T16:00:02+0500",
+  "started_at": "2026-09-02T15:04:15+0500",
+  "failures": 1
+}

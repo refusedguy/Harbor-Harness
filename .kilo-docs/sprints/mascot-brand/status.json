@@ -1,6 +1,6 @@
 {
   "name": "mascot-brand",
-  "state": "failed",
+  "state": "queued",
   "head": "d90d7bf",
   "base": "aee396a",
   "commits": 10,

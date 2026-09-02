@@ -2,18 +2,30 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:Harbor.App.Avalonia.Views"
              xmlns:ctrl="clr-namespace:Harbor.App.Avalonia.Views.Controls"
+             xmlns:vm="clr-namespace:Harbor.App.Avalonia.ViewModels"
+             xmlns:shell="clr-namespace:Harbor.App.Avalonia.Views.Shell"
              x:Class="Harbor.App.Avalonia.Views.Shell.ActivityRailView"
-             Width="56"
-             MinWidth="56"
              HorizontalAlignment="Left"
              VerticalAlignment="Stretch">
 
+    <UserControl.Resources>
+        <shell:BoolToWidthConverter x:Key="BoolToWidth" ExpandedWidth="240" CollapsedWidth="56"/>
+        <shell:FileTypeToGeometryConverter x:Key="FileTypeToGeometry"/>
+    </UserControl.Resources>
+
     <Border Background="{DynamicResource BgRailBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
-            BorderThickness="0,0,1,0">
+            BorderThickness="0,0,1,0"
+            Width="{Binding IsSidebarVisible, Converter={StaticResource BoolToWidth}}"
+            MinWidth="56">
         <DockPanel Margin="0,8">
-            <!-- upper actions -->
+            <!-- Toggle + upper actions -->
             <StackPanel DockPanel.Dock="Top" Spacing="4" HorizontalAlignment="Center">
+                <Button Classes="RailButton" Name="Rail_ToggleButton"
+                        AutomationProperties.AutomationId="Rail_ToggleButton"
+                        ToolTip.Tip="Toggle sidebar (Ctrl+B)" Click="Toggle_Click">
+                    <PathIcon Data="{StaticResource IcChevronRight}" Width="16" Height="16"/>
+                </Button>
                 <Button Classes="RailButton RailButtonActive" Name="Rail_BoardButton"
                         AutomationProperties.AutomationId="Rail_BoardButton"
                         ToolTip.Tip="Sessions" Click="Board_Click">
@@ -30,7 +42,46 @@
                     <PathIcon Data="{StaticResource IcDiff}" Width="20" Height="20"/>
                 </Button>
             </StackPanel>
-            <!-- bottom -->
+
+            <!-- File tree (visible only when expanded) -->
+            <Border DockPanel.Dock="Top" IsVisible="{Binding IsSidebarVisible}" Margin="0,8,0,0">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="8,0,8,4" ColumnDefinitions="Auto,*">
+                        <TextBlock Grid.Column="0" Text="Explorer"
+                                   FontSize="{DynamicResource FontSizeSmall}"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Padding="4" Width="28" Height="28"
+                                Click="Refresh_Click" HorizontalAlignment="Right"
+                                ToolTip.Tip="Refresh file tree">
+                            <PathIcon Data="{StaticResource IcRefresh}" Width="14" Height="14"/>
+                        </Button>
+                    </Grid>
+                    <TreeView ItemsSource="{Binding FileTree}" Virtualize="True" Name="FileTreeView"
+                              SelectionChanged="FileTreeView_SelectionChanged">
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate DataType="{x:Type vm:FileTreeNode}" ItemsSource="Children">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <PathIcon Width="16" Height="16">
+                                        <PathIcon.Data>
+                                            <Binding Path="." Converter="{StaticResource FileTypeToGeometry}"/>
+                                        </PathIcon.Data>
+                                    </PathIcon>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="{DynamicResource FontSizeSmall}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </DockPanel>
+            </Border>
+
+            <!-- Separator -->
+            <Border DockPanel.Dock="Bottom" Height="1"
+                    Background="{DynamicResource BorderSubtleBrush}"
+                    Margin="4,0" IsVisible="{Binding IsSidebarVisible}"/>
+
+            <!-- Bottom actions -->
             <StackPanel DockPanel.Dock="Bottom" Spacing="4" HorizontalAlignment="Center">
                 <Button Classes="RailButton" Name="Rail_ThemeButton"
                         AutomationProperties.AutomationId="Rail_ThemeButton"
