@@ -1,9 +1,9 @@
 {
   "name": "mascot-brand",
-  "state": "done",
+  "state": "queued",
   "head": "171907d43822d3ca9a1f9189d86e1ea4d4bd5a43",
-  "base": "aee396a",
-  "commits": 2,
+  "base": "",
+  "commits": 0,
   "started_at": "2026-08-31T22:50:14+0500",
   "finished_at": "2026-09-01T00:42:43+0500",
   "kilo_pid": null,
@@ -45,5 +45,5 @@
       "- 61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade"
     ]
   },
-  "finished": "2026-09-03T03:10:00Z"
+  "finished": ""
 }
