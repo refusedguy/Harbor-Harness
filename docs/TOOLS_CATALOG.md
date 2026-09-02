@@ -43,9 +43,15 @@
 
 ## 1. Inventory
 
-Harbor ships **14 builtin tools** registered by `Harbor.Cli.Hosting.HostBuilder.CreateToolRegistry`.
-They live in `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs` and are plain `sealed` classes
+Harbor ships **14 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+(in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
+`src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
+
+> **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
+> registers all 14 tools; `Standard10` omits the four heavier ones (`task`, `webfetch`,
+> `ripgrep`, `mcp`). The CLI defaults to `Full14`; the Avalonia desktop app uses
+> `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -110,10 +116,10 @@ for vision-capable hosts. Obvious binary content (NUL bytes) is rejected up fron
 
 ```jsonc
 // 1. Read whole file (cap: 2000 lines)
-{"path": "src/Harbor.Core/Agents/AgentLoop.cs"}
+{"path": "src/Harbor.Application/Agents/AgentLoop.cs"}
 
 // 2. Windowed read for a long file
-{"path": "src/Harbor.Core/Agents/AgentLoop.cs", "offset": 600, "limit": 80}
+{"path": "src/Harbor.Application/Agents/AgentLoop.cs", "offset": 600, "limit": 80}
 
 // 3. Image metadata (base64 is attached in metadata.imageBase64)
 {"path": "screenshots/diff.png"}
@@ -154,7 +160,7 @@ write (temp file + rename).
 
 ```jsonc
 // 1. Create a new file with content
-{"path": "src/Harbor.Tools.Builtin/Time/TimeTool.cs", "content": "..."}
+{"path": "src/Harbor.Tools.Builtin/Tools/Read/ReadTool.cs", "content": "..."}
 
 // 2. Overwrite an existing file (use read first to see the old content!)
 {"path": "README.md", "content": "# Harbor\n..."}
@@ -246,7 +252,7 @@ timeout, returns non-zero exit codes as `ToolResult.Error`.
 {"command": "dotnet build"}
 
 // 2. Run tests, longer timeout
-{"command": "dotnet test --filter Category=Integration", "timeoutMs": 300000}
+{"command": "dotnet test tests/Harbor.Tools.Builtin.Tests --treenode-filter \"/*/*/*/*[Category=Integration]\"", "timeoutMs": 300000}
 
 // 3. Pipe to grep
 {"command": "rg TODO | wc -l"}
@@ -339,7 +345,7 @@ matched content per match.
 {"pattern": "class\\s+Agent", "ignoreCase": true}
 
 // 3. Find usage of an identifier in a single file
-{"pattern": "AgentLoop", "path": "src/Harbor.Core/Agents/AgentLoop.cs"}
+{"pattern": "AgentLoop", "path": "src/Harbor.Application/Agents/AgentLoop.cs"}
 ```
 
 **Permissions.** Always Allow.
@@ -522,8 +528,8 @@ the changes.
 
 // 3. Multi-hunk patch (e.g. produced by `git diff`)
 {
-  "path": "src/Harbor.Core/Agents/AgentLoop.cs",
-  "patch": "--- a/src/Harbor.Core/Agents/AgentLoop.cs\n+++ b/src/Harbor.Core/Agents/AgentLoop.cs\n@@ -100,3 +100,3 @@\n-        var x = 1;\n+        var x = 2;\n@@ -200,3 +200,3 @@\n-        var y = 3;\n+        var y = 4;\n"
+  "path": "src/Harbor.Application/Agents/AgentLoop.cs",
+  "patch": "--- a/src/Harbor.Application/Agents/AgentLoop.cs\n+++ b/src/Harbor.Application/Agents/AgentLoop.cs\n@@ -100,3 +100,3 @@\n-        var x = 1;\n+        var x = 2;\n@@ -200,3 +200,3 @@\n-        var y = 3;\n+        var y = 4;\n"
 }
 ```
 
@@ -906,7 +912,7 @@ to any new tool.
 ### Step 1 — Pick a name, namespace, and folder
 
 ```
-src/Harbor.Tools.Builtin/WebFetch/WebFetchTool.cs
+src/Harbor.Tools.Builtin/Tools/WebFetch/WebFetchTool.cs
 ```
 
 The convention is `<Name>/<Name>Tool.cs` with a `sealed` class. The tool name is lowercase
@@ -1030,7 +1036,7 @@ public sealed class WebFetchTool : ITool
 
 ### Step 4 — Register in DI
 
-In `src/Harbor.Cli/Hosting/HostBuilder.cs`'s `CreateToolRegistry`:
+In `src/Harbor.Hosting/Modules/ToolsCatalog.cs`'s `CreateToolRegistry`:
 
 ```csharp
 tb.AddTool(() => new WebFetchTool(loggerFactory.CreateLogger<WebFetchTool>()));
@@ -1048,7 +1054,7 @@ If your tool needs an injected dependency (like `McpToolTool` needs `IMcpRegistr
 
 ### Step 5 — Add a permission rule
 
-In `src/Harbor.Abstractions/Permissions/PermissionRuleset.cs`'s `Default`:
+In `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`'s `Default`:
 
 ```csharp
 new("webfetch", "*", PermissionAction.Ask),
@@ -1267,57 +1273,72 @@ name in `IMcpRegistry` and forwards a JSON-RPC method call.
 
 ### Architecture
 
+The MCP stack is fully implemented in `src/Harbor.Tools.Builtin/Tools/Mcp/`:
+
 ```
 LLM  ──[tool: mcp, server="fs"]──>  McpToolTool  ──>  IMcpRegistry
                                                           │
-                                                          ▼
-                                            ┌──────────────────────────┐
-                                            │  InMemoryMcpRegistry     │  (stub)
-                                            │  - returns Failure       │
-                                            │  - real transport TBD    │
-                                            └──────────────────────────┘
-                                                          │
-                                                          ▼ (production)
-                                            ┌──────────────────────────┐
-                                            │  StdioMcpRegistry        │  (not yet impl)
-                                            │  - spawns child process  │
-                                            │  - JSON-RPC over stdio   │
-                                            └──────────────────────────┘
+                                        ┌─────────────────┴─────────────────┐
+                                        ▼                                   ▼
+                          ┌────────────────────────────┐    ┌────────────────────────┐
+                          │  McpRegistry               │    │  InMemoryMcpRegistry   │
+                          │  (Harbor.Tools.Mcp)        │    │  (Harbor.Registries,   │
+                          │  - spawns child process    │    │   desktop Standard10   │
+                          │  - JSON-RPC over stdio     │    │   fallback only)       │
+                          │  - kills tree on dispose   │    └────────────────────────┘
+                          └────────────────────────────┘
+                                    │            │
+                     McpProcessClient     McpJsonRpcTransport
+                     (one subprocess      (framing + response
+                      per server,          correlation)
+                      stderr → logger)
 ```
+
+- `IMcpRegistry` — `src/Harbor.Abstractions/Tools/IMcpRegistry.cs`
+- `McpRegistry` (real impl, `IAsyncDisposable`) — `src/Harbor.Tools.Builtin/Tools/Mcp/McpRegistry.cs`
+- `McpProcessClient` / `McpJsonRpcTransport` / `ProcessTree` — subprocess lifecycle + transport
+- `McpServersConfigLoader` / `McpServersConfig` — config discovery (below)
+- `McpToolAdapter` — wraps a single MCP tool as an `ITool` named `mcp_<server>_<tool>`
 
 ### Registering a server
 
-The default `InMemoryMcpRegistry` (in `src/Harbor.Core/Tools/InMemoryMcpRegistry.cs`)
-tracks server names but cannot actually invoke them — it returns `Result.Failure` for
-every `InvokeAsync` call. To wire up a real transport:
+Config-first: `ToolsCatalog.CreateMcpRegistry` (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`)
+loads server definitions from standard `mcp.json` files in overlay order (later wins):
 
-```csharp
-// In your host's startup (after HostBuilder.Build):
-var mcpRegistry = host.Services.GetRequiredService<IMcpRegistry>();
-mcpRegistry.Register("filesystem", "npx -y @modelcontextprotocol/server-filesystem /tmp");
-mcpRegistry.Register("github", "npx -y @modelcontextprotocol/server-github");
-```
+1. `$HARBOR_MCP_CONFIG` (explicit file), then
+2. `~/.harbor/mcp.json`, then
+3. `<project>/.harbor/mcp.json`
 
-### Example config (JSON)
-
-For a host that reads MCP server config from a file (TODO: not yet implemented — see
-`docs/ROADMAP.md`):
+Supported schema (industry-standard `mcpServers` map; unknown fields ignored;
+a legacy flat `"name": "command line"` form is also accepted):
 
 ```jsonc
-// ~/.harbor/mcp.json (proposed format)
+// ~/.harbor/mcp.json
 {
-  "servers": {
+  "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${harborHome}"],
+      "cwd": null,
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" },
+      "disabled": false,
+      "instructions": "Read-only filesystem access under ${harborHome}"
     }
   }
 }
+```
+
+- Macros `${projectRoot}`, `${home}`, `${harborHome}` are expanded in `command`, `args`,
+  `cwd`, and `env` values (`McpServersConfigLoader.Expand`).
+- `disabled: true` skips a server; missing files are treated as empty config, not errors.
+
+Programmatic registration also works for custom hosts:
+
+```csharp
+var mcpRegistry = new Harbor.Tools.Mcp.McpRegistry(logger);
+mcpRegistry.Register("filesystem", "npx -y @modelcontextprotocol/server-filesystem /tmp");
+// or with full spawn control:
+mcpRegistry.Register("github", new McpServerStartInfo { Command = "npx", Args = [...], Environment = ... });
 ```
 
 ### Discovering a server's API
@@ -1343,21 +1364,20 @@ Then call a specific tool:
 }
 ```
 
-### Replacing the stub registry
+### Implementation notes
 
-For production use, implement `IMcpRegistry` with a real stdio JSON-RPC client. The
-interface is in `src/Harbor.Abstractions/Tools/IMcpRegistry.cs`. Replace the DI
-registration in `HostBuilder.RegisterRegistries`:
-
-```csharp
-// Replace:
-//   builder.Services.AddSingleton<IMcpRegistry>(mcpRegistry);
-// With:
-builder.Services.AddSingleton<IMcpRegistry>(new StdioMcpRegistry(
-    sp.GetRequiredService<ILogger<StdioMcpRegistry>>()));
-```
-
-(See `docs/ROADMAP.md` for the status of the stdio transport implementation.)
+- `McpRegistry` is registered as the `IMcpRegistry` singleton by
+  `Harbor.Hosting.Modules.ToolsCatalog.CreateMcpRegistry` when the host opts into MCP
+  (`IncludeMcpTools` + `Full14` tool set). The Avalonia desktop host uses
+  `Standard10`, where the registry is an empty `InMemoryMcpRegistry`
+  (in `src/Harbor.Registries/Tools/InMemoryMcpRegistry.cs`) so view-models can resolve
+  the interface without spawning subprocesses.
+- Server instructions are surfaced to the system prompt via
+  `IMcpRegistry.GetInstructions()` — from a static `instructions` hint in `mcp.json`
+  and the `initialize` response harvested during `InvokeAsync`.
+- Per-call lifecycle: each `InvokeAsync` spawns the server process, performs the
+  JSON-RPC round-trip, and kills the whole process tree on dispose (job objects on
+  Windows, process-group kill elsewhere — see `ProcessTree`).
 
 ### Security notes
 
@@ -1372,7 +1392,8 @@ builder.Services.AddSingleton<IMcpRegistry>(new StdioMcpRegistry(
 ## 10. Testing tools
 
 Test files live in `tests/Harbor.Tools.Builtin.Tests/` and follow the convention
-`<Name>ToolTests.cs`. The project uses TUnit (built-in to .NET 10 SDK).
+`<Name>ToolTests.cs`. The project uses [TUnit](https://tunit.dev) (pinned in
+`Directory.Packages.props`).
 
 ### Canonical test structure
 
@@ -1434,15 +1455,17 @@ public class WebFetchToolTests
 ### Running tests
 
 ```bash
-# All tests
-dotnet test
+# Just the builtin tool tests (known-good pattern: per-project, Release, no rebuild)
+dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build
 
-# Just the builtin tool tests
-dotnet test tests/Harbor.Tools.Builtin.Tests
-
-# One test class
-dotnet test tests/Harbor.Tools.Builtin.Tests --filter "FullyQualifiedName~WebFetchToolTests"
+# One test class — TUnit uses --treenode-filter, not --filter
+dotnet test tests/Harbor.Tools.Builtin.Tests \
+  --treenode-filter "/*/*/WebFetchToolTests/*"
 ```
+
+> **Known limitation:** running the whole `Harbor.slnx` test suite in one command (`dotnet test`)
+> breaks under the MTP host (test-platform parallelism). Run per-project `dotnet test tests/<X>`
+> instead.
 
 ---
 

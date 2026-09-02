@@ -10,9 +10,9 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Agents;
-using Harbor.Core.Resilience;
-using Harbor.Core.Sessions;
+using Harbor.Application.Agents;
+using Harbor.Application.Resilience;
+using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 /// <summary>
@@ -158,7 +158,7 @@ internal sealed class BenchTextLlmClient : ILlmClient
 /// <summary>
 ///     Minimal <see cref="ILlmClient" /> that streams a single tool call
 ///     (<see cref="ToolCallStartEvent" /> + <see cref="ToolCallDeltaEvent" />) then a
-///     <c>tool_use</c> finish, driving the <see cref="Harbor.Core.Agents.ToolDispatcher" /> path.
+///     <c>tool_use</c> finish, driving the <see cref="Harbor.Application.Agents.ToolDispatcher" /> path.
 /// </summary>
 internal sealed class BenchToolLlmClient : ILlmClient
 {
@@ -209,6 +209,9 @@ internal sealed class BenchProviderRegistry : IProviderRegistry
     public Result<ILlmClient> GetClient(ProviderId providerId) => Result.Success(_client);
 
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
+        => _client.GetModelsAsync(cancellationToken);
+
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
         => _client.GetModelsAsync(cancellationToken);
 
     public void Register(ProviderId providerId, Func<ILlmClient> factory) { }

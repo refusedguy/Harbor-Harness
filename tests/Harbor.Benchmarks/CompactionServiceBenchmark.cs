@@ -6,7 +6,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Benchmarks;
 /// <summary>
@@ -75,7 +75,13 @@ public class CompactionServiceBenchmark
     ///     This runs every turn, so it must stay cheap even at 1000 messages.
     /// </summary>
     [Benchmark(Description = "ShouldCompact (full token scan)")]
-    public bool ShouldCompact() => _service.ShouldCompact(_messages, _model);
+    public bool ShouldCompact()
+    {
+        bool result = false;
+        for (int i = 0; i < 100; i++)
+            result = _service.ShouldCompact(_messages, _model);
+        return result;
+    }
 
     /// <summary>
     ///     Benchmarks a full compaction orchestration with the stub client, isolating the
@@ -169,6 +175,9 @@ internal sealed class StubProviderRegistry : IProviderRegistry
     public Result<ILlmClient> GetClient(ProviderId providerId) => Result.Success(_client);
 
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(Array.Empty<ModelInfo>()));
+
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
         => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(Array.Empty<ModelInfo>()));
 
     public void Register(ProviderId providerId, Func<ILlmClient> factory) { }

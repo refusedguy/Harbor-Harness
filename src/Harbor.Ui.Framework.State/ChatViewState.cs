@@ -33,6 +33,12 @@ public sealed record ChatViewState
     /// <summary>Accumulated text delta for the currently streaming message.</summary>
     public string StreamingBuffer { get; init; } = string.Empty;
 
+    /// <summary>
+    ///     Deltas not yet concatenated into <see cref="StreamingBuffer" />
+    ///     (flush policy: <see cref="StreamingSync" />).
+    /// </summary>
+    public ChunkedBuffer PendingStreaming { get; init; } = ChunkedBuffer.Empty;
+
     /// <summary>Human-readable status message (e.g. "thinking…", "calling tool…").</summary>
     public string StatusMessage { get; init; } = string.Empty;
 

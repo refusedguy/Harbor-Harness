@@ -33,7 +33,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class OnboardingTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("Onboarding").ConfigureAwait(false);
 
     /// <summary>Open a fresh onboarding window bound to a fresh VM at the given step.</summary>
     private async Task<(OnboardingWindow window, OnboardingViewModel vm)> OpenOnboardingAsync(int step)
@@ -77,7 +77,7 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 1).ConfigureAwait(false);
         try
         {
-            var sawBrand = await Driver.WaitForTextAsync("Harbor", TimeSpan.FromSeconds(2))
+            var sawBrand = await Driver.WaitForTextInWindowAsync(window, "Harbor", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(sawBrand).IsTrue();
             var step = UI(() => vm.CurrentStep);
@@ -104,9 +104,9 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 2).ConfigureAwait(false);
         try
         {
-            var hasAnthropic = await Driver.WaitForTextAsync("Anthropic", TimeSpan.FromSeconds(2))
+            var hasAnthropic = await Driver.WaitForTextInWindowAsync(window, "Anthropic", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            var hasOllama = await Driver.WaitForTextAsync("Ollama", TimeSpan.FromSeconds(2))
+            var hasOllama = await Driver.WaitForTextInWindowAsync(window, "Ollama", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasAnthropic || hasOllama).IsTrue();
 
@@ -140,7 +140,7 @@ public sealed class OnboardingTests : ComponentTestBase
             });
             await Task.Delay(150).ConfigureAwait(false);
 
-            var hasApiKey = await Driver.WaitForTextAsync("API key", TimeSpan.FromSeconds(2))
+            var hasApiKey = await Driver.WaitForTextInWindowAsync(window, "API key", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasApiKey).IsTrue();
 
@@ -166,7 +166,7 @@ public sealed class OnboardingTests : ComponentTestBase
         var (window, vm) = await OpenOnboardingAsync(step: 4).ConfigureAwait(false);
         try
         {
-            var hasModel = await Driver.WaitForTextAsync("default model", TimeSpan.FromSeconds(2))
+            var hasModel = await Driver.WaitForTextInWindowAsync(window, "default model", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasModel).IsTrue();
 
@@ -193,7 +193,7 @@ public sealed class OnboardingTests : ComponentTestBase
         try
         {
             UI(() => vm.DefaultModel = "qwen2.5-coder:7b");
-            var hasTheme = await Driver.WaitForTextAsync("Choose your theme", TimeSpan.FromSeconds(2))
+            var hasTheme = await Driver.WaitForTextInWindowAsync(window, "Choose your theme", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
             await Assert.That(hasTheme).IsTrue();
 

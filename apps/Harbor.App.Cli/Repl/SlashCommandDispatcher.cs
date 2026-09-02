@@ -1,17 +1,18 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Hosting;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Hosting;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Repl;
+namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     Slash command dispatcher — single responsibility: route /commands to handlers.
 ///     Extracted from Program.cs.
@@ -25,31 +26,70 @@ internal sealed class SlashCommandDispatcher
         _logger = logger;
     }
 
-    public async Task HandleAsync(
+    public async Task<SlashCommandOutcome> HandleAsync(
         string input, IServiceProvider sp, ITuiRenderer renderer,
         IAgent agent, IAgentRegistry agentRegistry,
         IConfigStore configStore, AuthStore authStore,
         IProviderRegistry providers, Session session)
     {
-        string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0) return;
+        // The legacy renderer path funnels its output through ITuiRenderer;
+        // the delegates below keep that contract in one place.
+        return await HandleCoreAsync(input, sp,
+            writer: msg => _ = renderer.WriteLineAsync(msg),
+            reader: async prompt =>
+            {
+                var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
+                return r.IsSuccess ? r.Value : string.Empty;
+            },
+            agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    ///     CE-4: renderer-free overload for the CellForge REPL — output goes to
+    ///     the chat timeline and input comes from the composer instead of an
+    ///     <see cref="ITuiRenderer" />.
+    /// </summary>
+    public Task<SlashCommandOutcome> HandleCoreAsync(
+        string input, IServiceProvider sp,
+        Action<string> writer, Func<string, Task<string>> reader,
+        IAgent agent, IAgentRegistry agentRegistry,
+        IConfigStore configStore, AuthStore authStore,
+        IProviderRegistry providers, Session session)
+    {
+        string[] parts = input[1..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return Task.FromResult(SlashCommandOutcome.Continue);
+
+        return HandleKnownCommandAsync(parts, sp, writer, reader,
+            agent, agentRegistry, configStore, authStore, providers, session);
+    }
+
+    private async Task<SlashCommandOutcome> HandleKnownCommandAsync(
+        string[] parts, IServiceProvider sp,
+        Action<string> writer, Func<string, Task<string>> reader,
+        IAgent agent, IAgentRegistry agentRegistry,
+        IConfigStore configStore, AuthStore authStore,
+        IProviderRegistry providers, Session session)
+    {
         string cmd = parts[0].ToLowerInvariant();
         string[] args = parts.Skip(1).ToArray();
         _logger.LogInformation("Slash command: /{Command} args={ArgCount}", cmd, args.Length);
-        var writer = (Action<string>)(msg => _ = renderer.WriteLineAsync(msg));
-        var reader = (Func<string, Task<string>>)(async prompt =>
+
+        // Quit commands are resolved before any dependency is touched so the
+        // shutdown decision never depends on renderer/DI state. Returning the
+        // outcome lets the caller run its normal cleanup (IPC stop, host
+        // dispose) — no Environment.Exit anywhere.
+        if (cmd is "exit" or "quit")
         {
-            var r = await renderer.ReadLineAsync(prompt).ConfigureAwait(false);
-            return r.IsSuccess ? r.Value : string.Empty;
-        });
+            _logger.LogInformation("Quit requested via /{Command}", cmd);
+            return SlashCommandOutcome.Quit(0);
+        }
 
         try
         {
             switch (cmd)
             {
                 case "help":
-                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /tui /storage /exit");
+                    writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /fork /plugins /tui /renderer /storage /exit");
                     break;
                 case "setup":
                     await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
@@ -58,7 +98,9 @@ internal sealed class SlashCommandDispatcher
                     await new AuthCommand(authStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
                 case "model":
-                    await new ModelCommand(configStore, providers, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    // PROD-UI-0 З.3: pass the live agent + session so /model
+                    // rebinds the active session (no REPL restart).
+                    await new ModelCommand(configStore, providers, writer, agent, session).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
                 case "agent" or "mode":
                     await new AgentCommand(configStore, agentRegistry, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
@@ -66,22 +108,85 @@ internal sealed class SlashCommandDispatcher
                 case "config":
                     await new ConfigCommand(configStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
+                case "permissions":
+                    await new PermissionsCommand(
+                        sp.GetRequiredService<IPermissionService>(),
+                        sp.GetRequiredService<IAgentRegistry>(),
+                        configStore, writer, agent, session)
+                        .ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
                 case "providers": await ListProviders(sp); break;
                 case "sessions": await ListSessions(sp); break;
+                case "fork":
+                    await ForkSession(sp, args, writer);
+                    break;
+                case "plugins":
+                    // Hot-reload CS-source plugins into the live registries (add-only MVP).
+                    if (sp.GetService<Harbor.Hosting.PluginReloadService>() is { } reload)
+                    {
+                        var summary = await reload.ReloadAsync().ConfigureAwait(false);
+                        writer(summary.Loaded == 0
+                            ? "Plugins: no new plugin(s) loaded."
+                            : $"Plugins: {summary.Loaded} loaded.");
+                        foreach (var note in summary.Notes)
+                            writer($"  - {note}");
+                        writer("Hint: edited/removed plugins need a restart to fully rebind.");
+                    }
+                    else
+                    {
+                        writer("Plugins: not available in this build (HARBOR_MINIMAL).");
+                    }
+                    break;
                 case "tui": PrintTuiOptions(); break;
                 case "storage": PrintStorageOptions(); break;
-                case "exit" or "quit": Environment.Exit(0); break;
+                case "renderer":
+                    // Phase 6.3: hot-swap the renderer backend mid-session.
+                    // No args → list available backends; with an arg → swap.
+                    if (sp.GetService<Harbor.Hosting.Rendering.IRendererPipeline>() is not { } pipeline)
+                    {
+                        writer("Renderer pipeline: not available in this build.");
+                        break;
+                    }
+
+                    if (args.Length == 0)
+                    {
+                        writer($"Renderer: {pipeline.CurrentBackendId} | available: {string.Join(", ", pipeline.AvailableBackends)}");
+                        writer("Usage: /renderer <backend>");
+                        break;
+                    }
+
+                    string backendId;
+                    string? resolveError = null;
+                    if (sp.GetService<Harbor.Hosting.RuntimeRendererSwapMiddleware>() is not { } swap)
+                    {
+                        writer("Renderer swap: middleware unavailable.");
+                        break;
+                    }
+
+                    if (!swap.TryResolve(args[0], out backendId, out resolveError))
+                    {
+                        writer($"Renderer swap: {resolveError ?? "unavailable"}");
+                        break;
+                    }
+
+                    bool swapped = await pipeline.SwapRendererAsync(backendId).ConfigureAwait(false);
+                    writer(swapped
+                        ? $"Renderer swapped → {backendId} ({pipeline.CurrentBackendId})"
+                        : $"Renderer swap → {backendId} failed (see logs).");
+                    break;
                 default:
                     _logger.LogWarning("Unknown command: /{Command}", cmd);
                     writer($"Unknown: /{cmd}. /help for commands.");
                     break;
             }
             _logger.LogDebug("Command /{Command} completed", cmd);
+            return SlashCommandOutcome.Continue;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching command /{Command}", cmd);
             writer($"Error: {ex.Message}");
+            return SlashCommandOutcome.Continue;
         }
     }
 
@@ -110,6 +215,39 @@ internal sealed class SlashCommandDispatcher
                 Console.WriteLine($"  {s.Id} — {s.Title} [{s.ProviderId}/{s.Model}]");
     }
 
+    /// <summary>
+    ///     <c>/fork &lt;session-id&gt; &lt;message-id&gt;</c> — branch a NEW session
+    ///     copying history up to (and including) the given message through
+    ///     <see cref="SessionForkRunner" />.
+    /// </summary>
+    private static async Task ForkSession(IServiceProvider sp, string[] args, Action<string> writer)
+    {
+        if (args.Length < 2)
+        {
+            writer("Usage: /fork <session-id> <message-id>");
+            return;
+        }
+
+        var store = sp.GetRequiredService<ISessionStore>();
+        var result = await new SessionForkRunner(store).ForkAsync(args[0], args[1]).ConfigureAwait(false);
+        writer(result.IsSuccess
+            ? $"Forked → {result.Value.ForkId}: copied {result.Value.Copied} message(s)."
+            : $"Fork failed: {result.Error}");
+    }
+
     private static void PrintTuiOptions() => Console.WriteLine("TUI: ansi (default), plain, spectre, fullscreen");
     private static void PrintStorageOptions() => Console.WriteLine("Storage: jsonl (default), memory, sqlite");
+
+    public static async Task<int?> TryHandleAsync(string commandName, string[] args, ICommand[] commands, CancellationToken ct = default)
+    {
+        var command = commands.FirstOrDefault(c => c.Name.Equals(commandName, StringComparison.OrdinalIgnoreCase));
+        if (command is null)
+        {
+            return null;
+        }
+
+        // Thread the command's own result through: 0 = success, non-zero =
+        // failure. The caller maps it directly onto the process exit code.
+        return await command.ExecuteAsync(args, ct).ConfigureAwait(false);
+    }
 }

@@ -1,11 +1,13 @@
 using Harbor.Build.Components;
+using Harbor.Build.Meta;
 using Nuke.Common.IO;
 using Nuke.Common.ProjectModel;
 namespace Harbor.Build.Targets;
 /// <summary>
 ///     Composition helpers — convenience overloads that bundle multiple
-///     targets into a single invocation. Used by the <c>All</c> target on
-///     the <c>Build</c> class.
+///     targets into a single invocation. All of them thread the
+///     <see cref="BuildOutput" /> through so dry-run and Json mode apply
+///     uniformly.
 /// </summary>
 public static class AllTargets
 {
@@ -16,13 +18,13 @@ public static class AllTargets
     public static void CleanBuild(
         ArtifactPathResolver resolver,
         Solution solution,
-        BuildSettings settings)
+        BuildSettings settings,
+        BuildOutput output)
     {
-        CleanTarget.Execute(resolver);
-        RestoreTarget.Execute(solution);
-        CompileTarget.Execute(solution, settings);
+        CleanTarget.Execute(resolver, output);
+        RestoreTarget.Execute(solution, output);
+        CompileTarget.Execute(solution, settings, output);
     }
-
     /// <summary>
     ///     Runs <c>Compile → Test → ArchitectureTests</c>. Assumes a clean
     ///     build has already happened (use <see cref="CleanBuild" /> first).
@@ -30,13 +32,13 @@ public static class AllTargets
     public static void CompileAndTest(
         Solution solution,
         ArtifactPathResolver resolver,
-        BuildSettings settings)
+        BuildSettings settings,
+        BuildOutput output)
     {
-        CompileTarget.Execute(solution, settings);
-        TestTarget.Execute(solution, settings);
-        ArchitectureTestTarget.Execute(resolver, settings);
+        CompileTarget.Execute(solution, settings, output);
+        TestTarget.Execute(solution, settings, output);
+        ArchitectureTestTarget.Execute(resolver, settings, output);
     }
-
     /// <summary>
     ///     Runs <c>Publish → Archive</c> for the given app + variant + flags.
     /// </summary>
@@ -48,10 +50,11 @@ public static class AllTargets
         PublishVariant variant,
         FeatureFlags flags,
         BuildSettings settings,
-        ArchiveFormat archiveFormat)
+        ArchiveFormat archiveFormat,
+        BuildOutput output)
     {
-        var publishDir = PublishTarget.Execute(resolver, variantBuilder, appName, variant, flags);
+        var publishDir = PublishTarget.Execute(resolver, variantBuilder, appName, variant, flags, output);
         return ArchiveTarget.Execute(
-            resolver, archiveBuilder, publishDir, appName, variant, settings, archiveFormat);
+            resolver, archiveBuilder, publishDir, appName, variant, settings, archiveFormat, output);
     }
 }

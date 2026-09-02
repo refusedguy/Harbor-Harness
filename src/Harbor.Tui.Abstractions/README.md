@@ -1,44 +1,45 @@
 # Harbor.Tui.Abstractions
 
-TUI abstractions — MVVM-style contracts shared across all TUI renderers (Ansi, Plain, Spectre, etc.) and desktop GUI apps. Defines `ITuiRenderer`, `ITuiReducer`, `UiState`, `UiEvent`, and the panel system contracts.
+**Backward-compat facade** over the R6 split of the old TUI abstractions. This project contains **no code** — it exists only so existing `ProjectReference` entries pointing at `Harbor.Tui.Abstractions.csproj` keep building until the v0.6 removal.
+
+The actual code lives in two split projects:
+
+- `Harbor.Ui.Framework` — TEA state machine (`UiStore`, `UiState`, `UiEvent`, `UiReducer`, `TuiEffectHost` in `Harbor.Ui.Framework.State`) + dockable panel system — used by terminal TUIs **and** desktop GUIs
+- `Harbor.Terminal.Abstractions` — terminal-specific renderer / view / view-model / plugin contracts + GFM table rendering
 
 ## Layer
 
-Presentation — TUI renderer. References `Harbor.Abstractions` (Domain) + `Harbor.Tui.Abstractions` (Presentation contracts).
+Presentation contracts (facade). Transitive dependency direction:
+
+```
+Harbor.Tui.Abstractions → Harbor.Ui.Framework          → Harbor.Abstractions
+                        → Harbor.Terminal.Abstractions  → Harbor.Ui.Framework
+                                                        → Harbor.Abstractions
+```
 
 ## Dependencies
 
-- `Harbor.Abstractions` (Domain)
-- `Harbor.Tui.Abstractions` (Presentation contracts: `ITuiRenderer`, `UiState`, `UiEvent`)
-- `CommunityToolkit.Mvvm` (source-generated ObservableObject)
-- `CommunityToolkit.HighPerformance`
-- `CSharpFunctionalExtensions`
+- `Harbor.Ui.Framework`
+- `Harbor.Terminal.Abstractions`
 
 ## Public API
 
-- `(none — abstractions only)` — implements `ITuiRenderer` from Harbor.Tui.Abstractions
-- `ITuiRenderer` — sink for UiState snapshots
-- `ITuiReducer` — folds AgentEvent -> UiState
-- `UiStore` — observable state container (Transition helper exposed to desktop GUIs via InternalsVisibleTo)
-- `UiState` / `UiEvent` — immutable record types
-- `ITuiPanelPlugin` — panel-system contract for TUI plugins
-
-## Usage
-
-Registered via DI in the composition root:
-
-```csharp
-services.AddSingleton<ITuiRenderer, (none — abstractions only)>();
-```
-
-Then `AgentLoop` emits `AgentEvent`s; the active `ITuiReducer` folds them into a `UiState`; the renderer is called once per state change.
+`(none — the facade itself ships zero types)`; `ITuiRenderer`, `UiStore`, `UiState`, `UiEvent`, `ITuiPanelPlugin`, and friends resolve via the split projects above. Consumers must update their `using` directives: `Harbor.Tui.Abstractions.State` → `Harbor.Ui.Framework.State`, etc.
 
 ## InternalsVisibleTo
 
-Exposes `UiStore.Transition` to: `Harbor.App.Avalonia`, `Harbor.Tui.Avalonia`, `Harbor.Tui.Wpf`, `Harbor.Tui.Maui`, `Harbor.Tui.Blazor`. Desktop GUIs use it to fold non-agent state transitions (e.g. inserting a user-input line into the transcript before the agent emits a UserMessage event).
+The `InternalsVisibleTo` grants for `UiStore.Transition` now live in
+`src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj:23-27`
+(`Harbor.App.Avalonia`, `Harbor.App.Wpf`, `Harbor.App.Maui`, `Harbor.App.Blazor`,
+`Harbor.App.Cli`). Desktop GUIs use it to fold non-agent state transitions (e.g.
+inserting a user-input line into the transcript before the agent emits a
+UserMessage event).
+
+## Usage
+
+New code should reference the split projects directly. This facade is scheduled for removal in v0.6 (see `docs/ARCHITECTURE_LAYERS.md §2`).
 
 ## See also
 
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
 - [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md) — full TUI/GUI renderer comparison
-- [../../docs/SPECTRE_TUI_DEEP_DIVE.md](../../docs/SPECTRE_TUI_DEEP_DIVE.md)

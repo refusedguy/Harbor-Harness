@@ -2,7 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.Core.Tools;
+using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>

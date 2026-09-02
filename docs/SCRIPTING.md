@@ -1,5 +1,10 @@
 # Scripting in Harbor
 
+> **Moved to contrib (sprint-2).** The `Harbor.Scripting.{Abstractions,Bridge,Compilation,Engines,Hosting,Storage}`
+> projects now live in [`contrib/scripting/`](../contrib/scripting/) and build via
+> `contrib/Contrib.slnx`. The `--script` flag is not part of the main-solution CLI — it
+> reports unsupported and points to contrib.
+
 Harbor's scripting system runs TypeScript / JavaScript plugins **in-process**
 (or as a sandboxed subprocess) and exposes a curated `Harbor` bridge to them.
 This document describes the layered architecture, the available engines, and
@@ -267,6 +272,9 @@ the trade-offs haven't changed; only the default has.
 ---
 
 ## 6. CLI usage
+
+> Requires a contrib build of the CLI (`dotnet build contrib/Contrib.slnx`) —
+> the main-solution CLI does not support `--script`.
 
 ```bash
 # Install SharpTS once (optional — Jint is the automatic fallback):

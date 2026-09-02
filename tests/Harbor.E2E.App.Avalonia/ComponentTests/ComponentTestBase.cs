@@ -46,38 +46,49 @@ public abstract class ComponentTestBase
         ".harbor",
         "test-screenshots-comp-ct");
 
-    /// <summary>Per-class temp HOME so each test run starts with an empty <c>~/.harbor</c>.</summary>
-    protected static readonly string TempHome = Path.Combine(
-        Path.GetTempPath(),
-        "harbor-avalonia-ct-" + Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture));
+    /// <summary>Root folder holding one sub-directory per test class.</summary>
+    protected static readonly string ScreenshotRoot = ScreenshotDir;
 
-    private static HeadlessAvaloniaDriver? _driver;
+    private static readonly Dictionary<string, HeadlessAvaloniaDriver> _drivers = new();
+    private static HeadlessAvaloniaDriver? _current;
+    private static string _currentShotDir = ScreenshotDir;
+    private static string _currentTempHome = string.Empty;
     private static int _screenshotIndex;
 
     /// <summary>
-    ///     Lazy-init the shared headless driver. The first derived class to
-    ///     call this pays the init cost (Avalonia app + DI host build); every
-    ///     later test reuses the singleton.
+    ///     A11 (sprint 5): PER-CLASS driver isolation. Every derived class gets
+    ///     its own Avalonia host, DI container, temp HOME and session store —
+    ///     previously all classes shared one driver, so Settings writes and
+    ///     SessionList seeds leaked across classes making those suites
+    ///     order-dependent. Classes must be [NotInParallel]; sequential init
+    ///     overwrites Application.Current safely.
     /// </summary>
-    protected static async Task<HeadlessAvaloniaDriver> GetDriverAsync()
+    /// <param name="ownerKey">Stable short class key (e.g. "Settings").</param>
+    protected static async Task<HeadlessAvaloniaDriver> GetDriverAsync(string ownerKey)
     {
-        if (_driver is not null)
+        if (_drivers.TryGetValue(ownerKey, out var existing))
         {
-            return _driver;
+            _current = existing;
+            _currentShotDir = Path.Combine(ScreenshotRoot, ownerKey);
+            return existing;
         }
 
-        if (Directory.Exists(ScreenshotDir))
+        string shotDir = Path.Combine(ScreenshotRoot, ownerKey);
+        if (Directory.Exists(shotDir))
         {
-            Directory.Delete(ScreenshotDir, recursive: true);
+            Directory.Delete(shotDir, recursive: true);
         }
-        Directory.CreateDirectory(ScreenshotDir);
+        Directory.CreateDirectory(shotDir);
 
-        if (Directory.Exists(TempHome))
+        string tempHome = Path.Combine(
+            Path.GetTempPath(),
+            $"harbor-avalonia-ct-{ownerKey.ToLowerInvariant()}");
+        if (Directory.Exists(tempHome))
         {
-            Directory.Delete(TempHome, recursive: true);
+            Directory.Delete(tempHome, recursive: true);
         }
-        Directory.CreateDirectory(TempHome);
-        var harborDir = Path.Combine(TempHome, ".harbor");
+        Directory.CreateDirectory(tempHome);
+        var harborDir = Path.Combine(tempHome, ".harbor");
         Directory.CreateDirectory(harborDir);
         await File.WriteAllTextAsync(
             Path.Combine(harborDir, "config.json"),
@@ -93,14 +104,29 @@ public abstract class ComponentTestBase
             }, new JsonSerializerOptions { WriteIndented = true }))
             .ConfigureAwait(false);
 
-        _driver = new HeadlessAvaloniaDriver(ScreenshotDir, TempHome);
-        await _driver.InitializeAsync().ConfigureAwait(false);
-        return _driver;
+        // A11: pin the process-wide harbor home BEFORE host build so this
+        // class's stores read/write ITS config, not the first class's.
+        Harbor.Desktop.Abstractions.Configuration.CommonConfig
+            .OverrideHarborHomeForTests(harborDir);
+
+        var driver = new HeadlessAvaloniaDriver(shotDir, tempHome);
+        await driver.InitializeAsync().ConfigureAwait(false);
+        _drivers[ownerKey] = driver;
+        _current = driver;
+        _currentShotDir = shotDir;
+        _currentTempHome = tempHome;
+        return driver;
     }
 
-    /// <summary>Get the initialised driver, throwing clearly if setup didn't run.</summary>
+    /// <summary>The CURRENT class's driver (set by GetDriverAsync in [Before]).</summary>
     protected static HeadlessAvaloniaDriver Driver
-        => _driver ?? throw new InvalidOperationException("GetDriverAsync() did not run.");
+        => _current ?? throw new InvalidOperationException("GetDriverAsync(key) did not run.");
+
+    /// <summary>The current class's screenshot directory.</summary>
+    protected static string CurrentShotDir => _currentShotDir;
+
+    /// <summary>The current class's isolated temp HOME (config.json lives here).</summary>
+    protected static string TempHome => _currentTempHome;
 
     /// <summary>The main Avalonia window from the driver.</summary>
     protected static Window MainWindow => Driver.MainWindow;
@@ -141,7 +167,7 @@ public abstract class ComponentTestBase
     {
         var idx = Interlocked.Increment(ref _screenshotIndex);
         var fileName = $"ct-{idx:00}-{logicalName}.png";
-        var path = Path.Combine(ScreenshotDir, fileName);
+        var path = Path.Combine(_currentShotDir, fileName);
         Dispatcher.UIThread.InvokeAsync(() =>
         {
             window.UpdateLayout();

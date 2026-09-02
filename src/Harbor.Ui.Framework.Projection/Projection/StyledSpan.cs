@@ -12,7 +12,5 @@ public readonly record struct StyledSpan(
     bool Dim,
     UiSpanStyle? Style);
 
-public readonly record struct RgbColor(
-    byte R,
-    byte G,
-    byte B);
+// RgbColor moved to the standalone Harbor.DesignSystem package; the
+// namespace is preserved so all consumers resolve it unchanged.

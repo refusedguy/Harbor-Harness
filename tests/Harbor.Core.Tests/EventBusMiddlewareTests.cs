@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Core.Events;
+using Harbor.Registries.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Core.Tests;

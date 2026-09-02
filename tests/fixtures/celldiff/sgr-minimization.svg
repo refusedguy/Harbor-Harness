@@ -1,0 +1,13 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='240' height='40' font-family='monospace' font-size='15'>
+<rect width='100%' height='100%' fill='#101018'/>
+<text x='0' y='34' fill='rgb(220,60,60)' xml:space='preserve'>E</text>
+<text x='12' y='34' fill='rgb(220,60,60)' xml:space='preserve'>R</text>
+<text x='24' y='34' fill='rgb(220,60,60)' xml:space='preserve'>R</text>
+<text x='36' y='34' fill='rgb(220,60,60)' xml:space='preserve'> </text>
+<text x='48' y='34' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>W</text>
+<text x='60' y='34' fill='#CCCCCC' xml:space='preserve' text-decoration='underline'>A</text>
+<text x='72' y='34' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>R</text>
+<text x='84' y='34' fill='#CCCCCC' xml:space='preserve' font-weight='bold'>N</text>
+<text x='108' y='34' fill='#CCCCCC' xml:space='preserve'>!</text>
+<text x='120' y='34' fill='#CCCCCC' xml:space='preserve'>k</text>
+</svg>

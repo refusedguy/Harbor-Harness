@@ -26,14 +26,13 @@ Infrastructure — plugin pipeline layer. Depends on all four lower plugin layer
 ```csharp
 var host = new PluginHostBuilder()
     .WithSource(new FileSystemPluginSource(pluginRoot, logger))
-    .WithCompiler(new RoslynPluginCompiler(references, logger))
+    .WithCompiler(new RoslynPluginCompiler(references))
     .WithInstantiator(new ReflectionPluginInstantiator(logger))
     .WithRegistrar(new SafePluginRegistrar(new PluginRegistrar(logger), logger))
-    .WithLoadHost(myHarborLoadHost)
     .WithOptions(o => o.ContinueOnError = true)
-    .Build();
+    .Build(logger);
 
-await host.LoadAllAsync(ct);
+await host.LoadAllAsync(myHarborLoadHost, ct);   // IPluginLoadHost passed per call
 ```
 
 ## Pipeline position

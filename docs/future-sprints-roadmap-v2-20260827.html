@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor Future Sprints — Research-Based Roadmap</title>
+<style>
+  body { background:#0a0e14; color:#b3b9c5; font-family:monospace; padding:20px; }
+  .ok { color:#7fd962; } .err { color:#ff6b6b; } .warn { color:#ffb454; } .accent { color:#39bae6; }
+  .card { background:#0d1117; border:1px solid #1f2430; border-radius:4px; padding:12px; margin:8px 0; }
+  .title { color:#5c6773; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  h1 { color:#39bae6; font-size:20px; margin:0 0 8px; }
+  h2 { color:#39bae6; font-size:16px; margin:16px 0 8px; }
+  h3 { color:#b3b9c5; font-size:14px; margin:12px 0 6px; }
+  .sub { color:#5c6773; font-size:12px; margin-bottom:16px; }
+  ul { margin:8px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  code { background:#131820; border:1px solid #1f2430; border-radius:3px; padding:2px 6px; font-size:11px; color:#d2a6ff; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #1f2430; }
+  th { color:#5c6773; font-weight:normal; }
+  .highlight { background:rgba(57,186,230,.08); border-left:2px solid #39bae6; padding:8px; margin:8px 0; }
+  .why { background:rgba(127,217,98,.08); border-left:2px solid #7fd962; padding:8px; margin:8px 0; }
+  .priority { display:inline-block; padding:2px 8px; border-radius:3px; font-size:10px; font-weight:600; margin-right:6px; }
+  .p1 { background:rgba(127,217,98,.15); color:#7fd962; border:1px solid rgba(127,217,98,.3); }
+  .p2 { background:rgba(255,180,84,.15); color:#ffb454; border:1px solid rgba(255,180,84,.3); }
+  .p3 { background:rgba(210,166,255,.15); color:#d2a6ff; border:1px solid rgba(210,166,255,.3); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Harbor Future Sprints — Research-Based Roadmap</h1>
+  <div class="sub">Каждый спринт содержит: что делаем, зачем для человека, зачем для агента, источники/референсы</div>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint Queue</div>
+  <table>
+    <tr><th>Sprint</th><th>Focus</th><th>Priority</th><th>Status</th></tr>
+    <tr><td><span class="accent">UI-V2</span></td><td>Animations, Command Palette, Themes, Sidebar, Killer Features</td><td><span class="priority p1">P0</span></td><td><span class="ok">planned</span></td></tr>
+    <tr><td><span class="accent">Multi-Agent</span></td><td>Fleet Manager, worktree isolation, shared context, A2A/MCP</td><td><span class="priority p1">P0</span></td><td><span class="ok">research ready</span></td></tr>
+    <tr><td><span class="accent">Performance</span></td><td>60fps, zero-alloc, SIMD, data virtualization, 10k+ messages</td><td><span class="priority p1">P0</span></td><td><span class="ok">research ready</span></td></tr>
+    <tr><td><span class="accent">IDE Integration</span></td><td>/ide IPC bridge, diff provider abstraction, inline editing</td><td><span class="priority p2">P1</span></td><td><span class="ok">research ready</span></td></tr>
+    <tr><td><span class="accent">Security</span></td><td>Named permission profiles, OS sandbox, audit logging</td><td><span class="priority p2">P1</span></td><td><span class="ok">research ready</span></td></tr>
+    <tr><td><span class="accent">Release Engineering</span></td><td>Homebrew/Chocolatey/WinGet, auto-updater, GitHub Actions</td><td><span class="priority p2">P1</span></td><td><span class="ok">research ready</span></td></tr>
+    <tr><td><span class="accent">Testing Strategy</span></td><td>Golden files, Verify.Avalonia, allocation-budget CI gates</td><td><span class="priority p2">P1</span></td><td><span class="ok">research ready</span></td></tr>
+  </table>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 1: UI-V2 — Visual Competitiveness</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Сейчас Harbor выглядит как кал по сравнению с Kilo/OpenCode/Codex. Нет анимаций, command palette, sidebar. Пользователь не чувствует современный UI и уходит к конкурентам.<br>
+    <strong>Зачем для агента:</strong> Анимации и панели позволяют агенту показывать больше контекста без перегрузки: tool cards, approval gates, status transitions — всё становится читаемым.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Panel fade-in/slide-in: 150ms fast, 300ms normal, ease-out</li>
+    <li>Tool cards slide-in + fade</li>
+    <li>Approval gate pulse/warn glow</li>
+    <li>Status bar smooth transitions</li>
+    <li>Timeline smooth scroll + opacity</li>
+    <li>Command Palette (ctrl+p) с fuzzy search</li>
+    <li>Quick-switch slots, leader-key system, vim mode</li>
+    <li>Multiple themes: Harbor Dark/Light/Warm/Cool + live-reload</li>
+    <li>Right sidebar (42px) с session info, token counter, model picker</li>
+    <li>Web UI: floating pill composer, collapsible sidebar, spring buttons</li>
+    <li>Ambient mascot, cost/token display, braille spinner</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li>Kilo Code: warm stone palette, flex-row + sidebar, two-tier tool cards</li>
+    <li>OpenCode: OpenTUI + SolidJS, plugin-extensible slots</li>
+    <li>Codex: Ratatui three-zone layout, steer mode</li>
+    <li>Claude: 80+ semantic color tokens, 6 built-in themes, live-reload</li>
+    <li>ChatGPT: pure-black theme, 260px floating sidebar, pill composer</li>
+    <li>Cursor: Parallel Agents Window, Design Mode</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>docs/next-sprint-ui-v2-20260827.html</code></li>
+    <li><code>docs/kilocode-cli-ux-analysis-20260827.md</code></li>
+    <li><code>docs/CLAUDE_CODE_UI_UX_ANALYSIS.md</code></li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 2: Multi-Agent Orchestration — Флот агентов</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Сейчас Harbor может запустить только одного агента. Пользователь хочет чтобы агенты работали параллельно — один пишет код, второй тестирует, третий ревьюит. Без этого Harbor не потянет реальные проекты.<br>
+    <strong>Зачем для агента:</strong> Агент получает возможность делегировать подзадачи другим агентам через <code>ISubAgentRunner</code>, работать в изолированных worktree, агрегировать результаты через diffs.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Phase 1: Fleet Manager — git worktree isolation, agent lifecycle, dashboard</li>
+    <li>Phase 2: Subagent Delegation — ISubAgentRunner, context isolation, shared task lists</li>
+    <li>Phase 3: Shared Context — ISharedContextStore, living spec sync</li>
+    <li>Phase 4: Coordinator Pipeline — Coordinator/Executor/Verifier roles</li>
+    <li>Phase 5: ACP compatibility + MCP server support</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li><strong>A2A Protocol</strong> (15.5k stars) — Google-backed agent-to-agent standard, .NET SDK available</li>
+    <li><strong>AG-UI Protocol</strong> (~15k stars) — CopilotKit Agent-User Interaction protocol, 16 event types</li>
+    <li><strong>Microsoft Agent Framework</strong> (~13k stars) — unified SK+AutoGen, GA April 2026, native A2A/MCP</li>
+    <li><strong>CrewAI</strong> (~51k stars) — rapid role-based coding-agent teams</li>
+    <li><strong>LangGraph</strong> (~40k stars) — state graphs, production-ready shared-state</li>
+    <li><strong>Kilo</strong> — subagent delegation + Agent Manager worktrees</li>
+    <li><strong>Cursor</strong> — 8 agents via Agents Window, removed integrator role</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>/home/nbook/multi-agent-orchestration-analysis.md</code></li>
+    <li><code>/home/nbook/multi-agent-orchestration-research.md</code></li>
+    <li><code>/home/nbook/agent_ui_overlay_analysis.md</code></li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 3: Performance & Scale — 60fps, 10k+ messages</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Пользователь работает с долгими transcripts (тысячи сообщений), крупными diffs, ожидает что терминал не лагает. Без 60fps и zero-alloc Harbor будет тормозить на реальных задачах.<br>
+    <strong>Зачем для агента:</strong> Агент может генерировать большие ответы, запускать тяжелые инструменты, отрисовывать сложные UI без блокировки потока. Zero-alloc hot path = больше токенов на единицу времени.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Rendering: SIMD row hashing, zero-alloc markdown→ANSI, BitmapCache, pooled Cell arrays</li>
+    <li>Memory: LOH compaction, string interning, GC pressure profiling</li>
+    <li>Startup: NativeAOT для CLI backend, ReadyToRun для Avalonia, lazy module loading</li>
+    <li>Large datasets: data-virtualized chat source, incremental loading, BufferFactor tuning</li>
+    <li>Benchmarking: extend BenchmarkDotNet suite, allocation-budget CI gates, 60fps assertions</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li><strong>Ratatui</strong> — tachyonfx shader-like effects, constraint-based flex, layout cache</li>
+    <li><strong>Textual</strong> — dirty-rect + virtual DOM (120 FPS), DataTable/TreeView</li>
+    <li><strong>Bubble Tea</strong> — harmonica spring physics, Elm-architecture input</li>
+    <li><strong>Terminal.Gui</strong> — double-buffering, NeedsDraw invalidation</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>docs/performance-patterns-analysis.md</code></li>
+    <li><code>/home/nbook/tui-framework-analysis.md</code></li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 4: IDE Integration — Мост в редакторы</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Пользователь хочет работать в своем редакторе (Cursor, VS Code, JetBrains), а не в отдельном терминале. Без IDE интеграции Harbor — это еще один изолированный инструмент.<br>
+    <strong>Зачем для агента:</strong> Агент получает прямой доступ к файлам, выделению, diff viewerу через стандартизированный протокол. Может показывать изменения в привычном UI.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>IPC Bridge: Unix domain socket + JSON payloads + WebSocket fallback</li>
+    <li>Diff Provider Abstraction: IDiffRenderer с ConsoleEx/VS Code/JetBrains/Avalonia реализациями</li>
+    <li>Inline Editing: ghost text preview, accept/reject, Source Control integration</li>
+    <li>IDE Plugins: Cursor fork, VS Code extension, JetBrains AI Assistant compatibility</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li><strong>Codex /ide</strong> — Unix domain socket, JSON payloads, file/selection/tabs</li>
+    <li><strong>Cursor</strong> — VS Code fork, native ghost text, multi-file Composer diffs</li>
+    <li><strong>GitHub Copilot</strong> — HTTPS proxy + ACP stdio + speculative decoding</li>
+    <li><strong>JetBrains AI Assistant</strong> — native Kotlin plugin + ACP + MCP, diff viewer</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>docs/IDE_INTEGRATION_PATTERNS.md</code></li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 5: Security & Sandboxing — Безопасное выполнение</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Пользователь дает агенту доступ к своему коду. Без sandbox и permissions агент может сломать систему. Нужна защита как у Codex/Cursor.<br>
+    <strong>Зачем для агента:</strong> Агент получает изолированную среду для выполнения инструментов, audit trail, понятные permission boundaries. Может безопасно работать с недоверенным кодом.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Named permission profiles: read-only, workspace-write, danger-full-access</li>
+    <li>OS Sandbox Abstraction: Landlock+seccomp (Linux), Seatbelt (macOS), RestrictedToken (Windows)</li>
+    <li>Audit logging: per-action trail, structured JSON, network isolation</li>
+    <li>Tool execution: out-of-process over IPC, container/VM fallback</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li><strong>Codex</strong> — 4-layer defense (OS sandbox → approval → validation → env filtering)</li>
+    <li><strong>Cursor</strong> — Seatbelt/Landlock/seccomp, sandbox.json policy</li>
+    <li><strong>Kilo</strong> — explicit permissions UX, optional OS-boundary sandbox</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>docs/security-sandboxing-analysis.md</code></li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 6: Release Engineering — Дистрибуция</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Пользователь хочет установить Harbor одной командой и получать обновления. Сейчас только GitHub releases — слишком сложно для не-технических пользователей.<br>
+    <strong>Зачем для агента:</strong> Агент может проверять версии, предлагать обновления, работать в любой среде без сложной установки.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Packaging: Homebrew, Chocolatey, WinGet, Scoop</li>
+    <li>Auto-updates: Velopack, channel management, delta updates</li>
+    <li>CI/CD: GitHub Actions, multi-platform matrix, automated changelog</li>
+    <li>Versioning: semantic versioning, Nerdbank.GitVersioning</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>release-engineering analysis</code> — 2.4KB summary</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sprint 7: Testing Strategy — QA на уровне UI фреймворков</div>
+  <div class="why">
+    <strong>Зачем для человека:</strong> Пользователь ожидает что Harbor не падает, UI не ломается после обновлений. Нужна automated visual regression и allocation budgets.<br>
+    <strong>Зачем для агента:</strong> Агент получает feedback loop: каждый коммит проверяется на regressions, allocation budgets, accessibility violations.
+  </div>
+
+  <h3>Что делаем</h3>
+  <ul>
+    <li>Golden/snapshot tests: AnsiTuiRenderer, PlainTuiRenderer, ConsoleEx</li>
+    <li>Verify.Avalonia для desktop visual regression</li>
+    <li>Allocation-budget CI gates</li>
+    <li>Appium для Avalonia accessibility, Playwright+axe для web</li>
+    <li>BenchmarkDotNet: DiffEngine, render blit paths, 60fps assertions</li>
+  </ul>
+
+  <h3>Референсы</h3>
+  <ul>
+    <li><strong>Ratatui</strong> — insta + TestBackend</li>
+    <li><strong>Textual</strong> — pytest-textual-snapshot (SVG)</li>
+    <li><strong>Bubble Tea</strong> — golden ANSI files with frozen time</li>
+    <li><strong>Avalonia</strong> — Verify.Avalonia (PNG pixel diff)</li>
+  </ul>
+
+  <h3>Источники</h3>
+  <ul>
+    <li><code>testing-strategies analysis</code> — 2.3KB summary</li>
+  </ul>
+</div>
+
+<div class="highlight">
+  <strong>Ready for review.</strong> Approve these sprint plans and I will generate the prompt files + update sprint chain for each sprint in order.
+</div>
+</body>
+</html>

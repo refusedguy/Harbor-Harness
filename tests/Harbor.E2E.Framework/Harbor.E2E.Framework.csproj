@@ -39,6 +39,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CE-5 Зона 1: PtySession/AnsiTerminalBuffer internals for the PTY scenario suite. -->
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.PtyTests"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true).
          Microsoft.NET.Test.Sdk is the test host adapter. -->
     <PackageReference Include="Microsoft.NET.Test.Sdk"/>

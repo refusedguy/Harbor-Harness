@@ -11,7 +11,8 @@ public sealed class ProviderConfig
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
+        AllowTrailingCommas = true,
+        TypeInfoResolver = OpenAiCompatibleJsonContext.Default
     };
     public string Id { get; set; } = "";
     public string DisplayName { get; set; } = "";
@@ -30,7 +31,6 @@ public sealed class ProviderConfig
     public Dictionary<string, string>? Headers { get; set; }
     public Dictionary<string, string>? Capabilities { get; set; }
     public int Timeout { get; set; } = 60;
-    public int Retries { get; set; } = 3;
 
     /// <summary>
     ///     §OOP-002 (RESOLVED): provider-specific request quirks (Strategy pattern).
@@ -42,22 +42,41 @@ public sealed class ProviderConfig
 
     public ProviderId GetProviderId() => ProviderId.Create(Id);
 
-    public static Result<ProviderConfig> LoadFromFile(string path)
+    public static Result<ProviderConfig> LoadFromFile(string path) =>
+        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(File.ReadAllText(path), JsonOptions))
+            .MapError(ex => $"Failed to load provider config '{path}': {ex}")
+            .Bind(Loaded);
+
+    /// <summary>
+    ///     Parse a config from an in-memory JSON payload (embedded resources,
+    ///     test harnesses). Same options and validation contract as
+    ///     <see cref="LoadFromFile" /> — keeps
+    ///     <see cref="OpenAiCompatibleJsonContext" /> internal while still
+    ///     AOT-safe (source-gen resolver only).
+    /// </summary>
+    public static Result<ProviderConfig> LoadFromJson(string json) =>
+        Result.Try(() => JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions))
+            .MapError(ex => $"Failed to load provider config from JSON: {ex}")
+            .Bind(Loaded);
+
+    private static Result<ProviderConfig> Loaded(ProviderConfig? c)
     {
-        try
+        if (c is null)
         {
-            string json = File.ReadAllText(path);
-            var config = JsonSerializer.Deserialize<ProviderConfig>(json, JsonOptions) ?? throw new InvalidOperationException("Deserialization returned null");
-            if (string.IsNullOrEmpty(config.Id))
-                return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'id'.");
-            if (string.IsNullOrEmpty(config.BaseUrl))
-                return Result.Failure<ProviderConfig>($"Provider config '{path}' is missing 'baseUrl'.");
-            return Result.Success(config);
+            return Result.Failure<ProviderConfig>("Provider config deserialized to null.");
         }
-        catch (Exception ex)
+
+        if (string.IsNullOrEmpty(c.Id))
         {
-            return Result.Failure<ProviderConfig>($"Failed to load provider config '{path}': {ex.Message}");
+            return Result.Failure<ProviderConfig>("Provider config is missing 'id'.");
         }
+
+        if (string.IsNullOrEmpty(c.BaseUrl))
+        {
+            return Result.Failure<ProviderConfig>("Provider config is missing 'baseUrl'.");
+        }
+
+        return Result.Success(c);
     }
 }
 
@@ -74,15 +93,16 @@ public sealed class ModelMapping
 }
 
 /// <summary>
-///     Auth resolver — fetches API key from env, file, or OS keychain.
+///     Default auth resolver — CLI override → conventional env var
+///     (<c>PROVIDER_ID</c> upper-cased with dashes replaced) → failure hint.
+///     The env twin of the single <see cref = "Harbor.Abstractions.Providers.IAuthResolver" />
+///     abstraction (ROP-A ПР.6): the former IOpenAIAuthResolver /
+///     IAnthropicAuthResolver interfaces and their per-provider resolvers
+///     collapsed into this pair.
 /// </summary>
-public interface IAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default);
-}
-
 /// <summary>
-///     Default auth resolver — env var → config file.
+///     Default auth resolver — CLI override → conventional env var
+///     (<c>PROVIDER_ID</c> upper-cased with dashes replaced) → failure hint.
 /// </summary>
 public sealed class EnvVarAuthResolver : IAuthResolver
 {
@@ -101,13 +121,14 @@ public sealed class EnvVarAuthResolver : IAuthResolver
         if (_overrides.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             return Task.FromResult(Result.Success(key));
 
-        // 2. Env var (conventional name)
+        // 2. Conventional env var
         string envName = providerId.ToUpperInvariant().Replace("-", "_") + "_API_KEY";
         string? envValue = Environment.GetEnvironmentVariable(envName);
-        if (!string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Success(envValue));
 
-        return Task.FromResult(Result.Failure<string>($"API key not found. Set ${envName} or pass --{providerId}-api-key."));
+        return Task.FromResult(
+            Result.SuccessIf(!string.IsNullOrEmpty(envValue),
+                    $"API key not found. Set ${envName} or pass --{providerId}-api-key.")
+                .Map(() => envValue!));
     }
 }
 
@@ -143,19 +164,26 @@ public sealed class DynamicModelCatalog : IModelCatalog
         if (string.IsNullOrEmpty(config.ModelsUrl))
             return Result.Failure<IReadOnlyList<ModelInfo>>($"Provider '{config.Id}' has no modelsUrl and no hardcoded models.");
 
+        // ROP-A ПР.8 — canonical Compensate chain: fresh cache → network →
+        // stale cache. Each fallback fires only when the previous source
+        // failed; the headline error stays the FETCH failure, not a cache miss.
         string cachePath = Path.Combine(_cacheDir, $"{config.Id}.json");
-        var cacheAge = GetCacheAge(cachePath);
+        TimeSpan maxAge = TimeSpan.FromHours(config.ModelsRefreshHours);
 
-        if (cacheAge < TimeSpan.FromHours(config.ModelsRefreshHours))
-        {
-            var cached = await TryReadCacheAsync(cachePath, config, ct).ConfigureAwait(false);
-            if (cached.IsSuccess)
-                return cached;
-        }
+        return await ReadCacheAsync(cachePath, config, ct, freshOnly: true, maxAge: maxAge)
+            .Compensate(_ => FetchAndCacheAsync(config, config.ModelsUrl!, cachePath, ct))
+            .Compensate(fetchError => ReadCacheAsync(cachePath, config, ct, freshOnly: false, maxAge: maxAge)
+                .MapError(_ => fetchError))
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>Fetch the live model list and seed the cache.</summary>
+    private async Task<Result<IReadOnlyList<ModelInfo>>> FetchAndCacheAsync(
+        ProviderConfig config, string modelsUrl, string cachePath, CancellationToken ct)
+    {
         try
         {
-            string response = await _http.GetStringAsync(config.ModelsUrl, ct).ConfigureAwait(false);
+            string response = await _http.GetStringAsync(modelsUrl, ct).ConfigureAwait(false);
             Directory.CreateDirectory(_cacheDir);
             await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
             return ParseModelsResponse(response, config);
@@ -163,21 +191,26 @@ public sealed class DynamicModelCatalog : IModelCatalog
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch models for {Provider}, trying stale cache", config.Id);
-            var stale = await TryReadCacheAsync(cachePath, config, ct).ConfigureAwait(false);
-            return stale.IsSuccess ? stale : Result.Failure<IReadOnlyList<ModelInfo>>(ex.Message);
+            return Result.Failure<IReadOnlyList<ModelInfo>>(ex.Message);
         }
     }
 
-    private static TimeSpan GetCacheAge(string path)
+    /// <summary>
+    ///     Read the cached model list. <paramref name="freshOnly" /> enforces
+    ///     the <paramref name="maxAge" /> window (a missing or aged-out cache is
+    ///     a MISS, reported distinctly from a corrupt cache).
+    /// </summary>
+    private async Task<Result<IReadOnlyList<ModelInfo>>> ReadCacheAsync(
+        string path, ProviderConfig config, CancellationToken ct, bool freshOnly, TimeSpan maxAge)
     {
-        if (!File.Exists(path)) return TimeSpan.MaxValue;
-        return DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(path);
-    }
+        if (freshOnly)
+        {
+            if (!File.Exists(path))
+                return Result.Failure<IReadOnlyList<ModelInfo>>("no cached model catalog");
 
-    private async Task<Result<IReadOnlyList<ModelInfo>>> TryReadCacheAsync(string path, ProviderConfig config, CancellationToken ct)
-    {
-        if (!File.Exists(path))
-            return Result.Failure<IReadOnlyList<ModelInfo>>("No cache.");
+            if (DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(path) >= maxAge)
+                return Result.Failure<IReadOnlyList<ModelInfo>>("cached model catalog is stale");
+        }
 
         try
         {

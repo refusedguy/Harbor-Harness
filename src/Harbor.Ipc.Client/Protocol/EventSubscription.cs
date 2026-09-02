@@ -24,9 +24,9 @@ public sealed class EventSubscription
     public async IAsyncEnumerable<HarborEvent> ReadAllAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (var evt in _client.EventReader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var frame in _client.EventFrames.ReadAllAsync(ct).ConfigureAwait(false))
         {
-            yield return evt;
+            yield return frame.Event;
         }
     }
 }

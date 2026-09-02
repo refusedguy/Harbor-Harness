@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Configuration;
+using Harbor.Abstractions.Results;
+
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Configuration store — reads/writes ~/.harbor/config.json.
 ///     Implements Repository pattern for config.
@@ -56,12 +58,6 @@ public interface IConfigStore
 /// </summary>
 public sealed class JsonConfigStore : IConfigStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private readonly string _configPath;
     private readonly object _lock = new();
     private readonly ILogger<JsonConfigStore>? _logger;
@@ -80,39 +76,45 @@ public sealed class JsonConfigStore : IConfigStore
     {
         lock (_lock)
         {
-            try
-            {
-                if (!File.Exists(_configPath))
-                {
-                    _logger?.LogInformation("Config file not found, using defaults");
-                    return Task.FromResult(Result.Success(HarborConfig.Default));
-                }
-
-                string json = File.ReadAllText(_configPath);
-                var raw = JsonSerializer.Deserialize<RawConfigDto>(json, JsonOptions);
-                if (raw is null)
-                    return Task.FromResult(Result.Failure<HarborConfig>("config.json is empty"));
-
-                // Normalize legacy aliases (defaultProvider/defaultModel/…) once.
-                var normalized = ConfigNormalizer.Normalize(raw);
-                if (normalized.IsFailure)
-                    return Task.FromResult(Result.Failure<HarborConfig>(normalized.Error));
-
-                // Validate every section — surface errors instead of silently
-                // discarding a corrupt config and pretending defaults were chosen.
-                return Task.FromResult(normalized.Value.Validate());
-            }
-            catch (JsonException ex)
-            {
-                _logger?.LogError(ex, "Failed to parse config");
-                return Task.FromResult(Result.Failure<HarborConfig>($"config.json is corrupt: {ex.Message}"));
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to load config");
-                return Task.FromResult(Result.Failure<HarborConfig>(ex.Message));
-            }
+            Result<HarborConfig> loaded = LoadCore();
+            if (loaded.IsFailure) // §4.6-ok: единая точка лога провала загрузки (rop-final-mile B2).
+                _logger?.LogError("Failed to load config: {Error}", loaded.Error);
+            return Task.FromResult(loaded);
         }
+    }
+
+    // rop-final-mile B2 / §4.6: only File/Deserialize throw; everything
+    // downstream is Result-native. Error texts preserved: "config.json is
+    // empty", normalize-error passthrough, "config.json is corrupt: …" for
+    // JsonException. Honest loss vs the old catch blocks: one consolidated
+    // failure log instead of two exception-shaped ones.
+    private Result<HarborConfig> LoadCore()
+    {
+        if (!File.Exists(_configPath))
+        {
+            _logger?.LogInformation("Config file not found, using defaults");
+            return Result.Success(HarborConfig.Default);
+        }
+
+        // Result.Try + ResultErrors.Message collapse errors to strings (bible §4.5:
+        // the single canon — no ResultGuard), so the JsonException vs generic
+        // discrimination happens HERE at the boundary while the exception is
+        // still typed; downstream the railway is string-typed.
+        return Result.Try(() =>
+            {
+                try
+                {
+                    string json = File.ReadAllText(_configPath);
+                    return JsonSerializer.Deserialize(json, ConfigJsonContext.Default.RawConfigDto)
+                           ?? throw new InvalidDataException("config.json is empty");
+                }
+                catch (JsonException je)
+                {
+                    throw new InvalidDataException($"config.json is corrupt: {je.Message}");
+                }
+            }, ResultErrors.Message)
+            .Bind(raw => ConfigNormalizer.Normalize(raw))
+            .Bind(config => config.Validate());
     }
 
     /// <inheritdoc />
@@ -120,32 +122,33 @@ public sealed class JsonConfigStore : IConfigStore
     {
         lock (_lock)
         {
-            try
-            {
-                string? dir = Path.GetDirectoryName(_configPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                // Serialize the canonical flat shape (not the composed sections)
-                // so a reload reads the same fields back via RawConfigDto.
-                string json = JsonSerializer.Serialize(config.ToRaw(), JsonOptions);
-                File.WriteAllText(_configPath, json);
-                _logger?.LogDebug("Config saved to {Path}", _configPath);
-                return Task.FromResult(Result.Success());
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Failed to save config");
-                return Task.FromResult(Result.Failure(ex.Message));
-            }
+            // rop-final-mile B3 / §4.6: one guard around the sync IO core.
+            // Canonical selector (§4.5): OCE propagates instead of masking
+            // cancellation as a save failure — same contract as LoadAsync.
+            return Task.FromResult(Result.Try(() => SaveCore(config), ResultErrors.Message)
+                .TapError(error => _logger?.LogError("Failed to save config: {Error}", error)));
         }
+    }
+
+    private void SaveCore(HarborConfig config)
+    {
+        string? dir = Path.GetDirectoryName(_configPath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        // Serialize the canonical flat shape (not the composed sections)
+        // so a reload reads the same fields back via RawConfigDto.
+        string json = JsonSerializer.Serialize(config.ToRaw()!, ConfigJsonContext.Default.RawConfigDto);
+        File.WriteAllText(_configPath, json);
+        _logger?.LogDebug("Config saved to {Path}", _configPath);
     }
 
     /// <inheritdoc />
     public async Task<Result> UpdateAsync(Func<HarborConfig, HarborConfig> updater, CancellationToken ct = default)
     {
         var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure) return loadResult;
+        if (loadResult.IsFailure) return loadResult; // §4.6-ok: одиночный passthrough.
+
 
         var updated = updater(loadResult.Value);
         return await SaveAsync(updated, ct).ConfigureAwait(false);
@@ -155,7 +158,8 @@ public sealed class JsonConfigStore : IConfigStore
     public async Task<Result<string>> GetApiKeyAsync(string providerId, CancellationToken ct = default)
     {
         var loadResult = await LoadAsync(ct).ConfigureAwait(false);
-        if (loadResult.IsFailure) return Result.Failure<string>(loadResult.Error);
+        if (loadResult.IsFailure) return Result.Failure<string>(loadResult.Error); // §4.6-ok: одиночный passthrough (смена типа ошибки).
+
         if (loadResult.Value.ApiKeys.TryGetValue(providerId, out string? key) && !string.IsNullOrEmpty(key))
             return Result.Success(key);
         return Result.Failure<string>($"No API key for '{providerId}' in config.json");

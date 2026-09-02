@@ -1,35 +1,16 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
-using Harbor.Providers.Anthropic;
-using Harbor.Providers.OpenAI;
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 namespace Harbor.Providers.Tests;
-/// <summary>
-///     Stub auth resolver for AnthropicLlmClient — never hits env vars or files.
-/// </summary>
-internal sealed class StubAnthropicAuthResolver : IAnthropicAuthResolver
-{
-    public static readonly StubAnthropicAuthResolver Instance = new();
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default) =>
-        Task.FromResult(Result.Success("test-key"));
-}
 
 /// <summary>
-///     Stub auth resolver for OpenAILlmClient.
+///     Stub IAuthResolver for every client — accepts any provider ID, returns
+///     a fixed key (ROP-A ПР.6: one auth interface for all providers).
 /// </summary>
-internal sealed class StubOpenAIAuthResolver : IOpenAIAuthResolver
+internal sealed class StubAuthResolver : IAuthResolver
 {
-    public static readonly StubOpenAIAuthResolver Instance = new();
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default) =>
-        Task.FromResult(Result.Success("test-key"));
-}
-
-/// <summary>
-///     Stub IAuthResolver for OpenAiCompatibleLlmClient — accepts any provider ID.
-/// </summary>
-internal sealed class StubGenericAuthResolver : IAuthResolver
-{
-    public static readonly StubGenericAuthResolver Instance = new();
+    public static readonly StubAuthResolver Instance = new();
     public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
         Task.FromResult(Result.Success("test-key"));
 }

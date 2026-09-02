@@ -33,6 +33,8 @@ public sealed class CliDriver : IE2eDriver
 {
     private readonly string _projectPath;
     private Process? _process;
+    private Task? _stderrDrain;
+    private Task? _stdoutDrain;
     private StringBuilder _stderr = new();
     private StreamReader? _stderrReader;
     private StreamWriter? _stdinWriter;
@@ -111,7 +113,9 @@ public sealed class CliDriver : IE2eDriver
         _stdinWriter.AutoFlush = true;
 
         // Drain stdout/stderr asynchronously so the buffer never deadlocks.
-        _ = Task.Run(async () =>
+        // The tasks are awaited in WaitForExitAsync: after process exit both
+        // readers hit EOF, so completion means every byte is in the buffer.
+        _stdoutDrain = Task.Run(async () =>
         {
             char[] buf = new char[4096];
             int n;
@@ -123,7 +127,7 @@ public sealed class CliDriver : IE2eDriver
                 }
             }
         }, ct);
-        _ = Task.Run(async () =>
+        _stderrDrain = Task.Run(async () =>
         {
             char[] buf = new char[4096];
             int n;
@@ -206,7 +210,20 @@ public sealed class CliDriver : IE2eDriver
             }
             return -1;
         }
-        // Give the async stdout/stderr drainers a chance to flush.
+
+        // Await the drainers so the captured output is guaranteed complete
+        // before the caller reads the screen. After exit both pipes are at
+        // EOF and the tasks finish; the WaitAsync cap guards against a
+        // pathological hang (e.g. a grandchild process inheriting the pipe).
+        try
+        {
+            await Task.WhenAll(_stdoutDrain ?? Task.CompletedTask, _stderrDrain ?? Task.CompletedTask)
+                .WaitAsync(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        { /* best-effort: return whatever was captured */
+        }
+
         await Task.Delay(50, ct).ConfigureAwait(false);
         return _process.ExitCode;
     }

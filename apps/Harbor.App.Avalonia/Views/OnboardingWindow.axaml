@@ -216,6 +216,18 @@
                             <TextBlock Text="✓ This provider doesn't need an API key. Click Next to continue."
                                        TextWrapping="Wrap" Foreground="{DynamicResource StateSuccessBrush}" FontSize="13" />
                         </Border>
+                        <!-- PROD-UI-0 З.2: test connection probe -->
+                        <StackPanel IsVisible="{Binding HasConnectionTest}" Spacing="6">
+                            <Button Content="🔌 Test connection"
+                                    Command="{Binding TestConnectionCommand}"
+                                    IsEnabled="{Binding !IsTestingConnection}"
+                                    HorizontalAlignment="Left"
+                                    MinHeight="34" Padding="14,4" />
+                            <TextBlock Text="{Binding ConnectionStatus}"
+                                       FontSize="12" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextTertiaryBrush}"
+                                       FontFamily="{DynamicResource FontMono}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Step 4: Default model -->
@@ -237,10 +249,28 @@
                                            VerticalAlignment="Center" />
                             </StackPanel>
                         </Border>
-                        <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
+                        <!-- PROD-UI-0 З.4: live model picker when the catalog is reachable,
+                             explicit free-text fallback otherwise -->
+                        <ComboBox IsVisible="{Binding IsLiveModelList}"
+                                  ItemsSource="{Binding AvailableModels}"
+                                  SelectedItem="{Binding DefaultModel, Mode=TwoWay}"
+                                  MinHeight="44" HorizontalAlignment="Stretch" />
+                        <TextBox IsVisible="{Binding !IsLiveModelList}"
+                                 Text="{Binding DefaultModel, Mode=TwoWay}"
                                  PlaceholderText="model id"
                                  FontFamily="{DynamicResource FontMono}"
                                  MinHeight="44" />
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    IsVisible="{Binding IsLoadingModels}">
+                            <ProgressBar IsIndeterminate="True" Width="120" Height="4"
+                                         VerticalAlignment="Center" />
+                            <TextBlock Text="Fetching model list…" FontSize="11"
+                                       Foreground="{DynamicResource TextTertiaryBrush}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding ModelListNote}"
+                                   IsVisible="{Binding ModelListNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                   FontSize="11" Foreground="{DynamicResource TextTertiaryBrush}"
+                                   TextWrapping="Wrap" />
                         <TextBlock Text="You can switch models anytime with /model or in Settings."
                                    FontSize="11" Foreground="{DynamicResource TextTertiaryBrush}" TextWrapping="Wrap" />
                     </StackPanel>

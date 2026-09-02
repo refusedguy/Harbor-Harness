@@ -1,4 +1,6 @@
+using Harbor.Abstractions.Events;
 using Harbor.App.Avalonia.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
@@ -21,7 +23,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class StatusBarTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("StatusBar").ConfigureAwait(false);
 
     /// <summary>
     ///     Idle state: grey status dot + 'idle' text.
@@ -107,16 +109,25 @@ public sealed class StatusBarTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        UI(() =>
-        {
-            Vm.TokensIn = 1234;
-            Vm.TokensOut = 5678;
-        });
-        await Task.Delay(200).ConfigureAwait(false);
+        // Drive token counts through the REAL event path: direct VM property
+        // sets are stomped by the selector pipeline on the next store
+        // transition now that the app fully boots. StepFinishEvent carries
+        // usage into state.Cost (AppReducer.OnStepFinish).
+        var eventBus = Driver.Host.Services
+            .GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty(
+            "e2e-tok-session", "qwen2.5-coder:7b");
+        await eventBus.PublishAsync(new MessageUpdateEvent(
+            new StepFinishEvent(0, "stop", new Harbor.Abstractions.Models.Usage(1234, 5678)),
+            partial)).ConfigureAwait(false);
 
-        var hasIn = await Driver.WaitForTextAsync("1,234", TimeSpan.FromSeconds(2))
+        // N0 grouping is culture-dependent ("1,234" vs "1 234") — build the
+        // expected strings with the process culture instead of hardcoding.
+        string expectedIn = 1234.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        string expectedOut = 5678.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        var hasIn = await Driver.WaitForTextAsync(expectedIn, TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        var hasOut = await Driver.WaitForTextAsync("5,678", TimeSpan.FromSeconds(2))
+        var hasOut = await Driver.WaitForTextAsync(expectedOut, TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasIn && hasOut).IsTrue();
 

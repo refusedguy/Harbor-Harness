@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.Ollama;
 /// <summary>
@@ -64,47 +65,29 @@ public sealed class OllamaLlmClient : ILlmClient
             try
             {
                 var httpRequest = BuildRequest(request);
-                HttpResponseMessage response;
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (HttpRequestException ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent(
-                        $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
-                        $"Is `ollama serve` running? Error: {ex.Message}"), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
+                var chunkState = new ChunkStreamState();
 
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
+                // Shared pump (ROP-A ПР.1) in raw-line (NDJSON) mode: Ollama has
+                // no "data:" prefix and no [DONE] sentinel — every line is a
+                // JSON chunk, EOF is the end of stream.
+                await SsePump.RunAsync(
+                    writer, _http, httpRequest,
+                    async (line, token) =>
                     {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent($"Ollama error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    // NDJSON: one JSON object per line (not SSE)
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        await WriteNdjsonEventsAsync(line, writer, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                        await WriteNdjsonEventsAsync(line, writer, chunkState, token).ConfigureAwait(false);
+                        return true;
+                    },
+                    "Ollama", _logger, cancellationToken,
+                    mapSendFailure: (ex, token) => ex is HttpRequestException hre
+                        ? new ErrorEvent(
+                            $"Cannot connect to Ollama at {_config.BaseUrl ?? DefaultBaseUrl}. " +
+                            $"Is `ollama serve` running? Error: {hre.Message}",
+                            Kind: ProviderErrorKind.Network)
+                        : new ErrorEvent(
+                            $"HTTP request failed: {ex.Message}", ex.ToString(),
+                            ProviderErrors.FromException(ex, token))).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -112,7 +95,9 @@ public sealed class OllamaLlmClient : ILlmClient
             }
             catch (Exception ex)
             {
-                await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(new ErrorEvent(
+                    $"Stream failed: {ex.Message}", ex.ToString(),
+                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -126,48 +111,50 @@ public sealed class OllamaLlmClient : ILlmClient
         }
     }
 
-    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        // ROP-A ПР.9: network and parsing are separate failure modes with
+        // separate hints — "is the daemon up?" vs "response was not JSON".
+        Result.Try(
+                () => _http.GetStringAsync(string.Concat(_baseUrl, "/api/tags"), cancellationToken),
+                ex => $"Cannot connect to Ollama at {_baseUrl}. Is `ollama serve` running? {ex.Message}")
+            .Bind(json => Result.Try(
+                () => ParseModels(json),
+                ex => $"Ollama /api/tags returned invalid JSON: {ex.Message}"));
+
+    /// <summary>Pure projection of an /api/tags payload onto ModelInfo (throws on malformed JSON).</summary>
+    private static IReadOnlyList<ModelInfo> ParseModels(string json)
     {
-        try
+        using var doc = JsonDocument.Parse(json);
+        // Pre-size the models list only when the models array is present and has a known count.
+        List<ModelInfo>? models = null;
+        if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
         {
-            string response = await _http.GetStringAsync(string.Concat(_baseUrl, "/api/tags"), cancellationToken).ConfigureAwait(false);
-
-            using var doc = JsonDocument.Parse(response);
-            // Pre-size the models list only when the models array is present and has a known count.
-            List<ModelInfo>? models = null;
-            if (doc.RootElement.TryGetProperty("models", out var modelsArray) && modelsArray.ValueKind == JsonValueKind.Array)
+            models = new List<ModelInfo>(modelsArray.GetArrayLength());
+            foreach (var m in modelsArray.EnumerateArray())
             {
-                models = new List<ModelInfo>(modelsArray.GetArrayLength());
-                foreach (var m in modelsArray.EnumerateArray())
-                {
-                    string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                    if (string.IsNullOrEmpty(id)) continue;
+                string? id = m.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+                if (string.IsNullOrEmpty(id)) continue;
 
-                    int ctx = m.TryGetProperty("model_info", out var info) &&
-                              info.TryGetProperty("context_length", out var ctxEl) &&
-                              ctxEl.ValueKind == JsonValueKind.Number
-                        ? ctxEl.GetInt32()
-                        : 4096;
+                int ctx = m.TryGetProperty("model_info", out var info) &&
+                          info.TryGetProperty("context_length", out var ctxEl) &&
+                          ctxEl.ValueKind == JsonValueKind.Number
+                    ? ctxEl.GetInt32()
+                    : 4096;
 
-                    models.Add(new ModelInfo(
-                        id,
-                        "ollama",
-                        id,
-                        ctx,
-                        ctx,
-                        false,
-                        false,
-                        true,
-                        Pricing.Unknown,
-                        "openai"));
-                }
+                models.Add(new ModelInfo(
+                    id,
+                    "ollama",
+                    id,
+                    ctx,
+                    ctx,
+                    false,
+                    false,
+                    true,
+                    Pricing.Unknown,
+                    "openai"));
             }
-            return Result.Success<IReadOnlyList<ModelInfo>>((IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>());
         }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<ModelInfo>>($"Failed to fetch Ollama models: {ex.Message}");
-        }
+        return (IReadOnlyList<ModelInfo>?)models ?? Array.Empty<ModelInfo>();
     }
 
     private HttpRequestMessage BuildRequest(LlmRequest request)
@@ -177,7 +164,7 @@ public sealed class OllamaLlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
-            ["messages"] = BuildMessages(request),
+            ["messages"] = BuildMessages(request, _logger),
             ["stream"] = true,
             ["options"] = BuildOptions(request)
         };
@@ -214,7 +201,7 @@ public sealed class OllamaLlmClient : ILlmClient
         return options;
     }
 
-    private static List<object> BuildMessages(LlmRequest request)
+    private static List<object> BuildMessages(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -230,7 +217,8 @@ public sealed class OllamaLlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "ollama")
                 },
                 LlmAssistantMessage a => new
                 {
@@ -257,27 +245,27 @@ public sealed class OllamaLlmClient : ILlmClient
 
     /// <summary>
     ///     Parse one NDJSON line and write any emitted events directly into the channel.
-    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
-    ///     materialization that the previous MapNdjsonChunk helper required to keep JsonElement
-    ///     values alive after dispose.
+    ///     Malformed lines follow the unified skip-and-count policy (ROP-A ПР.4).
     /// </summary>
-    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, CancellationToken ct)
+    private async Task WriteNdjsonEventsAsync(string line, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
         try
         {
             using var doc = JsonDocument.Parse(line);
-            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement))
+            foreach (var evt in MapNdjsonChunkFromDocument(doc.RootElement, chunkState.IndexToId))
             {
                 await writer.WriteAsync(evt, ct).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to parse Ollama NDJSON chunk: {Line}", line);
+            chunkState.CountMalformed();
+            _logger.LogWarning(ex, "Skipping malformed Ollama NDJSON line #{Count}: {Line}",
+                chunkState.MalformedChunks, line);
         }
     }
 
-    private IEnumerable<LlmEvent> MapNdjsonChunkFromDocument(JsonElement root)
+    private IEnumerable<LlmEvent> MapNdjsonChunkFromDocument(JsonElement root, Dictionary<int, string> indexToId)
     {
         var message = root.TryGetProperty("message", out var msgEl) ? msgEl : default;
 
@@ -298,7 +286,16 @@ public sealed class OllamaLlmClient : ILlmClient
         {
             foreach (var tc in tcs.EnumerateArray())
             {
-                string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
+                // Stable id (ROP-A ПР.3): wire id → remembered id → positional
+                // fallback. Never a fresh Guid per chunk — that broke coalescing.
+                int index = tc.TryGetProperty("index", out var idxEl) && idxEl.ValueKind == JsonValueKind.Number
+                    ? idxEl.GetInt32()
+                    : 0;
+                string id = tc.TryGetProperty("id", out var idEl) && !string.IsNullOrEmpty(idEl.GetString())
+                    ? idEl.GetString()!
+                    : indexToId.GetValueOrDefault(index) ?? $"tc{index}";
+                indexToId[index] = id;
+
                 var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
 
                 if (fn.ValueKind == JsonValueKind.Object)

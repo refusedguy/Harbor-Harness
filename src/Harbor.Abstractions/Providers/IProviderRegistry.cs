@@ -42,6 +42,19 @@ public interface IProviderRegistry
     public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Get the model catalog for one provider, served from a short-TTL
+    ///     cache when a fresh entry exists (ROP-C П.7). The registry owns the
+    ///     cache so every consumer (agent loop, compaction service, UI) shares
+    ///     one round-trip budget instead of each instance fetching its own.
+    ///     Failures are never cached — a transient provider outage must not pin
+    ///     an empty catalog for the TTL window.
+    /// </summary>
+    /// <param name="providerId">The provider whose catalog to fetch.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Success with the catalog, or failure if the provider is unregistered or unreachable.</returns>
+    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Register a provider with a factory function (lazy instantiation).
     /// </summary>
     /// <param name="providerId">The provider id to register.</param>
@@ -86,4 +99,10 @@ public interface IProviderRegistryBuilder
     /// <param name="providerId">The provider id string.</param>
     /// <param name="factory">Factory producing the client (invoked lazily).</param>
     public void AddProvider(string providerId, Func<ILlmClient> factory);
+
+    /// <summary>
+    ///     Register a provider via a factory interface.
+    /// </summary>
+    /// <param name="factory">Factory producing the client instance.</param>
+    public void AddProvider(IProviderFactory factory);
 }

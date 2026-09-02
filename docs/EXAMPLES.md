@@ -32,7 +32,7 @@
 Самый простой tool: возвращает текущее время. 30 строк.
 
 ```csharp
-// src/Harbor.Tools.Builtin/Time/TimeTool.cs
+// src/Harbor.Tools.Builtin/Tools/Time/TimeTool.cs
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
@@ -63,10 +63,11 @@ public sealed class TimeTool : ITool
 }
 ```
 
-Register in `HostBuilder.CreateToolRegistry`:
+Register in `ToolsCatalog.CreateToolRegistry`
+(`src/Harbor.Hosting/Modules/ToolsCatalog.cs`):
 
 ```csharp
-tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));
+tb.AddTool(lf => new TimeTool(lf.CreateLogger<TimeTool>()));
 registry.Freeze();
 ```
 
@@ -91,8 +92,8 @@ public Result ValidateArguments(JsonElement args)
 ### 3. Read a file with offset/limit (existing `read` tool)
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask \
-    "Read the first 20 lines of src/Harbor.Core/Agents/AgentLoop.cs and summarize it"
+$ dotnet run --project apps/Harbor.App.Cli -- ask \
+    "Read the first 20 lines of src/Harbor.Application/Agents/AgentLoop.cs and summarize it"
 ```
 
 LLM вызовет `read` с `{"path":"...","offset":1,"limit":20}`. Tool вернёт строки в формате `[0001] using ...`.
@@ -204,7 +205,7 @@ public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
 ```bash
 export MYLLM_API_KEY=...
 export HARBOR_MODEL=myllm/llama-4-70b
-dotnet run --project src/Harbor.Cli -- providers   # verify it's loaded
+dotnet run --project apps/Harbor.App.Cli -- providers   # verify it's loaded
 ```
 
 ### 10. Add a native LLM provider (Anthropic-style)
@@ -232,7 +233,8 @@ public sealed class MyLlmClient : ILlmClient
 }
 ```
 
-Register in `HostBuilder.CreateProviderRegistry`:
+Register in `ProviderFactories.CreateProviderRegistry`
+(`src/Harbor.Hosting/Modules/ProviderFactories.cs`):
 
 ```csharp
 pb.AddProvider("myllm", () => new MyLlmClient(httpFactory.CreateClient("myllm")));
@@ -254,7 +256,7 @@ export HARBOR_MODEL=anthropic/claude-sonnet-4-20250514
 ollama pull llama3.2
 ollama serve &
 export HARBOR_MODEL=ollama/llama3.2
-dotnet run --project src/Harbor.Cli -- ask "Write a haiku about .NET"
+dotnet run --project apps/Harbor.App.Cli -- ask "Write a haiku about .NET"
 ```
 
 ### 13. Switch provider mid-REPL
@@ -288,7 +290,7 @@ Append-only, git-friendly, zero native deps.
 
 ```bash
 export HARBOR_STORAGE=sqlite
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 # Sessions in ~/.harbor/sessions.db
 sqlite3 ~/.harbor/sessions.db "SELECT COUNT(*) FROM messages;"
 ```
@@ -319,7 +321,8 @@ public sealed class RedisSessionStore : ISessionStore
 }
 ```
 
-Register in `HostBuilder.RegisterStorage`.
+Register in `StorageModule` (`src/Harbor.Hosting/Modules/StorageModule.cs`) —
+the `HARBOR_STORAGE` env var (`jsonl` / `memory` / `sqlite`) selects the backend.
 
 ---
 
@@ -330,9 +333,12 @@ Register in `HostBuilder.RegisterStorage`.
 ```bash
 export HARBOR_TUI=plain      # no colors, for pipes
 export HARBOR_TUI=ansi       # default streaming
-export HARBOR_TUI=spectre    # rich panels/tables
-export HARBOR_TUI=fullscreen # interactive (scroll, hotkeys)
+export HARBOR_TUI=spectre    # rich interactive shell (contrib renderer, compiled in by default)
+export HARBOR_TUI=consoleex  # second in-process interactive shell (raw mode, cell-diff)
 ```
+
+> `HARBOR_MINIMAL=true` / `-p:HarborWithSpectreTui=false` excludes the contrib
+> renderers from the CLI build; unsupported ids then fall back to `plain`.
 
 ### 19. Add a TUI view model with MVVM
 
@@ -466,7 +472,7 @@ public sealed class HelloTool : ITool
 }
 EOF
 
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   hello  v1.0.0  Says hello
 harbor> ask "Say hello to Alice"
@@ -519,7 +525,7 @@ See [PLUGIN_DEVELOPMENT.md §LspDiagnosticsPanel](./PLUGIN_DEVELOPMENT.md) for t
 ### 26. List saved sessions
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- sessions
+$ dotnet run --project apps/Harbor.App.Cli -- sessions
 abc123  2026-07-16 14:23  Code review of AgentLoop.cs     17 msgs
 def456  2026-07-15 09:11  Refactor PermissionService      8 msgs
 ```

@@ -28,6 +28,8 @@ public sealed class PluginRegistrar : IPluginRegistrar
 {
     private readonly ILogger<PluginRegistrar> _logger;
     private readonly string _pluginRoot;
+    private readonly ILoggerFactory _loggerFactory;
+    private readonly IPluginAuditLog? _audit;
 
     /// <summary>
     ///     Construct a new registrar.
@@ -36,10 +38,18 @@ public sealed class PluginRegistrar : IPluginRegistrar
     ///     Host plugin root directory. Used to derive per-plugin data directories.
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
-    public PluginRegistrar(string pluginRoot, ILogger<PluginRegistrar> logger)
+    /// <param name="loggerFactory">Logger factory for tool/provider construction.</param>
+    /// <param name="audit">Optional capability-audit sink for the tool sandbox.</param>
+    public PluginRegistrar(
+        string pluginRoot,
+        ILogger<PluginRegistrar> logger,
+        ILoggerFactory loggerFactory,
+        IPluginAuditLog? audit = null)
     {
         _pluginRoot = pluginRoot ?? throw new ArgumentNullException(nameof(pluginRoot));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _loggerFactory = loggerFactory;
+        _audit = audit;
     }
 
     /// <inheritdoc />
@@ -59,11 +69,17 @@ public sealed class PluginRegistrar : IPluginRegistrar
         {
             if (plugin.Instance is IToolPlugin toolPlugin)
             {
-                toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(host, _logger));
+                toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(
+                    host,
+                    plugin.Instance.Name,
+                    plugin.DeclaredCapabilities,
+                    _audit,
+                    _logger,
+                    _loggerFactory));
             }
             if (plugin.Instance is IProviderPlugin providerPlugin)
             {
-                providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(host, _logger));
+                providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(host, _logger, _loggerFactory));
             }
             if (plugin.Instance is IAgentPlugin agentPlugin)
             {
@@ -106,34 +122,61 @@ public sealed class PluginRegistrar : IPluginRegistrar
     private sealed class ToolRegistryBuilderAdapter : IToolRegistryBuilder
     {
         private readonly IPluginLoadHost _host;
+        private readonly string _pluginName;
+        private readonly IReadOnlySet<PluginCapability> _pluginCapabilities;
+        private readonly IPluginAuditLog? _audit;
         private readonly ILogger _logger;
+        private readonly ILoggerFactory _loggerFactory;
 
-        internal ToolRegistryBuilderAdapter(IPluginLoadHost host, ILogger logger)
+        internal ToolRegistryBuilderAdapter(
+            IPluginLoadHost host,
+            string pluginName,
+            IReadOnlySet<PluginCapability> pluginCapabilities,
+            IPluginAuditLog? audit,
+            ILogger logger,
+            ILoggerFactory loggerFactory)
         {
             _host = host;
+            _pluginName = pluginName;
+            _pluginCapabilities = pluginCapabilities;
+            _audit = audit;
             _logger = logger;
+            _loggerFactory = loggerFactory;
         }
 
         public void AddTool(ITool tool)
         {
-            var r = _host.RegisterTool(tool);
+            // Every plugin-contributed tool passes through the execution sandbox:
+            // 30s timeout + 10MB allocation guard, with PluginBlockedEvent on enforcement.
+            var sandboxed = new SandboxedPluginTool(
+                tool,
+                _pluginName,
+                _host.EventBus,
+                _host.LoggerFactory.CreateLogger<SandboxedPluginTool>(),
+                capabilities: _pluginCapabilities,
+                audit: _audit);
+            var r = _host.RegisterTool(sandboxed);
             if (r.IsFailure)
                 _logger.LogWarning("Plugin tool registration failed for {Name}: {Error}", tool.Name, r.Error);
         }
 
         public void AddTool<T>() where T : ITool, new() => AddTool(new T());
         public void AddTool(Func<ITool> factory) => AddTool(factory());
+        public void AddTool(IToolFactory factory) => AddTool(factory.CreateTool(_loggerFactory));
+        public void AddTool(Func<ILoggerFactory, ITool> factory) => AddTool(factory(_loggerFactory));
     }
 
     private sealed class ProviderRegistryBuilderAdapter : IProviderRegistryBuilder
     {
         private readonly IPluginLoadHost _host;
         private readonly ILogger _logger;
+        private readonly ILoggerFactory _loggerFactory;
 
-        internal ProviderRegistryBuilderAdapter(IPluginLoadHost host, ILogger logger)
+        internal ProviderRegistryBuilderAdapter(IPluginLoadHost host, ILogger logger, ILoggerFactory loggerFactory)
         {
             _host = host;
             _logger = logger;
+            _loggerFactory = loggerFactory;
         }
 
         /// <summary>
@@ -151,6 +194,13 @@ public sealed class PluginRegistrar : IPluginRegistrar
         ///     plugins that don't know their provider id until they construct
         ///     the client.
         /// </remarks>
+        public void AddProvider(IProviderFactory factory)
+        {
+            var r = _host.RegisterProvider(factory.ProviderId, () => factory.CreateClient(_loggerFactory));
+            if (r.IsFailure)
+                _logger.LogWarning("Plugin provider registration failed for {Id}: {Error}", factory.ProviderId, r.Error);
+        }
+
         public void AddProvider(Func<ILlmClient> factory)
         {
             // Eager invocation: needed to read ProviderId. Plugin authors

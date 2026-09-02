@@ -27,7 +27,7 @@ public abstract record TuiEffect
 
 /// <summary>
 ///     Executes <see cref="TuiEffect" /> values. Implemented by the composition
-///     root (e.g. <c>Harbor.Cli</c>) with access to <c>IAgent</c> and the slash handler.
+///     root (e.g. <c>Harbor.App.Cli</c>) with access to <c>IAgent</c> and the slash handler.
 /// </summary>
 public interface ITuiEffectRunner
 {
@@ -50,12 +50,12 @@ public sealed class UiStore
     // initial read in each iteration is an acquire load (interlocked CAS already
     // provides a full barrier on success).
     //
-    // §FP-007 (acknowledged, not fixed): `Transition(Func<UiState,UiState>)` is
-    // still an escape hatch from the pure reducer — the effect runner uses it to
-    // fold follow-up state. Marked `internal` so external renderers cannot bypass
-    // Dispatch(UiMsg). Removing it entirely would require restructuring
-    // TuiEffectHost to emit UiMsg values instead of mutating state directly —
-    // out of scope for this sprint.
+    // §FP-007 (RESOLVED): the old `Transition(Func<UiState,UiState>)` escape
+    // hatch is gone — the last callers (TuiEffectHost, SessionManager,
+    // SessionSwitcher) now dispatcher UiMsg.AgentStarted / AgentEnded /
+    // StatusChanged / AppendLine through the pure reducer instead. Concurrent
+    // agents therefore cannot corrupt each other's state via shared mutation:
+    // every fold rides the same CAS + UiReducer.Update path.
     private volatile UiState _state;
 
 
@@ -116,16 +116,13 @@ public sealed class UiStore
     }
 
     /// <summary>
-    ///     Apply a manual transition (e.g. user input, bind meta) through a reducer
-    ///     function. Prefer <see cref="Dispatch(UiMsg)" /> for new code; this remains
-    ///     for the effect runner (<see cref="TuiEffectHost" />), which legitimately
-    ///     folds follow-up state as part of running an effect.
+    ///     Apply a manual state fold through a reducer function. Private on
+    ///     purpose (§FP-007 resolved): every state change must be expressible as a
+    ///     <see cref="Dispatch(UiMsg)" /> so concurrent agents in different
+    ///     sessions can never bypass the pure reducer. Only the store's own
+    ///     convenience wrappers (<see cref="BindSession" />, <see cref="Reset" />) fold directly.
     /// </summary>
-    /// <remarks>
-    ///     Marked <c>internal</c> so external renderers cannot bypass
-    ///     <see cref="Dispatch(UiMsg)" /> — see §FP-007 in the audit.
-    /// </remarks>
-    internal void Transition(Func<UiState, UiState> reducer)
+    private void Transition(Func<UiState, UiState> reducer)
     {
         UiState original;
         UiState next;

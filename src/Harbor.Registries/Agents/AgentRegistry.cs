@@ -76,7 +76,7 @@ public sealed class AgentRegistryBuilder : IAgentRegistryBuilder
     public void AddAgent(AgentDefinition agent)
     {
         var result = _registry.Register(agent);
-        if (result.IsFailure)
+        if (result.IsFailure) // §4.6-ok: void-контракт, программная ошибка регистрации → исключение.
             throw new InvalidOperationException(result.Error);
     }
 }

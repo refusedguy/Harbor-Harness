@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
+using Microsoft.Extensions.Logging;
 namespace Harbor.Abstractions.Tools;
 /// <summary>
 ///     Registry of tools. Implements Registry pattern.
@@ -81,6 +82,24 @@ public interface IToolRegistryBuilder
     /// </summary>
     /// <param name="factory">Factory producing the tool instance.</param>
     public void AddTool(Func<ITool> factory);
+
+    /// <summary>
+    ///     Register a tool via a factory interface.
+    /// </summary>
+    /// <param name="factory">Factory producing the tool instance.</param>
+    public void AddTool(IToolFactory factory);
+
+    /// <summary>
+    ///     Register a tool via a logger-aware factory lambda — the canonical
+    ///     way to contribute a tool that only needs an
+    ///     <see cref="ILogger{TCategoryName}" /> (P.2: one line instead of one
+    ///     IToolFactory class per tool).
+    /// </summary>
+    /// <param name="factory">
+    ///     Receives the builder's <see cref="ILoggerFactory" /> and returns the
+    ///     tool instance, e.g. <c>lf => new ReadTool(lf.CreateLogger&lt;ReadTool&gt;())</c>.
+    /// </param>
+    public void AddTool(Func<ILoggerFactory, ITool> factory);
 }
 
 /// <summary>

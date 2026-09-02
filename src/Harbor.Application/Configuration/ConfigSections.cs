@@ -1,4 +1,4 @@
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Provider / model / agent identity selection.
 ///     Replaces the flat <c>Provider</c>/<c>Model</c>/<c>Agent</c> string fields
@@ -39,13 +39,18 @@ public sealed record IdentityConfig(
 /// <summary>
 ///     Plugin + builtin-tool toggles.
 /// </summary>
+/// <summary>
+///     Plugin + builtin-tool toggles.
+/// </summary>
 public sealed record ToolingConfig(
     IReadOnlyList<string> EnabledPlugins,
-    IReadOnlyList<string> DisabledTools)
+    IReadOnlyList<string> DisabledTools,
+    [property: JsonPropertyName("autoReloadPlugins")] bool AutoReloadPlugins = true)
 {
     public static readonly ToolingConfig Default = new(
         Array.Empty<string>(),
-        Array.Empty<string>());
+        Array.Empty<string>(),
+        AutoReloadPlugins: true);
 
     public Result<ToolingConfig> Validate()
     {
@@ -73,9 +78,9 @@ public sealed record CostConfig(decimal Limit)
 ///     Compaction tuning.
 /// </summary>
 public sealed record CompactionConfig(
-    int ReserveTokens,
-    int KeepRecentTokens,
-    int TailTurns)
+    [property: JsonPropertyName("reserveTokens")] int ReserveTokens,
+    [property: JsonPropertyName("keepRecentTokens")] int KeepRecentTokens,
+    [property: JsonPropertyName("tailTurns")] int TailTurns)
 {
     public static readonly CompactionConfig Default = new(16384, 20000, 2);
 
@@ -92,6 +97,29 @@ public sealed record CompactionConfig(
 }
 
 /// <summary>
+///     CellForge renderer tuning (<c>ui.consoleEx</c> in config.json). The
+///     CellForge path itself is selected by <c>tui: "consoleex"</c> or the
+///     <c>HARBOR_TUI=consoleex</c> env var; this section is its kill-switch
+///     and frame-wrapper knob.
+/// </summary>
+/// <param name="Enabled">
+///     Master switch for the CellForge interactive renderer. When explicitly
+///     <c>false</c>, a <c>tui: "consoleex"</c> selection falls back to the
+///     legacy ANSI renderer with a log line instead of failing.
+/// </param>
+/// <param name="SyncUpdates">
+///     Wrap frames in the synchronized-update pair <c>CSI ?2026 h/l</c>
+///     (DECSYNC). Terminals without support simply ignore the sequence; the
+///     probe refines this later, the config is the safe default.
+/// </param>
+public sealed record CellForgeUiConfig(
+    [property: JsonPropertyName("enabled")] bool Enabled = true,
+    [property: JsonPropertyName("syncUpdates")] bool SyncUpdates = true)
+{
+    public static readonly CellForgeUiConfig Default = new();
+}
+
+/// <summary>
 ///     UI / storage presentation preferences.
 /// </summary>
 public sealed record PresentationConfig(
@@ -99,6 +127,10 @@ public sealed record PresentationConfig(
     string Storage,
     bool Onboarded)
 {
+    /// <summary>CellForge renderer section — defaults apply when absent.</summary>
+    [JsonPropertyName("consoleEx")]
+    public CellForgeUiConfig CellForge { get; init; } = CellForgeUiConfig.Default;
+
     public static readonly PresentationConfig Default = new("ansi", "jsonl", false);
 
     public Result<PresentationConfig> Validate()
@@ -132,9 +164,9 @@ public sealed record RunLimitsConfig(
 ///     User-supplied provider config entry (overrides the bundled JSON presets).
 /// </summary>
 public sealed record ProviderConfigEntry(
-    string BaseUrl,
-    string ApiType,
-    string? ModelsUrl)
+    [property: JsonPropertyName("baseUrl")] string BaseUrl,
+    [property: JsonPropertyName("apiType")] string ApiType,
+    [property: JsonPropertyName("modelsUrl")] string? ModelsUrl)
 {
     public static readonly ProviderConfigEntry Default = new(string.Empty, "openai-compatible", null);
 

@@ -83,7 +83,7 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="Default model" Classes="Label" />
                             <TextBox Text="{Binding DefaultModel, Mode=TwoWay}"
-                                     PlaceholderText="qwen2.5-coder:7b, gpt-4o, claude-sonnet-4, …" />
+                                     PlaceholderText="tencent/hy3:free, gpt-4o, claude-sonnet-4, …" />
                         </StackPanel>
 
                         <!-- Font family -->

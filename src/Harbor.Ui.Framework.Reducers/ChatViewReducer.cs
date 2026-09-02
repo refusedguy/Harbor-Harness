@@ -31,20 +31,14 @@ public static partial class ChatViewReducer
             IsStreaming = true,
             IsThinking = false,
             StreamingBuffer = string.Empty,
+            PendingStreaming = ChunkedBuffer.Empty,
             StatusMessage = string.Empty,
             ToolCalls = []
         },
 
-        MessageUpdateEvent { LlmEvent: TextDeltaEvent tde } => state with
-        {
-            StreamingBuffer = state.StreamingBuffer + tde.Delta
-        },
+        MessageUpdateEvent { LlmEvent: TextDeltaEvent tde } => AppendText(state, tde.Delta),
 
-        MessageUpdateEvent { LlmEvent: ThinkingDeltaEvent tde } => state with
-        {
-            IsThinking = true,
-            StreamingBuffer = state.StreamingBuffer + tde.Delta
-        },
+        MessageUpdateEvent { LlmEvent: ThinkingDeltaEvent tde } => AppendThinking(state, tde.Delta),
 
         MessageUpdateEvent { LlmEvent: ToolCallStartEvent tcse } => state with
         {
@@ -77,20 +71,61 @@ public static partial class ChatViewReducer
         _ => state
     };
 
+    /// <summary>
+    ///     Append a text delta to the chunked pending buffer and rebuild the
+    ///     synced <see cref="ChatViewState.StreamingBuffer" /> string only when
+    ///     <see cref="StreamingSync.ShouldFlush" /> demands it.
+    /// </summary>
+    private static ChatViewState AppendText(ChatViewState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state;
+
+        ChunkedBuffer pending = state.PendingStreaming.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.StreamingBuffer.Length, pending.Length))
+            return state with { PendingStreaming = pending };
+
+        return state with
+        {
+            StreamingBuffer = StreamingSync.Concat(state.StreamingBuffer, pending),
+            PendingStreaming = ChunkedBuffer.Empty
+        };
+    }
+
+    /// <summary>Thinking-delta counterpart of <see cref="AppendText" />.</summary>
+    private static ChatViewState AppendThinking(ChatViewState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state with { IsThinking = true };
+
+        ChunkedBuffer pending = state.PendingStreaming.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.StreamingBuffer.Length, pending.Length))
+            return state with { PendingStreaming = pending, IsThinking = true };
+
+        return state with
+        {
+            StreamingBuffer = StreamingSync.Concat(state.StreamingBuffer, pending),
+            PendingStreaming = ChunkedBuffer.Empty,
+            IsThinking = true
+        };
+    }
+
     private static ChatViewState AddStreamingBuffer(ChatViewState state)
     {
+        string full = StreamingSync.Concat(state.StreamingBuffer, state.PendingStreaming);
         var next = state with
         {
             IsStreaming = false,
             IsThinking = false,
             StreamingBuffer = string.Empty,
+            PendingStreaming = ChunkedBuffer.Empty,
             StatusMessage = string.Empty
         };
 
-        if (!string.IsNullOrEmpty(state.StreamingBuffer))
+        if (!string.IsNullOrEmpty(full))
         {
             var role = state.IsThinking ? ChatRole.Thinking : ChatRole.Assistant;
-            var line = new ChatLineViewModel(role, state.StreamingBuffer);
+            var line = new ChatLineViewModel(role, full);
             next = next with { Lines = state.Lines.Add(line) };
         }
 
@@ -126,6 +161,7 @@ public static partial class ChatViewReducer
         IsThinking = false,
         IsAgentRunning = true,
         StreamingBuffer = string.Empty,
+        PendingStreaming = ChunkedBuffer.Empty,
         StatusMessage = string.Empty,
         ToolCalls = [],
         PullProgress = 0.0,
@@ -142,6 +178,7 @@ public static partial class ChatViewReducer
         IsThinking = false,
         IsAgentRunning = false,
         StreamingBuffer = string.Empty,
+        PendingStreaming = ChunkedBuffer.Empty,
         StatusMessage = string.Empty,
         ToolCalls = [],
         PullProgress = 0.0,

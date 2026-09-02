@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!--
+    contrib/tests/Directory.Build.props — mirrors tests/Directory.Build.props
+    for test projects that moved into contrib/ (sprint 2). Imports the repo-root
+    Directory.Build.props so central package management and analyzer settings
+    keep applying.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CA1707;CA1861;S5445;S3011</NoWarn>
+  </PropertyGroup>
+
+</Project>

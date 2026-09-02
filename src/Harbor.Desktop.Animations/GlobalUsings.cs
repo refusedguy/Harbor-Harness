@@ -1,3 +1,2 @@
-// GlobalUsings.cs — solution-wide implicit usings for Harbor.Desktop.Animations.
-global using System;
-global using Harbor.Desktop.Abstractions.DesignSystem;
+// Animations reuses design tokens from Harbor.DesignSystem
+global using Harbor.Ui.Framework.Projection;

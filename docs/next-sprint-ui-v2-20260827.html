@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor Next Sprint — Competitive UI/UX Analysis</title>
+<style>
+  body { background:#0a0e14; color:#b3b9c5; font-family:monospace; padding:20px; }
+  .ok { color:#7fd962; } .err { color:#ff6b6b; } .warn { color:#ffb454; } .accent { color:#39bae6; }
+  .card { background:#0d1117; border:1px solid #1f2430; border-radius:4px; padding:12px; margin:8px 0; }
+  .title { color:#5c6773; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+  h1 { color:#39bae6; font-size:20px; margin:0 0 8px; }
+  h2 { color:#39bae6; font-size:16px; margin:16px 0 8px; }
+  h3 { color:#b3b9c5; font-size:14px; margin:12px 0 6px; }
+  .sub { color:#5c6773; font-size:12px; margin-bottom:16px; }
+  ul { margin:8px 0; padding-left:20px; }
+  li { margin:4px 0; }
+  code { background:#131820; border:1px solid #1f2430; border-radius:3px; padding:2px 6px; font-size:11px; color:#d2a6ff; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #1f2430; }
+  th { color:#5c6773; font-weight:normal; }
+  .highlight { background:rgba(57,186,230,.08); border-left:2px solid #39bae6; padding:8px; margin:8px 0; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Harbor Next Sprint — Competitive UI/UX Analysis</h1>
+  <div class="sub">Анализ 6 источников: Kilo Code, OpenCode, Codex CLI, Claude Code, TUI frameworks, Web AI UIs</div>
+</div>
+
+<div class="section card">
+  <div class="title">Executive Summary</div>
+  <p>Конкуренты уже ушли далеко в сторону анимаций, дизайн-систем и killer features. Harbor сейчас отстаёт по:</p>
+  <ul>
+    <li>Panel animations — у конкурентов fade/slide/pulse стандарт, у Harbor нет</li>
+    <li>Command palette — у Kilo/OpenCode/Codex есть, у Harbor нет</li>
+    <li>Sidebar с контекстом — у OpenCode/Cursor есть, у Harbor нет</li>
+    <li>Theme system — у Claude 6 тем + live-reload, у Harbor 1</li>
+    <li>Web UI — у ChatGPT/Claude/Cursor продакшен, у Harbor только заготовки</li>
+    <li>TUI animations — Ratatui/Textual имеют CSS-like transitions, у Harbor нет</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Competitive Findings</div>
+
+  <h3>Kilo Code CLI</h3>
+  <ul>
+    <li>Warm stone palette (#0c0a09 base, #f9f76f accent)</li>
+    <li>Flex-row main + sidebar (42px)</li>
+    <li>Two-tier tool cards: InlineTool + BlockTool</li>
+    <li>PermissionPrompt с 3-stage flow + live diff preview</li>
+    <li>Command Palette (ctrl+p) с fuzzy search + suggested commands</li>
+    <li>Leader-key system (ctrl+x), Emacs + optional vim editing</li>
+    <li>Thinking blocks render at 72% opacity</li>
+    <li>Petdex mascots as ambient animations</li>
+    <li>Quick-switch slots (&lt;leader&gt;1-9)</li>
+    <li>Cost/token display in prompt footer</li>
+  </ul>
+
+  <h3>OpenCode CLI</h3>
+  <ul>
+    <li>OpenTUI + SolidJS rendering engine</li>
+    <li>Split layout: main scrollbox + optional 42-char sidebar</li>
+    <li>Rich promptarea: @agent mentions, file attachments, external editor</li>
+    <li>Dialog system: Command Palette, Model picker, Agent picker, Timeline, Fork, Export</li>
+    <li>Plugin-extensible slots: home_logo, home_prompt, home_bottom, home_footer</li>
+    <li>Ghostty-web + Desktop app (Tauri + Electron)</li>
+    <li>CSS-like styling with theme tokens</li>
+  </ul>
+
+  <h3>Codex CLI (OpenAI)</h3>
+  <ul>
+    <li>Ratatui-based three-zone vertical layout</li>
+    <li>Steer mode: Enter injects mid-turn</li>
+    <li>Plan/Pair/Execute collaboration modes</li>
+    <li>Syntax-highlighted V4A diffs</li>
+    <li>/ide IPC bridge to VS Code/Cursor</li>
+    <li>Configurable keymaps/themes/statuslines</li>
+    <li>Platform-native sandboxing (Seatbelt/Landlock/RestrictedToken)</li>
+    <li>Raw scrollback mode</li>
+  </ul>
+
+  <h3>Claude Code (Anthropic)</h3>
+  <ul>
+    <li>Forked Ink with React 19 ConcurrentRoot</li>
+    <li>Yoga flexbox layout + double-buffered Int32Array screen buffers</li>
+    <li>80+ semantic color tokens in typed Theme contract</li>
+    <li>6 built-in themes: auto, dark, light, dark-daltonized, light-ansi</li>
+    <li>Custom JSON themes with live-reloading in ~/.claude/themes/</li>
+    <li>Dingbat spinner glyphs (✶, ✻, ✳, ✢) with elapsed time and token rate</li>
+    <li>Full vim mode (hjkl, visual selection, yank/paste, indent/dedent)</li>
+    <li>Worktree isolation for parallel sessions</li>
+    <li>Skills & plugins system with hooks</li>
+    <li>Inline diff review (/diff) reconstructed from conversation</li>
+    <li>Extended thinking toggle (Meta+T)</li>
+    <li>OSC 11 auto-theme detection</li>
+  </ul>
+
+  <h3>TUI Framework Patterns</h3>
+  <ul>
+    <li><strong>Ratatui</strong>: tachyonfx shader-like post-render effects, constraint-based flex, layout cache</li>
+    <li><strong>Bubble Tea</strong>: harmonica spring physics, Elm-architecture input, Viewport widget</li>
+    <li><strong>Textual</strong>: CSS animations, dirty-rect + virtual DOM (120 FPS), DataTable/TreeView/CommandPalette</li>
+    <li><strong>Terminal.Gui</strong>: explicit screen-reader support, keyboard-only navigation, Wizard/FileDialog</li>
+  </ul>
+
+  <h3>Web AI UIs</h3>
+  <ul>
+    <li><strong>ChatGPT</strong>: pure-black theme, 260px floating sidebar, pill-shaped composer, 300+ CSS vars</li>
+    <li><strong>Claude</strong>: warm-neutral dark, dual typography (sans UI + serif responses), spring-physics buttons, dyslexic font support</li>
+    <li><strong>Cursor</strong>: Parallel Agents Window, reviewable multi-file diffs in Composer, Design Mode visual annotation</li>
+    <li><strong>Windsurf/Devin</strong>: Cascade flow model, fleet command center for multiple agents, Spaces for shared context</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Harbor Gaps vs Competitors</div>
+  <table>
+    <tr><th>Area</th><th>Competitor</th><th>Harbor</th><th>Gap</th></tr>
+    <tr><td>Panel animations</td><td>Kilo, OpenCode, Codex</td><td>None</td><td>No fade/slide/pulse in ConsoleEx</td></tr>
+    <tr><td>Command palette</td><td>Kilo, OpenCode, Codex</td><td>None</td><td>No ctrl+p fuzzy search</td></tr>
+    <tr><td>Sidebar context</td><td>OpenCode, Cursor</td><td>None</td><td>No session sidebar with plugins</td></tr>
+    <tr><td>Theme system</td><td>Claude (6 themes + live-reload)</td><td>1 Catppuccin</td><td>No theme switching, no live-reload</td></tr>
+    <tr><td>Web UI</td><td>ChatGPT, Claude, Cursor</td><td>Blazor shell</td><td>No floating sidebar, pill composer</td></tr>
+    <tr><td>TUI animations</td><td>Ratatui/Textual</td><td>None</td><td>No spring physics, no shader effects</td></tr>
+    <tr><td>Collaboration modes</td><td>Codex (Plan/Pair/Execute)</td><td>Single agent</td><td>No multi-mode collaboration</td></tr>
+    <tr><td>Accessibility</td><td>Terminal.Gui</td><td>None</td><td>No screen-reader semantics</td></tr>
+    <tr><td>Mascots/ambient</td><td>Kilo (Petdex)</td><td>None</td><td>No ambient animations</td></tr>
+  </table>
+</div>
+
+<div class="section card">
+  <div class="title">Proposed Next Sprint: UI-V2</div>
+  <p>Based on competitive analysis, the next sprint should focus on <strong>making Harbor visually competitive</strong> rather than just functional.</p>
+
+  <h3>Priority 1: Animations & Transitions (must have)</h3>
+  <ul>
+    <li>Panel fade-in/slide-in: 150ms fast, 300ms normal, ease-out</li>
+    <li>Tool cards slide-in + fade</li>
+    <li>Approval gate pulse/warn glow</li>
+    <li>Status bar smooth transitions between states</li>
+    <li>Timeline smooth scroll + opacity transitions</li>
+    <li>Spring physics for panel resizing (Bubble Tea harmonica)</li>
+  </ul>
+
+  <h3>Priority 2: Command Palette & Navigation</h3>
+  <ul>
+    <li>Command Palette (ctrl+p) with fuzzy search + suggested commands</li>
+    <li>Quick-switch slots for recent sessions</li>
+    <li>Leader-key system for power users</li>
+    <li>Vim mode toggle for composer</li>
+  </ul>
+
+  <h3>Priority 3: Theme System Expansion</h3>
+  <ul>
+    <li>Multiple built-in themes: Harbor Dark, Light, Warm, Cool</li>
+    <li>Custom JSON theme support with live-reload</li>
+    <li>OSC 11 auto-theme detection</li>
+    <li>Per-component theme overrides</li>
+  </ul>
+
+  <h3>Priority 4: Sidebar & Context Panels</h3>
+  <ul>
+    <li>Optional right sidebar (42px default, auto-show on wide terminals)</li>
+    <li>Plugin-extensible sidebar slots</li>
+    <li>Session info, token counter, model picker in sidebar</li>
+    <li>Modified files / LSP status / MCP status widgets</li>
+  </ul>
+
+  <h3>Priority 5: Web UI Polish</h3>
+  <ul>
+    <li>Floating pill composer (ChatGPT pattern)</li>
+    <li>260px collapsible sidebar with session list</li>
+    <li>Spring-physics button animations</li>
+    <li>Dyslexic font support</li>
+  </ul>
+
+  <h3>Priority 6: Killer Features</h3>
+  <ul>
+    <li>Ambient mascot/avatar (Petdex-style)</li>
+    <li>Cost/token display in prompt footer</li>
+    <li>Retry countdown timers</li>
+    <li>Copy-on-select</li>
+    <li>Braille streaming spinner</li>
+  </ul>
+
+  <h3>Deferred (not this sprint)</h3>
+  <ul>
+    <li>Multi-agent collaboration modes (Plan/Pair/Execute)</li>
+    <li>/ide IPC bridge to external editors</li>
+    <li>Worktree isolation for parallel sessions</li>
+    <li>Shader-like post-render effects (tachyonfx)</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Implementation Notes</div>
+  <ul>
+    <li>Use existing <code>Harbor.DesignSystem</code> tokens for all new components</li>
+    <li>Animations via <code>Harbor.Desktop.Animations</code> tokens (Fast=150ms, Normal=300ms)</li>
+    <li>ConsoleEx animations should be frame-tick driven, no layout thrash</li>
+    <li>Avalonia animations via XAML Transitions + GPU compositing</li>
+    <li>Blazor animations via CSS transitions + JavaScript interop</li>
+    <li>One commit = 1-2 files, atomic changes</li>
+    <li>Tests after each commit</li>
+  </ul>
+</div>
+
+<div class="section card">
+  <div class="title">Sources</div>
+  <ul>
+    <li><code>/mnt/projects/Harbor-Harness/docs/kilocode-cli-ux-analysis-20260827.md</code></li>
+    <li><code>/home/nbook/opencode-cli-uiux-analysis.md</code></li>
+    <li><code>/home/nbook/codex-cli-uiux-analysis.md</code></li>
+    <li><code>/mnt/projects/Harbor-Harness/docs/CLAUDE_CODE_UI_UX_ANALYSIS.md</code></li>
+    <li><code>/home/nbook/tui-framework-analysis.md</code></li>
+    <li><code>/home/nbook/web-ai-chat-ux-analysis.md</code></li>
+  </ul>
+</div>
+
+<div class="highlight">
+  <strong>Ready for review.</strong> Approve this sprint plan and I will generate the prompt file + update sprint chain.
+</div>
+</body>
+</html>

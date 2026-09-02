@@ -7,6 +7,8 @@ using Harbor.App.Avalonia.Views.Components;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
+using Avalonia.Controls;
+using Avalonia.Threading;
 
 namespace Harbor.App.Avalonia.ViewModels;
 
@@ -61,6 +63,14 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     ///     Performs Avalonia-specific UI updates (rendering, session status) on the
     ///     UI thread after the state projection is complete.
     /// </summary>
+    /// <remarks>
+    ///     Ф-A1 (sprint 4.5): renders are FRAME-COALESCED. During streaming the
+    ///     store emits one transition per TextDelta — dozens per second — and
+    ///     each full reconcile + INPC storm forces a layout pass, which made
+    ///     the whole window jitter. Instead of rendering every transition, we
+    ///     remember only the LATEST snapshot and flush at most once per
+    ///     16 ms frame via a DispatcherTimer; intermediate snapshots collapse.
+    /// </remarks>
     /// <param name="state">The new <see cref="UiState" /> snapshot.</param>
     protected override void OnAfterSelectorsApplied(UiState state)
     {
@@ -69,14 +79,63 @@ public sealed partial class ChatViewModel : ChatViewModelBase
             Logger.LogDebug("OnAfterSelectorsApplied: lines={Lines}, streaming={Streaming}, agentRunning={Running}, textBufLen={TextBufLen}",
                 state.Lines.Length, state.IsStreaming, state.IsAgentRunning, state.Active.TextBuffer?.Length ?? 0);
 
-            _renderEngine.Render(state, this);
-
-            if (_sessionManager?.Active is { } activeSession)
-            {
-                _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
-                _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
-            }
+            _pendingRenderState = state;
+            StartRenderTimer();
         });
+    }
+
+    /// <summary>Latest snapshot awaiting its frame slot (UI thread only).</summary>
+    private UiState? _pendingRenderState;
+
+    private DispatcherTimer? _renderTimer;
+
+    /// <summary>
+    ///     Arm the 16 ms frame timer if it is not running yet. Created lazily
+    ///     on the UI thread — the ViewModel itself is constructed by DI off-thread.
+    /// </summary>
+    private void StartRenderTimer()
+    {
+        if (_renderTimer is null)
+        {
+            _renderTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(16)
+            };
+            _renderTimer.Tick += RenderFrameTick;
+        }
+
+        if (!_renderTimer.IsEnabled)
+        {
+            _renderTimer.Start();
+        }
+    }
+
+    private void RenderFrameTick(object? sender, EventArgs e)
+    {
+        // One tick = one frame = one render with the freshest snapshot.
+        _renderTimer!.Stop();
+        var state = _pendingRenderState;
+        _pendingRenderState = null;
+        if (state is null)
+        {
+            return;
+        }
+
+        // A frame-coalesced render must not clobber NEWER local state: while
+        // this snapshot sat queued, the user may have typed into the input
+        // (local VM state, not part of UiState). Capture it and restore.
+        string inputBefore = InputText;
+        _renderEngine.Render(state, this);
+        if (inputBefore.Length > 0 && !string.Equals(InputText, inputBefore, StringComparison.Ordinal))
+        {
+            InputText = inputBefore;
+        }
+
+        if (_sessionManager?.Active is { } activeSession)
+        {
+            _sessionManager.SetStatus(activeSession.Id, _renderEngine.DeriveStatus(state));
+            _sessionManager.NotifyMessageCount(activeSession.Id, state.Lines.Length);
+        }
     }
 
     /// <summary>Submit the current input text. Plain Enter (handled in view) triggers this.</summary>
@@ -109,7 +168,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
         }
         else
         {
-            _store.Transition(s => s.AddLine(ChatRole.User, text));
+            _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, text));
             effect = new TuiEffect.PromptAgent(trimmed);
         }
 
@@ -150,7 +209,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void SendSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 
@@ -232,7 +291,7 @@ public sealed partial class ChatViewModel : ChatViewModelBase
     private void ExecuteSuggestion(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt)) return;
-        _store.Transition(s => s.AddLine(ChatRole.User, prompt));
+        _store.Dispatch(new UiMsg.AppendLine(ChatRole.User, prompt));
         _effects.Run(new TuiEffect.PromptAgent(prompt));
     }
 

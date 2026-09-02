@@ -22,21 +22,23 @@ UI tests use TUnit `[Category]` attributes for filtering:
 
 ```bash
 # All Avalonia headless tests (fast, no display required)
-dotnet test tests/Harbor.App.Avalonia.Tests
+dotnet test tests/Harbor.App.Avalonia.Tests -c Release --no-build
 
 # View inflation only (headless)
 dotnet test tests/Harbor.App.Avalonia.Tests --treenode-filter "/*/*/ViewInflationTests/*"
 
 # E2E Avalonia tests (require Avalonia.Headless)
-dotnet test tests/Harbor.E2E.App.Avalonia --filter "Category=E2E"
+dotnet test tests/Harbor.E2E.App.Avalonia \
+  --treenode-filter "/*/*/*/*[Category=E2E]"
 
-# Component subset of E2E
-dotnet test tests/Harbor.E2E.App.Avalonia --filter "Category=E2E&Category=Component"
+# Component subset of E2E (AND of both categories)
+dotnet test tests/Harbor.E2E.App.Avalonia \
+  --treenode-filter "/*/*/*/*[Category=E2E][Category=Component]"
 ```
 
-> **Note:** TUnit does **not** support `--filter-category`. Use `--filter "Category=..."` instead.
-> The project memory explicitly records this constraint: *MTP не поддерживает VSTest-флаги --nologo, --logger, --filter; для фильтрации в TUnit используйте --treenode-filter*.
-> For E2E categories use the standard `--filter "Category=E2E"` syntax.
+> **Note:** TUnit filtering is `--treenode-filter`; VSTest-style
+> `--filter "Category=E2E"` is not supported under the MTP host. Category
+> filters use the property syntax `[Category=X]` inside a treenode expression.
 
 ## CI pipeline (normalized)
 
@@ -50,7 +52,7 @@ A typical CI job-step block for Avalonia UI tests:
   run: dotnet test tests/Harbor.App.Avalonia.Tests --nologo --no-build
 
 - name: UI E2E Tests
-  run: dotnet test tests/Harbor.E2E.App.Avalonia --filter "Category=E2E"
+  run: dotnet test tests/Harbor.E2E.App.Avalonia --treenode-filter "/*/*/*/*[Category=E2E]"
 ```
 
 ## JUnit XML output

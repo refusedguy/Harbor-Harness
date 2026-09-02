@@ -1,5 +1,7 @@
 # 01 — Архитектура ядра
 
+> **SUPERSEDED** by [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) + [docs/ARCHITECTURE_LAYERS.md](../docs/ARCHITECTURE_LAYERS.md) and [specs/14-architecture-revised.md](./14-architecture-revised.md) — this v1 layout (single Harbor.sln, SQLite-first storage, `IExtensionHost`) does not match the shipped solution.
+
 > Документ: программная архитектура. Слои, assembly layout, pipeline, DI, lifecycle, threading model. Здесь — структурные решения; детали каждого компонента — в специализированных разделах (`02-plugins.md`, `03-providers.md`, и т.д.).
 
 ## 1. Слои и сборки

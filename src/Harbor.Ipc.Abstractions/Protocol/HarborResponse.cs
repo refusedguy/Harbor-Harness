@@ -11,7 +11,7 @@ namespace Harbor.Ipc.Protocol;
 ///     <list type="bullet">
 ///         <item>
 ///             <see cref="OkResponse" /> — success with optional
-///             <see cref="OkResponse.Payload" /> (MessagePack-typeless bytes
+///             <see cref="OkResponse.Payload" /> (MessagePack bytes
 ///             carrying a domain object).
 ///         </item>
 ///         <item>
@@ -48,15 +48,17 @@ public abstract record HarborResponse
 }
 
 /// <summary>
-///     Success response. <see cref="Payload" /> is a MessagePack-typeless-
-///     serialized domain object (or <see langword="null" /> for void methods).
+///     Success response. <see cref="Payload" /> is a MessagePack-serialized
+///     domain object produced by <see cref="WireCodec.SerializeDomain{T}" />
+///     (or <see langword="null" /> for void methods).
 /// </summary>
 [MessagePackObject]
 public sealed record OkResponse : HarborResponse
 {
     /// <summary>
-    ///     MessagePack-typeless serialized domain payload. <see langword="null" />
-    ///     for void-returning methods (StartAgent, AbortAgent, DeleteSession).
+    ///     MessagePack-serialized domain payload (typed, no wire type
+    ///     metadata). <see langword="null" /> for void-returning methods
+    ///     (StartAgent, AbortAgent, DeleteSession).
     /// </summary>
     [Key(1)]
     public byte[]? Payload { get; init; }
@@ -81,7 +83,11 @@ public sealed record ErrorResponse : HarborResponse
 /// <remarks>
 ///     <see cref="Event" /> is MessagePack-serialized using the
 ///     <c>[Union]</c> tag on <see cref="HarborEvent" />. The wire form of an
-///     EventEnvelope is therefore: <c>[tag=2][RequestId=Guid.Empty][event-bytes]</c>.
+///     EventEnvelope is therefore:
+///     <c>[tag=2][RequestId=Guid.Empty][event-bytes][sequence][target]</c>.
+///     Keys 2/3 were appended in sprint 6 (A1/A3): array-format MessagePack
+///     maps by position, and appended keys are transparently ignored by
+///     older readers.
 /// </remarks>
 [MessagePackObject]
 public sealed record EventEnvelope : HarborResponse
@@ -91,4 +97,20 @@ public sealed record EventEnvelope : HarborResponse
     /// </summary>
     [Key(1)]
     public byte[]? EventBytes { get; init; }
+
+    /// <summary>
+    ///     Server-assigned monotonic delivery sequence (1, 2, 3…). Clients
+    ///     use it for dedup and reconnect replay bookkeeping
+    ///     (<see cref="SubscribeToEventsRequest.LastSequence"/>).
+    /// </summary>
+    [Key(2)]
+    public ulong Sequence { get; init; }
+
+    /// <summary>
+    ///     Addressing: null = broadcast to every subscriber;
+    ///     non-null = deliver only to the named client connection
+    ///     (events belonging to a session leased by that client).
+    /// </summary>
+    [Key(3)]
+    public string? TargetClientId { get; init; }
 }

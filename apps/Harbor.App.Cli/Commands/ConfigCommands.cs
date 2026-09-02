@@ -1,27 +1,20 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tui;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
-namespace Harbor.Cli.Commands;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
+using Harbor.Application.Permissions;
+namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     /setup — run onboarding wizard.
 /// </summary>
-public sealed class SetupCommand : ISlashCommand
+public sealed class SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer) : ISlashCommand
 {
-    private readonly Func<string, Task<string>> _reader;
-
-    private readonly OnboardingWizard _wizard;
-    private readonly Action<string> _writer;
-
-    public SetupCommand(OnboardingWizard wizard, Func<string, Task<string>> reader, Action<string> writer)
-    {
-        _wizard = wizard;
-        _reader = reader;
-        _writer = writer;
-    }
     public string Name => "setup";
     public string Description => "Run setup wizard (provider, API key, model)";
     public string Usage => "/setup";
@@ -29,7 +22,7 @@ public sealed class SetupCommand : ISlashCommand
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
-        var result = await _wizard.RunAsync(_reader, _writer, ct).ConfigureAwait(false);
+        var result = await wizard.RunAsync(reader, writer, ct).ConfigureAwait(false);
         return result;
     }
 }
@@ -125,18 +118,40 @@ public sealed class AuthCommand : ISlashCommand
 /// <summary>
 ///     /model — switch model.
 /// </summary>
+/// <remarks>
+///     PROD-UI-0 З.3: after persisting the new model the command REBINDS the
+///     active session (desktop SessionManager.RebindFromCommonConfigAsync
+///     pattern): fresh session record + AgentDefinition.WithModel +
+///     IAgent.Initialize — no REPL restart. The agent loop resolves the LLM
+///     client from the bound definition on every turn, so the next prompt
+///     goes through the new provider/model.
+/// </remarks>
 public sealed class ModelCommand : ISlashCommand
 {
 
     private readonly IConfigStore _configStore;
     private readonly IProviderRegistry _providers;
     private readonly Action<string> _writer;
+    private readonly IAgent? _agent;
+    private readonly Session? _session;
 
     public ModelCommand(IConfigStore configStore, IProviderRegistry providers, Action<string> writer)
+        : this(configStore, providers, writer, null, null)
+    {
+    }
+
+    public ModelCommand(
+        IConfigStore configStore,
+        IProviderRegistry providers,
+        Action<string> writer,
+        IAgent? agent,
+        Session? session)
     {
         _configStore = configStore;
         _providers = providers;
         _writer = writer;
+        _agent = agent;
+        _session = session;
     }
     public string Name => "model";
     public string Description => "Switch LLM model";
@@ -208,12 +223,60 @@ public sealed class ModelCommand : ISlashCommand
             return c;
         }, ct).ConfigureAwait(false);
 
-        if (updateResult.IsSuccess)
-            _writer($"✓ Switched to model: {model}");
-        else
+        if (updateResult.IsFailure)
+        {
             _writer($"✗ Failed: {updateResult.Error}");
+            return updateResult;
+        }
 
-        return updateResult;
+        _writer($"✓ Switched to model: {model}");
+
+        var rebindResult = await RebindActiveSessionAsync(model).ConfigureAwait(false);
+        return rebindResult;
+    }
+
+    /// <summary>
+    ///     Rebind the running agent to the freshly selected provider/model
+    ///     (PROD-UI-0 З.3). Best-effort: when the command was constructed
+    ///     without agent/session context (e.g. non-REPL usage) the config is
+    ///     still updated and takes effect on the next REPL start.
+    /// </summary>
+    private async Task<Result> RebindActiveSessionAsync(string model)
+    {
+        if (_agent is null || _session is null)
+        {
+            _writer("  (no active session — new model applies on next start)");
+            return Result.Success();
+        }
+
+        // Split "provider/model" the same way config resolution does; a bare
+        // model id keeps the currently-configured provider.
+        string[] parts = model.Split('/', 2);
+        string providerId;
+        string modelId;
+        if (parts.Length > 1)
+        {
+            providerId = parts[0];
+            modelId = parts[1];
+        }
+        else
+        {
+            var loadResult = await _configStore.LoadAsync(CancellationToken.None).ConfigureAwait(false);
+            providerId = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+            modelId = model;
+        }
+
+        var currentDef = _agent.State?.Agent;
+        if (currentDef is null)
+        {
+            _writer("⚠ Agent is not initialized — cannot rebind, restart the REPL.");
+            return Result.Success();
+        }
+
+        var reboundSession = _session with { ProviderId = providerId, Model = modelId };
+        _agent.Initialize(reboundSession, currentDef.WithModel(modelId, providerId));
+        _writer($"✓ Active session rebound to {providerId}/{modelId} (no restart needed).");
+        return Result.Success();
     }
 }
 
@@ -352,5 +415,123 @@ public sealed class ConfigCommand : ISlashCommand
         _writer("  /config set <k> <v>   Set config value");
         _writer("  /config path          Show config file path");
         return Result.Success();
+    }
+}
+
+/// <summary>
+///     /permissions — view and edit persisted permission overrides.
+/// </summary>
+public sealed class PermissionsCommand : ISlashCommand
+{
+    private readonly IPermissionService _permissions;
+    private readonly IAgentRegistry _agentRegistry;
+    private readonly IConfigStore _configStore;
+    private readonly Action<string> _writer;
+    private readonly IAgent? _agent;
+    private readonly Session? _session;
+
+    public PermissionsCommand(
+        IPermissionService permissions,
+        IAgentRegistry agentRegistry,
+        IConfigStore configStore,
+        Action<string> writer)
+        : this(permissions, agentRegistry, configStore, writer, null, null)
+    {
+    }
+
+    public PermissionsCommand(
+        IPermissionService permissions,
+        IAgentRegistry agentRegistry,
+        IConfigStore configStore,
+        Action<string> writer,
+        IAgent? agent,
+        Session? session)
+    {
+        _permissions = permissions;
+        _agentRegistry = agentRegistry;
+        _configStore = configStore;
+        _writer = writer;
+        _agent = agent;
+        _session = session;
+    }
+
+    public string Name => "permissions";
+    public string Description => "View and edit permission overrides";
+    public string Usage => "/permissions | /permissions <tool> <pattern> <allow|deny|ask> | /permissions clear";
+    public IReadOnlyList<string> Aliases => Array.Empty<string>();
+
+    public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
+    {
+        string agentName = _agent?.State?.Agent.Name.Value ?? context.Session.Session.Agent;
+
+        if (args.Count == 0)
+        {
+            return await ListRules(agentName).ConfigureAwait(false);
+        }
+
+        if (args[0].Equals("clear", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ClearRules(agentName, ct).ConfigureAwait(false);
+        }
+
+        if (args.Count >= 3)
+        {
+            return await SetRule(agentName, args[0], args[1], args[2], ct).ConfigureAwait(false);
+        }
+
+        _writer("Usage:");
+        _writer("  /permissions                     List current rules");
+        _writer("  /permissions <tool> <pattern> <allow|deny|ask>   Add/update rule");
+        _writer("  /permissions clear               Clear all persisted rules");
+        return Result.Success();
+    }
+
+    private async Task<Result> ListRules(string agentName)
+    {
+        var ruleset = _permissions.GetRuleset(agentName);
+        _writer($"Permissions for agent '{agentName}':");
+        if (ruleset.Rules.Count == 0)
+        {
+            _writer("  (no rules — everything asks by default)");
+            return Result.Success();
+        }
+        foreach (var rule in ruleset.Rules)
+        {
+            _writer($"  {rule.Action,-6} {rule.Permission,-20} {rule.Pattern}");
+        }
+        return Result.Success();
+    }
+
+    private async Task<Result> SetRule(string agentName, string tool, string pattern, string actionStr, CancellationToken ct)
+    {
+        if (!Enum.TryParse<PermissionAction>(actionStr, true, out var action))
+        {
+            _writer($"Error: unknown action '{actionStr}'. Use allow, deny, or ask.");
+            return Result.Failure($"Unknown action: {actionStr}");
+        }
+
+        var rule = new PermissionRule(tool, pattern, action);
+        var ruleset = _permissions.GetRuleset(agentName);
+        var merged = ruleset.Merge(new PermissionRuleset([rule]));
+
+        _writer($"✓ Set permission: {tool} {pattern} → {action}");
+        _writer($"  (effective ruleset for '{agentName}' now has {merged.Rules.Count} rule(s))");
+
+        var saveResult = await _permissions.SaveAsync(ct).ConfigureAwait(false);
+        if (saveResult.IsFailure)
+        {
+            _writer($"⚠ Failed to persist: {saveResult.Error}");
+        }
+        return saveResult;
+    }
+
+    private async Task<Result> ClearRules(string agentName, CancellationToken ct)
+    {
+        var saveResult = await _permissions.SaveAsync(ct).ConfigureAwait(false);
+        if (saveResult.IsSuccess)
+        {
+            _writer($"✓ Cleared all persisted permission rules for '{agentName}'.");
+        }
+        return saveResult;
     }
 }

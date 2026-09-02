@@ -6,10 +6,12 @@ Harbor runs three layers of static analysis + DI validation:
    `Directory.Build.props` (solution-wide) and `apps/Directory.Build.props`
    (apps-only). Severities configured in `.editorconfig`.
 2. **DI registration tests** — per-composition-root test projects under
-   `tests/Harbor.App.*.Tests/` that build the host and assert every
+   `tests/Harbor.App.*.Tests/` (Wpf/Maui/Blazor variants live in
+   `contrib/tests/` since sprint-2) that build the host and assert every
    expected service is resolvable.
-3. **`dotnet-arch-analyzer`** — optional namespace-level layer validation
-   via `dotnetarch.json` (circular deps + layer violations).
+3. **Architecture tests** — `tests/Harbor.Architecture.Tests/` enforce layer
+   dependencies at `dotnet test` time (the external `dotnet-arch` tool and its
+   stale `dotnetarch.json` were removed in ROP-D; see §3).
 
 ---
 
@@ -100,9 +102,12 @@ Each composition root has a dedicated test project under
 `tests/Harbor.App.*.Tests/` that builds the host and asserts every
 `[Exposes(typeof(T))]`-declared service is resolvable.
 
+> Since sprint-2, `Harbor.App.{Wpf,Maui,Blazor}.Tests` live in `contrib/tests/`
+> (build via `contrib/Contrib.slnx`); Cli/Avalonia test projects remain in `tests/`.
+
 | Test project | Composition root | TFM |
 |--------------|------------------|-----|
-| `Harbor.App.Cli.Tests` | `Harbor.Cli.Hosting.HostBuilder.Build` | `net10.0` |
+| `Harbor.App.Cli.Tests` | `Harbor.App.Cli.Hosting.HostBuilder.Build` | `net10.0` |
 | `Harbor.App.Avalonia.Tests` | `Harbor.App.Avalonia.AppHost.BuildAsync` | `net10.0` |
 | `Harbor.App.Wpf.Tests` | `Harbor.App.Wpf.App.BuildHostInternal` | `net10.0-windows10.0.19041` |
 | `Harbor.App.Blazor.Tests` | `Harbor.App.Blazor.Program.BuildApp` | `net10.0` |
@@ -126,7 +131,8 @@ When adding a new service registration to any composition root:
 2. Add `[Exposes(typeof(IFoo))]` to the composition root's `Build` method
    (keep the attribute list in sync with the actual registrations).
 3. Add a `[Test] public async Task Build_Registers_IFoo()` to the matching
-   `tests/Harbor.App.*.Tests/*DiTests.cs` file.
+   `tests/Harbor.App.*.Tests/*DiTests.cs` file (Wpf/Maui/Blazor: under
+   `contrib/tests/`).
 4. Add `typeof(IFoo)` to the `required` array in the aggregate test
    (`Build_AllDeclaredServices_Resolvable`).
 
@@ -134,41 +140,22 @@ The DI tests will fail at PR time if a registration is accidentally removed.
 
 ---
 
-## 3. `dotnet-arch-analyzer`
+## 3. Architecture tests (replaced `dotnet-arch-analyzer`, ROP-D Z2)
 
-Optional namespace-level architecture validation. The config lives in
-`dotnetarch.json` at the repo root.
+The optional external `dotnet-arch` tool and its `dotnetarch.json` config were
+**removed** in ROP-D: the config had rotted (it still listed the deleted
+Harbor.Domain, per-tool Harbor.Tools.* projects that were merged into
+Harbor.Tools.Builtin, contrib TUI renderers, and Wpf/Maui apps — while missing
+every Ipc.*, Ui.Framework.* and Desktop.* project), and it duplicated rules
+that are already enforced mechanically.
 
-### Install
-
-```bash
-dotnet tool install -g dotnet-arch
-```
-
-### Run
-
-```bash
-dotnet-arch analyze --config dotnetarch.json --solution Harbor.slnx
-```
-
-### Layers
-
-| Layer | Assemblies | Depends on |
-|-------|------------|------------|
-| **Domain** | `Harbor.Abstractions` | (none) |
-| **Application** | `Harbor.Core`, `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`, `Harbor.Scripting.Abstractions` | Domain |
-| **Infrastructure** | `Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`, `Harbor.Plugins.Runtime`, `Harbor.Plugins.Hosting`, `Harbor.Plugins.Compilation`, `Harbor.Plugins.Instantiation`, `Harbor.Plugins.Registration`, `Harbor.Plugins.Storage`, `Harbor.Scripting.*` | Domain, Application |
-| **Presentation** | `Harbor.Tui.*`, `Harbor.Desktop.*`, `Harbor.Ui.Framework` | Domain, Application |
-| **CompositionRoot** | `Harbor.App.*` | Domain, Application, Infrastructure, Presentation |
-
-### Rules
-
-- `arch/circular-dependency` → error
-- `arch/layer-violation` → error
-
-Mechanical enforcement of the layering rules documented in
-`docs/ARCHITECTURE_LAYERS.md` and exercised by
-`tests/Harbor.Architecture.Tests/`.
+Canonical enforcement now lives in `tests/Harbor.Architecture.Tests/`
+(46 tests: reflection-based + NetArchTest + the ROP-D full-project matrix in
+`FullLayerMatrixTests.cs`). Per the ROP-D close-out the matrix covers 47 of 50
+`src/` directories; the other 3 (CodeGen build tool, Plugins.Host exe,
+Providers.Shared linked source) are documented out-of-scope. It runs
+as part of the regular `dotnet test` step — no extra tool install, single source
+of truth. See docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
 
 ---
 

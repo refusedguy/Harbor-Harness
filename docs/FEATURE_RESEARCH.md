@@ -1,5 +1,10 @@
 # Harbor Feature Research — Orca, Pi, Kilocode, OpenCode
 
+> **Historical research (pre-sprint-2).** Optional components referenced here
+> (`Harbor.Tui.{Sixel,Spectre*,...}`, `Harbor.App.{Wpf,Maui,Blazor}`, `Harbor.Scripting.*`)
+> now live under [`contrib/`](../contrib/); `Harbor.Tui.Avalonia` was superseded by
+> `apps/Harbor.App.Avalonia`. Paths are not updated.
+
 > **Task ID:** R
 > **Agent:** researcher (Subagent R)
 > **Purpose:** Study 4 GitHub repositories the user named as Harbor's inspirations, produce a "feature rip-off plan" that maps their ideas onto Harbor's .NET 10 architecture, and specifically answer the question: *"How do I get an animated desktop UI like Orca on .NET?"*

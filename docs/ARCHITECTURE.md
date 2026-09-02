@@ -15,26 +15,30 @@
 2. **NativeAOT-ready** — Core can be AOT-compiled; TUI runs JIT.
 3. **Low memory** — <30MB RSS idle target (vs 1GB+ for Node.js equivalents).
 4. **Plugin-extensible** — tools, providers, agents, UI all extensible.
-5. **Testable** — 65+ unit tests, interfaces make mocking easy.
+5. **Testable** — ~1350 tests across 20+ test projects; interfaces make mocking easy.
 
 ## Solution structure
 
 ```
-Harbor.sln
-├── src/
-│   ├── Harbor.Abstractions/         (zero deps, only CSharpFunctionalExtensions)
-│   ├── Harbor.Core/                 (DI, EventBus, AgentLoop, registries)
-│   ├── Harbor.Storage.Jsonl/        (JSONL session store)
-│   ├── Harbor.Providers.OpenAiCompatible/ (generic LLM client)
-│   ├── Harbor.Tools.Builtin/        (7 builtin tools)
-│   ├── Harbor.Tui.Abstractions/     (TUI interfaces)
-│   ├── Harbor.Tui.Ansi/             (ANSI streaming renderer)
-│   └── Harbor.Cli/                  (entry point, wiring)
-├── tests/
-│   ├── Harbor.Abstractions.Tests/   (35 tests)
-│   ├── Harbor.Core.Tests/           (10 tests)
-│   ├── Harbor.Tools.Builtin.Tests/  (16 tests)
-│   └── Harbor.Storage.Jsonl.Tests/  (5 tests)
+Harbor.slnx                          (.sln не существует; есть ещё Harbor.Samples.slnx)
+├── apps/
+│   ├── Harbor.App.Cli/              (entry point, DI wiring, ReplRunner, TuiMode)
+│   └── Harbor.App.Avalonia/         (cross-platform desktop GUI)
+├── src/                             (51 проектов; representative subset below)
+│   ├── Harbor.Abstractions/         (zero-dep contract surface)
+│   ├── Harbor.Abstractions.Contracts/ (models/formatters; бывший Harbor.Domain)
+│   ├── Harbor.Application/          (AgentLoop, Configuration, Permissions…)
+│   ├── Harbor.Core/                 (EventBus, registries helpers)
+│   ├── Harbor.Ui.Framework*/        (TEA state + VMs + services, 9 проектов)
+│   ├── Harbor.Storage.Jsonl|Memory|Sqlite/
+│   ├── Harbor.Providers.Anthropic|OpenAI|Ollama|OpenAiCompatible|Shared/
+│   ├── Harbor.Plugins.{Abstractions..Runtime,Host}/  (8 проектов plugin pipeline)
+│   ├── Harbor.Ipc.{Abstractions,Client,Server,InProcess}/
+│   ├── Harbor.Tui.{Abstractions,Ansi,Plain,ConsoleEx,Notifications}/
+│   ├── Harbor.Tools.Builtin/        (14 builtin tools в Tools/)
+│   └── … (Telemetry.*, Logging, Extensions, Hosting, CodeGen и др.)
+├── contrib/                         (optional components: tui/, apps/, scripting/, tests/)
+├── tests/                           (27 csproj dirs incl. benchmarks + E2E harnesses)
 ├── providers/                       (13 JSON LLM provider configs)
 ├── specs/                           (16 design documents)
 └── docs/                            (architecture, development guides)
@@ -54,10 +58,11 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  PRESENTATION (UI / CLI)                                        │
-│  - Harbor.Cli                                                   │
-│  - Harbor.Tui.Ansi / Plain / Spectre / Spectre.Fullscreen /     │
-│    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel /  │
-│    Notifications / Wpf / Avalonia / Maui / Blazor               │
+│  - Harbor.App.Cli (composition root) / Harbor.App.Avalonia      │
+│  - contrib: App.Wpf / App.Maui / App.Blazor                     │
+│  - In-solution TUI: Ansi, Plain, ConsoleEx, Notifications       │
+│  - contrib/tui (optional): Spectre, Spectre.Fullscreen,         │
+│    SpectreTui, TerminalGui, Termina, RazorConsole, Sixel        │
 │  Depends on: Application + Abstractions                         │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -65,11 +70,10 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
-│  - Harbor.Core (AgentLoop, CompactionService, PermissionService,│
-│                 AgentRegistry, ToolRegistry, ProviderRegistry,  │
-│                 InMemoryEventBus, SystemPromptBuilder, …)       │
-│  - Harbor.Plugins.Runtime (PluginHost, PluginHostBuilder)       │
-│  - Harbor.Scripting (ScriptHost, Bridge/ScriptGlobals)          │
+│  - Harbor.Application (AgentLoop, Configuration, Permissions)   │
+│  - Harbor.Core + Harbor.Registries                              │
+│  - Harbor.Plugins.{Runtime, Hosting, Registration, …}           │
+│  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
 │  Depends on: Abstractions ONLY                                  │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
@@ -79,23 +83,25 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 │  INFRASTRUCTURE (adapters, I/O, external services)              │
 │  - Harbor.Storage.Jsonl / Memory / Sqlite                       │
 │  - Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI /     │
-│    Ollama                                                       │
-│  - Harbor.Tools.Builtin                                         │
-│  - (Plugins.Runtime/Compilation + Scripting/Engines are         │
-│     Infrastructure-flavored subfolders inside Application       │
-│     projects — see ARCHITECTURE_LAYERS.md §3 for the rationale) │
-│  Depends on: Abstractions ONLY (NOT Harbor.Core)                │
+│    Ollama / Shared                                              │
+│  - Harbor.Tools.Builtin (все 14 инструментов в одном проекте,   │
+│    каталог Tools/)                                              │
+│  - MCP-клиент — src/Harbor.Tools.Builtin/Tools/Mcp/             │
+│  Depends on: Abstractions ONLY (NOT Application)                │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ declares
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  DOMAIN / ABSTRACTIONS (the hexagon core)                       │
-│  - Harbor.Abstractions (interfaces, models, events, value objs, │
+│  - Harbor.Abstractions (interfaces, events, value objs,         │
 │    IAgent, IAgentRunner, IAgentLoop, ITool, IToolRegistry,      │
 │    ILlmClient, ISessionStore, IProviderRegistry, IAgentRegistry,│
 │    IEventBus, IPermissionService, ICompactionService,           │
-│    PermissionRuleset, Session, Messages, Identifiers, …)        │
+│    PermissionRuleset, Identifiers, Plugins/IPlugin, …)          │
+│  - Harbor.Abstractions.Contracts (models; namespace            │
+│    `Harbor.Abstractions.Models`; бывший Harbor.Domain.dll —     │
+│    переименован в F1 decoupling, ADR-007, commit fa8d3ae)       │
 │  - Harbor.Tui.Abstractions (TUI interfaces, UiState, UiReducer, │
 │    ViewRegistry, IPanels, ITuiViewModel, ITuiView, ITuiPlugin)  │
 │  Depends on: NOTHING (only BCL + CSharpFunctionalExtensions +   │
@@ -103,21 +109,23 @@ inward only. The innermost layer (Domain) references nothing but the BCL.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key layering invariants** (enforced by `Harbor.Architecture.Tests`):
+**Key layering invariants** (enforced by `Harbor.Architecture.Tests` — reflection rules
++ NetArchTest + `FullLayerMatrixTests` data-table over all main-solution src assemblies):
 
 1. `Harbor.Abstractions` references no other Harbor assembly.
 2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
-3. `Harbor.Core` references only `Harbor.Abstractions` (NOT `Harbor.Tui.Abstractions`,
-   NOT Infrastructure).
-4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` +
-   `Harbor.Tui.Abstractions` only (NOT `Harbor.Core`).
-5. `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
-6. `Harbor.Providers.*` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
-7. `Harbor.Storage.*` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
-8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+3. `Harbor.Application` / `Harbor.Core` reference only Domain (+ registries for Core);
+   never Infrastructure or Presentation.
+4. `Harbor.Plugins.*` reference Domain (Runtime may also reference Tui.Abstractions);
+   NOT Application.
+5. contrib `Harbor.Scripting` references `Harbor.Abstractions` only (NOT `Harbor.Core`).
+6. `Harbor.Providers.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
+7. `Harbor.Storage.*` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
+8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only (NOT `Harbor.Application`).
 9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` +
-   `Harbor.Tui.Abstractions` only (NOT `Harbor.Core`, NOT Infrastructure).
-10. `Harbor.Cli` references everything — it is the Composition Root.
+   `Harbor.Tui.Abstractions` only (NOT Application, NOT Infrastructure).
+10. `apps/Harbor.App.Cli` references everything — it is the Composition Root
+    (composition root'ы `apps/*` вне матрицы; исключения также CodeGen и Plugins.Host exe).
 
 See [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) for the full allowed/forbidden
 matrix and [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) §ARCH-001+ for the
@@ -186,27 +194,20 @@ public interface IPlugin
 {
     string Name { get; }
     Version Version { get; }
+    Version RequiredHarborVersion { get; }   // contract field on IPlugin
     void Initialize(PluginContext context);
     Task ShutdownAsync(CancellationToken ct = default);
 }
-
-public interface IToolPlugin : IPlugin
-{
-    void RegisterTools(IToolRegistryBuilder builder);
-}
-
-public interface IProviderPlugin : IPlugin
-{
-    void RegisterProviders(IProviderRegistryBuilder builder);
-}
-
-public interface IAgentPlugin : IPlugin
-{
-    void RegisterAgents(IAgentRegistryBuilder builder);
-}
+// ... + IToolPlugin / IProviderPlugin / IAgentPlugin / ITuiPlugin —
+// полный контракт: src/Harbor.Abstractions/Plugins/IPlugin.cs
 ```
 
-Plugins discovered from `~/.harbor/plugins/*.dll` (JIT mode). AOT mode uses out-of-process plugin-host.
+Two loading paths:
+- **In-process CS-source (default):** `.cs` files dropped in `~/.harbor/plugins/`
+  are compiled in-memory by Roslyn (`Harbor.Plugins.Runtime/CsPluginLoader.cs`)
+  and cached on disk by source SHA-256 (`Harbor.Plugins.Compilation/CachingCompiler.cs`).
+- **Out-of-process:** `Harbor.Plugins.Host` is a standalone exe hosting plugins
+  over MCP stdio (`McpPluginLoadHost`, `McpStdioServer`).
 
 ### 9. JSONL session storage
 
@@ -270,18 +271,15 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 41 нарушение, 11 критических, разбито по 4 спринта. Полный список — [docs/CODE_PRINCIPLES_AUDIT.md §Prioritized plan](./CODE_PRINCIPLES_AUDIT.md).
 
 ## NativeAOT strategy
-## NativeAOT strategy
 
-> Note: duplicate heading kept for historical reasons — fix in v0.4 doc cleanup.
-
-**Core** (`Harbor.Abstractions`, `Harbor.Core`, `Harbor.Storage.Jsonl`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`) — designed to be AOT-compatible:
+**Core** (`Harbor.Abstractions`, `Harbor.Abstractions.Contracts`, `Harbor.Application`, `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`) — designed to be AOT-compatible:
 - No reflection emit.
-- `System.Text.Json` source-gen (planned).
+- `System.Text.Json` source-gen (planned; MCP уже использует `McpJsonSerializerContext`).
 - No `AssemblyLoadContext` collectible.
 
-**TUI** (`Harbor.Tui.Ansi`, future `Harbor.Tui.TerminalGui`) — JIT, runs in separate process:
+**TUI** (`Harbor.Tui.Ansi`, `Harbor.Tui.ConsoleEx`, optional `contrib/tui/Harbor.Tui.TerminalGui`) — JIT, runs in-process today; two-process mode planned:
 - Can use any library.
-- Communicates with Core via Unix domain sockets (planned v0.7).
+- Planned: NDJSON over Unix domain sockets (v0.9, см. ROADMAP).
 - Crash isolation — TUI crash doesn't kill Core.
 
 ## Performance targets
@@ -292,7 +290,7 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 | RSS idle | <30MB | Core only |
 | Binary size | ~5-7MB | NativeAOT, stripped |
 | Token-to-screen latency | <35ms | LLM network dominates |
-| Test execution | <2s | 65 tests in ~300ms |
+| Test execution | <2s per project | per-project run; whole-solution test invocation breaks under the MTP host |
 
 ## Concrete code flow: one user prompt
 
@@ -301,22 +299,25 @@ Harbor следует строгим принципам OOP/SOLID/GoF/FP/ROP/per
 
 ### Step 1: `Program.cs` → `RunAskAsync`
 
-`src/Harbor.Cli/Program.cs:85`:
+`apps/Harbor.App.Cli/Program.cs:249`:
 
 ```csharp
-private static async Task<int> RunAskAsync(string[] args)
+private static async Task<int> RunAskAsync(string[] args, string? scriptPath = null)
 {
-    if (args.Length == 0) { Console.Error.WriteLine("Usage: harbor ask <prompt>"); return 1; }
+    if (args.Length == 0) { Console.Error.WriteLine("Usage: harbor ask <prompt> [--script <path>]"); return 1; }
     string prompt = string.Join(' ', StripLogArgs(args));
     using var host = HostBuilder.Build(args);
+    await StartIpcAsync(host.Services).ConfigureAwait(false);
     var runner = new ReplRunner(host.Services.GetRequiredService<ILogger<ReplRunner>>());
-    return await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+    int exitCode = await runner.RunAskAsync(host.Services, prompt).ConfigureAwait(false);
+    await StopIpcAsync(host.Services).ConfigureAwait(false);
+    return exitCode;
 }
 ```
 
 ### Step 2: `HostBuilder.Build` wires DI
 
-`src/Harbor.Cli/Hosting/HostBuilder.cs:40`:
+`apps/Harbor.App.Cli/Hosting/HostBuilder.cs:27`:
 
 ```csharp
 public static IHost Build(params string[] args)
@@ -361,7 +362,7 @@ public async Task<Result> PromptAsync(ISessionContext session, string prompt, Ca
 
 ### Step 4: `AgentLoop.RunAsync` — orchestration
 
-`src/Harbor.Core/Agents/AgentLoop.cs:89`:
+`src/Harbor.Application/Agents/AgentLoop.cs:102`:
 
 ```csharp
 public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
@@ -745,7 +746,7 @@ Mitigated by `record` value equality + structural sharing.
 Known existing violations documented in [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md)
 (41 findings, 11 critical). Don't add more of the same kind.
 
-## Future architecture (v0.7+)
+## Future architecture (v0.9+, two-process)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -771,6 +772,7 @@ See [specs/14-architecture-revised.md](../specs/14-architecture-revised.md) for 
 ## References
 
 - [Specifications](../specs/README.md) — 16 detailed design documents.
+- [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — layering matrix + architecture tests.
 - [CLAUDE.md](../CLAUDE.md) — code conventions.
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.
 - [Development Guide](./DEVELOPMENT.md) — how to contribute.

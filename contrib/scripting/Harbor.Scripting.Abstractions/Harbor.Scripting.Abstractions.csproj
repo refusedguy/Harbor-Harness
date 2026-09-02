@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Scripting.Abstractions — scripting pipeline contracts.
+
+    Contains the leaf-level interfaces and data types referenced by every
+    Harbor.Scripting.* layer:
+      - IScriptEngine          (engine contract)
+      - IScriptStore           (storage contract)
+      - IScriptCompiler        (compilation contract)
+      - ScriptEngineOptions    (resource limits passed to IScriptEngine.Evaluate)
+      - ScriptGlobals          (the `Harbor` global object exposed to scripts)
+      - ScriptEntry            (immutable record returned by IScriptStore)
+
+    Depends only on Harbor.Abstractions (Domain) — never Harbor.Core.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Scripting.Abstractions</PackageId>
+    <Description>Harbor scripting pipeline contracts — interfaces and data types shared across all scripting layers.</Description>
+    <PackageTags>harbor;scripting;abstractions;contracts;sharpts;jint</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

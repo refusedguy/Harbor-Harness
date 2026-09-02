@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor Release & Packaging Report — 2026-08-27</title>
+<style>
+  :root { --bg:#0b0c10; --panel:#15171e; --border:#232733; --text:#c5c8ce; --dim:#6e7380; --accent:#7aaaff; --ok:#7ee787; --warn:#e3b341; --err:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; line-height:1.5; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .card { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card .label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .card .value { font-size: 20px; font-weight: 600; margin-top: 6px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); } .accent { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border:1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+  th { background:#1d2030; color: var(--dim); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
+  .badge.ok { color: var(--ok); border-color: rgba(126,231,135,.25); background: rgba(126,231,135,.08); }
+  .badge.warn { color: var(--warn); border-color: rgba(227,179,65,.25); background: rgba(227,179,65,.08); }
+  .badge.err { color: var(--err); border-color: rgba(248,81,73,.25); background: rgba(248,81,73,.08); }
+  .badge.accent { color: var(--accent); border-color: rgba(122,170,255,.25); background: rgba(122,170,255,.08); }
+  .section { margin-top: 22px; }
+  .section h2 { font-size: 16px; margin: 0 0 10px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .small { font-size: 12px; color: var(--dim); }
+  details { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+  a { color: var(--accent); text-decoration: none; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Harbor Release & Packaging Report</h1>
+  <div class="sub">Автоматизация релизов + кросс-платформенная упаковка • Сформирован: 2026-08-27 • HEAD: <span class="mono" id="head"></span></div>
+
+  <div class="grid">
+    <div class="card"><div class="label">CI/CD</div><div class="value err">Нет</div></div>
+    <div class="card"><div class="label">Версионирование</div><div class="value warn">Статическое</div></div>
+    <div class="card"><div class="label">AOT + плагины</div><div class="value warn">2 файла</div></div>
+    <div class="card"><div class="label">Рекомендация</div><div class="value ok">Архив</div></div>
+  </div>
+
+  <div class="section">
+    <h2>1. Текущее состояние</h2>
+    <div class="grid-2">
+      <div>
+        <h3 style="margin-top:0">Build & Release</h3>
+        <table>
+          <tr><th>Компонент</th><th>Статус</th></tr>
+          <tr><td>Build system</td><td>NUKE — <span class="mono small">./build.sh Compile|Test|Release</span></td></tr>
+          <tr><td>Target framework</td><td><span class="mono small">net10.0</span></td></tr>
+          <tr><td>Версия</td><td>Статическая <span class="mono small">0.4.0-alpha</span> в <span class="mono small">Directory.Build.props</span></td></tr>
+          <tr><td>CI/CD</td><td><span class="badge err">Нет</span> — <span class="mono small">.github/workflows</span> пустой</td></tr>
+          <tr><td>GitHub Releases</td><td><span class="badge warn">Частично</span> — <span class="mono small">GitHubReleaseUploader</span> есть, но не подключён к CI</td></tr>
+          <tr><td>Тесты</td><td><span class="badge warn">Осторожно</span> — whole-slnx <span class="mono small">dotnet test</span> ломается под MTP, нужен per-project loop</td></tr>
+        </table>
+      </div>
+      <div>
+        <h3 style="margin-top:0">Publish Variants</h3>
+        <table>
+          <tr><th>Variant</th><th>Описание</th></tr>
+          <tr><td>FrameworkDependent</td><td>Требует runtime <span class="mono small">net10</span></td></tr>
+          <tr><td>SelfContained</td><td>~80 MB, включает runtime</td></tr>
+          <tr><td>SingleFile</td><td>Один EXE, но требует runtime</td></tr>
+          <tr><td>SingleFileSelfContained</td><td>Один EXE + runtime</td></tr>
+          <tr><td>Trimmed</td><td>SCD + <span class="mono small">PublishTrimmed=true</span></td></tr>
+          <tr><td>AOT</td><td>NativeAOT, <span class="mono small">PublishAot=true</span>, ~5–7 MB</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>2. Ключевая проблема: AOT + плагины</h2>
+    <table>
+      <tr><th>Компонент</th><th>Технология</th><th>Почему нельзя объединить</th></tr>
+      <tr><td>Harbor.App.Cli</td><td>NativeAOT</td><td>Не может ссылаться на Roslyn / JIT код</td></tr>
+      <tr><td>Harbor.Plugins.Host</td><td>JIT + Roslyn</td><td>Компилирует <span class="mono small">.cs</span> плагины на лету</td></tr>
+      <tr><td>IPC</td><td>stdio / pipe / UDS</td><td>Общение между процессами</td></tr>
+    </table>
+    <p class="small">NativeAOT всегда выдаёт <strong>один нативный EXE на одну RID</strong>. Он не умеет вложить внутрь себя отдельный JIT-процесс. Поэтому при включённых плагинах — <strong>всегда два файла</strong>.</p>
+  </div>
+
+  <div class="section">
+    <h2>3. Рекомендуемая стратегия упаковки</h2>
+    <table>
+      <tr><th>Tier</th><th>Вариант</th><th>Команда</th><th>Размер</th><th>Плагины</th></tr>
+      <tr><td>1</td><td>Non-AOT single-file</td><td class="mono small">PublishSingleFile=true</td><td>~50–80 MB</td><td>Нет</td></tr>
+      <tr><td>2</td><td>AOT native binary</td><td class="mono small">PublishAot=true</td><td>~5–7 MB</td><td>Нет</td></tr>
+      <tr><td>3</td><td>JIT self-contained single-file</td><td class="mono small">SelfContained + SingleFile</td><td>~80–120 MB</td><td>Да</td></tr>
+    </table>
+    <p class="small">Для AOT + плагины: <strong>архив</strong> (<span class="mono small">.tar.gz</span> / <span class="mono small">.zip</span>) с обоими бинарями. Это соответствуетplanned v0.9.0 two-process architecture.</p>
+  </div>
+
+  <div class="section">
+    <h2>4. План автоматизации релизов</h2>
+    <table>
+      <tr><th>Шаг</th><th>Что</th><th>Где</th><th>Эффект</th></tr>
+      <tr><td>1</td><td>CI workflow</td><td><span class="mono small">.github/workflows/ci.yml</span></td><td>Build + per-project test matrix на каждый PR</td></tr>
+      <tr><td>2</td><td>Release workflow</td><td><span class="mono small">.github/workflows/release.yml</span></td><td>Авто-релиз по тэгу <span class="mono small">v*</span></td></tr>
+      <tr><td>3</td><td>Версионирование из тэгов</td><td>CI step или <span class="mono small">Nerdbank.GitVersioning</span></td><td>Нет ручного редактирования <span class="mono small">Directory.Build.props</span></td></tr>
+      <tr><td>4</td><td>Чексуммы</td><td><span class="mono small">release.yml</span></td><td><span class="mono small">SHA256</span> для каждого артефакта</td></tr>
+      <tr><td>5</td><td>Changelog</td><td><span class="mono small">release.yml</span></td><td>Авто-генерация из коммитов</td></tr>
+      <tr><td>6</td><td>NUKE TestTarget fix</td><td><span class="mono small">build/_build/Targets/TestTarget.cs</span></td><td>Per-project loop вместо whole-slnx</td></tr>
+      <tr><td>7</td><td>NuGet publish</td><td><span class="mono small">release.yml</span> + NUKE</td><td>Авто-пубиш на nuget.org</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>5. RID матрица</h2>
+    <table>
+      <tr><th>ОС</th><th>RID</th><th>AOT</th><th>JIT SCD</th></tr>
+      <tr><td>Linux (glibc)</td><td class="mono small">linux-x64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>Linux (glibc)</td><td class="mono small">linux-arm64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>Linux (Alpine)</td><td class="mono small">linux-musl-x64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>Linux (Alpine)</td><td class="mono small">linux-musl-arm64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>macOS</td><td class="mono small">osx-x64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>macOS</td><td class="mono small">osx-arm64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>Windows</td><td class="mono small">win-x64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+      <tr><td>Windows</td><td class="mono small">win-arm64</td><td class="ok">✅</td><td class="ok">✅</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>6. Следующие шаги</h2>
+    <ol>
+      <li>Создать <span class="mono small">.github/workflows/ci.yml</span> — build + per-project test matrix</li>
+      <li>Создать <span class="mono small">.github/workflows/release.yml</span> — tag-triggered cross-platform publish + checksums + GitHub Release</li>
+      <li>Добавить version-set step в <span class="mono small">release.yml</span>, который читает <span class="mono small">github.ref</span> и патчит <span class="mono small">Directory.Build.props</span></li>
+      <li>Поправить <span class="mono small">TestTarget.cs</span> на per-project loop</li>
+      <li>Убрать глобальный <span class="mono small">PublishSingleFile</span> из <span class="mono small">Directory.Build.props</span></li>
+      <li>Добавить <span class="mono small">PublishVariant.AotWithPluginsHost</span> в NUKE</li>
+    </ol>
+  </div>
+
+  <details>
+    <summary>Исходные отчёты</summary>
+    <pre class="small">/tmp/harbor-analysis/release-automation.md
+/tmp/harbor-analysis/crossplatform-packaging.md</pre>
+  </details>
+</div>
+</body>
+</html>

@@ -6,6 +6,257 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Sprint ci-cd-maturity — 01.09.2026
+
+**GitHub Actions до production-качества.**
+
+- `renderer-perf-gate.yml` — убран VSTest-era `--logger` (MTP-only режим: «Zero tests ran», exit 5), per-test вывод через `--output Detailed`; green на push в dev.
+- `ci.yml` — build Harbor.slnx (0-warning + HarborArchGate), тесты шардами core/platform/ui/e2e с `--minimum-expected-tests` guard'ом, test-os матрица windows/macos для переносимого ядра (TUI + IPC включены), self-contained single-file publish Harbor.App.Cli артефактом, NuGet cache@v4 по Directory.Packages.props, step summary по каждому проекту.
+- Волна порто-фиксов, найденных matrix-билдами: гонка stdout-drain в CliDriver (потеря вывода на холодном runner'е), SSRF DNS-гейт в WebFetch-моках, разделители путей в permission-паттернах (продуктовый баг Windows), JSON-экранирование + `copy NUL` в bash-deny E2E, UDS-имена IPC под лимит macOS 104 символа, memory-бюджет load-тестов по `HARBOR_MEM_BUDGET_STRICT=1`, skip золотых пиксель-фреймов на CI (`HARBOR_GOLDENS_STRICT=1` для pinned-машины), изоляция HOME в HostBuilderDiTests, ripgrep в platform-шарде.
+- `release.yml` — тег `v*` → self-contained binaries linux-x64/linux-arm64/win-x64 + GitHub Release с changelog.
+- `benchmark.yml` — BDN short-job subset горячих путей на каждый PR, таблицы в job summary.
+- `codeql.yml` — csharp + security-extended, weekly + mainline. `dependabot.yml` — nuget (CPM) + actions, еженедельно.
+- `demo-gifs` починен: vhs 0.11 — `Set Framerate` вместо `Set FPS`.
+
+### Sprint demo-gif — 31.08.2026
+
+
+**Commits since previous sprint tag** (3):
+- 3445993 merge: demo-gif into dev (assets + status)
+- 37e130e chore: demo-gif done — assets + CHANGELOG + report
+- b72bc52 chore: sync demo-gif progress — assets + status
+
+### Sprint mascot-brand — 31.08.2026
+
+
+**Commits since previous sprint tag** (10):
+- d90d7bf chore: restore mascot-brand status to done
+- c86b148 chore: restore renderer-moat + osc-expansion status to done
+- f8a79b8 chore: reset demo-gif status
+- c813dfe chore: cleanup demo-gif status
+- decef7c chore: reset failed/queued sprint statuses for clean restart
+- 1c2a73d chore: sync ide-integration artifacts (CI bypass)
+- ac046fa docs(sprint): mascot-brand status DONE — all 3 tasks landed
+- 744cef1 feat(tui): event-driven mascot reactions — error blink, success bounce, approval wiggle
+- 6a778d3 feat(tui): HARBOR_MASCOT_MODE=panel — 3-row mascot cat beside the composer via LayoutTree.Split
+- 61307bf feat(tui): mascot moods for thinking / tool-call / error / success with accent-ramp crossfade
+
+### Sprint renderer-unification — 28.08.2026
+
+**Renderer Unification.**
+
+- Phase 1: Shared Business Logic
+- Phase 2: CellForge Rename
+- Phase 3: NickConsoleEx
+- Phase 4: Unify Ansi/Plain
+- Phase 5: Visual Regression Tests
+- Phase 6: Moat-Building Architecture (competitive differentiators)
+
+**Commits since previous sprint tag** (77):
+- 4c9d3e7 docs(sprint): renderer-unification report.html
+- 43378b5 fix(markdown): measured long-document budget (see BENCHMARKS_RENDERERS.md)
+- 180b82c feat(ansi-plain): writer-injection ctor for golden-frame capture
+- ff21a65 docs(nickconsoleex): reflect the retarget in csproj notes
+- 22aaf14 fix(external): retarget SharpConsoleUI Spectre.Console to the Harbor root pin 0.54.0
+- 87bcf3b test(ui-framework): move timing-gate enforcement to the serialized perf project
+- e1152dd docs: BENCHMARKS_RENDERERS.md — per-renderer contracts, baselines, cell-diff bandwidth (Phase 6.1)
+- 654f19d ci(renderer-perf-gate): fail on contract violation; strict 5% regression mode (Phase 6.1)
+- 27df847 chore(perf): commit measured baseline; register PerfTests in solution (Phase 6.1)
+- 161e27a test(perf): absolute contract gate + markdown contract in CI scope (Phase 6.1)
+- 4e67e6b feat(perf): RendererBenchmarkSuite — identical synthetic load per backend (Phase 6.1)
+- 3aa758b feat(perf): per-backend renderer performance contracts (Phase 6.1)
+- 6207447 fix(chain): mark ui-v2-hotfix done, stale status cleanup
+- 121ba53 test(ui-framework): frozen-tail cache, tail-only diff, and perf-contract tests (Phase 6.4)
+- 8cfcb3e feat(markdown): MarkdownRenderPerformanceContract + measurable gate (Phase 6.4)
+- 00a023d feat(markdown): DifferentialMarkdownPipeline — tail-only cell diffs via protocol (Phase 6.4)
+- bcaec70 feat(markdown): FrozenTailMarkdownCache — LRU cell snapshots with observable freeze (Phase 6.4)
+- 762c499 test(tui): RendererPipeline swap/state-restore/CAS-gate tests (Phase 6.3)
+- e1cb981 feat(hot-swap): /renderer slash command for mid-session backend swap (Phase 6.3)
+- 29882ca feat(hot-swap): HostBuilder wires RuntimeSwappable into compose options (Phase 6.3)
+- c51dd1d feat(hot-swap): ui.runtime_swappable config toggle on CliConfig/ComposeOptions (Phase 6.3)
+- c65f85d feat(hot-swap): TuiModule registers RendererPipeline + backend factories (Phase 6.3)
+- a6e7114 feat(hot-swap): RuntimeRendererSwapMiddleware — config/env policy guard (Phase 6.3)
+- 77efaff feat(hot-swap): RendererPipeline — CAS-gated swap, UiState snapshot restore, single dispose (Phase 6.3)
+- 36e097b feat(hot-swap): IRendererPipeline contract with cancelable swapping event (Phase 6.3)
+- c90451d feat(chain): add demo-gif sprint as last in queue
+- 4511010 test(ui-framework): cell-diff protocol encoder/codec/pipeline tests (Phase 6.2)
+- 3531cd5 feat(cellforge): CellForgeDiffEncoder — engine-linked batch emitter, ANSI path untouched (Phase 6.2)
+- 3114bb4 feat(rendering): Cell.FromRaw for protocol codec round-trips (Phase 6.2)
+- 6c23d00 feat(protocol): DifferentialRenderPipeline — producer sinks + consumer replay (Phase 6.2)
+- 2946457 feat(protocol): RowHashDiffEncoder — portable row-hash fast path + hint threshold (Phase 6.2)
+- 98dd117 feat(protocol): compact binary codec with backward-compatible V1 decode (Phase 6.2)
+- 8e7f6f2 feat(protocol): ICellDiffEncoder/ICellDiffDecoder/ICellDiffSink contracts (Phase 6.2)
+- 8f59b49 feat(protocol): immutable sequence-numbered CellDiffBatch (Phase 6.2)
+- aa6349d feat(protocol): portable CellDiffMessage value (Phase 6.2)
+- a296367 feat(protocol): versioned cell-diff protocol — v1 baseline, v2 FrameHints (Phase 6.2)
+- f047535 test(renderer-tests): commit golden frames for cellforge/nickconsoleex/ansiplain (Phase 5)
+- d191916 chore(editorconfig): reserve section for renderer capture test diagnostics
+- b073e21 test(renderer-tests): NickConsoleEx golden frame; disable SharpConsoleUI clock panels (Phase 5)
+- e9d8814 test(renderer-tests): RecordingConsoleDriver cell-grid capture decorator (Phase 5)
+
+### Sprint multi-agent — 29.08.2026
+
+**Multi-Agent.**
+
+- Включи TaskTool execution.
+- Убери UiStore.Transition escape hatch.
+- Сделай EventBroadcaster session-scoped.
+- Добавь AgentLoop pipeline behaviors (§3.5).
+
+**Commits since previous sprint tag** (64):
+- 26eb64f docs(sprint): multi-agent re-verified at head 5cac99a — build 0 errors + 10-suite run 876/0/6 all rc=0, stray duplicate report removed
+- 5cac99a docs(sprint): multi-agent re-verified at head dc9fae3 — build 0 err/0 warn, 10 suites 876/0/6 all rc=0, stray duplicate report removed
+- dc9fae3 docs(sprint): multi-agent re-verified at head bef04d6 — build 0 errors + 10-suite run 876/0/6 (all rc=0)
+- bef04d6 docs(sprint): multi-agent re-verified at head 7b3db0a — build 0 errors + 10-suite run 876/0/6 (all rc=0)
+- 7b3db0a docs(sprint): multi-agent re-verified at head df3890d — build 0 errors + 10-suite run 882/0/6
+- df3890d docs(sprint): multi-agent re-verified at head 3db6942 — build 0 errors, 10-suite run 882/0/6 (all rc=0) + live E2E run task agent=explore proven
+- 3db6942 docs(sprint): multi-agent re-verified at head f83bf53 — build 0 errors + 5 sprint-critical suites 576/0/6
+- f83bf53 docs(sprint): multi-agent re-verified at head 9da02ca — cold build 0 errors (src/ clean) + 10-suite run 882/0/6
+- 9da02ca fix(chain): restore valid JSON in multi-agent status.json
+- 96005bd docs(sprint): multi-agent re-verified at head 4376cf9 — fresh build 0/0 + 10-suite run 882/0/6
+- 4376cf9 docs(sprint): multi-agent re-verified at head 10c5b7a — fresh build 0 errors + 10-suite run 882/0/6
+- 10c5b7a chore(sprint): multi-agent heartbeat timestamp refresh (live hermes watcher)
+- 35d8664 chore(sprint): multi-agent re-verified at head b43ad82 — fresh build 0 errors + sprint-critical suites 484/0/6 green
+- b43ad82 docs(sprint): multi-agent re-verified at head d61c5f0 — fresh build 0 errors + 10-suite run 882/0/6
+- d61c5f0 chore(sprint): multi-agent re-verified at head eaba85e — fresh build 0 errors + 10-suite run 882/0/6
+- eaba85e chore(sprint): multi-agent re-verified at head 12da510 — fresh build 0 errors + 10-suite run 876/0/6
+- b476921 chore(sprint): design-system-product status heartbeat — pack consume 8/8 refreshed at head 12da510 (leftover from prior session)
+- 12da510 chore(sprint): design-system-product verification refresh — head cd4a8b7 re-proven: 49+47+669 suites green, docgen zero-drift, nupkg fresh-consume 8/8
+- cd4a8b7 chore(sprint): design-system-product verification refresh — comment-tolerance fix consumed 7/7, suites 49+669+47 green at head 7846615
+- 7846615 fix(designsystem): tolerate JSON comments in theme files
+- 50a9134 chore(sprint): multi-agent heartbeat timestamp refresh (leftover from prior session)
+- 650eb5b chore(sprint): design-system-product verification refresh — pack consume 5/5, docgen zero drift re-proven at head 38f3d37
+- 38f3d37 chore(sprint): design-system-product closed — 3 commits re-verified per-commit + pack dry-run consume green
+- 257493b chore(sprint): multi-agent heartbeat — fresh re-verification 618/0/6 across 6 suites at head c8ffd6c
+- 05762c2 chore(sprint): multi-agent full 10-suite re-verified 876/0/6 at head c8ffd6c
+- c8ffd6c chore(sprint): multi-agent status heartbeat (sprint-critical suites re-run at head cae081d)
+- f1f2f36 chore(sprint): multi-agent status heartbeat (sprint-critical suites re-run at head cae081d)
+- cae081d chore(sprint): multi-agent status heartbeat (876/0/6 verified at head b985328)
+- 9316939 docs(sprint): multi-agent verified at head b985328 — full 10-suite re-run 876/0/6 + live E2E sub-agent run
+- b985328 docs(sprint): multi-agent independent re-verification at head 823194a — 5 sprint-critical suites fresh green
+- 823194a docs(sprint): multi-agent re-verified at final head 689789c — fresh 876/0/6 across 10 suites
+- 4c98413 docs(sprint): multi-agent final re-verification at head 689789c (5 sprint-critical suites fresh)
+- 689789c chore(sprint): multi-agent status heartbeat (re-verified 876/0/6 at head)
+- 9307a5e docs(sprint): multi-agent re-verification at final head 405db82
+- 405db82 docs(designsystem): theme guide, generated API reference, example themes
+- 88a923e feat(designsystem): theme marketplace — JSON format, validation, store, live reload
+- 7100f90 feat(designsystem): extract Harbor.DesignSystem as standalone zero-dependency package
+- 8296524 chore(sprint): sweep stale ui-v2 queue entries + multi-agent heartbeat
+- 9d1c9aa docs(sprint): multi-agent verification record (E2E run-task smoke + fresh test counts)
+- ba1fdf0 docs(sprint): multi-agent status.json + report.html
+
+### Sprint performance — 29.08.2026
+
+**Performance.**
+
+- WireCodec: ArrayPool + PipeReader.
+- AppReducer: streaming concat zero-alloc.
+- JsonlSessionStore: Utf8JsonReader streaming parse.
+- DifferentialRenderer для ConsoleEx.
+
+**Commits since previous sprint tag** (20):
+- 7e03c4e docs(sprint): performance re-verified at head f78b7ec on re-dispatch №9 — suites 36/76/81+4s/669/118 green, alloc numbers byte-identical
+- f78b7ec docs(sprint): performance status.json heartbeat corrected to actual commit time
+- ad80362 docs(sprint): performance re-verified at head 2079bc0 on re-dispatch №8 — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 2079bc0 docs(sprint): performance re-verified at head 09254c5 on re-dispatch №7 — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 09254c5 docs(sprint): performance re-verified at head 5b0f492 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 5b0f492 docs(sprint): performance re-verified at head beda182 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- beda182 docs(sprint): performance re-verified at head ab5952f on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- ab5952f docs(sprint): performance re-verified at head c581949 on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- c581949 docs(sprint): performance re-verified at head 6018eaa on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 6018eaa docs(sprint): performance re-verified at head 6b3f5ec on re-dispatch — suites 36/76/81+4s/669 green, alloc numbers byte-identical
+- 6b3f5ec docs(sprint): performance re-verified at head ec82f52 — 4 benchmarks re-run, alloc numbers byte-identical, suites 862/0/4-skip
+- ec82f52 docs(sprint): performance status → done, 4/4 tasks with verdicts
+- 7be1390 docs(sprint): performance — benchmark report before/after (WireCodec 0B/frame, AppReducer 34x, JSONL 0B machinery, DiffEngine 7KB/s) + HTML report
+- 0cd7f8f bench(tui): streaming-delta ANSI-bytes acceptance for DiffEngine (§3.10)
+- 66b6338 bench(ui): AppReducer streaming-delta cost — the P0 O(n^2) baseline scenario
+- caec831 bench(storage): JSONL parse micro + 10k-message cold-parse acceptance benchmarks
+- c546b16 perf(storage): zero-intermediate JSONL line parse — raw UTF-8 spans, no JsonDocument round-trip (PERF-005)
+- 9f39718 perf(ipc): persistent PipeReader per connection in MessagePackRpcClient
+- 255134b perf(ipc): WireCodec zero-alloc framing — pooled single-write + PipeReader read path
+- af32355 docs(sprint): multi-agent re-verified at head 26eb64f — build 0 errors + 10-suite run 876/0/6 all rc=0, stray duplicate report removed
+
+### Sprint security — 30.08.2026
+
+**Security & Sandboxing.**
+
+- CollectiblePluginLoadContext + deny-list.
+- Capability manifest + trust.json v2.
+- Plugin execution timeout + memory guard.
+- Plugin audit log.
+
+**Commits since previous sprint tag** (54):
+- 5320515 docs(sprint): security report — independent final re-verification at 50b1a5b, build 0/0 strict, plugins 64/64, arch 47/47
+- 50b1a5b docs(sprint): security report — final verification at e5959d0, build 0/0, plugins 64/64 x7, arch 47/47
+- e5959d0 chore(sprint): security status head → 8a8e1e8
+- 8a8e1e8 test(plugins): drain late creation echo before asserting save-burst collapse
+- de84a31 docs(sprint): security report — delete/modify FSW flake fixed in component, 64/64 x6 at 41f1531
+- 41f1531 fix(plugins): report Removed when a watched file vanished by fire time
+- fe2fabc test(plugins): migrate remaining HasCount assertions in TrustLayerTests
+- 12985a4 test(plugins): migrate deprecated TUnit HasCount assertions to Count().IsEqualTo
+- f8e4b30 docs(sprint): security report — re-verified at eedb970 (build 0/0, plugins 64/64, arch 47/47)
+- eedb970 docs(sprint): security report — rename flake fixed at root cause, suite 64/64 x3 at 54c8497
+- 54c8497 test(plugins): fix rename race — await both rename signals, not a bare event count
+- 33cc5fc chore(sprint): security status head → c928b4c
+- c928b4c docs(sprint): security report updated — trust seam finalization, 64/64 suite
+- 45b7fbf test(plugins): trust-seam capability narrowing + invalid-manifest rejection
+- 0e0f1bb feat(plugins): interactive per-capability approval at startup
+- a636a68 fix(plugins): fail closed on invalid capability manifest in the trust gate
+- 6d7be18 feat(plugins): narrow plugin capability set to approved grants at the trust seam
+- b2ce47a feat(plugins): promote GetGrantedCapabilities to IPluginTrustPolicy contract
+- 66da1b1 docs(sprint): security report — 60/60 suite incl. trust v2 capability tests
+- 767c37b test(plugins): trust.json v2 per-capability approval contract tests
+- 839f194 docs(sprint): security & sandboxing report and sprint status
+- fb60d3a fix(plugins): register PluginBlockedEvent as AgentEvent JsonDerivedType
+- 883c64f fix(ide): restore missing usings in IdeBridgeRunner so the solution builds
+- 0515cfb fix(plugins): allow-path audits only evidenced capabilities; JSONL append-only audit tests
+- 10160ff test(plugins): execution sandbox — timeout kill, memory guard, block event, audit trail
+- 7b007d3 fix(plugins): capability directive accepts optional colon before the list
+- 703efcb test(plugins): sandbox ALC contract — capability deny-list, shared types, leak-free unload
+- 87bb0b9 test(plugins): RecordingEventBus test double and Contracts project reference for runtime tests
+- ffa0192 fix(plugins): collectible sandbox ALC implements IDisposable via cooperative Unload
+- 3fc4b10 feat(plugins): wire the audit log into the runtime composition root
+- 9bedb19 feat(plugins): registrar feeds declared capabilities and audit sink into the tool sandbox
+- 3954d8b feat(plugins): audit capability use per tool call in the execution sandbox
+- 7dd1aac feat(plugins): audit read_files on plugin source files at trust-gate load
+- 44d4c69 refactor(plugins): move audit contract to abstractions; Storage keeps JSONL sink
+- 43a63df feat(plugins): IPluginAuditLog contract in the abstractions layer
+- e27bbc0 feat(plugins): thread declared capabilities through CompiledPluginAssembly and LoadedPlugin
+- 552e8cf feat(plugins): instantiator preserves declared capabilities on LoadedPlugin
+- 9328f7b feat(plugins): compilers attach the capability manifest to compiled assemblies
+- 2cdd365 feat(plugins): thread declared capabilities through CompiledPluginAssembly and LoadedPlugin
+- bacf3d4 feat(plugins): route every plugin-contributed tool through the execution sandbox
+
+### Sprint release-engineering — 30.08.2026
+
+**Release Engineering.**
+
+- Полная автоматизация sprint-chain.sh.
+- Zero-warning arch-test gate в build.
+- Pre-commit hook (git alias `harbor-check`).
+- Автоматические release notes.
+
+**Commits since previous sprint tag** (7):
+- 4924202 feat(release-notes): automatic sprint release notes — status.json merge + CHANGELOG entry + sprint tags
+- dccdc01 feat(git): install pre-commit hook (.githooks) + git alias harbor-check
+- 9c4c62c feat(hooks): harbor-check — fast pre-commit verification gate
+- 6c6a32c feat(build): release arch-test gate — dotnet build fails when arch tests regress
+- e11a6e0 feat(cli): harbor ide — NDJSON JSON-RPC stdio bridge verb (attach mode, silent stdout)
+- 6873d5a chore(sprint): queue names → slug form (status paths match sprint dirs), model kilo-auto/free
+- 23070e8 feat(sprint-chain): fully automated dispatcher — branch, dispatch, status.json, fail-safe
+
+
+### Sprint 2 — contrib migration + documentation sweep
+
+- Moved optional components out of the main solution: TUI renderers (Spectre,
+  Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel) to
+  `contrib/tui/`, Wpf/Maui/Blazor apps + tests to `contrib/apps/` and
+  `contrib/tests/`, the Scripting stack (SharpTS/Jint) to `contrib/scripting/`.
+  Main `Harbor.slnx`: 82 → 66 projects; new `contrib/Contrib.slnx` builds
+  separately. Architecture layering rules now scope the main solution only.
+- Known issues: ViewInflationTests.MainWindow_Inflates pre-existing red (NRE,
+  ViewInflationTests.cs:211); LocatorConventionTests.TryGet_ReturnsNullForUnregistered
+  broken by sprint (passes isolated — state pollution, needs fix in sprint 3).
 
 ### Changed — R28-R31: UI component decomposition + business logic extraction
 

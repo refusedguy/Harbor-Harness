@@ -1,4 +1,5 @@
-using Harbor.Core.Configuration;
+using System.Text.Json;
+using Harbor.Application.Configuration;
 namespace Harbor.Config.Tests;
 /// <summary>
 ///     Tests for ProviderPresets — the built-in catalog of provider templates.
@@ -101,6 +102,109 @@ public class ProviderPresetsTests
         {
             await Assert.That(p.EnvVarName).IsNotNull();
             await Assert.That(p.SetupHint).IsNotNull();
+        }
+    }
+
+    // ---- PROD-UI-0 З.1: catalog consistency (presets ↔ providers/*.json) ----
+
+    /// <summary>
+    ///     Locate the bundled <c>providers/</c> directory by walking up from
+    ///     the test binary towards the repo root (mirrors
+    ///     JsonProviderDiscovery.FindProvidersDirectories precedence).
+    /// </summary>
+    private static string? FindProvidersDirectory()
+    {
+        string? current = AppContext.BaseDirectory;
+        for (int i = 0; i < 10 && current is not null; i++)
+        {
+            string candidate = Path.Combine(current, "providers");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "kilocode.json")))
+                return candidate;
+            current = Path.GetDirectoryName(current);
+        }
+        return null;
+    }
+
+    [Test]
+    public async Task EveryPreset_HasBundledJsonConfig()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            await Assert.That(File.Exists(path)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_HaveNoOrphansOutsidePresets()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        HashSet<string> presetIds = ProviderPresets.All.Select(p => p.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (string file in Directory.EnumerateFiles(dir!, "*.json"))
+        {
+            string id = Path.GetFileNameWithoutExtension(file);
+            await Assert.That(presetIds.Contains(id)).IsTrue();
+        }
+    }
+
+    [Test]
+    public async Task All_DefaultModels_AreNonEmpty()
+    {
+        foreach (var p in ProviderPresets.All)
+        {
+            await Assert.That(string.IsNullOrWhiteSpace(p.DefaultModel)).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_IdMatchesPresetId()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            string? id = doc.RootElement.GetProperty("id").GetString();
+            await Assert.That(id).IsEqualTo(preset.Id);
+        }
+    }
+
+    [Test]
+    public async Task BundledJsonConfigs_AuthAlignsWithPreset()
+    {
+        string? dir = FindProvidersDirectory();
+        await Assert.That(dir).IsNotNull();
+
+        foreach (var preset in ProviderPresets.All)
+        {
+            string path = Path.Combine(dir!, $"{preset.Id}.json");
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("authType", out var authTypeEl))
+                continue;
+            string authType = authTypeEl.GetString() ?? "";
+
+            if (preset.RequiresApiKey)
+            {
+                // Key-requiring presets must not be 'none' and must carry the
+                // same env var name the onboarding wizard tells the user about.
+                await Assert.That(authType).IsNotEqualTo("none");
+                string? envVar = root.TryGetProperty("authEnvVar", out var envEl) ? envEl.GetString() : null;
+                await Assert.That(envVar).IsEqualTo(preset.EnvVarName);
+            }
+            else
+            {
+                // Local presets (ollama, vllm) must work without any key.
+                await Assert.That(authType).IsEqualTo("none");
+            }
         }
     }
 }

@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- §ARCH-003: Infrastructure references Domain (Harbor.Abstractions) ONLY. -->
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>

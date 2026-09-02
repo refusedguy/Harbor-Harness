@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Core.Events;
+namespace Harbor.Registries.Events;
 
 /// <summary>
 ///     Samples <see cref="MessageUpdateEvent" />s at a configurable rate.

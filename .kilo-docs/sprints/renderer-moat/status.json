@@ -1,0 +1,30 @@
+{
+  "name": "renderer-moat",
+  "state": "done",
+  "head": "630d399",
+  "base": "f8a79b8",
+  "commits": 3,
+  "started_at": "2026-09-01T02:22:16+0500",
+  "finished_at": "2026-09-01T04:09:05+0500",
+  "kilo_pid": null,
+  "kilo_session": null,
+  "findings": null,
+  "report": "Third-pass verification (fresh agent, clean eyes): all 3 task commits (054a425, 1ce16c7, 630d399) confirmed ancestors of HEAD; hard rules audited directly against the sprint range — ScreenBuffer.cs and src/Harbor.Terminal.Abstractions (public IRenderer API) untouched, DiffEngine/AnsiWriter/ScreenSession extended only, new files purely additive (BufferSwapChain, PostFx, HotSwapTests, PostFxTests, RendererMoatPerfTests). Build Harbor.slnx Release: success, 0 errors, warnings confined to pre-existing test files (none in sprint code). Tests: 766/766 CellForge, 57/57 PTY golden (byte-exact), 47/47 architecture. Perf probes re-run fresh (Release, 120x500 live timeline, 500 frames): full diff 0.688 ms, hinted 0.314 ms (budget <2 ms, 6x headroom, 2.2x faster than full), frame 0.848 ms, armed-glow frame 0.891 ms (within noise of disarmed), 0 B allocations over 2 000 hinted frames plain and armed-empty (test-enforced).",
+  "failures": 0,
+  "retries": 0,
+  "last_activity": "2026-09-01T04:09:05+0500",
+  "progress": {
+    "current_task": "",
+    "tasks_done": 3,
+    "tasks_total": 3,
+    "eta_minutes": 0,
+    "last_heartbeat": "2026-09-01T04:09:05+0500"
+  },
+  "summary": {
+    "task_1": "054a425 perf(cellforge): partial-scan diffs via DiffEngine.FrameHint damage contract — hinted diff 0.328 ms vs full 0.739 ms on 120x500 (budget <2 ms), 0 B steady-state allocs over 2 000 hinted frames",
+    "task_2": "1ce16c7 perf(cellforge): lock-free hot-swap runtime — atomic double-buffer handoff (Interlocked-only swap chain, frame-boundary adoption, pinned-frame palette) — no torn frames, no locks; 4-producer/1-consumer stress test",
+    "task_3": "630d399 perf(cellforge): shader-like post-render effects — composable glow pipeline (diff → transform → SGR encode), approval-gate warn bloom wired via EnablePostFx + ArmGateGlow, armed-empty frames byte-identical + allocation-free",
+    "tests": "766 CellForge + 57 PTY golden + 47 architecture, all green (third-pass re-verification 2026-09-01)",
+    "perf": "docs/BENCHMARKS.md §Renderer-moat probes; fresh run 2026-09-01 Release: hinted 0.314 ms / full 0.688 ms diff, 0.848 ms frame, 0.891 ms armed-glow frame, 0 B allocs"
+  }
+}

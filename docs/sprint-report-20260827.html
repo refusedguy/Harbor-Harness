@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Harbor Sprint Report — 2026-08-27</title>
+<style>
+  :root { --bg:#0b0c10; --panel:#15171e; --border:#232733; --text:#c5c8ce; --dim:#6e7380; --accent:#7aaaff; --ok:#7ee787; --warn:#e3b341; --err:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; line-height:1.45; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+  .card { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card .label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .card .value { font-size: 20px; font-weight: 600; margin-top: 6px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); } .accent { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border:1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+  th { background:#1d2030; color: var(--dim); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); }
+  .badge.ok { color: var(--ok); border-color: rgba(126,231,135,.25); background: rgba(126,231,135,.08); }
+  .badge.warn { color: var(--warn); border-color: rgba(227,179,65,.25); background: rgba(227,179,65,.08); }
+  .badge.err { color: var(--err); border-color: rgba(248,81,73,.25); background: rgba(248,81,73,.08); }
+  .badge.accent { color: var(--accent); border-color: rgba(122,170,255,.25); background: rgba(122,170,255,.08); }
+  .section { margin-top: 22px; }
+  .section h2 { font-size: 16px; margin: 0 0 10px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .small { font-size: 12px; color: var(--dim); }
+  .commit { display:flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .commit:last-child { border-bottom: none; }
+  .commit .msg { flex: 1; }
+  .commit .meta { color: var(--dim); font-size: 12px; white-space: nowrap; }
+  details { background: var(--panel); border:1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 500; }
+  a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Harbor Sprint Report</h1>
+  <div class="sub">Автоматический отчёт по запланированным спринтам • Сформирован: 2026-08-27 • HEAD: <span class="mono" id="head"></span></div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Всего коммитов</div><div class="value accent" id="totalCommits">—</div></div>
+    <div class="card"><div class="label">Запланировано</div><div class="value" id="planned">—</div></div>
+    <div class="card"><div class="label">Завершено</div><div class="value ok" id="completed">—</div></div>
+    <div class="card"><div class="label">В работе</div><div class="value warn" id="inprogress">—</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Спринты: запланировано vs реальность</h2>
+    <table>
+      <thead>
+        <tr><th>Спринт / Версия</th><th>План</th><th>Реальность</th><th>Статус</th><th>Коммиты</th></tr>
+      </thead>
+      <tbody id="sprintsBody"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Последние коммиты</h2>
+    <table>
+      <thead><tr><th>Хэш</th><th>Дата</th><th>Сообщение</th></tr></thead>
+      <tbody id="commitsBody"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Незакоммиченный прогресс</h2>
+    <div class="small" id="uncommitted"></div>
+  </div>
+
+  <details>
+    <summary>Сырые данные</summary>
+    <pre class="small" id="raw"></pre>
+  </details>
+</div>
+
+<script>
+  const data = {"head": "224fcd767e17", "totalCommits": 202, "planned": 14, "completed": 8, "inprogress": 1, "sprints": [{"name": "R25-R26 Concurrent Agents", "scope": "Per-session UiStore, EventBus routing", "plan": "Per-session UiStore, background agents, no abort on switch", "reality": "Выполнено: UiStore per SessionContext, EventBus by SessionId", "status": "done", "commits": "21.08"}, {"name": "R28-R31 Decomposition", "scope": "Ui.Framework extraction + god-object split", "plan": "ToolCallViewModel, StatusMappers, MarkdownRenderer/Jsonl/SessionManager decomposition", "reality": "Выполнено: MarkdownRenderer 487→110+4, JsonlMessageCodec, IChatViewBinder", "status": "done", "commits": "22–24.08"}, {"name": "F1 Abstractions.Contracts", "scope": "Harbor.Domain → Harbor.Abstractions.Contracts", "plan": "ADR-007, rebuild-set measurements, namespace cleanup", "reality": "Выполнено: fa8d3ae, rebuild-set -63% Extensions copies", "status": "done", "commits": "24.08"}, {"name": "F2 Hosting Composition", "scope": "Registration.AddHarbor, CommonConfig, StorageBackend", "plan": "Slim HostBuilder.Build, hermetic CommonConfig, empty-unset StorageBackend", "reality": "Выполнено: 1498b67, ec39344, 105c54a", "status": "done", "commits": "24–25.08"}, {"name": "CE-0..CE-5 ConsoleEx", "scope": "Alt-screen cell-diff REPL", "plan": "Kitty/mouse/paste/raw-mode, DiffEngine, widgets, live REPL, PTY harness", "reality": "Выполнено: CE-0..CE-5, 8 PTY scenarios, macOS flags", "status": "done", "commits": "26–27.08"}, {"name": "PROD-UI-0", "scope": "Provider picker + onboarding polish", "plan": "ProviderPresets catalog, health check, /model rebind, live model lists", "reality": "Выполнено: ProviderPresets, IProviderHealthCheck, /model", "status": "done", "commits": "26.08"}, {"name": "DOCS-ZERO", "scope": "Documentation pass", "plan": "README/PLAN per project, ARCHITECTURE sync, XML audit, links cross-check", "reality": "Выполнено: 52/52 READMEs, XML audit 2861 members, docs updated", "status": "done", "commits": "27.08"}, {"name": "ROP-A/B/C/D", "scope": "Result rails + observability + enforcement + tail closure", "plan": "ROP-A providers, ROP-B resilience, ROP-C agents, ROP-D enforcement+verification", "reality": "Выполнено: InstrumentedLlmClient error split, RetryPolicy, AgentLoop decomposition, 1188 tests", "status": "done", "commits": "24–27.08"}, {"name": "MVP-DELIVERY (current)", "scope": "Close 20% remaining from audit", "plan": "Sub-agent execution, plugin CLI, sessions search/revert, ConsoleEx edge cases, E2E recording-replay, AgentLoop decomposition", "reality": "В работе: sub-agent done, plugin CLI done, sessions search/revert done, recording-replay started, AgentLoop decomposition in progress", "status": "inprogress", "commits": "27.08"}, {"name": "v0.5.0 Plugin System & Sub-agents", "scope": "Plugin trust, hot-reload, CLI commands", "plan": "Plugin trust prompt, hot-reload, harbor plugin install/list/uninstall", "reality": "CLI частично done, trust/hot-reload pending", "status": "partial", "commits": "27.08"}, {"name": "v0.6.0 MCP Integration", "scope": "HTTP/SSE transports, resources, prompts, OAuth", "plan": "HTTP/SSE transports, MCP resources/prompts, OAuth, lazy reconnect", "reality": "Stdio done, остальное pending", "status": "partial", "commits": "25–27.08"}, {"name": "v0.8.0 Session Polish", "scope": "branch/fork/revert/search/import/export", "plan": "Session branching, /tree, snapshot/revert, search, JSONL import/export", "reality": "search/revert/import/export done, branch/fork pending", "status": "partial", "commits": "27.08"}, {"name": "v0.9.0 Two-Process", "scope": "Core NativeAOT + TUI JIT separate", "plan": "NDJSON over UDS, late-attach, multi-client", "reality": "Не начато", "status": "planned", "commits": "0"}, {"name": "v1.0.0 Stabilization", "scope": "API freeze, NuGet, docs site, audits", "plan": "API freeze, NuGet packages, docs site, benchmarks, security/a11y/i18n audits", "reality": "Не начато", "status": "planned", "commits": "0"}], "recentCommits": [{"hash": "224fcd7", "date": "2026-08-27", "msg": "08:49:10 +0500 feat(e2e): recording-replay в MockLlmServer — StartRecording/ReplayFrom (JSONL-фикстура, FIFO per model, tool/error entries, громкий маркер истощения)"}, {"hash": "13ce366", "date": "2026-08-27", "msg": "08:41:44 +0500 feat(cli): harbor sessions revert <session> <message> — rewind истории через DeleteMessagesAfterAsync с отчётом удалённых/оставшихся"}, {"hash": "d987bc8", "date": "2026-08-27", "msg": "08:40:25 +0500 feat(storage): ISessionStore.DeleteMessagesAfterAsync — revert «rewind to here» во всех 3 бекендах (memory remove-range, jsonl rewrite-in-place с сохранением header, sqlite anchored DELETE + rowid tie-break); тесты per-backend"}, {"hash": "70d9b2a", "date": "2026-08-27", "msg": "08:29:54 +0500 feat(cli): harbor sessions search — case-insensitive поиск по user/assistant/tool_result сообщениям, фильтр --session, cap 50; Aggregate(empty) баг найден тестом и починен"}, {"hash": "c94899d", "date": "2026-08-27", "msg": "08:22:03 +0500 test(pty): харнесс открыт для macOS — per-OS флаги (O_NOCTTY/O_CLOEXEC/TIOCSWINSZ/POSIX_SPAWN_SETSID), RequireUnix для POSIX-сценариев; termios-layout сценарии жёстко Linux-gated"}, {"hash": "7e67807", "date": "2026-08-27", "msg": "08:16:14 +0500 test(consoleex): C0 raw-mode edge cases — ^C→Ctrl+C decode, ESC-композиты, legacy C0|0x40 таблица (\\ ] ^ _), BEL→Ctrl+G, ^C внутри paste остаётся литералом"}, {"hash": "4ec7595", "date": "2026-08-27", "msg": "08:11:31 +0500 test(agents): SubAgentRunner edge cases — thinking-only fallback, multi-part join, ход назад по non-assistant хвосту, прокидывание ct, WorkingDirectory в CreateAsync"}, {"hash": "de7aa21", "date": "2026-08-27", "msg": "08:08:29 +0500 feat(cli): harbor plugin list/install/uninstall — управление CS-source плагинами из CLI (scope global/project, --force, confinement от path-traversal)"}, {"hash": "67d2b94", "date": "2026-08-27", "msg": "07:56:42 +0500 feat(sessions): JSONL export/import + rename CLI; фикс потери tool_result при перечитывании"}, {"hash": "d6bbbe7", "date": "2026-08-27", "msg": "07:22:42 +0500 feat(agents): реальный запуск sub-agent через task tool"}, {"hash": "4a2be72", "date": "2026-08-27", "msg": "06:34:33 +0500 chore: queue AGENTLOOP-DECOMP sprint after DOCS-ZERO"}, {"hash": "f4d21f2", "date": "2026-08-27", "msg": "06:29:30 +0500 docs: update DOCS-ZERO materials"}, {"hash": "3625e8e", "date": "2026-08-27", "msg": "06:09:53 +0500 feat: add auto sprint chain with next-sprint dispatcher"}, {"hash": "c7fd2c9", "date": "2026-08-27", "msg": "05:21:45 +0500 docs: кросс-чек DOCS-ZERO — 233 ссылки проверены (0 битых), канонический webfetch, namespace Identifiers, 4 native-провайдера в README (D4)"}, {"hash": "887ee35", "date": "2026-08-27", "msg": "05:08:50 +0500 docs(api): XML-doc WireCodec — Harbor.Domain → Harbor.Abstractions.Contracts (после F1-сплита) (DOCS-ZERO D3)"}, {"hash": "8c531f8", "date": "2026-08-27", "msg": "05:08:40 +0500 docs(projects): Tools.Builtin README+PLAN — 14 тулов вместо 8, реальный ToolsCatalog+PermissionRuleset, TaskTool честно «не реализован» (DOCS-ZERO D2b дополнение)"}, {"hash": "9ec5c7b", "date": "2026-08-27", "msg": "05:08:25 +0500 docs(agent-facing): AGENTS/CLAUDE структура под реальные 50 src-проектов и .slnx + per-project тесты с MTP-warning, README корневой переписан по факту, DECISIONS пополнен ADR-002..007 (DOCS-ZERO D3)"}, {"hash": "a455538", "date": "2026-08-27", "msg": "05:07:56 +0500 docs(projects+apps): Storage/Tui/Apps README+PLAN по реальному коду — реальные классы стореджей, CLI-сабкоманды из Program.cs, Avalonia 12.1, ConsoleEx README дополнен CE-5 (DOCS-ZERO D2b)"}, {"hash": "e9abaaa", "date": "2026-08-27", "msg": "05:07:48 +0500 docs(projects): README+PLAN Abstractions..Registries сверены с кодом — Core как deprecated-фасад, Domain→Contracts (F1), вымышленные типы удалены, PLAN Done/TODO рехонсированы (DOCS-ZERO D2a)"}, {"hash": "78d30e7", "date": "2026-08-27", "msg": "05:07:37 +0500 docs(guides): TOOLS_CATALOG по реальным 14 тулам + MCP-стек, PLUGIN_* под 8-проектный сплит, BUILD/DEVELOPMENT/GETTING_STARTED с per-project тестами и MTP-warning, PATTERNS/paths re-pointed (DOCS-ZERO D1b)"}, {"hash": "b9e6010", "date": "2026-08-27", "msg": "05:07:22 +0500 docs(core): ROADMAP v0.5/v0.6 сверены с кодом (plugins/MCP done), PROJECT_STATUS/BENCHMARKS/ARCHITECTURE* под актуальную структуру, shell-recon* помечены архивными (DOCS-ZERO D1a)"}, {"hash": "8f3d93b", "date": "2026-08-27", "msg": "03:43:14 +0500 docs(consoleex): CE-5 research notes (kilo-docs leftover)"}, {"hash": "8fa93d5", "date": "2026-08-26", "msg": "22:14:37 +0500 test(consoleex): CE-5 З.2 — 8 PTY-сценариев ConsoleEx (launch/submit/kitty/mouse/paste/resize/ctrl-c/termios)"}, {"hash": "cdc4da5", "date": "2026-08-26", "msg": "22:13:54 +0500 fix(consoleex): пять багов, найденных PTY-е2е CE-5 — сырой stdin, VMIN=1, провайдеры в plain-сборке, Ctrl+C-окна, lifetime bootstrap-DI (CE-5 З.2)"}, {"hash": "cc17e13", "date": "2026-08-26", "msg": "16:37:26 +0500 feat(consoleex): PtyHarness — реальный процесс в псевдотерминале для L2-тестов (CE-5 З.1)"}, {"hash": "1749841", "date": "2026-08-26", "msg": "16:03:41 +0500 fix(consoleex): Termios struct 49→60 bytes — add c_ispeed/c_ospeed, kernel wrote past struct → stack corruption → AccessViolation in raw-mode Enter (CE-4 live-run bug)"}, {"hash": "8e59f9f", "date": "2026-08-26", "msg": "15:11:58 +0500 fix(config): каноническая секция ui.consoleEx{enabled,syncUpdates} — вложенная форма пишется и читается, корневой consoleEx остаётся legacy-алиасом только на чтение (CE-4 финал)"}, {"hash": "6b4b2d1", "date": "2026-08-26", "msg": "14:29:37 +0500 style(consoleex): dotnet format whitespace в ChatScreenBridge + переименование параметра Initialize под контракт IAgent (S927) (CE-4 финал)"}, {"hash": "14e87ab", "date": "2026-08-26", "msg": "14:18:59 +0500 docs(consoleex): README — включение (env/config/kill-switch), ограничения MVP, клавиши, терминалы; ROADMAP — ConsoleEx MVP помечен done (CE-4 З.4)"}, {"hash": "0148ceb", "date": "2026-08-26", "msg": "14:17:18 +0500 test(consoleex): E2E-smoke полного цикла REPL — scripted stdin, mock-агент на живом InMemoryEventBus, golden grid-dump финального кадра; потокобезопасность: события шины прокачиваются на поток кадра (bridge autoSubscribe:false + AcceptAsync), EOF-выход не срезает ход агента (CE-4 З.4)"}, {"hash": "a40099a", "date": "2026-08-26", "msg": "14:08:02 +0500 feat(consoleex): живой REPL — ConsoleExReplRunner с event-driven кадровым циклом (wake-канал + спиннер-тик 80мс), alt-screen/raw-режим, submit-пайплайн композера через HandleCoreAsync, Ctrl+C: прервать ход AbortSource → повтор — выход, wheel/PageUp скролл, resize через ScreenSession policy; ReplRunner ветвит на ConsoleEx c откатом при отказе raw-режима (CE-4 З.3)"}, {"hash": "d06a578", "date": "2026-08-26", "msg": "14:07:57 +0500 feat(consoleex): мост на живого агента — replay-дедуп против полного снапшота AgentStart (NotifyLocalUserMessage), AgentStart→Running, SessionStatsEvent→SetUsage, публичный AppendSystemLine; SlashCommandDispatcher получил renderer-free HandleCoreAsync для writer/reader-делегатов (CE-4 З.2)"}, {"hash": "e6748f6", "date": "2026-08-26", "msg": "14:07:44 +0500 feat(consoleex): точка входа второго рендера — секция ui.consoleEx{enabled,syncUpdates} с round-trip через RawConfigDto, распознавание consoleex в TuiMode (interactive + opt-in из config.json), DI-модуль ConsoleExModule с singleton-владением кадром, ProjectReference App.Cli→ConsoleEx (CE-4 З.1)"}, {"hash": "bd5a456", "date": "2026-08-26", "msg": "13:26:40 +0500 test(consoleex): ce3 golden svg-фикстуры — grid-dump артефакты golden-suite, консистентно с ce2-набором (CE-3)"}, {"hash": "3c58afc", "date": "2026-08-26", "msg": "13:26:33 +0500 fix(consoleex): глубокий прогрев 100k итераций перед снапшотом аллокаций — tiered-JIT tier-up начислял разовые байты в измеряемое окно PerfBudgetTests (CE-3)"}, {"hash": "f3b2617", "date": "2026-08-26", "msg": "12:57:03 +0500 perf(consoleex): бюджеты CE-3 — 0 аллокаций steady-state (лента/стрим-хвост/статус), кэш ctx-бара, финальное замораживание хвоста, замер кадра с лентой (CE-3 финал)"}, {"hash": "12587d8", "date": "2026-08-26", "msg": "12:49:57 +0500 feat(consoleex): мост агента → лента — ChatScreenBridge с CommitTickPacer-гейтом, сплит timeline/composer/status, история из AgentStart, diff-извлечение (CE-3 W2.4)"}, {"hash": "5322483", "date": "2026-08-26", "msg": "12:24:39 +0500 feat(consoleex): DiffBlock — unified-diff парсер с номерами строк, гуттер+знак+цвет без syntax-overlay, golden (CE-3 W2.3)"}, {"hash": "debc93a", "date": "2026-08-26", "msg": "12:14:58 +0500 feat(consoleex): VirtualizedChatTimeline — viewport-only рендер, follow-tail, unpin при скролле, ChatTimelinePanel для LayoutTree (CE-3 W2.2)"}, {"hash": "f2848b1", "date": "2026-08-26", "msg": "12:07:07 +0500 feat(consoleex): StreamingMarkdownRenderer frozen-tail — абзацы/fence/ATX/списки, однопроходный inline B/I/code, инвариант «токен-за-токеном == цельный документ» (CE-3 W2.1)"}], "uncommitted": "Незакоммиченно 25 файлов, включая: README×19, XML_DOC_AUDIT, SessionPorter, SubAgentRunner, Apps.Cli wiring, MockLlmServer recording-replay, ConsoleEx PTY harness."};
+  document.getElementById('head').textContent = data.head;
+  document.getElementById('totalCommits').textContent = data.totalCommits;
+  document.getElementById('planned').textContent = data.planned;
+  document.getElementById('completed').textContent = data.completed;
+  document.getElementById('inprogress').textContent = data.inprogress;
+  const tbody = document.getElementById('sprintsBody');
+  data.sprints.forEach(s => {
+    const tr = document.createElement('tr');
+    const badgeClass = s.status==='done'?'ok':(s.status==='partial'?'warn':(s.status==='planned'?'accent':'err'));
+    tr.innerHTML = `<td><strong>${s.name}</strong><div class="small">${s.scope}</div></td>
+      <td>${s.plan}</td>
+      <td>${s.reality}</td>
+      <td><span class="badge ${badgeClass}">${s.status}</span></td>
+      <td class="small">${s.commits}</td>`;
+    tbody.appendChild(tr);
+  });
+  const ct = document.getElementById('commitsBody');
+  data.recentCommits.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono small">${c.hash}</td><td class="small">${c.date}</td><td>${c.msg}</td>`;
+    ct.appendChild(tr);
+  });
+  document.getElementById('uncommitted').innerHTML = data.uncommitted;
+  document.getElementById('raw').textContent = JSON.stringify(data, null, 2);
+</script>
+</body>
+</html>

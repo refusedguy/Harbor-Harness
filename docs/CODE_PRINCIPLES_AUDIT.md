@@ -7,6 +7,9 @@
 **Аудитор:** Super Z (auto)  
 **Покрытие:** `src/` + `tests/` (всего 25 проектов, ~6500 строк product-кода)
 
+> **Note (sprint-2):** пути к `Harbor.Tui.SpectreTui` ниже обновлены на `contrib/tui/...` —
+> проект перенесён в contrib; остальные пути отражают состояние на дату аудита.
+
 ---
 
 ## TL;DR
@@ -63,7 +66,7 @@ Findings NOT touched in this sprint (Sprint 3+ scope): §SOLID-001, §SOLID-002,
 
 ### §SOLID-001 — AgentLoop: нарушение Single Responsibility
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** medium  
 **Line:** ~16 (класс целиком, ~650 строк)
 
@@ -93,7 +96,7 @@ public async Task<Result> RunAsync(...) {
 
 ### §SOLID-002 — ChatScreen (SpectreTUI): god-class на 270 строк
 
-**Файл:** `src/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs` (вложенный `private sealed class ChatScreen`)  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs` (вложенный `private sealed class ChatScreen`)  
 **Severity:** medium  
 
 ChatScreen внутри `SpectreTuiRenderer` делает (1) key dispatch, (2) scroll math, (3) viewport measurement, (4) layout sync, (5) footer rendering, (6) key translation. Вложенный `private sealed class` видит все private fields наружного renderer'а — это нарушение инкапсуляции.
@@ -217,7 +220,7 @@ private static AgentMessage? DeserializeMessage(string sessionId, JsonElement el
 
 ### §OOP-004 — AgentLoop.RunAsync: OCP violation (switch on LlmEvent)
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** medium  
 **Line:** 199 (`switch (evt)`)
 
@@ -253,7 +256,7 @@ await foreach (var evt in client.StreamAsync(request, ct)) {
 
 ### §OOP-005 — ToolRegistry/ProviderRegistry: двойной путь (frozen vs concurrent)
 
-**Файлы:** `src/Harbor.Core/Tools/ToolRegistry.cs`, `src/Harbor.Core/Providers/ProviderRegistry.cs`  
+**Файлы:** `src/Harbor.Registries/Tools/ToolRegistry.cs`, `src/Harbor.Registries/Providers/ProviderRegistry.cs`  
 **Severity:** low  
 
 Каждый registry держит **две коллекции** — `ConcurrentDictionary` (для записи) и `FrozenDictionary?` (для чтения после `Freeze()`). Каждый метод (`GetAllTools`, `ResolveTools`, `GetTool`) имеет `if (_frozen is not null) { /* fast path */ } else { /* slow path */ }` — дублирование логики.
@@ -293,7 +296,7 @@ public sealed class ToolRegistry {
 
 ### §OOP-007 — CompactionService.ReserveTokens / KeepRecentTokens: mutable properties
 
-**Файл:** `src/Harbor.Core/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 89, 94, 99
 
@@ -406,7 +409,7 @@ Mutable dictionary как accumulator — нарушение immutability. Дл�
 
 > **Status:** ✅ RESOLVED (Sprint 1) — the `ToolContext.ReportProgress` lambda is now `async`/`await` with a try/catch that logs failures at Warning level instead of letting them die as unobserved task exceptions.
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** **high**  
 **Line:** 620 (в `ToolContext.ReportProgress`)
 
@@ -439,7 +442,7 @@ async (update, c) => {
 
 > **Status:** ✅ PARTIAL (Sprint 2, alongside §PERF-009) — `Cache` is now a `ConcurrentDictionary`, removing the per-render `lock(Cache)` and the race on parallel renderers. The `Enabled` static toggle is left as-is: it is set once at startup from config and is a process-wide policy (markdown is either on or off for the whole UI), not a per-renderer option. Making it per-renderer would require threading a flag through every call site — out of scope for this sprint.
 
-**Файл:** `src/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs`  
 **Severity:** medium  
 **Line:** 12, 16, 18
 
@@ -458,7 +461,7 @@ public static bool Enabled { get; set; } = true;
 
 > **Status:** ✅ RESOLVED (Sprint 3, subagent T / tea-restorer) — `ChatScreen`'s three mutable fields are gone. All scroll / viewport / was-running state lives in `UiState` (`ScrollOffset`, `ViewportLines`, `TotalLines`, plus new `WasRunning`). The reducer snapshots `WasRunning = state.IsAgentRunning` on `AgentStartEvent` / `AgentEndEvent` and pins `ScrollOffset = 0` on `AgentStartEvent` so streaming is always visible. `HandleLocalScroll` is removed — every scroll action (`ScrollUpLine`/`DownLine`/`UpPage`/`DownPage`/`Top`/`Bottom`) flows through `UiReducer.Update` via `UiMsg.KeyInput`. `ChatScreen.Render` is now pure: it reads `_store.State`, measures geometry, dispatches measurement msgs (`UiMsg.Viewport`, `UiMsg.HistoryMeasured`, `UiMsg.ScrollClamp`, `UiMsg.ScrollResetToTail`), and re-reads state. The `PanelRegistry` was also refactored to be registration-only — `SetState`/`SetSize`/`FocusedPanelId` setter/`ApplySnapshot`/`SnapshotStates`/`SnapshotSizes`/`CycleFocus` are all removed. Panel state lives only in `UiState.PanelStates` / `PanelSizes` / `FocusedPanelId`, mutated by the reducer on `UiMsg.TogglePanel` / `FocusPanel` / `CyclePanelsFocus` / `ResizePanel`. Renderers read state via the new read-only `PanelRegistryView` snapshot. Tests: `tests/Harbor.Tui.Tests/PanelRegistryTests.cs` → `TeaComplianceTests` (13 reflection-based tests assert the invariants hold).
 
-**Файл:** `src/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs`  
 **Severity:** medium  
 
 `ChatScreen` объявляет себя "Thin TEA view" (The Elm Architecture), но на деле держит 3 mutable поля в render loop. В чистой TEA эти значения должны быть в `UiState` и обновляться через reducer. Сейчас **двойной source of truth**: `UiState.ScrollOffset` (через reducer) и `ChatScreen._scroll` (локально), которые расходятся.
@@ -549,7 +552,7 @@ private static Result<AgentMessage> DeserializeMessage(JsonElement element) {
 
 > **Status:** ✅ RESOLVED (Sprint 1) — `CheckAsync` and `GetRuleset` now pattern-match `Result<AgentName>` instead of calling `.Value` (which threw `InvalidOperationException` on invalid input). On failure, `CheckAsync` returns `Result.Failure<PermissionResponse>` and `GetRuleset` returns `PermissionRuleset.Empty` (its contract is best-effort lookup).
 
-**Файл:** `src/Harbor.Core/Permissions/PermissionService.cs`  
+**Файл:** `src/Harbor.Application/Permissions/PermissionService.cs`  
 **Severity:** **high**  
 **Line:** 35
 
@@ -837,7 +840,7 @@ public void Dispatch(UiMsg msg) {
 
 ### §PERF-008 — InMemoryEventBus.GetScrollback: drains channel
 
-**Файл:** `src/Harbor.Core/Events/InMemoryEventBus.cs`  
+**Файл:** `src/Harbor.Registries/Events/InMemoryEventBus.cs`  
 **Severity:** medium  
 **Line:** 140
 
@@ -865,7 +868,7 @@ public IReadOnlyList<AgentEvent> GetScrollback(int max) {
 
 > **Status:** ✅ RESOLVED (Sprint 2) — `Cache` is now a `ConcurrentDictionary<string, List<TextSpan>>`. The per-render `lock(Cache)` is gone, replaced by `GetOrAdd(text, factory, baseColor)`. The `Cache.Count > 2048 → Clear()` thundering-herd eviction is removed: the cache is already bounded upstream by `ChatTranscriptCache._rows` (only lines currently in the transcript are reachable from `ToSpans`).
 
-**Файл:** `src/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs`  
 **Severity:** low  
 **Line:** 38
 
@@ -895,7 +898,7 @@ private static readonly ConcurrentDictionary<string, List<TextSpan>> Cache = new
 
 ### §LOW-001 — AgentLoop.SnapshotMessages: List copy on every event
 
-**Файл:** `src/Harbor.Core/Agents/AgentLoop.cs`  
+**Файл:** `src/Harbor.Application/Agents/AgentLoop.cs`  
 **Severity:** low  
 **Line:** 450
 
@@ -917,7 +920,7 @@ private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> m
 
 ### §LOW-002 — CompactionService.AppendFormattedMessage: GetRawText per tool call
 
-**Файл:** `src/Harbor.Core/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 316
 
@@ -935,7 +938,7 @@ case ToolCallPart tc:
 
 ### §LOW-003 — ChatMessageFormatter.BodyLines: string.Split на каждый message
 
-**Файл:** `src/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs`  
 **Severity:** medium  
 **Line:** 56
 
@@ -964,7 +967,7 @@ while (true) {
 
 ### §LOW-004 — ChatTranscriptCache.Sync: prefix-check O(n²)
 
-**Файл:** `src/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`  
 **Severity:** low  
 **Line:** 42
 
@@ -982,7 +985,7 @@ for (int i = 0; i < _source.Length; i++) {
 
 ### §LOW-005 — SpectreTuiRenderContext: Console.Write per call
 
-**Файл:** `src/Harbor.Tui.SpectreTui/SpectreTuiRenderContext.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderContext.cs`  
 **Severity:** low  
 **Line:** 9
 
@@ -1015,7 +1018,7 @@ private void Flush() {
 
 ### §LOW-006 — ChatChromeView.BuildHeader: string interpolation per frame
 
-**Файл:** `src/Harbor.Tui.SpectreTui/View/ChatChromeView.cs`  
+**Файл:** `contrib/tui/Harbor.Tui.SpectreTui/View/ChatChromeView.cs`  
 **Severity:** low  
 **Line:** 27
 
@@ -1088,21 +1091,21 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 
 | Файл | Нарушения | Severity |
 |---|---|---|
-| `src/Harbor.Core/Agents/AgentLoop.cs` | §SOLID-001, §OOP-004, §FP-003, §LOW-001 | medium |
+| `src/Harbor.Application/Agents/AgentLoop.cs` | §SOLID-001, §OOP-004, §FP-003, §LOW-001 | medium |
 | `src/Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs` | §OOP-001, §OOP-002, §FP-001, §PERF-001, §PERF-002, §AOT-001, §AOT-002, §ROP-004 | **high** |
 | `src/Harbor.Storage.Jsonl/JsonlSessionStore.cs` | §OOP-003, §OOP-008, §FP-002, §PERF-003, §PERF-004, §PERF-005, §ROP-001, §ROP-003, §AOT-001 | **high** |
-| `src/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs` | §SOLID-002, ~~§FP-005~~ (RESOLVED) | medium |
-| `src/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs` | §FP-004, §PERF-009 | medium |
-| `src/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs` | §LOW-003 | low |
-| `src/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs` | §LOW-004 | low |
-| `src/Harbor.Tui.SpectreTui/View/ChatChromeView.cs` | §LOW-006 | low |
-| `src/Harbor.Tui.SpectreTui/SpectreTuiRenderContext.cs` | §LOW-005 | low |
+| `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs` | §SOLID-002, ~~§FP-005~~ (RESOLVED) | medium |
+| `contrib/tui/Harbor.Tui.SpectreTui/View/ChatMarkdown.cs` | §FP-004, §PERF-009 | medium |
+| `contrib/tui/Harbor.Tui.SpectreTui/View/ChatMessageFormatter.cs` | §LOW-003 | low |
+| `contrib/tui/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs` | §LOW-004 | low |
+| `contrib/tui/Harbor.Tui.SpectreTui/View/ChatChromeView.cs` | §LOW-006 | low |
+| `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderContext.cs` | §LOW-005 | low |
 | `src/Harbor.Tui.Abstractions/State/UiStore.cs` | §PERF-007, ~~§FP-007~~ (RESOLVED) | medium |
 | `src/Harbor.Tui.Abstractions/State/TuiEffectHost.cs` | §FP-006 | **high** |
-| `src/Harbor.Core/Permissions/PermissionService.cs` | §ROP-002 | **high** |
-| `src/Harbor.Core/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
-| `src/Harbor.Core/Events/InMemoryEventBus.cs` | §PERF-008 | medium |
-| `src/Harbor.Core/Tools/ToolRegistry.cs` | §OOP-005, §GOF-001 | low |
+| `src/Harbor.Application/Permissions/PermissionService.cs` | §ROP-002 | **high** |
+| `src/Harbor.Application/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
+| `src/Harbor.Registries/Events/InMemoryEventBus.cs` | §PERF-008 | medium |
+| `src/Harbor.Registries/Tools/ToolRegistry.cs` | §OOP-005, §GOF-001 | low |
 | `src/Harbor.Tools.Builtin/Bash/BashTool.cs` | §PERF-006 | medium |
 
 ---

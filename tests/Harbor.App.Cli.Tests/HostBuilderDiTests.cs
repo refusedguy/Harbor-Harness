@@ -4,19 +4,19 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Cli.Configuration;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
-using Harbor.Core.Sessions;
+using Harbor.App.Cli.Configuration;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
+using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-// Alias avoids CS0104 ambiguity between Harbor.Cli.Hosting.HostBuilder (the
+// Alias avoids CS0104 ambiguity between Harbor.App.Cli.Hosting.HostBuilder (the
 // one we want to call) and Microsoft.Extensions.Hosting.HostBuilder (the
 // generic host builder class pulled in by the Microsoft.Extensions.Hosting using).
-using HostBuilder = Harbor.Cli.Hosting.HostBuilder;
+using HostBuilder = Harbor.App.Cli.Hosting.HostBuilder;
 
 // DI006 (do not cache IServiceProvider in static fields) is intentionally
 // violated by this test fixture: the whole point of the file is to build the
@@ -59,6 +59,16 @@ public class HostBuilderDiTests
     /// </summary>
     private static readonly Lazy<IHost> _hostLazy = new(() =>
     {
+        // Isolate test runs: point HOME to a temp directory so ~/.harbor/config.json
+        // on the dev machine (e.g. DefaultProvider="kilocode") doesn't leak into
+        // these pure-DI assertions — same pattern as E2eTestBase. Without this,
+        // Build_Registers_CommonConfig fails on any machine whose saved config
+        // differs from the code default ("anthropic").
+        var tempHome = Path.Combine(Path.GetTempPath(), $"harbor-cli-di-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempHome);
+        Environment.SetEnvironmentVariable("HOME", tempHome);
+        Environment.SetEnvironmentVariable("USERPROFILE", tempHome);
+
         var host = HostBuilder.Build("--log-level", "Warning");
         return host;
     });
@@ -135,7 +145,8 @@ public class HostBuilderDiTests
     public async Task Build_Registers_IPermissionService() => await Assert.That(Services.GetService<IPermissionService>()).IsNotNull();
 
     [Test]
-    public async Task Build_Registers_ISessionStore() => await Assert.That(Services.GetService<ISessionStore>()).IsNotNull();
+    public async Task Build_Registers_ISessionStore() =>
+        await Assert.That(Services.GetService<ISessionStore>()).IsTypeOf<Harbor.Storage.Jsonl.JsonlSessionStore>();
 
     [Test]
     public async Task Build_Registers_ITuiRenderer() => await Assert.That(Services.GetService<ITuiRenderer>()).IsNotNull();
@@ -165,8 +176,14 @@ public class HostBuilderDiTests
         var config = Services.GetService<CommonConfig>();
         await Assert.That(config).IsNotNull();
         await Assert.That(config!.ConfigFileName).IsEqualTo("config.json");
-        await Assert.That(config.DefaultProvider).IsEqualTo("kilocode");
-        await Assert.That(config.StorageBackend).IsEqualTo("jsonl");
+        // Code default from the CommonConfig store seed (see CommonConfig.DefaultProvider).
+        // The effective agent-side provider ladders to "kilocode" via
+        // IdentityConfig.FallbackProvider — that contract is pinned in
+        // Harbor.Config.Tests, not here: this is a pure-DI wiring assertion.
+        await Assert.That(config.DefaultProvider).IsEqualTo("anthropic");
+        // Persisted StorageBackend is empty-unset by default; the CLI preset
+        // supplies "jsonl" at composition time (pinned by the ISessionStore
+        // type assertion above).
     }
 
     [Test]

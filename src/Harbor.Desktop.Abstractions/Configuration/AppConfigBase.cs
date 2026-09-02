@@ -67,10 +67,13 @@ public abstract record AppConfigBase
     ///     on Windows, <c>$HOME/.harbor</c> on Linux/macOS). Override only
     ///     for tests.
     /// </summary>
-    public virtual string ConfigDirectory =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".harbor");
+    /// <remarks>
+    ///     Uses <see cref="CommonConfig.HarborHome"/> (process-wide snapshot)
+    ///     instead of calling GetFolderPath lazily: on Linux a mid-process
+    ///     HOME change makes GetFolderPath return the EMPTY string, which
+    ///     silently turns this into a CWD-relative '.harbor'.
+    /// </remarks>
+    public virtual string ConfigDirectory => CommonConfig.HarborHome;
 
     /// <summary>
     ///     Absolute path to this app's JSON config file:

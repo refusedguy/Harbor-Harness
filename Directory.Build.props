@@ -30,6 +30,21 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
 
+    <!--
+      Feature-flag defaults (see Harbor.Hosting.csproj F2.2 plumbing).
+
+      The HarborWith* properties used to be defined ONLY inside apps/*.csproj,
+      so plain `dotnet build` evaluated src/Harbor.Hosting with an empty value:
+      no plugin ProjectReferences, no DefineConstants, runtime log printed
+      "Feature flags: plugins=False" and the entire CS-plugin pipeline was dead
+      code outside NUKE-driven release builds. These defaults make a standard
+      `dotnet build` produce what actually ships. Env override:
+      HARBOR_MINIMAL=true keeps the stripped profile (matches Cli's mapping);
+      explicit /p:HarborWith*=false still wins when passed directly.
+    -->
+    <HarborWithPlugins Condition="'$(HarborWithPlugins)' == '' AND '$(HARBOR_MINIMAL)' != 'true'">true</HarborWithPlugins>
+    <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
+
     <!-- Debugging -->
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
@@ -103,8 +118,37 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
-  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
+  <!--
+    Banned API analyzer input (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030).
+    The analyzer package is referenced above, but the rules in /BannedSymbols.txt
+    were dead until ROP-D Z2: (a) the file was never listed in AdditionalFiles,
+    and (b) the analyzer only reads files named `BannedSymbols.txt` — the old
+    `BannedApi.txt` name was invisible to it. Every new use of a banned API now
+    fails the build. Accepted legacy exemptions carry a documented reason at the
+    call site (#pragma warning disable RS0030 // reason) and are catalogued by
+    class in BannedSymbols.txt itself.
+  -->
   <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!--
+    RS0030 policy: production code (src/, apps/, contrib/tui, contrib/apps,
+    samples/plugins) enforces banned-API violations as errors via the global
+    TreatWarningsAsErrors above; accepted legacy exemptions live as pragmas at
+    their call sites and are catalogued in BannedSymbols.txt itself.
+
+    Test, benchmark and E2E-driver projects are exempted centrally below:
+    benchmark GlobalSetup/IterationSetup, Avalonia-headless marshaling helpers
+    and IPC test fixtures block on async setup by design (their lifecycles are
+    synchronous), and failing CI on those would train people to ignore the
+    analyzer. The rules stay visible there as diagnostics for new code review.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('tests')) or $(MSBuildProjectDirectory.Contains('samples'))">
+    <NoWarn>$(NoWarn);RS0030</NoWarn>
+  </PropertyGroup>
+
+  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
     <!-- Code style + quality -->
     <PackageReference Include="Roslynator.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -129,7 +173,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- Banned API analyzer (configure in .bannedapi.txt) -->
+    <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -148,5 +192,40 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!--
+    Release architecture gate (compile-time, not runtime):
+      `dotnet build Harbor.slnx -c Release` re-runs the Harbor.Architecture.Tests
+      suite (47 layer rules) against the freshly built assemblies as part of the
+      build itself. Any layering regression fails the build on CI immediately —
+      no PR review or separate test step needed. Works together with the
+      BannedApiAnalyzers gate above (banned symbol ⇒ RS0030 build error).
+
+      Scope: runs once, after tests/Harbor.Architecture.Tests is built (its
+      ProjectReferences are already fresh by then). Skipped for design-time /
+      IDE builds. A test-platform direct run with a no-build flag (no Build
+      target) never triggers it. Escape hatch: property HarborArchGate=false.
+  -->
+  <PropertyGroup>
+    <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
+  </PropertyGroup>
+
+  <Target Name="HarborArchitectureGate"
+          AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true'
+                     AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'
+                     AND '$(DesignTimeBuild)' != 'true'
+                     AND '$(BuildingInsideVisualStudio)' != 'true'">
+    <!-- Evaluated HERE, at execution time: at Directory.Build.props import
+         time $(IntermediateOutputPath) is still empty, which used to scatter
+         the gate log into the project dir instead of obj/. -->
+    <PropertyGroup>
+      <HarborArchGateLog>$(IntermediateOutputPath)harbor-arch-gate.log</HarborArchGateLog>
+    </PropertyGroup>
+    <Message Importance="high" Text="[arch-gate] Harbor architecture tests: $(TargetFileName)" />
+    <Exec Command="dotnet exec &quot;$(TargetPath)&quot; > &quot;$(HarborArchGateLog)&quot; 2>&amp;1 || { tail -30 &quot;$(HarborArchGateLog)&quot;; exit 1; }"
+          IgnoreExitCode="false"
+          ConsoleToMSBuild="false" />
+  </Target>
 
 </Project>

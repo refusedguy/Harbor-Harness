@@ -1,0 +1,20 @@
+# golden: sgr-minimization
+## grid art (20x2)
+                    
+ERR WARN !k         
+## cells (x,y: rune fg/bg/attrs width)
+0,1: 'E' rgb(220,60,60)/d/- w1
+1,1: 'R' rgb(220,60,60)/d/- w1
+2,1: 'R' rgb(220,60,60)/d/- w1
+3,1: ' ' rgb(220,60,60)/d/- w1
+4,1: 'W' d/d/B w1
+5,1: 'A' d/d/U w1
+6,1: 'R' d/d/B w1
+7,1: 'N' d/d/B w1
+9,1: '!' d/d/- w1
+10,1: 'k' d/d/- w1
+## frames
+## frame 1 (73 bytes)
+\e[?2026h\e[2;1H\e[0m\e[38;2;220;60;60mERR \e[1m\e[39mWARN\e[2;10H\e[0mok\e[?2026l
+## frame 2 (43 bytes)
+\e[?2026h\e[2;6H\e[0m\e[4mA\e[2;10H\e[0m!\e[?2026l

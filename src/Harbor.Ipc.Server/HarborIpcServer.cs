@@ -24,12 +24,14 @@ public sealed class HarborIpcServer : IHarborServer
     private readonly ILoggerFactory _loggerFactory;
     private readonly MessagePackRpcServer _rpc;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ServerPipeTransport _transport;
+    private readonly IIpcServerTransport _transport;
+    private readonly SessionLeaseRegistry _leases;
     private int _disposed;
     private int _running;
 
     /// <summary>
-    ///     Construct a server backed by the host's service provider.
+    ///     Construct a server backed by the host's service provider over a
+    ///     named pipe (Windows) / Unix domain socket (Linux/Mac).
     /// </summary>
     /// <param name="serviceProvider">
     ///     The host's DI container (must expose IAgent, ISessionStore, IProviderRegistry,
@@ -37,20 +39,41 @@ public sealed class HarborIpcServer : IHarborServer
     /// </param>
     /// <param name="pipeName">Pipe name (Windows) or socket file basename (Unix). Defaults to <c>harbor-ipc</c>.</param>
     /// <param name="loggerFactory">Logger factory.</param>
-    public HarborIpcServer(IServiceProvider serviceProvider, string pipeName = "harbor-ipc", ILoggerFactory? loggerFactory = null)
+    /// <param name="psk">
+    ///     Optional pre-shared key. Null keeps the local UDS listener ungated
+    ///     (default); a non-null key gates EVERY connection behind
+    ///     PskAuthRequest.
+    /// </param>
+    public HarborIpcServer(IServiceProvider serviceProvider, string pipeName = "harbor-ipc", ILoggerFactory? loggerFactory = null, string? psk = null)
+        : this(serviceProvider, new ServerPipeTransport(
+                pipeName,
+                (loggerFactory ?? LoggerFactory.Create(b => b.AddSimpleConsole())).CreateLogger<ServerPipeTransport>()),
+            loggerFactory, psk)
+    {
+    }
+
+    /// <summary>
+    ///     Construct a server over an arbitrary transport — used for the
+    ///     TCP/tailscale daemon listeners, which are always PSK-gated.
+    /// </summary>
+    public HarborIpcServer(
+        IServiceProvider serviceProvider,
+        IIpcServerTransport transport,
+        ILoggerFactory? loggerFactory = null,
+        string? psk = null)
     {
         _serviceProvider = serviceProvider;
         _loggerFactory = loggerFactory ?? LoggerFactory.Create(b => b.AddSimpleConsole());
-        _transport = new ServerPipeTransport(
-            pipeName,
-            _loggerFactory.CreateLogger<ServerPipeTransport>());
+        _transport = transport;
+        _leases = new SessionLeaseRegistry();
         _broadcaster = new EventBroadcaster(
             serviceProvider.GetRequiredService<IEventBus>(),
-            _loggerFactory.CreateLogger<EventBroadcaster>());
-        var dispatcher = new RequestDispatcher(serviceProvider, _broadcaster);
+            _loggerFactory.CreateLogger<EventBroadcaster>(),
+            _leases);
+        var dispatcher = new RequestDispatcher(serviceProvider, _broadcaster, _leases);
         _rpc = new MessagePackRpcServer(
             _transport, dispatcher, _broadcaster,
-            _loggerFactory.CreateLogger<MessagePackRpcServer>());
+            _loggerFactory.CreateLogger<MessagePackRpcServer>(), psk);
     }
 
     /// <inheritdoc />

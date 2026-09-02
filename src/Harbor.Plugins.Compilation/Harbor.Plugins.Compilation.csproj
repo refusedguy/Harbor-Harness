@@ -30,7 +30,7 @@
       compiler needs a direct reference to allow the static type lookup in
       RoslynPluginCompiler's host code.
     -->
-    <ProjectReference Include="..\Harbor.Domain\Harbor.Domain.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -11,7 +11,7 @@ Default `IHarborClient` implementation. Calls `IAgent` / `ISessionStore` / `IPro
 ## When NOT to use
 
 - UI runs in a different process than the agent loop (e.g. remote TUI over SSH, mobile client talking to a desktop server, web UI talking to a backend).
-- UI is written in a non-.NET language (Python/JS/Rust/Go). Use `Harbor.Ipc.Client` (or write your own client using the MessagePack protocol directly — see `docs/IPC.md`).
+- UI is written in a non-.NET language (Python/JS/Rust/Go). Use `Harbor.Ipc.Client` (or write your own client using the MessagePack protocol directly).
 
 ## Registration
 

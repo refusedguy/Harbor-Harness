@@ -7,7 +7,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.Sessions;

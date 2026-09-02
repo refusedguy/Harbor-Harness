@@ -1,0 +1,266 @@
+/* ============================================================
+   Harbor Blazor — CSS animations.
+   Kept separate from site.css so they can be lazily loaded.
+   ============================================================ */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes lineIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes bubbleIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes paletteIn {
+    from {
+        opacity: 0;
+        transform: translateY(-12px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes toastOut {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(40px);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Reusable utility classes */
+.fade-in {
+    animation: fadeIn 200ms ease;
+}
+
+.slide-in-right {
+    animation: slideInRight 280ms ease;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+}
+
+.shimmer {
+    background: linear-gradient(90deg, var(--panel) 25%, var(--panel-hover) 50%, var(--panel) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+/* Hover lift effect for cards */
+.lift-on-hover {
+    transition: transform var(--transition-med), box-shadow var(--transition-med);
+}
+
+.lift-on-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* ============== Spring physics (web UI polish §P5.3) ============== */
+
+@keyframes springIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    60% {
+        opacity: 1;
+        transform: scale(1.02);
+    }
+    80% {
+        transform: scale(0.99);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes springPress {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(0.96);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Spring entrance — apply to elements that pop into view. */
+.spring-in {
+    animation: springIn 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Spring press — tactile press feedback on any clickable. */
+.spring-press,
+.btn-primary,
+.btn-secondary,
+.sidebar-toggle {
+    transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        opacity var(--transition-fast);
+}
+
+.spring-press:active,
+.btn-primary:active,
+.btn-secondary:active,
+.sidebar-toggle:active {
+    animation: springPress 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spring-in,
+    .spring-press:active,
+    .btn-primary:active,
+    .btn-secondary:active,
+    .sidebar-toggle:active {
+        animation: none;
+        transition: none;
+    }
+}
+
+/* ============== Floating pill composer (§P5.1) ============== */
+
+@keyframes composerIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ChatGPT-style floating pill composer: detached rounded slab above the
+   page edge, soft shadow, focus ring glow. */
+.chat-composer {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--space-2);
+    align-items: end;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-2) var(--space-3);
+    animation: composerIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: border-color var(--transition-med), box-shadow var(--transition-med);
+}
+
+.chat-composer:focus-within {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg), 0 0 0 3px rgba(57, 186, 230, 0.15);
+}
+
+.chat-composer .chat-input {
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-3);
+}
+
+.chat-composer .chat-input:focus {
+    outline: none;
+    border: none;
+}
+
+.chat-composer .btn-primary {
+    border-radius: var(--radius-full);
+}

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Abstractions.Contracts — pure contract layer.
+
+    Contains the domain types that appear in Harbor.Abstractions interface
+    signatures: Session/Messages/Identifiers value objects, AgentEvent
+    discriminated unions, PermissionRuleset (+ BashArgMatcher), MemoryPack
+    formatters. Formerly Harbor.Domain (deleted in the F1 decoupling).
+
+    Zero Harbor project references. Only NuGet dependencies:
+      - CSharpFunctionalExtensions  (ValueObject base class for identifiers)
+      - MemoryPack                  (binary serialization for [MemoryPackable] types)
+
+    Namespaces preserved as Harbor.Abstractions.{Models,Events,Permissions,
+    Models.Identifiers} so consumer code requires zero changes — they all keep
+    `using Harbor.Abstractions.Models;` etc. and pick up the types transitively
+    via the Harbor.Abstractions facade project.
+
+    Layering (see docs/adr/ADR-007 and AbstractionsSplitLayerRules.cs):
+      Harbor.Abstractions.Contracts -> 0        (pure data + rules)
+      Harbor.Extensions              -> 0        (pure BCL/NuGet helpers)
+      Harbor.Abstractions            -> Contracts only (interface signatures)
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Abstractions.Contracts</PackageId>
+    <Description>Harbor contracts layer — pure models, value objects, events, permission rules referenced by abstraction interfaces. Zero Harbor project dependencies.</Description>
+    <PackageTags>harbor;ai;agent;contracts;models</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <RootNamespace>Harbor.Abstractions</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="MemoryPack"/>
+  </ItemGroup>
+
+</Project>

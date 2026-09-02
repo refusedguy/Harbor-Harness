@@ -1,3 +1,5 @@
+using System.IO.Pipelines;
+
 namespace Harbor.Ipc.Protocol;
 /// <summary>
 ///     MessagePack RPC client. Sends <see cref="HarborRequest" />s over a
@@ -16,6 +18,13 @@ namespace Harbor.Ipc.Protocol;
 ///         channel for the <see cref="EventSubscription" /> to enumerate.
 ///     </para>
 ///     <para>
+///         <b>Framing (perf sprint):</b> the read loop owns ONE persistent
+///         <see cref="PipeReader" /> per connection — required because
+///         responses and event envelopes interleave on the same stream, so
+///         bytes over-read past the current frame must stay buffered for the
+///         next frame. A per-call transient reader would discard them.
+///     </para>
+///     <para>
 ///         <b>Concurrency:</b> a single writer serializes request frames
 ///         through a <see cref="SemaphoreSlim" />; multiple awaiters can be
 ///         in-flight at once, each waiting on its own TCS.
@@ -24,36 +33,53 @@ namespace Harbor.Ipc.Protocol;
 public sealed class MessagePackRpcClient : IAsyncDisposable
 {
     private readonly CancellationTokenSource _cts = new();
-    private readonly Channel<HarborEvent> _eventChannel =
-        Channel.CreateUnbounded<HarborEvent>(new UnboundedChannelOptions
+    private readonly Channel<EventFrame> _frameChannel =
+        Channel.CreateBounded<EventFrame>(new BoundedChannelOptions(4096)
         {
             SingleReader = false,
-            SingleWriter = true
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
     private readonly ILogger _logger;
+    private readonly string? _psk;
 
     private readonly Dictionary<Guid, TaskCompletionSource<HarborResponse>> _pending = new();
     private readonly Lock _pendingLock = new();
-    private readonly ClientPipeTransport _transport;
+    private readonly IIpcClientTransport _transport;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private int _disposed;
     private Task? _readLoopTask;
     private Stream? _stream;
+    private PipeReader? _reader;
 
     /// <summary>
     ///     Construct an RPC client over the given transport.
     /// </summary>
-    public MessagePackRpcClient(ClientPipeTransport transport, ILogger logger)
+    /// <param name="transport">Transport to dial through.</param>
+    /// <param name="logger">Logger.</param>
+    /// <param name="psk">
+    ///     Optional pre-shared key: sent as a <see cref="PskAuthRequest" />
+    ///     immediately after the stream opens. Required against PSK-gated
+    ///     (TCP/tailscale) listeners; ignored by ungated ones.
+    /// </param>
+    public MessagePackRpcClient(IIpcClientTransport transport, ILogger logger, string? psk = null)
     {
         _transport = transport;
         _logger = logger;
+        _psk = psk;
     }
 
     /// <summary>
-    ///     Reader side of the event channel. The <see cref="EventSubscription" />
-    ///     enumerates this.
+    ///     Reader side of the event channel. Frames carry the server-assigned
+    ///     envelope sequence so reconnecting clients can dedup and bookkeep.
     /// </summary>
-    public ChannelReader<HarborEvent> EventReader => _eventChannel.Reader;
+    public ChannelReader<EventFrame> EventFrames => _frameChannel.Reader;
+
+    /// <summary>
+    ///     Raised when the read loop dies from EOF/IO error (NOT on Dispose).
+    ///     Reconnecting callers use this as the "dial again" trigger.
+    /// </summary>
+    public event EventHandler ConnectionLost = delegate { };
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -61,7 +87,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _cts.Cancel();
-        _eventChannel.Writer.TryComplete();
+        _frameChannel.Writer.TryComplete();
 
         if (_readLoopTask is not null)
         {
@@ -95,7 +121,17 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
     {
         if (_stream is not null) return;
         _stream = await _transport.ConnectAsync(ct).ConfigureAwait(false);
+        _reader = PipeReader.Create(_stream, new StreamPipeReaderOptions(leaveOpen: true));
         _readLoopTask = ReadLoopAsync(_cts.Token);
+
+        if (_psk is not null)
+        {
+            HarborResponse authResponse = await SendAsync(new PskAuthRequest(_psk), ct).ConfigureAwait(false);
+            if (authResponse is ErrorResponse authError)
+            {
+                throw new IOException($"PSK authentication failed: {authError.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -113,14 +149,30 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             _pending[request.RequestId] = tcs;
         }
 
-        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
+        bool written = false;
         try
         {
-            await WireCodec.WriteRequestAsync(_stream, request, ct).ConfigureAwait(false);
+            await _writeLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await WireCodec.WriteRequestAsync(_stream, request, ct).ConfigureAwait(false);
+                written = true;
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
         }
-        finally
+        catch
         {
-            _writeLock.Release();
+            if (!written)
+            {
+                // The request never made it to the wire — remove the TCS NOW,
+                // otherwise it leaks in _pending forever (ipc-deep §2).
+                lock (_pendingLock) { _pending.Remove(request.RequestId); }
+            }
+
+            throw;
         }
 
         // Unregister the TCS on cancellation so the read loop doesn't try
@@ -143,7 +195,7 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             HarborResponse? response;
             try
             {
-                response = await WireCodec.ReadResponseAsync(_stream, ct).ConfigureAwait(false);
+                response = await WireCodec.ReadResponseAsync(_reader!, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
             catch (EndOfStreamException) { break; }
@@ -174,7 +226,10 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
             tcs?.TrySetResult(response);
         }
 
-        // Stream ended — fail all pending requests so callers don't hang.
+        // Stream ended — fail all pending requests so callers don't hang,
+        // reset dial state so ConnectAsync can re-open a fresh connection,
+        // and signal reconnecting callers (ipc-deep §2: "_stream is not null"
+        // used to make every later call write into a dead pipe forever).
         lock (_pendingLock)
         {
             foreach (var tcs in _pending.Values)
@@ -182,6 +237,23 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
                 tcs.TrySetException(new IOException("Server closed the connection"));
             }
             _pending.Clear();
+        }
+
+        if (_reader is not null)
+        {
+            // Release the persistent reader's pooled buffers (leaveOpen — the
+            // transport owns the stream's lifetime).
+            await _reader.CompleteAsync().ConfigureAwait(false);
+            _reader = null;
+        }
+
+        _stream = null;
+        try { await _transport.DisconnectAsync(CancellationToken.None).ConfigureAwait(false); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Suppress transport disconnect after read-loop death"); }
+
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            ConnectionLost.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -193,10 +265,10 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         {
             var data = MessagePackSerializer.Deserialize<HarborEventData>(envelope.EventBytes);
             var evt = HarborEventMapping.FromData(data);
-            if (!_eventChannel.Writer.TryWrite(evt))
-            {
-                _logger.LogDebug("Event channel full; dropping event {Kind}", evt.Kind);
-            }
+            // Honestly bounded (A4): DropOldest keeps memory flat when a UI
+            // consumer stalls — the old "channel full" branch was dead code
+            // over an unbounded channel.
+            _frameChannel.Writer.TryWrite(new EventFrame(envelope.Sequence, evt));
         }
         catch (Exception ex)
         {
@@ -204,3 +276,8 @@ public sealed class MessagePackRpcClient : IAsyncDisposable
         }
     }
 }
+
+/// <summary>
+///     One received event plus its server-assigned delivery sequence.
+/// </summary>
+public readonly record struct EventFrame(ulong Sequence, HarborEvent Event);

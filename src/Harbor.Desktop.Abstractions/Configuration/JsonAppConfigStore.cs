@@ -5,9 +5,17 @@
 // via a SemaphoreSlim so concurrent callers don't truncate each other's writes.
 // Reads fall back to the supplied default config when the file is missing or
 // corrupt — never throws for expected IO failures.
+//
+// AOT note: because the concrete T (CliConfig, AvaloniaConfig, …) is defined
+// in each app's own assembly, this store cannot source-generate metadata for
+// it. Under NativeAOT, pass a source-generated JsonTypeInfo<T> (from a
+// JsonSerializerContext declared next to the app's config record) via the
+// optional constructor parameter; without it the store falls back to the
+// reflection-based resolver, which logs a warning and only works on JIT.
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using CSharpFunctionalExtensions;
 namespace Harbor.Desktop.Abstractions.Configuration;
 /// <summary>
@@ -56,6 +64,7 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     private readonly T _default;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly ILogger<JsonAppConfigStore<T>> _logger;
+    private readonly JsonTypeInfo<T>? _jsonTypeInfo;
 
     /// <summary>
     ///     Construct a JSON-backed store.
@@ -65,10 +74,37 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
     ///     is missing. Typically <c>new CliConfig()</c> / <c>new AvaloniaConfig()</c> / etc.
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
-    public JsonAppConfigStore(T defaultConfig, ILogger<JsonAppConfigStore<T>> logger)
+    /// <param name="jsonTypeInfo">
+    ///     Optional source-generated metadata for <typeparamref name="T" />,
+    ///     e.g. from an app-local <c>JsonSerializerContext</c>
+    ///     (<c>MyAppJsonContext.Default.CliConfig</c>). When supplied, all
+    ///     (de)serialization goes through it and works under NativeAOT. When
+    ///     omitted (the default, keeping existing 2-argument call sites
+    ///     compiling), the store falls back to the reflection-based resolver —
+    ///     fine on JIT, but it logs a warning and will fail under strict AOT
+    ///     publishing where reflection serialization is unavailable.
+    ///     If <typeparamref name="T" /> has immutable-collection properties,
+    ///     build the type info from options that register the converters in
+    ///     this assembly (see <c>ConfigJson.Options</c>) or equivalent ones.
+    /// </param>
+    public JsonAppConfigStore(
+        T defaultConfig,
+        ILogger<JsonAppConfigStore<T>> logger,
+        JsonTypeInfo<T>? jsonTypeInfo = null)
     {
         _default = defaultConfig ?? throw new ArgumentNullException(nameof(defaultConfig));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _jsonTypeInfo = jsonTypeInfo;
+
+        if (_jsonTypeInfo is null)
+        {
+            _logger.LogWarning(
+                "JsonAppConfigStore has no source-generated JsonTypeInfo for config type " +
+                "{ConfigType}; falling back to reflection-based System.Text.Json, which is " +
+                "unsupported under NativeAOT. Declare a JsonSerializerContext for that type " +
+                "and pass its JsonTypeInfo to the constructor.",
+                typeof(T).Name);
+        }
     }
 
     /// <inheritdoc />
@@ -86,7 +122,9 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
             }
 
             string json = await File.ReadAllTextAsync(path, ct).ConfigureAwait(false);
-            var config = JsonSerializer.Deserialize<T>(json, JsonOptions);
+            var config = _jsonTypeInfo is not null
+                ? JsonSerializer.Deserialize(json, _jsonTypeInfo)
+                : JsonSerializer.Deserialize<T>(json, JsonOptions);
             if (config is null)
             {
                 _logger.LogWarning("App config at {Path} deserialized to null, using defaults", path);
@@ -125,7 +163,9 @@ public sealed class JsonAppConfigStore<T> : IAppConfigStore<T> where T : AppConf
                 Directory.CreateDirectory(dir);
             }
 
-            string json = JsonSerializer.Serialize(config, JsonOptions);
+            string json = _jsonTypeInfo is not null
+                ? JsonSerializer.Serialize(config, _jsonTypeInfo)
+                : JsonSerializer.Serialize(config, JsonOptions);
             string tempPath = path + ".tmp";
 
             // Write to temp file first, then atomically move into place. This

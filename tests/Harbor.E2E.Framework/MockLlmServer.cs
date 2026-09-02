@@ -45,6 +45,20 @@ public sealed class MockLlmServer : IAsyncDisposable
     private readonly object _receivedLock = new();
     private readonly Dictionary<string, CannedResponse> _responses = new(StringComparer.Ordinal);
     private readonly object _responsesLock = new();
+    private readonly HashSet<string> _echoModels = new(StringComparer.Ordinal);
+    private readonly object _echoLock = new();
+    // Inter-chunk delay for streamed text responses. Defaults to the historical
+    // 50 ms provider cadence; load tests dilate it (e.g. 1-2 ms) via
+    // SetChunkDelay so N concurrent streams still interleave on the wire while
+    // wall-clock time stays compressed. Zero disables the delay entirely.
+    private TimeSpan _chunkDelay = TimeSpan.FromMilliseconds(50);
+    // Recording: every served completion is appended to this JSONL file so a
+    // later run can replay the exact sequence without re-scripting.
+    private string? _recordingPath;
+    // Replay: FIFO queues per model, filled by ReplayFrom. When non-empty, the
+    // dict path is bypassed and entries are consumed in serve order.
+    private readonly Dictionary<string, Queue<CannedResponse>> _replayQueues = new(StringComparer.Ordinal);
+    private readonly object _replayLock = new();
     private CancellationTokenSource? _cts;
     private HttpListener _listener = new();
     private Task? _loopTask;
@@ -158,6 +172,33 @@ public sealed class MockLlmServer : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Set the inter-chunk delay for streamed text responses (time
+    ///     dilation). The default 50 ms emulates real provider cadence for
+    ///     single-stream E2E tests; load tests compress it to 0-2 ms so many
+    ///     concurrent SSE streams still interleave without wall-clock sleeps
+    ///     in the harness itself.
+    /// </summary>
+    public void SetChunkDelay(TimeSpan delay)
+    {
+        _chunkDelay = delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+    }
+
+    /// <summary>
+    ///     Put <paramref name="model" /> into echo mode: every request is
+    ///     answered with <c>echo-&lt;sha256-12-of-last-user-message&gt;</c>.
+    ///     Per-request deterministic output with zero per-request scripting —
+    ///     load tests use it to prove each session received exactly its own
+    ///     completion (cross-session bleed changes the echo).
+    /// </summary>
+    public void SetEchoResponse(string model)
+    {
+        lock (_echoLock)
+        {
+            _echoModels.Add(model);
+        }
+    }
+
+    /// <summary>
     ///     Configure an error response for a given model id. Subsequent
     ///     <c>chat/completions</c> requests for that model will receive an
     ///     HTTP 500 with <paramref name="errorMessage" /> in the body, simulating
@@ -184,6 +225,66 @@ public sealed class MockLlmServer : IAsyncDisposable
         lock (_responsesLock)
         {
             _responses[model] = canned;
+        }
+    }
+
+    /// <summary>
+    ///     Start recording every served completion to a JSONL file (one entry
+    ///     per chat-completion request, in serve order). Recorded entries feed
+    ///     <see cref="ReplayFrom" /> — the fixture is the recording.
+    /// </summary>
+    public void StartRecording(string filePath)
+    {
+        string dir = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        File.WriteAllText(filePath, string.Empty); // fresh recording per run
+        _recordingPath = filePath;
+    }
+
+    /// <summary>
+    ///     Load a recording produced by <see cref="StartRecording" /> and switch
+    ///     to replay mode: requests are served FIFO from the recorded sequence
+    ///     per model. An exhausted model queue yields the loud
+    ///     "recording exhausted" marker instead of silently repeating entries.
+    /// </summary>
+    public void ReplayFrom(string filePath)
+    {
+        var queues = new Dictionary<string, Queue<CannedResponse>>(StringComparer.Ordinal);
+        foreach (var raw in File.ReadAllLines(filePath))
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            var entry = JsonSerializer.Deserialize<RecordedCompletion>(raw);
+            if (entry is null)
+                continue;
+
+            if (!queues.TryGetValue(entry.Model, out var queue))
+            {
+                queue = [];
+                queues[entry.Model] = queue;
+            }
+
+            queue.Enqueue(new CannedResponse(
+                entry.Kind == "text" ? entry.Text : null,
+                entry.Kind == "tool",
+                entry.ToolName,
+                entry.ToolArgs,
+                entry.Kind == "error",
+                entry.ErrorMessage));
+        }
+
+        lock (_replayLock)
+        {
+            _replayQueues.Clear();
+            foreach (var kv in queues)
+            {
+                _replayQueues[kv.Key] = kv.Value;
+            }
         }
     }
 
@@ -280,6 +381,34 @@ public sealed class MockLlmServer : IAsyncDisposable
         await resp.OutputStream.WriteAsync(body, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Replay queue first (FIFO per model, loud marker when exhausted),
+    ///     then the static dict, then the "not configured" fallback.
+    /// </summary>
+    private CannedResponse ResolveNextResponse(string? model)
+    {
+        if (model is not null)
+        {
+            lock (_replayLock)
+            {
+                if (_replayQueues.TryGetValue(model, out var queue))
+                    return queue.Count > 0
+                        ? queue.Dequeue()
+                        : new CannedResponse($"(recording exhausted for model '{model}')",
+                            false, null, null, false, null);
+            }
+
+            lock (_responsesLock)
+            {
+                if (_responses.TryGetValue(model, out var canned))
+                    return canned;
+            }
+        }
+
+        return new CannedResponse("(no mock response configured for model '" + model + "')",
+            false, null, null, false, null);
+    }
+
     private async Task WriteChatCompletionAsync(HttpListenerRequest req, HttpListenerResponse resp, CancellationToken ct)
     {
         // Parse body to record the request + extract model.
@@ -303,13 +432,24 @@ public sealed class MockLlmServer : IAsyncDisposable
             _received.Add(new ChatCompletionRequest(model ?? "", requestBody));
         }
 
-        CannedResponse canned;
-        lock (_responsesLock)
+        // Echo mode bypasses scripted responses entirely: the served text is
+        // derived from the request itself (see SetEchoResponse).
+        bool isEcho = false;
+        if (model is not null)
         {
-            canned = model is not null && _responses.TryGetValue(model, out var r)
-                ? r
-                : new CannedResponse("(no mock response configured for model '" + model + "')",
-                    false, null, null, false, null);
+            lock (_echoLock)
+            {
+                isEcho = _echoModels.Contains(model);
+            }
+        }
+
+        CannedResponse canned = isEcho
+            ? new CannedResponse(BuildEchoText(requestBody), false, null, null, false, null)
+            : ResolveNextResponse(model);
+
+        if (_recordingPath is not null)
+        {
+            RecordServed(model ?? "", canned);
         }
 
         // Error response: return HTTP 500 with the error message in the body.
@@ -348,13 +488,59 @@ public sealed class MockLlmServer : IAsyncDisposable
                 string slice = text.Substring(i, len);
                 string chunk = BuildTextDeltaChunk(model ?? "mock", slice);
                 await WriteSseAsync(outStream, chunk, ct).ConfigureAwait(false);
-                await Task.Delay(50, ct).ConfigureAwait(false);
+                if (_chunkDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(_chunkDelay, ct).ConfigureAwait(false);
+                }
             }
             string finishChunk = BuildFinishChunk(model ?? "mock", "stop");
             await WriteSseAsync(outStream, finishChunk, ct).ConfigureAwait(false);
         }
 
         await WriteSseDoneAsync(outStream, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Derive the echo reply for a request body: the LAST message with
+    ///     role "user" is hashed (SHA-256, first 12 hex chars) into
+    ///     <c>echo-&lt;hash&gt;</c>. Falls back to a fixed marker when the
+    ///     body carries no user message (fail loudly in the transcript).
+    /// </summary>
+    private static string BuildEchoText(string requestBody)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(requestBody);
+            if (doc.RootElement.TryGetProperty("messages", out var messages) &&
+                messages.ValueKind == JsonValueKind.Array)
+            {
+                string? lastUser = null;
+                foreach (var m in messages.EnumerateArray())
+                {
+                    if (m.TryGetProperty("role", out var role) &&
+                        role.ValueKind == JsonValueKind.String &&
+                        role.GetString() == "user" &&
+                        m.TryGetProperty("content", out var content) &&
+                        content.ValueKind == JsonValueKind.String)
+                    {
+                        lastUser = content.GetString();
+                    }
+                }
+
+                if (lastUser is not null)
+                {
+                    string hash = Convert.ToHexString(
+                        System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(lastUser)));
+                    return "echo-" + hash[..12].ToLowerInvariant();
+                }
+            }
+        }
+        catch
+        {
+            /* malformed body → loud marker below */
+        }
+
+        return "echo-<no-user-message>";
     }
 
     private static async Task WriteSseAsync(Stream s, string jsonPayload, CancellationToken ct)
@@ -370,6 +556,29 @@ public sealed class MockLlmServer : IAsyncDisposable
         await s.WriteAsync(line, ct).ConfigureAwait(false);
         await s.FlushAsync(ct).ConfigureAwait(false);
     }
+
+    /// <summary>Append one served completion to the recording file (thread-safe append).</summary>
+    private void RecordServed(string model, CannedResponse canned)
+    {
+        var entry = new RecordedCompletion(
+            Model: model,
+            Kind: canned.IsError ? "error" : canned.IsToolCall ? "tool" : "text",
+            Text: canned.Text,
+            ToolName: canned.ToolName,
+            ToolArgs: canned.ToolArgs,
+            ErrorMessage: canned.ErrorMessage);
+
+        string line = JsonSerializer.Serialize(entry);
+        File.AppendAllText(_recordingPath!, line + "\n");
+    }
+
+    private sealed record RecordedCompletion(
+        string Model,
+        string Kind,
+        string? Text,
+        string? ToolName,
+        string? ToolArgs,
+        string? ErrorMessage);
 
     private static string BuildTextDeltaChunk(string model, string deltaText)
     {

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Excubo.Analyzers.DependencyInjection;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -9,46 +8,23 @@ using Harbor.Abstractions.Tools;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.Services;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Hosting;
 using Harbor.Ipc;
 using Harbor.Ui.Framework.State;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia;
+
 /// <summary>
-///     Composition root for the standalone Harbor Avalonia app. Mirrors the wiring
-///     in <c>Harbor.Cli/Hosting/HostBuilder.cs</c> but trimmed to a desktop-app subset
-///     (no plugins, no MCP, no JSON providers — bring-your-own-provider via Settings).
+///     Composition root for the standalone Harbor Avalonia app. The whole
+///     Harbor DI-graph is one <c>Registration.AddHarbor</c> call (§7.3); the
+///     app adds only its UI shell (view-models, app services) and post-build
+///     event routing (<see cref="UiEventRouter" />).
 /// </summary>
-/// <remarks>
-///     <para>
-///         This class is a thin orchestrator — every registration is delegated
-///         to a dedicated <c>Harbor.App.Avalonia.Hosting.*Registration</c> class
-///         so each piece can be unit-tested in isolation. The orchestrator just
-///         calls them in dependency order:
-///     </para>
-///     <list type="number">
-///         <item><see cref="LoggingConfiguration" /> — Serilog setup.</item>
-///         <item><see cref="ConfigRegistration" /> — load + register CommonConfig / AvaloniaConfig / auth resolver.</item>
-///         <item><see cref="StorageRegistration" /> — pick jsonl / memory backend.</item>
-///         <item>
-///             <see cref="ToolRegistration" /> / <see cref="ProviderRegistration" /> / <see cref="AgentRegistration" />
-///             — eager registry construction.
-///         </item>
-///         <item>
-///             <see cref="ServiceRegistration" /> — core services + eager registries + app-local services +
-///             IHarborClient.
-///         </item>
-///         <item><see cref="ViewModelRegistration" /> — all view-models with appropriate lifetimes.</item>
-///     </list>
-///     <para>
-///         Post-<see cref="HostApplicationBuilder.Build" />, the orchestrator also
-///         performs the two cross-wirings that need a built service provider:
-///         binding <see cref="UiStore" /> → <see cref="AvaloniaDispatcherAdapter" />
-///         and subscribing <see cref="IEventBus" /> → <see cref="UiStore" />.
-///     </para>
-/// </remarks>
 internal static class AppHost
 {
     /// <summary>
@@ -88,137 +64,68 @@ internal static class AppHost
     [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
     public static async Task<IHost> BuildAsync(string[] args)
     {
-        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string harborDir = Path.Combine(homeDir, ".harbor");
-        string sessionsDir = Path.Combine(harborDir, "sessions");
-        Directory.CreateDirectory(harborDir);
-        Directory.CreateDirectory(sessionsDir);
-
+        string harborDir = ResolveHarborDir();
         var builder = Host.CreateApplicationBuilder(args);
 
-        // 1. Logging (Serilog) — replaces .NET logging providers.
         LoggingConfiguration.Configure(builder);
-        builder.Services.AddHttpClient(); // per-provider HttpClient w/ timeout for OpenAI-compatible clients
-
-        // 2. Bootstrap logger factory — used by eager singletons constructed
-        // BEFORE the host is built (config stores, registries, auth resolver).
         var loggerFactory = LoggingConfiguration.CreateBootstrapLoggerFactory();
-
-        // 3. Config — load CommonConfig + AvaloniaConfig eagerly, register
-        // stores + auth resolver + composite. Returns the loaded configs.
         var config = await ConfigRegistration.RegisterAsync(builder.Services, loggerFactory, harborDir).ConfigureAwait(false);
 
-        // 4. Storage — pick jsonl/memory based on CommonConfig.StorageBackend (or HARBOR_STORAGE env).
-        StorageRegistration.Register(builder.Services, sessionsDir, config.CommonConfig);
+        // Весь граф Harbor — один вызов композиционного корня (§7.3).
+        builder.Services.AddHarbor(DesktopOptions(harborDir, config, loggerFactory, builder.Configuration));
 
-        // 5. Registries — build eagerly so the agent can be initialized with them.
-        var toolRegistry = ToolRegistration.Build(loggerFactory);
-        var providerRegistry = ProviderRegistration.Build(loggerFactory, config.AuthResolver, config.ModelCatalog);
-        var agentRegistry = AgentRegistration.Build(config.CommonConfig);
-
-        // 6. Core services + compaction/permissions + eager registries + app-local services + IHarborClient.
-        ServiceRegistration.Register(builder.Services);
-        ServiceRegistration.RegisterCompactionAndPermissions(builder.Services, providerRegistry, agentRegistry);
-        ServiceRegistration.RegisterEagerRegistries(builder.Services, toolRegistry, providerRegistry, agentRegistry, loggerFactory);
+        // Avalonia-специфика: UI-shell сервисы, IHarborClient и view-models.
         ServiceRegistration.RegisterAppServices(builder.Services);
         ServiceRegistration.RegisterHarborClient(builder.Services);
-
-        // 7. View-models.
         ViewModelRegistration.Register(builder.Services);
 
         var host = builder.Build();
-
-        // 8. Post-build cross-wirings (need a built service provider).
-        // Bind UiStore → AvaloniaDispatcherAdapter exactly once (idempotent).
-        // The DI-singleton UiStore is the INITIAL store the dispatcher is
-        // bound to; SessionManager.RebindChatViewModel rebinds to per-session
-        // stores as the user opens/creates/switches sessions.
-        var uiStore = host.Services.GetRequiredService<UiStore>();
-        host.Services.GetRequiredService<IDispatcherAdapter>().Bind(uiStore);
-
-        // CRITICAL: subscribe to IEventBus and route each agent event to the
-        // correct per-session UiStore. Without this routing, a background
-        // agent in session A would leak its events into the active session
-        // B's chat transcript (the user-visible bug this whole task fixes:
-        // "я хочу чтобы агенты не останавливались а я мог их в разных
-        // сессиях останавливать работающими").
-        //
-        // Routing logic:
-        //   - AgentStartEvent / CompactionStartedEvent / CompactionCompletedEvent
-        //     / SessionStatsEvent carry an explicit SessionId → route directly.
-        //   - Other events (TurnStart, MessageUpdate, ToolExecution*, etc.)
-        //     don't carry a session id. They are matched to the session id
-        //     that the most recent AgentStartEvent declared, tracked in
-        //     _currentAgentSessionId. With a singleton IAgent this is correct
-        //     because only one PromptAsync can be in flight at a time.
-        //   - Fallback: route to the active session's store (or the DI
-        //     singleton store if there's no active session yet).
-        var sessionManager = (SessionManager)host.Services.GetRequiredService<ISessionManager>();
-        var dispatcherAdapter = (AvaloniaDispatcherAdapter)host.Services.GetRequiredService<IDispatcherAdapter>();
-        string? currentAgentSessionId = null;
-        var eventBus = host.Services.GetRequiredService<IEventBus>();
-        eventBus.Subscribe(async (evt, ct) =>
-        {
-            try
-            {
-                string? sessionId = ExtractSessionId(evt, ref currentAgentSessionId);
-                UiStore? targetStore = null;
-                if (sessionId is not null)
-                {
-                    targetStore = sessionManager.GetContext(sessionId)?.Store;
-                }
-                targetStore ??= sessionManager.ActiveContext?.Store
-                                ?? dispatcherAdapter.BoundStore
-                                ?? uiStore;
-                targetStore.Dispatch(evt);
-            }
-            catch (Exception ex)
-            {
-                // Defensive: never let a subscriber exception crash the
-                // event bus (which would silently drop all subsequent events).
-                Debug.WriteLine($"EventBus subscriber crashed: {ex}");
-            }
-            await Task.CompletedTask;
-        });
-
-
+        UiEventRouter.Bind(host.Services);
         return host;
     }
 
     /// <summary>
-    ///     Extract the session id from an agent event. For events that
-    ///     carry an explicit SessionId (AgentStartEvent, CompactionStartedEvent,
-    ///     CompactionCompletedEvent, SessionStatsEvent), returns that id and
-    ///     (for AgentStartEvent) updates <paramref name="currentAgentSessionId" />.
-    ///     For other events, returns the last-seen AgentStartEvent session id
-    ///     so streaming events (MessageUpdate, ToolExecution*, etc.) route to
-    ///     the same store as the run they belong to.
+    ///     Desktop preset (di-design §3.3 as plain data): memory storage,
+    ///     desktop-safe 10-tool subset without MCP, model from CommonConfig,
+    ///     config stores owned by the app's async loader (not Hosting's).
     /// </summary>
-    /// <param name="evt">The agent event.</param>
-    /// <param name="currentAgentSessionId">
-    ///     Ref to the tracked current
-    ///     running-session id (set by AgentStartEvent).
-    /// </param>
-    /// <returns>The session id for routing, or null if unknown.</returns>
-    private static string? ExtractSessionId(AgentEvent evt, ref string? currentAgentSessionId)
+    private static HarborComposeOptions DesktopOptions(
+        string harborDir,
+        ConfigBundle config,
+        ILoggerFactory loggerFactory,
+        IConfiguration configuration) => new()
     {
-        switch (evt)
-        {
-            case AgentStartEvent start:
-                currentAgentSessionId = start.SessionId;
-                return start.SessionId;
-            case CompactionStartedEvent cs:
-                currentAgentSessionId = cs.SessionId;
-                return cs.SessionId;
-            case CompactionCompletedEvent cc:
-                return cc.SessionId;
-            case SessionStatsEvent ss:
-                return ss.SessionId;
-            case AgentEndEvent:
-                currentAgentSessionId = null;
-                return null;
-            default:
-                return currentAgentSessionId;
-        }
+        HarborDir = harborDir,
+        DefaultStorageBackend = "memory",
+        ToolSet = HarborToolSetKind.Standard10,
+        IncludeMcpTools = false,
+        ModelSource = HarborAgentModelSource.CommonConfig,
+        Providers = HarborProviderFlavor.Desktop,
+        DesktopAuthResolver = config.AuthResolver,
+        DesktopModelCatalog = config.ModelCatalog,
+        RegisterCommonConfigStore = false,
+        AfterConfiguration = c => c.Common = config.CommonConfig,
+        BootstrapLoggerFactory = () => loggerFactory,
+        Configuration = configuration,
+    };
+
+    /// <summary>
+    ///     Resolve ~/.harbor. HOME may have been re-pointed by an embedding
+    ///     harness (E2E driver) AFTER .NET cached the special-folder table —
+    ///     GetFolderPath then returns EMPTY. $HOME env is always authoritative
+    ///     on Unix; fall back to it explicitly, and to the app base dir as a
+    ///     last resort.
+    /// </summary>
+    private static string ResolveHarborDir()
+    {
+        string homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } p
+            ? p
+            : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } h
+                ? h
+                : AppContext.BaseDirectory;
+        string harborDir = Path.Combine(homeDir, ".harbor");
+        Directory.CreateDirectory(harborDir);
+        Directory.CreateDirectory(Path.Combine(harborDir, "sessions"));
+        return harborDir;
     }
 }

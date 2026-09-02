@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- See external/Directory.Build.props: root build targets stop here. -->
+
+  <!--
+    Spectre.Console retarget (renderer-unification Phase 3).
+
+    SharpConsoleUI declares Spectre.Console >= 0.55.0, but the Harbor root
+    pins 0.54.0 (RazorConsole compat: 0.55 moved Color/Decoration into
+    Spectre.Console.Ansi without type forwarders). A 0.55 edge flowing into
+    any Harbor project graph trips NU1109 under CentralPackageTransitivePinningEnabled.
+
+    Directory.Build.targets is evaluated after the project body, so this
+    PackageReference *Update* rewrites SharpConsoleUI's direct Spectre.Console
+    version to the Harbor pin without touching the vendored source. If
+    SharpConsoleUI ever starts using 0.55-only APIs it will fail to compile
+    HERE — loudly — and this override must be revisited (e.g. upgrade the
+    whole repo to 0.55+ together with RazorConsole).
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'SharpConsoleUI'">
+    <PackageReference Update="Spectre.Console" Version="0.54.0" />
+  </ItemGroup>
+
+</Project>

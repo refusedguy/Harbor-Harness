@@ -5,18 +5,21 @@ using Avalonia.Data.Converters;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using Harbor.App.Avalonia.ViewModels;
+using Harbor.App.Avalonia.Views.Controls;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Views;
 /// <summary>
 ///     Code editor view code-behind. Hosts the <see cref="TextEditor" /> from AvaloniaEdit
 ///     and syncs the active tab's content + syntax-highlighting definition when the
-///     <see cref="CodeEditorViewModel.ActiveTab" /> changes.
+///     <see cref="CodeEditorViewModel.ActiveTab" /> changes. Published LSP diagnostics
+///     surface as colored underlines via <see cref="DiagnosticsSquiggleRenderer" />.
 /// </summary>
 public partial class CodeEditorView : UserControl
 {
     private static readonly ILogger<CodeEditorView> Logger =
         LoggerFactory.Create(b => b.AddDebug()).CreateLogger<CodeEditorView>();
     private bool _suppressTextChanged;
+    private DiagnosticsSquiggleRenderer? _diagnosticsRenderer;
 
     /// <summary>Construct the code editor view. Avalonia's generated InitializeComponent runs first.</summary>
     public CodeEditorView()
@@ -38,7 +41,22 @@ public partial class CodeEditorView : UserControl
         var vm = Vm;
         if (vm is null) return;
         vm.PropertyChanged += OnVmPropertyChanged;
+        EnsureDiagnosticsRenderer();
         ApplyTab(vm.ActiveTab);
+    }
+
+    private void EnsureDiagnosticsRenderer()
+    {
+        if (_diagnosticsRenderer is not null) return;
+        try
+        {
+            _diagnosticsRenderer = new DiagnosticsSquiggleRenderer(Editor.TextArea.TextView);
+            Editor.TextArea.TextView.BackgroundRenderers.Add(_diagnosticsRenderer);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Diagnostics squiggle renderer unavailable");
+        }
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -46,6 +64,11 @@ public partial class CodeEditorView : UserControl
         if (e.PropertyName == nameof(CodeEditorViewModel.ActiveTab))
         {
             ApplyTab(Vm?.ActiveTab);
+        }
+
+        if (e.PropertyName == nameof(CodeEditorViewModel.ActiveDiagnostics) && _diagnosticsRenderer is not null)
+        {
+            _diagnosticsRenderer.SetDiagnostics(Vm?.ActiveDiagnostics ?? []);
         }
     }
 

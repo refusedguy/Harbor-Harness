@@ -1,14 +1,21 @@
+using System.Runtime.InteropServices;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
+using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
+using Harbor.Tui.CellForge.Input;
+using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Streaming;
+using Harbor.Tui.CellForge.Widgets;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Cli.Repl;
+namespace Harbor.App.Cli.Repl;
 /// <summary>
 ///     REPL and interactive session runner — single responsibility: run the user interaction loop.
 ///     Extracted from Program.cs.
@@ -24,6 +31,38 @@ internal sealed class ReplRunner
 
     public async Task<int> RunInteractiveAsync(IServiceProvider sp, CancellationToken ct = default)
     {
+        // Plugin hot-reload: resolve (and thereby start) the FS watcher glue for the
+        // interactive session; disposal rides on the host container teardown.
+        _ = sp.GetService<Harbor.Hosting.PluginAutoReloader>();
+
+        // ── CE-4: CellForge gate (второй путь рендера) ────────────────────
+        // Режим включается значением consoleex у переменной окружения HARBOR_TUI
+        // или поля tui в config.json. Kill-switch — секция ui.consoleEx.enabled.
+        // При отказе raw-режима — прозрачный откат на legacy-путь ниже.
+        var earlyConfigResult = await sp.GetRequiredService<IConfigStore>().LoadAsync().ConfigureAwait(false);
+        var earlyConfig = earlyConfigResult.IsSuccess ? earlyConfigResult.Value : HarborConfig.Default;
+        if (TuiMode.IsCellForgeSelected())
+        {
+            if (!earlyConfig.Ui.CellForge.Enabled)
+            {
+                _logger.LogWarning("CellForge выбран (tui/env), но ui.consoleEx.enabled=false — используется legacy-рендер");
+            }
+            else if (!earlyConfig.Onboarded)
+            {
+                _logger.LogInformation("CellForge отложен: onboarding не завершён — мастер требует legacy-рендер");
+            }
+            else
+            {
+                var consoleResult = await RunCellForgeAsync(sp, ct).ConfigureAwait(false);
+                if (consoleResult.IsSuccess)
+                {
+                    return consoleResult.Value;
+                }
+
+                _logger.LogWarning("CellForge недоступен ({Reason}) — откат на legacy-рендер", consoleResult.Error);
+            }
+        }
+
         var configStore = sp.GetRequiredService<IConfigStore>();
         var authStore = sp.GetRequiredService<AuthStore>();
         var wizard = sp.GetRequiredService<OnboardingWizard>();
@@ -36,8 +75,6 @@ internal sealed class ReplRunner
 
         _logger.LogInformation("Interactive REPL starting — renderer={RendererType}", renderer.GetType().Name);
         await renderer.InitializeAsync().ConfigureAwait(false);
-        _logger.LogDebug("Renderer initialized, subscribing to event bus");
-        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         var configResult = await configStore.LoadAsync().ConfigureAwait(false);
         var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
@@ -94,18 +131,94 @@ internal sealed class ReplRunner
         {
             _logger.LogInformation("Interactive renderer detected — entering interactive loop");
             var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-            interactive.SetSlashHandler(raw => dispatcher.HandleAsync(
-                raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value));
+            int? slashExitCode = null;
+            interactive.SetSlashHandler(async raw =>
+            {
+                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                    raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value).ConfigureAwait(false);
+                if (outcome.ShouldQuit)
+                {
+                    slashExitCode = outcome.ExitCode;
+                }
+            });
             int exitCode = await interactive.RunInteractiveAsync(agent, sp).ConfigureAwait(false);
+            if (slashExitCode is int quitCode)
+            {
+                _logger.LogInformation("Interactive loop ended via /exit with code {ExitCode}", quitCode);
+                return quitCode;
+            }
             _logger.LogInformation("Interactive loop ended with exit code {ExitCode}", exitCode);
             return exitCode;
         }
+
+        _logger.LogDebug("Renderer initialized, subscribing to event bus");
+        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         _logger.LogInformation("Non-interactive renderer — entering line REPL");
         int lineExitCode = await RunLineReplAsync(renderer, agent, sp, configStore, authStore, providers, agentRegistry, sessionResult.Value).ConfigureAwait(false);
         _logger.LogInformation("Line REPL ended with exit code {ExitCode}", lineExitCode);
         return lineExitCode;
     }
+
+    /// <summary>
+    ///     CE-4: сборка и запуск CellForge-REPL. Сессия создаётся только после
+    ///     успешного входа в raw-режим, чтобы откат на legacy не оставлял
+    ///     осиротевших сессий.
+    /// </summary>
+    private async Task<Result<int>> RunCellForgeAsync(IServiceProvider sp, CancellationToken ct)
+    {
+        var modeController = CreateModeController();
+        var agentRegistry = sp.GetRequiredService<IAgentRegistry>();
+        var sessionStore = sp.GetRequiredService<ISessionStore>();
+        var configStore = sp.GetRequiredService<IConfigStore>();
+        var configResult = await configStore.LoadAsync().ConfigureAwait(false);
+        var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
+
+        try
+        {
+            modeController.Enter();
+            modeController.Restore(); // the runner re-enters inside its own lifetime
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
+        {
+            return Result.Failure<int>($"raw mode unavailable: {ex.Message}");
+        }
+
+        var defaultAgent = agentRegistry.GetAllAgents().FirstOrDefault(a => a.Name.Value == config.Agent)
+                           ?? agentRegistry.GetAllAgents()[0];
+        string[] parts = config.EffectiveModel.Split('/', 2);
+        _logger.LogInformation("CellForge: creating session agent={Agent}, provider={Provider}, model={Model}",
+            defaultAgent.Name.Value, parts[0], parts.Length > 1 ? parts[1] : config.EffectiveModel);
+        var sessionResult = await sessionStore.CreateAsync(
+            Environment.CurrentDirectory, defaultAgent.Name.Value, parts[0],
+            parts.Length > 1 ? parts[1] : config.EffectiveModel).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+        {
+            return Result.Failure<int>(sessionResult.Error);
+        }
+
+        var agent = sp.GetRequiredService<IAgent>();
+        agent.Initialize(sessionResult.Value, defaultAgent);
+
+        var runner = new CellForgeReplRunner(
+            sp,
+            agent,
+            sessionResult.Value,
+            sp.GetRequiredService<ScreenSession>(),
+            sp.GetRequiredService<ChatScreen>(),
+            sp.GetRequiredService<ChatScreenBridge>(),
+            sp.GetRequiredService<TerminalInputSource>(),
+            modeController,
+            sp.GetRequiredService<ITerminalBackend>(),
+            sp.GetRequiredService<ILogger<CellForgeReplRunner>>());
+        int exitCode = await runner.RunAsync(ct).ConfigureAwait(false);
+        return Result.Success(exitCode);
+    }
+
+    private static ITerminalModeController CreateModeController() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? new WindowsVtModeController()
+            : new UnixTermiosModeController();
 
     public async Task<int> RunAskAsync(IServiceProvider sp, string prompt)
     {
@@ -163,7 +276,15 @@ internal sealed class ReplRunner
             {
                 _logger.LogDebug("Slash command: {Command}", trimmed);
                 var dispatcher = new SlashCommandDispatcher(sp.GetRequiredService<ILogger<SlashCommandDispatcher>>());
-                await dispatcher.HandleAsync(trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+                SlashCommandOutcome outcome = await dispatcher.HandleAsync(
+                    trimmed, sp, renderer, agent, agentRegistry, configStore, authStore, providers, session).ConfigureAwait(false);
+                if (outcome.ShouldQuit)
+                {
+                    // Managed shutdown: returning the code lets Program run its
+                    // normal cleanup (IPC stop, host dispose) before exiting.
+                    _logger.LogInformation("Quit requested via slash command — REPL exiting with code {ExitCode}", outcome.ExitCode);
+                    return outcome.ExitCode;
+                }
                 continue;
             }
 

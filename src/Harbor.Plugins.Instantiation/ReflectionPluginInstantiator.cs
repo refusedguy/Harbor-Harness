@@ -46,7 +46,8 @@ public sealed class ReflectionPluginInstantiator : IPluginInstantiator
                 type,
                 compiled.SourcePath,
                 compiled.SourceHash,
-                compiled.FromCache));
+                compiled.FromCache,
+                compiled.DeclaredCapabilities ?? new HashSet<PluginCapability>()));
         }
 
         if (loaded.Count == 0)

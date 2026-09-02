@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Diagnostics.Abstractions</PackageId>
+    <Description>Harbor observability contracts — ITracer/IMetrics and correlation context. Zero dependencies.</Description>
+    <PackageTags>harbor;diagnostics;telemetry;tracing;metrics</PackageTags>
+  </PropertyGroup>
+
+  <!-- sprint3-C design: this assembly is the innermost telemetry ring.
+       NOTHING may be referenced here — not even Harbor.Abstractions — so any
+       layer (Domain included) can depend on the contracts without cycles. -->
+
+</Project>

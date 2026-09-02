@@ -4,8 +4,8 @@
 
 ## Done
 
-- [x] All five pipeline contracts
-- [x] Immutable data types
+- [x] All five pipeline contracts (`IPluginSource`, `IPluginCompiler`, `IPluginInstantiator`, `IPluginRegistrar`, `IPluginLoadHost`)
+- [x] Immutable data types (`PluginScript`, `CompiledPluginAssembly`, `LoadedPlugin`, `CompilationResult`)
 - [x] XML docs on every public type
 
 ## TODO

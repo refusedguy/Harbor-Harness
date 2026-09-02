@@ -19,13 +19,18 @@ namespace Harbor.Plugins.Abstractions;
 ///     when the assembly was loaded from a path rather than from bytes (e.g. cache hit).
 /// </param>
 /// <param name="FromCache">
-///     <see langword="true" /> if the assembly was loaded from the on-disk cache rather
-///     than freshly compiled this run. Threads through to
-///     <see cref="Instantiation.LoadedPlugin.LoadedFromCache" />.
-/// </param>
-public sealed record CompiledPluginAssembly(
+    ///     <see langword="true" /> if the assembly was loaded from the on-disk cache rather
+    ///     than freshly compiled this run. Threads through to
+    ///     <see cref="Instantiation.LoadedPlugin.LoadedFromCache" />.
+    /// </param>
+    /// <param name="DeclaredCapabilities">
+    ///     Capabilities declared in the plugin's manifest (fail-closed empty set when
+    ///     absent). Used by the sandbox ALC and the execution guard.
+    /// </param>
+    public sealed record CompiledPluginAssembly(
     Assembly Assembly,
     string SourceHash,
     string SourcePath,
     byte[]? AssemblyBytes = null,
-    bool FromCache = false);
+    bool FromCache = false,
+    IReadOnlySet<PluginCapability>? DeclaredCapabilities = null);

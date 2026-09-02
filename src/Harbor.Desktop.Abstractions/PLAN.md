@@ -2,15 +2,15 @@
 
 ## Status: MVP
 
-Shared view-model base classes + service interfaces for all Harbor desktop apps (Avalonia, WPF, MAUI, Blazor). Created by S3 to eliminate VM duplication across the 4 desktop apps.
+Shared view-model base classes + service interfaces + config stores for Harbor desktop apps. Created in S3 to eliminate VM duplication across desktop UIs; Avalonia is the only platform shipped today.
 
 ## Done
 
-- [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels)
-- [x] 10 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ...
+- [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels) — verified on `ChatViewModelBase.cs:31`, `SessionListViewModelBase.cs:12`
+- [x] 13 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ThemeSettings, FocusSession, ProviderModelPicker (+ concrete platform-facing VMs)
 - [x] Service interfaces: `IDispatcherAdapter`, `IThemeService`, `IFilePicker`, `IDialogService`, `IToastService`
-- [x] Harbor.Tui.Abstractions integration (UiStore observable -> VM updates)
-- [x] InternalsVisibleTo: Harbor.App.Avalonia, Harbor.App.Wpf, Harbor.App.Maui, Harbor.App.Blazor
+- [x] Configuration stores shared by all desktop apps (`Configuration/JsonAppConfigStore`, `JsonCommonConfigStore`)
+- [x] Terminal.Abstractions integration (panel contracts referenced without pulling a renderer)
 
 ## TODO
 
@@ -23,7 +23,7 @@ Shared view-model base classes + service interfaces for all Harbor desktop apps 
 ## Known issues
 
 - Each desktop app still has some platform-specific VM duplication beyond the base classes.
-- IDispatcherAdapter implementations vary in correctness (Avalonia verified, WPF verified, MAUI untested, Blazor untested).
+- IDispatcherAdapter implementations vary in correctness (Avalonia verified; WPF / MAUI / Blazor apps do not exist in-repo — only `apps/Harbor.App.Avalonia` and `apps/Harbor.App.Cli` are present).
 - No multi-window support yet (panels are docked only).
 
 ## Next priorities

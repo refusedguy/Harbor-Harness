@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Agents;
+namespace Harbor.Application.Agents;
 /// <summary>
 ///     Dispatches tool calls to the registered <see cref="ITool" />s and
 ///     aggregates results into a <see cref="ToolResultMessage" />. Extracted
@@ -40,31 +40,20 @@ namespace Harbor.Core.Agents;
 ///         successful "tool returned an error" rather than throwing.
 ///     </para>
 /// </remarks>
-internal sealed class ToolDispatcher
+/// <remarks>
+///     <b>ROP-C П.5:</b> public so hosts can construct the default dispatcher
+///     when wiring <see cref="IToolDispatcher" /> in DI.
+/// </remarks>
+public sealed class ToolDispatcher(
+    IToolRegistry tools,
+    IPermissionService permissions,
+    IEventBus eventBus,
+    // ROP-C П.8: own category instead of the borrowed ILogger<AgentLoop>
+    // (S6672) — dispatcher records are filterable by their own type.
+    ILogger<ToolDispatcher> logger) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
-
-    private readonly IEventBus _eventBus;
-#pragma warning disable S6672 // Logger category should match enclosing type — ToolDispatcher is internal, sharing AgentLoop's logger is fine
-    private readonly ILogger<AgentLoop> _logger;
-#pragma warning restore S6672
-    private readonly IPermissionService _permissions;
-    private readonly IToolRegistry _tools;
-
-    public ToolDispatcher(
-        IToolRegistry tools,
-        IPermissionService permissions,
-        IEventBus eventBus,
-#pragma warning disable S6672
-        ILogger<AgentLoop> logger)
-#pragma warning restore S6672
-    {
-        _tools = tools;
-        _permissions = permissions;
-        _eventBus = eventBus;
-        _logger = logger;
-    }
 
     /// <summary>
     ///     Execute a batch of tool calls either sequentially (if any tool
@@ -77,7 +66,8 @@ internal sealed class ToolDispatcher
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout = null)
     {
         bool hasSequential = HasSequentialTool(toolCalls);
 
@@ -87,7 +77,7 @@ internal sealed class ToolDispatcher
         {
             foreach (var tc in toolCalls)
             {
-                var result = await ExecuteSingleAsync(tc, session, partial, agent, ct).ConfigureAwait(false);
+                var result = await ExecuteSingleAsync(tc, session, partial, agent, ct, toolExecutionTimeout).ConfigureAwait(false);
                 results.Add(result);
             }
         }
@@ -103,7 +93,7 @@ internal sealed class ToolDispatcher
                 tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(toolCalls.Count);
                 for (int i = 0; i < toolCalls.Count; i++)
                 {
-                    tasks[i] = ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct);
+                    tasks[i] = ExecuteSingleAsync(toolCalls[i], session, partial, agent, ct, toolExecutionTimeout);
                 }
 
                 var resolved = await Task.WhenAll(
@@ -132,22 +122,55 @@ internal sealed class ToolDispatcher
     ///     If so, the entire batch must run sequentially (otherwise sequential
     ///     tools would race on shared state like the file system or shell).
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.19: the 4-level nested IsSuccess ladder collapses to a single
+    ///     combinator predicate per call. Unresolvable entries fold to
+    ///     <see langword="false" /> here — their proper error entries are still
+    ///     produced per-call by <see cref="ExecuteSingleAsync" />.
+    /// </remarks>
     private bool HasSequentialTool(IReadOnlyList<ToolCallPart> toolCalls)
     {
         for (int i = 0; i < toolCalls.Count; i++)
         {
-            var tc = toolCalls[i];
-            var toolNameResult = ToolName.TryCreate(tc.ToolName);
-            if (toolNameResult.IsSuccess)
+            bool sequential = ToolName.TryCreate(toolCalls[i].ToolName)
+                .Bind(tools.GetTool)
+                .Map(static t => t.ExecutionMode == ExecutionMode.Sequential)
+                .Match(static v => v, static _ => false);
+            if (sequential)
             {
-                var toolResult = _tools.GetTool(toolNameResult.Value);
-                if (toolResult.IsSuccess && toolResult.Value.ExecutionMode == ExecutionMode.Sequential)
-                {
-                    return true;
-                }
+                return true;
             }
         }
+
         return false;
+    }
+
+    /// <summary>
+    ///     Parse a raw tool name and resolve it to a registered tool on one
+    ///     railway. Failure text is produced at the source of each failure:
+    ///     invalid format via MapError, unknown tool (with the available-tools
+    ///     inventory) via the registry-miss branch.
+    /// </summary>
+    private Result<ITool> ResolveTool(string rawName) =>
+        ToolName.TryCreate(rawName)
+            .MapError(e => $"Invalid tool name: {e}")
+            .Bind(name => tools.GetTool(name).MapError(_ => UnknownToolDiagnostic(rawName)));
+
+    /// <summary>
+    ///     Build the "available tools" list with a pooled StringBuilder instead of
+    ///     `.Select(...).JoinToString(...)` (which allocates an iterator + intermediate list).
+    /// </summary>
+    private string UnknownToolDiagnostic(string rawName)
+    {
+        using var avail = StringBuilderPool.Rent(128);
+        var allTools = tools.GetAllTools();
+        for (int i = 0; i < allTools.Count; i++)
+        {
+            if (avail.Builder.Length > 0) avail.Builder.Append(", ");
+            avail.Builder.Append(allTools[i].Name.Value);
+        }
+
+        return $"Unknown tool: '{rawName}'. Available: {avail}";
     }
 
     /// <summary>
@@ -161,51 +184,43 @@ internal sealed class ToolDispatcher
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
-        CancellationToken ct)
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout = null)
     {
         using var activity = Source.StartActivity("Tool.Execute");
         activity?.SetTag(ToolNameTag, toolCall.ToolName);
-        var toolNameResult = ToolName.TryCreate(toolCall.ToolName);
-        if (toolNameResult.IsFailure)
+
+        // ROP-C П.4: the two guard ladders (name parse → registry lookup) ride
+        // one Bind railway. Diagnostics stay distinct by construction: MapError
+        // localizes "invalid name" at its source and the registry-miss branch
+        // carries the available-tools inventory (rop-final-mile L5 boundary).
+        Result<ITool> resolved = ResolveTool(toolCall.ToolName);
+        if (resolved.IsFailure) // §4.6-ok: выход Bind-рельсы (ROP-C П.4), диагностики различаются по построению (L5).
         {
-            return new ToolResultEntry(
-                toolCall.Id,
-                toolCall.ToolName,
-                $"Invalid tool name: {toolNameResult.Error}",
-                true);
+            return new ToolResultEntry(toolCall.Id, toolCall.ToolName, resolved.Error, true);
         }
 
-        var toolResult = _tools.GetTool(toolNameResult.Value);
-        if (toolResult.IsFailure)
-        {
-            // Build the "available tools" list with a pooled StringBuilder instead of
-            // `.Select(...).JoinToString(...)` (which allocates an iterator + intermediate list).
-            string available;
-            using (var avail = StringBuilderPool.Rent(128))
-            {
-                var allTools = _tools.GetAllTools();
-                for (int i = 0; i < allTools.Count; i++)
-                {
-                    if (avail.Builder.Length > 0) avail.Builder.Append(", ");
-                    avail.Builder.Append(allTools[i].Name.Value);
-                }
-                available = avail.ToString();
-            }
-            return new ToolResultEntry(
-                toolCall.Id,
-                toolCall.ToolName,
-                $"Unknown tool: '{toolCall.ToolName}'. Available: {available}",
-                true);
-        }
+        ITool tool = resolved.Value;
 
-        await _eventBus.PublishAsync(new ToolExecutionStartEvent(
+        await eventBus.PublishAsync(new ToolExecutionStartEvent(
             toolCall.Id, toolCall.ToolName, toolCall.Args), ct).ConfigureAwait(false);
-        _logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
+        logger.LogDebug("Tool execution start: {ToolName} (call {CallId})", toolCall.ToolName, toolCall.Id);
 
-        try
+        // A9: arm the per-call deadline (if configured). The linked token is
+        // passed to permission check AND execution so a hanging tool's awaits
+        // observe the cancel and the dispatcher can synthesize an error entry.
+        CancellationTokenSource? timeoutCts = null;
+        if (toolExecutionTimeout is { } deadline)
         {
-            var tool = toolResult.Value;
+            timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(deadline);
+        }
 
+        using (timeoutCts)
+        {
+            CancellationToken effectiveCt = timeoutCts?.Token ?? ct;
+            try
+            {
             // Argument validation — returns a tool error instead of letting the
             // tool throw (e.g. KeyNotFoundException on a missing required prop).
             var validation = tool.ValidateArguments(toolCall.Args);
@@ -213,20 +228,26 @@ internal sealed class ToolDispatcher
             {
                 activity?.SetStatus(ActivityStatusCode.Error, validation.Error);
                 var invalid = ToolResult.Error(validation.Error);
-                await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+                await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, invalid, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, invalid);
             }
 
             // Permission check
-            var permResponse = await _permissions.CheckAsync(
-                agent.Name.Value, toolCall.ToolName, toolCall.Args, ct).ConfigureAwait(false);
+            var permResponse = await permissions.CheckAsync(
+                agent.Name.Value, toolCall.ToolName, toolCall.Args, effectiveCt).ConfigureAwait(false);
 
-            if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Deny)
+            // G3 fail-closed: a permission-SUBSYSTEM failure (agent not in the
+            // registry, invalid name) used to fall through to execution — i.e.
+            // every tool ran as "allow all". Any non-success verdict now denies.
+            if (permResponse.IsFailure || permResponse.Value.Action == PermissionAction.Deny)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
-                var denied = ToolResult.Error("Permission denied");
-                await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+                string reason = permResponse.IsFailure
+                    ? $"Permission check failed: {permResponse.Error}"
+                    : "Permission denied";
+                var denied = ToolResult.Error(reason);
+                await eventBus.PublishAsync(new ToolExecutionEndEvent(
                     toolCall.Id, denied, true), ct).ConfigureAwait(false);
                 return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, denied);
             }
@@ -237,20 +258,20 @@ internal sealed class ToolDispatcher
             // eagerly before checking whether Debug is enabled. The guard eliminates
             // the per-tool-call string allocation when debug logging is off (the
             // common production case).
-            if (_logger.IsEnabled(LogLevel.Debug))
+            if (logger.IsEnabled(LogLevel.Debug))
             {
-                _logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
+                logger.LogDebug("Executing tool {ToolName} (call {CallId}) args={Args}", toolCall.ToolName, toolCall.Id, toolCall.Args.GetRawText());
             }
             var ctx = new ToolContext(
                 session.Session.Id,
                 partial.Id,
                 toolCall.Id,
                 agent.Name.Value,
-                ct,
+                effectiveCt,
                 session.Messages,
                 async (update, c) =>
                 {
-                    // §FP-003 (RESOLVED): previously `_ = _eventBus.PublishAsync(...)`
+                    // §FP-003 (RESOLVED): previously `_ = eventBus.PublishAsync(...)`
                     // was fire-and-forget — exceptions died as unobserved task exceptions
                     // and tool progress updates were silently dropped on bus back-pressure.
                     // The lambda is now async and awaits the publish with a try/catch so
@@ -258,45 +279,60 @@ internal sealed class ToolDispatcher
                     // still `Task` per the ToolContext.ReportProgress contract.
                     try
                     {
-                        await _eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
+                        await eventBus.PublishAsync(new ToolExecutionUpdateEvent(toolCall.Id, update.PartialResult ?? update), c)
                             .ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
+                        logger.LogWarning(ex, "Tool progress publish failed for {ToolCallId}", toolCall.Id);
                     }
                 },
                 // async/await instead of ContinueWith + .Result: the latter allocates a
                 // continuation Task and accesses .Result which (though safe here because
                 // the antecedent is already complete) is a foot-gun. The async state
                 // machine is slightly cheaper and clearer about intent.
-                async (req, c) => (await _permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
+                async (req, c) => (await permissions.AskUserAsync(req, c).ConfigureAwait(false)).Value,
                 null!);
 
-            var result = await tool.ExecuteAsync(toolCall.Args, ctx, ct).ConfigureAwait(false);
+            var result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
 
-            _logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, result, result.IsError), ct).ConfigureAwait(false);
+            logger.LogDebug("Tool execution end: {ToolName} (call {CallId}) isError={IsError}", toolCall.ToolName, toolCall.Id, result.IsError);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                toolCall.Id, result, result.IsError), effectiveCt).ConfigureAwait(false);
 
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, result);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             var cancelled = ToolResult.Error("Tool execution was cancelled.");
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, cancelled, true), ct).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
+        }
+        catch (OperationCanceledException oce) when (!ct.IsCancellationRequested)
+        {
+            // A9: the per-call deadline fired (outer token NOT cancelled) —
+            // synthesize an error entry so the loop keeps going.
+            activity?.SetStatus(ActivityStatusCode.Error, "tool timed out");
+            string message = toolExecutionTimeout is { } t
+                ? $"Tool '{toolCall.ToolName}' timed out after {t.TotalSeconds:0.#}s."
+                : "Tool execution was cancelled.";
+            logger.LogWarning(oce, "Tool {ToolName} (call {CallId}) hit its execution deadline", toolCall.ToolName, toolCall.Id);
+            var timeout = ToolResult.Error(message);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                toolCall.Id, timeout, true), ct).ConfigureAwait(false);
+            return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, timeout);
         }
         catch (Exception ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             activity?.AddException(ex);
-            _logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
+            logger.LogError(ex, "Tool {ToolName} failed", toolCall.ToolName);
             var errored = ToolResult.Error($"Tool execution failed: {ex.Message}");
-            await _eventBus.PublishAsync(new ToolExecutionEndEvent(
-                toolCall.Id, errored, true), ct).ConfigureAwait(false);
+            await eventBus.PublishAsync(new ToolExecutionEndEvent(
+                toolCall.Id, errored, true), effectiveCt).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
+        }
         }
     }
 }

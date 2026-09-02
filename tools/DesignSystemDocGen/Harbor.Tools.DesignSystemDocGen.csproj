@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    DesignSystemDocGen — documentation build tool for Harbor.DesignSystem
+    (sprint "Design System as Product", task 3).
+
+    Generates, from XML doc comments + the theme JSON schema:
+      api        docs/DESIGN_SYSTEM_API.md  (token tables, theme slots, runtime API)
+      examples   docs/themes/harbor-{dark,light,warm}.json  (example themes)
+
+    Build tool, not part of Harbor.slnx (same convention as Harbor.CodeGen).
+    Run: dotnet run -p tools/DesignSystemDocGen -c Release (args: api | examples | all)
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Harbor.DesignSystem/Harbor.DesignSystem.csproj"/>
+  </ItemGroup>
+
+</Project>

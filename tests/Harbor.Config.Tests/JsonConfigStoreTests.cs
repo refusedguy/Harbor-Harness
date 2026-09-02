@@ -1,4 +1,5 @@
-using Harbor.Core.Configuration;
+using Harbor.Abstractions.Permissions;
+using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
 /// <summary>
@@ -121,6 +122,164 @@ public class JsonConfigStoreTests
     }
 
     [Test]
+    public async Task LoadAsync_CellForgeSection_ParsesKillSwitchAndSyncUpdates()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true,
+                        "tui": "consoleex",
+                        "ui": {
+                          "consoleEx": { "enabled": false, "syncUpdates": false }
+                        }
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Tui).IsEqualTo("consoleex");
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsFalse();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task LoadAsync_LegacyRootCellForge_StillHonored()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true,
+                        "consoleEx": { "enabled": false, "syncUpdates": false }
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsFalse();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task LoadAsync_MissingCellForgeSection_AppliesDefaults()
+    {
+        string json = """
+                      {
+                        "provider": "mock",
+                        "model": "mock/test-model",
+                        "onboarded": true
+                      }
+                      """;
+        string path = WriteTempConfig(json);
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var result = await store.LoadAsync();
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result.Value.Ui.CellForge.Enabled).IsTrue();
+            await Assert.That(result.Value.Ui.CellForge.SyncUpdates).IsTrue();
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
+    public async Task SaveAsync_LoadAsync_Roundtrip_CellForgeSectionSurvives()
+    {
+        string path = NewTempConfigPath();
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var config = new HarborConfig
+            {
+                Provider = "mock",
+                Model = "mock/test-model",
+                Tui = "consoleex",
+                Onboarded = true
+            };
+            config.Ui = config.Ui with { CellForge = new CellForgeUiConfig(Enabled: false, SyncUpdates: false) };
+
+            var saveResult = await store.SaveAsync(config);
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded.Value.Tui).IsEqualTo("consoleex");
+            await Assert.That(loaded.Value.Ui.CellForge.Enabled).IsFalse();
+            await Assert.That(loaded.Value.Ui.CellForge.SyncUpdates).IsFalse();
+
+            // Defaults are omitted from the persisted JSON (no config drift for legacy users),
+            // and the non-default section is written in the canonical nested `ui` shape
+            // (no root-level alias, no explicit nulls).
+            string persisted = File.ReadAllText(path);
+            await Assert.That(persisted).Contains("\"ui\":{\"consoleEx\":{\"enabled\":false,\"syncUpdates\":false}}");
+            await Assert.That(persisted).DoesNotContain("\"consoleEx\":null");
+        }
+        finally
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Test]
     public async Task UpdateAsync_ChangesValue()
     {
         string path = NewTempConfigPath();
@@ -145,9 +304,16 @@ public class JsonConfigStoreTests
         }
         finally
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
             string? dir = Path.GetDirectoryName(path);
-            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 
@@ -173,9 +339,16 @@ public class JsonConfigStoreTests
         }
         finally
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
             string? dir = Path.GetDirectoryName(path);
-            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+            if (dir is not null && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
         }
     }
 
@@ -185,5 +358,48 @@ public class JsonConfigStoreTests
         string path = JsonConfigStore.GetDefaultPath();
         await Assert.That(path).Contains(".harbor");
         await Assert.That(Path.GetFileName(path)).IsEqualTo("config.json");
+    }
+
+    [Test]
+    public async Task SaveAsync_LoadAsync_PermissionsRoundtrip()
+    {
+        string path = NewTempConfigPath();
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var config = new HarborConfig
+            {
+                Provider = "kilocode",
+                Model = "kilocode/tencent/hy3:free",
+            };
+            config.Permissions["code"] = new List<PermissionRule>
+            {
+                new("bash", "*", PermissionAction.Allow),
+                new("write", "src/*", PermissionAction.Allow)
+            };
+            config.Permissions["plan"] = new List<PermissionRule>
+            {
+                new("bash", "cat *", PermissionAction.Allow)
+            };
+
+            var saveResult = await store.SaveAsync(config);
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded.Value.Permissions.ContainsKey("code")).IsTrue();
+            await Assert.That(loaded.Value.Permissions["code"].Count).IsEqualTo(2);
+            await Assert.That(loaded.Value.Permissions["code"][0].Permission).IsEqualTo("bash");
+            await Assert.That(loaded.Value.Permissions["code"][0].Pattern).IsEqualTo("*");
+            await Assert.That(loaded.Value.Permissions["code"][0].Action).IsEqualTo(PermissionAction.Allow);
+            await Assert.That(loaded.Value.Permissions["plan"][0].Permission).IsEqualTo("bash");
+            await Assert.That(loaded.Value.Permissions["plan"][0].Pattern).IsEqualTo("cat *");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
     }
 }

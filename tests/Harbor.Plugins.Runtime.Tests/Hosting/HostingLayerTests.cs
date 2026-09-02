@@ -55,7 +55,7 @@ public sealed class HostingLayerTests
                 NullLogger<CachingCompiler>.Instance))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance),
+                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
                 NullLogger.Instance))
             .WithOptions(o => o.PluginRoot = fixture.PluginsDir)
             .Build(NullLogger<PluginHost>.Instance);
@@ -95,7 +95,7 @@ public sealed class HostingLayerTests
                 NullLogger<CachingCompiler>.Instance))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance),
+                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
                 NullLogger.Instance))
             .WithOptions(o =>
             {
@@ -136,7 +136,7 @@ public sealed class HostingLayerTests
                 NullLogger<CachingCompiler>.Instance))
             .WithInstantiator(new ReflectionPluginInstantiator())
             .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance),
+                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
                 NullLogger.Instance))
             .WithOptions(o =>
             {

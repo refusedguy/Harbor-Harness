@@ -22,6 +22,14 @@ public sealed class AvaloniaContentHost : IContentHost
 {
     public object? ActiveView { get; private set; }
 
+    /// <summary>
+    ///     Raised after a successful <see cref="TryNavigate" /> with the route
+    ///     string. Shell chrome (MainViewModel.ActiveView, the tab strip's
+    ///     TwoWay radio bindings) subscribes so palette-driven navigation —
+    ///     which bypasses SwitchViewCommand — stays in sync with the tabs.
+    /// </summary>
+    public event Action<string>? RouteNavigated;
+
     public ChatViewModel Chat { get; }
     public SessionListViewModel Sessions { get; }
     public CodeEditorViewModel CodeEditor { get; }
@@ -96,6 +104,7 @@ public sealed class AvaloniaContentHost : IContentHost
         }
 
         ActiveView = target;
+        RouteNavigated?.Invoke(route);
         return true;
     }
 

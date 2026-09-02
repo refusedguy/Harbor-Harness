@@ -1,0 +1,62 @@
+{
+  "sprint": "ui-v2-hotfix",
+  "date": "2026-08-28",
+  "branch": "dev",
+  "commits": [
+    {
+      "sha": "4c7c84f",
+      "task": "1 — ApprovalGateView queue",
+      "files": [
+        "src/Harbor.Tui.ConsoleEx/Streaming/ChatScreenBridge.cs",
+        "src/Harbor.Tui.ConsoleEx/Widgets/ApprovalGateView.cs"
+      ],
+      "change": "Single _pendingApproval routing slot replaced with an arrival-ordered pending Queue<ApprovalGateView> (bound 8; overflow auto-denies the oldest gate so its DecisionRecorded waiter always wakes). DrainGateQueue now appends every queued gate and enqueues it; TryRouteApprovalKey/TryRouteApprovalClick serve the OLDEST pending gate and dequeue it on decision; resolved-off-path gates are pruned before routing. ApprovalGateView.Id is now instance-unique (approval:{n}:{toolName}) — the old approval:{toolName} collided for same-tool gates.",
+      "tests": "Harbor.Tui.ConsoleEx.Tests 661/661 pass; temp acceptance harness (2 consecutive bash gates accepted in arrival order, no zombie IsPending, ids distinct; overflow auto-deny) 2/2 pass, harness removed before commit."
+    },
+    {
+      "sha": "876862b",
+      "task": "2 — Renderer lag / wide-cell artifacts",
+      "files": [
+        "src/Harbor.Tui.ConsoleEx/Rendering/ScreenBuffer.cs",
+        "src/Harbor.Tui.ConsoleEx/Widgets/VirtualizedChatTimeline.cs"
+      ],
+      "change": "ScreenBuffer.SetStyleAt skipped Wide lead cells (returned false), so PanelFx.BlendRegion left wide glyphs stale-colored and could half-recolor a pair via its WSkip tail. Writes now restyle the full lead+tail cluster and route tail hits to their lead; tail cells are rebuilt with Cell.From(Rune(0)) which resolves to WSkip width. VirtualizedChatTimeline.Append's per-append O(n) budget rescan replaced with a running total (adjusted on Append/ReplaceLast/Replace/Evict); eviction now triggers only when the total crosses BudgetBytes and evicts down to a 75% low-water mark in one pass instead of evicting every append.",
+      "tests": "Harbor.Tui.ConsoleEx.Tests 661/661 pass (incl. DiffEngine style-only and golden SGR tests, Budget eviction test); temp harness verified lead+tail restyle, tail routing, no stale colors after BlendRegion, and 20k appends with eviction complete in tens of ms — harness removed before commit."
+    },
+    {
+      "sha": "734a003",
+      "task": "3 — Windows PTY restore path",
+      "files": [
+        "apps/Harbor.App.Cli/Repl/ConsoleExReplRunner.cs"
+      ],
+      "change": "RunAsync finally awaited backend.WriteAsync(leave-alt-screen) BEFORE modeController.Restore(); a throwing write skipped Restore and left Windows consoles in raw/VT mode. The write is now wrapped in try/catch (logged via ILogger, no silent swallow) so Restore() runs unconditionally; Unix path and public API unchanged, no hot-path allocations.",
+      "tests": "Harbor.Tui.ConsoleEx.PtyTests 39/39 pass (one transient flake on first run — passed on two consecutive re-runs); Harbor.App.Cli.Tests 78/78 pass."
+    },
+    {
+      "sha": "d8f1198",
+      "task": "Follow-up — permanent acceptance tests for task 1",
+      "files": [
+        "tests/Harbor.Tui.ConsoleEx.Tests/ChatScreenBridgeTests.cs",
+        "tests/Harbor.Tui.ConsoleEx.Tests/ApprovalGateViewTests.cs"
+      ],
+      "change": "The temp acceptance harness for the two-consecutive-bash-gates criterion was removed before commit 4c7c84f; replaced with three permanent tests: TwoConsecutiveBashGates_ResolveInArrivalOrder_NoZombies (arrival-order routing, no zombie IsPending, id distinctness), RequestApprovalGate_TwoGates_RoutedInArrivalOrder_OnTick (off-thread queue drains both gates in one tick, oldest-first), and Id_IsUniquePerInstance_ForSameToolGates.",
+      "tests": "Harbor.Tui.ConsoleEx.Tests 664/664 pass (661 + 3 new)."
+    }
+  ],
+  "verification": {
+    "independent_recheck": "All three commits re-verified post-hoc: full Harbor.slnx Release build 0 errors / 180 warnings (pre-existing, none in the five touched files); Harbor.Tui.ConsoleEx.Tests 661/661, Harbor.Tui.ConsoleEx.PtyTests 39/39 (×2 after one transient flake), Harbor.App.Cli.Tests 78/78.",
+    "pty_flake": "PtyTests first invocation had 1/39 failure with no reproduction on two full re-runs — treat as environment-flaky, not a regression from 734a003.",
+    "fresh_rerun": "2026-08-28 post-hoc re-verification on dev: Harbor.slnx Release build 0 errors; Harbor.Tui.ConsoleEx.Tests 664/664 (661 + 3 permanent acceptance tests from d8f1198), Harbor.App.Cli.Tests 78/78, Harbor.Tui.ConsoleEx.PtyTests 39/39 — no PTY flake observed.",
+    "fresh_rerun_2": "2026-08-28 second independent re-verification on dev @ 3ffb869: Harbor.slnx Release build 0 errors / 180 warnings (none in the five touched files); Harbor.Tui.ConsoleEx.Tests 664/664 (first run hit the PanelFx flake below at 663/664, passed clean on re-run and in isolation), Harbor.Tui.ConsoleEx.PtyTests 39/39, Harbor.App.Cli.Tests 78/78.",
+    "panelfx_flake": "Harbor.Tui.ConsoleEx.Tests first full run: PanelFxTests.WithAlpha_ZeroAlpha_FadesTowardPanelSurface failed with expected rgb(13,18,25) vs received rgb(13,17,23) — the two Panel colors of different built-in themes. Root cause is a pre-existing test-isolation race, not a sprint regression: WithAlpha captures ChatPalette.Panel (a process-global volatile Catalog, ChatPalette.cs:66) at arrange time while the assert re-reads it, and theme tests (ThemeSwitchTests / JsonThemeLoaderTests / ThemeFileWatcherTests) apply TerminalColorPalette.Apply in parallel. Untouched by all sprint commits; not reproducible in isolation nor on suite re-run. A theme-pinning fixture for palette-dependent tests would eliminate it — out of hotfix scope."
+  },
+  "notes": [
+    "Hard rule '1-2 files per commit' held: 2/2/1 files; three atomic commits (task 2's named files both fit in one).",
+    "Harbor.DesignSystem untouched; no public API changes; no TODO(principles) markers added.",
+    "Eviction Array.Copy inside TimelineLayoutCache.EvictFirst remains O(n) per single eviction; low-water batching amortizes it in practice (rare pass, memmove-speed). A bulk prefix-remove EvictFirst(count) in the cache would make it strictly O(1) amortized per append — deferred as future work to keep this commit within the file budget.",
+    "Full Harbor.slnx build after all commits: 0 errors, 180 warnings (all pre-existing, none from touched files).",
+    "Whole-solution dotnet test not run per AGENTS.md MTP warning; verification was per focused project.",
+    "Second verification pass (2026-08-28) confirms all three fixes still hold and adds the PanelFx flake finding above — sprint remains complete, no code changes needed.",
+    "Sprint-chain heartbeat in .kilo-docs/sprints/ui-v2-hotfix/status.json is tool-managed and left uncommitted — not a deliverable."
+  ]
+}

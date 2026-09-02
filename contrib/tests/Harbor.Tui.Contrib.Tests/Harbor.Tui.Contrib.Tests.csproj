@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Tui.Contrib.Tests — unit tests for the contrib TUI renderers
+    (Spectre, Spectre.Fullscreen, SpectreTui, TerminalGui, Termina,
+    RazorConsole). Split out of tests/Harbor.Tui.Tests during the sprint-2
+    contrib migration; the main test project keeps only Ansi /
+    Terminal.Abstractions / Ui.Framework coverage.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\tui\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    <PackageReference Include="Moq"/>
+  </ItemGroup>
+
+</Project>

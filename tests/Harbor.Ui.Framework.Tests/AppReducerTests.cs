@@ -1,4 +1,7 @@
+using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -84,7 +87,7 @@ public class AppReducerTests
     public async Task ScrollResetToTail_PinsScrollAndSetsWasRunning()
     {
         var state = new UiState { ScrollOffset = 10 };
-        var result = UiReducer.Update(state, UiMsg.ScrollResetToTail);
+        var result = UiReducer.Update(state, new UiMsg.ScrollResetToTail());
         await Assert.That(result.State.ScrollOffset).IsEqualTo(0);
         await Assert.That(result.State.WasRunning).IsTrue();
     }

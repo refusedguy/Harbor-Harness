@@ -1,0 +1,121 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Hosting — ЕДИНЫЙ композиционный корень DI-графа Harbor (§7 di-design).
+
+    Applications (Cli / Avalonia / Wpf / Maui) contain NO service registrations:
+    they call Registration.AddHarbor(...) and pass app specifics through
+    HarborComposeOptions. Call order is fixed (see ADR-007 sibling design doc)
+    and covered by HostBuilderDiTests / AppHostDiTests.
+
+    Feature flags: the HarborWith* MSBuild switches (fed by the NUKE build) are
+    declared here — this project owns the conditional ProjectReferences and the
+    HARBOR_WITH_* / HARBOR_MINIMAL DefineConstants. The rest of the code branches
+    on #if only inside Modules/.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Hosting</PackageId>
+    <Description>Harbor composition root — Registration.AddHarbor builds the whole DI graph; apps pass HarborComposeOptions.</Description>
+    <PackageTags>harbor;ai;agent;hosting;di</PackageTags>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions"/>
+    <PackageReference Include="Microsoft.Extensions.Http"/>
+  </ItemGroup>
+
+  <!--
+    Feature-flag plumbing (moved from Harbor.App.Cli.csproj, F2.2): NUKE
+    FeatureFlags -> MSBuild properties HarborWith* -> DefineConstants.
+  -->
+  <PropertyGroup>
+    <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
+    <!--
+      NickConsoleEx (renderer-unification Phase 3) auto-enables when the
+      vendored nickprotop/ConsoleEx submodule is initialized; fresh clones
+      without submodules build the rest of the graph unaffected.
+    -->
+    <DefineConstants Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')">$(DefineConstants);HARBOR_WITH_NICK_CONSOLE_EX</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Base graph: abstractions + contracts + core pipeline + desktop config types -->
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
+    <ProjectReference Include="..\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+
+    <!-- Storage backends -->
+    <ProjectReference Include="..\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
+    <ProjectReference Include="..\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+
+    <!-- Baseline renderers -->
+    <ProjectReference Include="..\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <ProjectReference Include="..\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+
+    <!-- Baseline providers -->
+    <ProjectReference Include="..\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
+    <ProjectReference Include="..\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj"/>
+
+    <!-- Tools (Mcp lives inside Harbor.Tools.Builtin: namespace Harbor.Tools.Mcp) -->
+    <ProjectReference Include="..\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
+    <ProjectReference Include="..\Harbor.Lsp\Harbor.Lsp.csproj"/>
+
+    <!-- IPC -->
+    <ProjectReference Include="..\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ipc.InProcess\Harbor.Ipc.InProcess.csproj"/>
+    <ProjectReference Include="..\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>
+    <ProjectReference Include="..\Harbor.Ipc.Client\Harbor.Ipc.Client.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HarborWithPlugins)' == 'true'">
+    <ProjectReference Include="..\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HarborWithAllProviders)' == 'true'">
+    <ProjectReference Include="..\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
+    <ProjectReference Include="..\Harbor.Providers.Anthropic\Harbor.Providers.Anthropic.csproj"/>
+    <ProjectReference Include="..\Harbor.Providers.OpenAI\Harbor.Providers.OpenAI.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>
+
+  <!--
+    NickConsoleEx (renderer-unification Phase 3): ADDITIVE wrapper backend over
+    the vendored nickprotop/ConsoleEx submodule. external/Directory.Build.targets
+    retargets SharpConsoleUI's Spectre.Console dependency to the Harbor root pin
+    (0.54.0), so this reference is safe next to every other renderer backend.
+    Skipped when the submodule is not initialized (fresh clone).
+  -->
+  <ItemGroup Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')">
+    <ProjectReference Include="..\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
+  </ItemGroup>
+
+</Project>

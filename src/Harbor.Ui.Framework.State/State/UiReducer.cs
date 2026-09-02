@@ -58,7 +58,9 @@ public static class UiReducer
             IsAgentRunning = false,
             WasRunning = state.IsAgentRunning,
             IsStreaming = false,
-            Active = ActiveMessage.Empty
+            Active = ActiveMessage.Empty,
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty
         },
         _ => state
     };
@@ -95,17 +97,81 @@ public static class UiReducer
             Status = "running",
             IsAgentRunning = true,
             IsStreaming = true,
-            Active = ActiveMessage.Empty
+            Active = ActiveMessage.Empty,
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty
         };
 
     private static UiState OnMessageUpdate(UiState state, MessageUpdateEvent mu) => mu.LlmEvent switch
     {
-        TextDeltaEvent td => state with { Active = state.Active with { TextBuffer = state.Active.TextBuffer + td.Delta } },
-        ThinkingDeltaEvent thd => state with { Active = state.Active with { ThinkBuffer = state.Active.ThinkBuffer + thd.Delta } },
-        ToolCallStartEvent tcs => state.AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
-        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(state, sf.Usage),
+        TextDeltaEvent td => WithTextDelta(state, td.Delta),
+        ThinkingDeltaEvent thd => WithThinkingDelta(state, thd.Delta),
+        ToolCallStartEvent tcs => FlushPending(state).AddLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id),
+        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(FlushPending(state), sf.Usage),
         _ => state
     };
+
+    /// <summary>
+    ///     Append a text delta to the chunked pending buffer and rebuild the
+    ///     synced <see cref="ActiveMessage.TextBuffer" /> string only when
+    ///     <see cref="StreamingSync.ShouldFlush" /> demands it.
+    /// </summary>
+    private static UiState WithTextDelta(UiState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state;
+
+        ChunkedBuffer pending = state.PendingStreamText.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.Active.TextBuffer.Length, pending.Length))
+            return state with { PendingStreamText = pending };
+
+        string full = StreamingSync.Concat(state.Active.TextBuffer, pending);
+        return state with
+        {
+            Active = state.Active with { TextBuffer = full },
+            PendingStreamText = ChunkedBuffer.Empty
+        };
+    }
+
+    /// <summary>Thinking-delta counterpart of <see cref="WithTextDelta" />.</summary>
+    private static UiState WithThinkingDelta(UiState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state;
+
+        ChunkedBuffer pending = state.PendingStreamThink.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.Active.ThinkBuffer.Length, pending.Length))
+            return state with { PendingStreamThink = pending };
+
+        string full = StreamingSync.Concat(state.Active.ThinkBuffer, pending);
+        return state with
+        {
+            Active = state.Active with { ThinkBuffer = full },
+            PendingStreamThink = ChunkedBuffer.Empty
+        };
+    }
+
+    /// <summary>
+    ///     Materialize any pending chunks into the synced
+    ///     <see cref="UiState.Active" /> buffer strings so pause points
+    ///     (tool calls, step finish, message end) observe the complete text.
+    /// </summary>
+    private static UiState FlushPending(UiState state)
+    {
+        if (state.PendingStreamText.Length == 0 && state.PendingStreamThink.Length == 0)
+            return state;
+
+        return state with
+        {
+            Active = state.Active with
+            {
+                TextBuffer = StreamingSync.Concat(state.Active.TextBuffer, state.PendingStreamText),
+                ThinkBuffer = StreamingSync.Concat(state.Active.ThinkBuffer, state.PendingStreamThink)
+            },
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty
+        };
+    }
 
     private static UiState OnStepFinish(UiState state, Usage usage)
     {
@@ -122,12 +188,18 @@ public static class UiReducer
 
     private static UiState OnMessageEnd(UiState state)
     {
-        var next = state;
+        var next = FlushPending(state);
         if (!string.IsNullOrEmpty(next.Active.ThinkBuffer))
             next = next.AddLine(ChatRole.Thinking, next.Active.ThinkBuffer.Trim());
         if (!string.IsNullOrEmpty(next.Active.TextBuffer))
             next = next.AddLine(ChatRole.Assistant, next.Active.TextBuffer.Trim());
-        return next with { IsStreaming = false, Active = ActiveMessage.Empty };
+        return next with
+        {
+            IsStreaming = false,
+            Active = ActiveMessage.Empty,
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty
+        };
     }
 
     private static UiState OnCompactionCompleted(UiState state, CompactionCompletedEvent cc) =>
@@ -171,6 +243,12 @@ public static class UiReducer
     public static (UiState State, TuiEffect Effect) Update(UiState state, UiMsg msg) => msg switch
     {
         UiMsg.Agent a => (Reduce(state, a.Event), new TuiEffect.None()),
+        UiMsg.AgentStarted => (state with { Status = "running", IsAgentRunning = true }, new TuiEffect.None()),
+        UiMsg.AgentEnded ae => (OnAgentEnded(state, ae), new TuiEffect.None()),
+        UiMsg.StatusChanged sc => (state with { Status = sc.Status }, new TuiEffect.None()),
+        UiMsg.AppendLine al => (state.AddLine(al.Role, al.Text, al.ToolCallId), new TuiEffect.None()),
+        UiMsg.InputText it => (state.SetInput(state.Input.SetText(it.Text)), new TuiEffect.None()),
+        UiMsg.Quit => (state with { ShouldQuit = true }, new TuiEffect.None()),
         UiMsg.KeyInput k => UpdateKey(state, k),
         UiMsg.Viewport v => (state with { ViewportLines = v.HistoryHeight }, new TuiEffect.None()),
         UiMsg.HistoryMeasured t => (state with { TotalLines = t.TotalLines }, new TuiEffect.None()),
@@ -191,6 +269,24 @@ public static class UiReducer
         }, new TuiEffect.None()),
         _ => (state, new TuiEffect.None())
     };
+
+    /// <summary>
+    ///     Run-end fold for the effect host. A null <see cref="UiMsg.AgentEnded.Status" />
+    ///     keeps a previously set <c>"error"</c> status (so a failed run does not get
+    ///     repainted as a clean finish by the host's finally block) and otherwise
+    ///     falls back to <c>"idle"</c>.
+    /// </summary>
+    private static UiState OnAgentEnded(UiState state, UiMsg.AgentEnded msg)
+    {
+        var next = state with
+        {
+            IsAgentRunning = false,
+            IsStreaming = false,
+            Active = ActiveMessage.Empty,
+            Status = msg.Status ?? (state.Status == "error" ? "error" : "idle")
+        };
+        return msg.Error is null ? next : next.AddLine(ChatRole.Error, msg.Error);
+    }
 
     // ── panel transitions (pure; no IPanelRegistry dependency) ────────────
 

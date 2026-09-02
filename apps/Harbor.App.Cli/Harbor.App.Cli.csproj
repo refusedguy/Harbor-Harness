@@ -20,9 +20,9 @@
     because XML comments disallow consecutive hyphens).
 
       * `HarborWithPlugins=false`       — removes Harbor.Plugins.* (Roslyn loader)
-      * `HarborWithScripting=false`     — removes Harbor.Scripting.* (Jint engine)
-      * `HarborWithSpectreTui=false`    — removes alternative TUI renderers
-                                          (Spectre/Fullscreen/Termina/RazorConsole/TerminalGui/Ansi)
+      * `HarborWithSpectreTui=false`    — (historical; alternative TUI renderers
+                                          now live in contrib/tui and are no
+                                          longer referenced from the main CLI)
       * `HarborWithAllProviders=false`  — keeps only Harbor.Providers.Ollama
       * `HarborWithAllTools=false`      — (future) keeps only 6 core tools
 
@@ -32,7 +32,7 @@
     HostBuilder.cs.
 
     The granular flags additionally define per-feature C# symbols
-    (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SCRIPTING`, `HARBOR_WITH_SPECTRE_TUI`,
+    (`HARBOR_WITH_PLUGINS`, `HARBOR_WITH_SPECTRE_TUI`,
     `HARBOR_WITH_ALL_PROVIDERS`) so HostBuilder.cs can use finer-grained
     `#if` guards.
 
@@ -50,7 +50,7 @@
     <PackageTags>harbor;cli;ai;agent;app</PackageTags>
     <EmbedProviders>true</EmbedProviders>
     <!-- The .NET namespace stays Harbor.Cli for backward compat. -->
-    <RootNamespace>Harbor.Cli</RootNamespace>
+    <RootNamespace>Harbor.App.Cli</RootNamespace>
     <AssemblyName>Harbor.App.Cli</AssemblyName>
 
     <!--
@@ -76,9 +76,6 @@
     <HarborWithPlugins Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithPlugins>
     <HarborWithPlugins Condition="'$(HarborWithPlugins)' == ''">true</HarborWithPlugins>
 
-    <HarborWithScripting Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithScripting>
-    <HarborWithScripting Condition="'$(HarborWithScripting)' == ''">true</HarborWithScripting>
-
     <HarborWithSpectreTui Condition="'$(HARBOR_MINIMAL)' == 'true'">false</HarborWithSpectreTui>
     <HarborWithSpectreTui Condition="'$(HarborWithSpectreTui)' == ''">true</HarborWithSpectreTui>
 
@@ -93,7 +90,6 @@
       Each symbol is defined IFF its corresponding flag is 'true'.
     -->
     <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
-    <DefineConstants Condition="'$(HarborWithScripting)' == 'true'">$(DefineConstants);HARBOR_WITH_SCRIPTING</DefineConstants>
     <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
@@ -104,8 +100,39 @@
       HostBuilder.cs for the minimal shorthand use case (CLI flag spelled
       with a double-hyphen prefix, omitted here per XML-comment rules).
     -->
-    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithScripting)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+    <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
+
+    <!--
+      NativeAOT configuration. Enabled automatically when HARBOR_MINIMAL=true
+      (which disables Roslyn scripting, non-AOT-friendly providers, etc.).
+      Can also be enabled explicitly: dotnet publish -p:HarborWithAot=true.
+      When AOT is on, force all incompatible features off so the trimmed
+      binary stays functional.
+    -->
+    <HarborWithAot Condition="'$(HARBOR_MINIMAL)' == 'true'">true</HarborWithAot>
+    <HarborWithAot Condition="'$(HarborWithAot)' == ''">false</HarborWithAot>
+    <HarborWithAot Condition="'$(HarborWithAot)' == 'true'">true</HarborWithAot>
+
+    <DefineConstants Condition="'$(HarborWithAot)' == 'true'">$(DefineConstants);HARBOR_WITH_AOT</DefineConstants>
   </PropertyGroup>
+
+  <!-- NativeAOT: strip, optimize for speed. JSON serialization hot paths
+       are migrated to JsonSerializerContext source generation (§PERF-002/§PERF-005)
+       so AOT analysis passes cleanly. Only third-party assemblies that emit
+       their own trimming warnings (MemoryPack, MessagePack) are suppressed. -->
+  <PropertyGroup Condition="'$(HarborWithAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <StripSymbols>true</StripSymbols>
+    <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
+    <TrimMode>full</TrimMode>
+    <UseAppHost>false</UseAppHost>
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <ILLinkTreatWarningsAsErrors>false</ILLinkTreatWarningsAsErrors>
+    <NativeAOTErrorOnWarningsAsErrors>false</NativeAOTErrorOnWarningsAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL3050;IL2104;IL3053</WarningsNotAsErrors>
+  </PropertyGroup>
+
 
   <!--
     Expose internals to the DI test project so it can call the internal
@@ -120,10 +147,12 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Jsonl\Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Plain\Harbor.Tui.Plain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Providers.Ollama\Harbor.Providers.Ollama.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tools.Builtin\Harbor.Tools.Builtin.csproj"/>
 
@@ -172,15 +201,6 @@
     <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
   </ItemGroup>
 
-  <!-- ── Scripting (conditional on HarborWithScripting) ───────────────────── -->
-  <ItemGroup Condition="'$(HarborWithScripting)' == 'true'">
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Hosting\Harbor.Scripting.Hosting.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Storage\Harbor.Scripting.Storage.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Compilation\Harbor.Scripting.Compilation.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Engines\Harbor.Scripting.Engines.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Scripting.Bridge\Harbor.Scripting.Bridge.csproj"/>
-  </ItemGroup>
-
   <!-- ── All Providers (conditional on HarborWithAllProviders) ─────────────── -->
   <ItemGroup Condition="'$(HarborWithAllProviders)' == 'true'">
     <ProjectReference Include="..\..\src\Harbor.Storage.Sqlite\Harbor.Storage.Sqlite.csproj"/>
@@ -190,15 +210,18 @@
   </ItemGroup>
 
   <!-- ── Alternative TUI renderers (conditional on HarborWithSpectreTui) ──── -->
-  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
-    <ProjectReference Include="..\..\src\Harbor.Tui.Ansi\Harbor.Tui.Ansi.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
-  </ItemGroup>
+  <!-- Physically live in contrib/tui since the sprint-2 contrib migration.
+       The main solution does not list them, but the CLI still compiles them
+       in when HarborWithSpectreTui=true (default); minimal/no-spectre-tui
+       builds exclude them entirely. -->
+<!--  <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre\Harbor.Tui.Spectre.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Spectre.Fullscreen\Harbor.Tui.Spectre.Fullscreen.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.Termina\Harbor.Tui.Termina.csproj"/>
+    <ProjectReference Include="..\..\contrib\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+  </ItemGroup>-->
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>

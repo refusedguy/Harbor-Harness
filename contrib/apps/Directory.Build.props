@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!--
+    contrib/apps/Directory.Build.props — composition-root-specific analyzers.
+
+    Every project under apps/ is a Harbor composition root (Cli, Avalonia in main; Wpf,
+    Blazor, Maui in contrib). These are the only projects that wire up the DI container,
+    so they are the only projects that need Excubo's [Exposes] validation.
+
+    The DI lifetime analyzer (DependencyInjection.Lifetime.Analyzers) is added
+    solution-wide in /Directory.Build.props because captive dependency and
+    lifetime mismatch detection is valuable everywhere (libraries can declare
+    Singleton types too).
+
+    Excubo.Analyzers.Annotations provides the [Exposes(typeof(T))] attribute.
+    Excubo.Analyzers.DependencyInjectionValidation is the analyzer that enforces it.
+  -->
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+  <ItemGroup>
+    <!-- Annotation attribute (compile-time only) — needed so composition roots
+         can put [Exposes(typeof(IAgent))] on their BuildHost methods. -->
+    <PackageReference Include="Excubo.Analyzers.Annotations">
+      <IncludeAssets>compile; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!-- Analyzer that validates [Exposes] declarations against actual
+         services.AddXxx<T>() registrations in the method body. -->
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

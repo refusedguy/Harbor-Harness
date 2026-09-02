@@ -1,0 +1,17 @@
+{
+  "name": "harbor-light",
+  "accent": "#0E7490",
+  "success": "#3F8F29",
+  "warning": "#B45309",
+  "error": "#DC2626",
+  "tool": "#7C3AED",
+  "system": "#C2410C",
+  "user": "#3A3F49",
+  "background": "#F5F3EF",
+  "panel": "#FFFFFF",
+  "surface": "#FAFAF8",
+  "surface2": "#EFEDE8",
+  "border": "#D8D5CE",
+  "muted": "#8A8F98",
+  "text": "#2A2E37"
+}

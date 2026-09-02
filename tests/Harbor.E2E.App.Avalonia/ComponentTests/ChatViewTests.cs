@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Events;
 using Harbor.App.Avalonia.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Harbor.Ui.Framework.State;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using TUnit.Assertions;
@@ -30,10 +32,10 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class ChatViewTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("ChatView").ConfigureAwait(false);
 
     /// <summary>
-    ///     Empty state: should show "Start a conversation" placeholder, the
+    ///     Empty state: should show "What are we building today?" placeholder, the
     ///     InputBox, and a DISABLED Send button.
     /// </summary>
     [Test]
@@ -43,7 +45,7 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(3))
+        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
@@ -118,31 +120,34 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        UI(() =>
-        {
-            var chat = Vm.Chat;
-            chat.IsStreaming = true;
-            chat.StreamingBuffer = "The model is streaming a response token by token, character by character…";
-        });
-        await Task.Delay(300).ConfigureAwait(false);
+        // Drive streaming through the REAL event path: direct VM property
+        // sets are stomped by the selector pipeline on the next store
+        // transition now that the app fully boots (see C1).
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        var streamModel = new Harbor.Abstractions.Models.ModelInfo(
+            "qwen2.5-coder:7b", "ollama", "Qwen2.5 Coder 7B", 32_768, 4_096, false, false, true,
+            Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
+        var partial = Harbor.Abstractions.Models.AssistantMessage.Empty("e2e-stream-session", "qwen2.5-coder:7b");
 
-        var hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(2))
+        await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(new MessageUpdateEvent(
+            new TextDeltaEvent("t1", "The model is streaming a response token by token, character by character…"),
+            partial)).ConfigureAwait(false);
+
+        var hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasStreaming).IsTrue();
 
-        var hasBuffer = await Driver.WaitForTextAsync("streaming a response", TimeSpan.FromSeconds(2))
+        var hasBuffer = await Driver.WaitForTextAsync("streaming a response", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
         await Assert.That(hasBuffer).IsTrue();
 
         var path = await CaptureAsync("chat-streaming").ConfigureAwait(false);
 
-        // Reset for next test.
-        UI(() =>
-        {
-            var chat = Vm.Chat;
-            chat.IsStreaming = false;
-            chat.StreamingBuffer = string.Empty;
-        });
+        // Reset through the matching production event.
+        await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
+            Harbor.Abstractions.Models.StopReason.Stop,
+            new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -205,7 +210,7 @@ public sealed class ChatViewTests : ComponentTestBase
         UI(() => Vm.Chat.ClearCommand.Execute(null));
         await Task.Delay(200).ConfigureAwait(false);
 
-        var sawPlaceholder = await Driver.WaitForTextAsync("Start a conversation", TimeSpan.FromSeconds(2))
+        var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(sawPlaceholder).IsTrue();
 
@@ -226,13 +231,13 @@ public sealed class ChatViewTests : ComponentTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
-        UI(() =>
-        {
-            var chat = Vm.Chat;
-            chat.Lines.Add(new ChatLineVm(
-                ChatRole.Error,
-                "Something went wrong: provider returned 503 Service Unavailable"));
-        });
+        // Drive the error through the REAL event path: direct chat.Lines.Add
+        // is stomped by SyncLines on the next store transition (the selector
+        // pipeline re-projects from UiState.Lines, which never saw our manual
+        // add). AgentErrorEvent is exactly what production raises.
+        var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
+        await eventBus.PublishAsync(new Harbor.Abstractions.Events.AgentErrorEvent(
+            "Something went wrong: provider returned 503 Service Unavailable")).ConfigureAwait(false);
         await Task.Delay(200).ConfigureAwait(false);
 
         var hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))

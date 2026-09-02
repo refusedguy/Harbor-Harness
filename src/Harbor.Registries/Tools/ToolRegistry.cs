@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Microsoft.Extensions.Logging;
 using NonBlocking;
 namespace Harbor.Abstractions.Tools;
 /// <summary>
@@ -203,21 +204,24 @@ public sealed class ToolRegistry : IToolRegistry
 public sealed class ToolRegistryBuilder : IToolRegistryBuilder
 {
     private readonly IToolRegistry _registry;
+    private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>
     ///     Construct a builder backed by the supplied registry.
     /// </summary>
     /// <param name="registry">The registry to wrap.</param>
-    public ToolRegistryBuilder(IToolRegistry registry)
+    /// <param name="loggerFactory">Logger factory for tool construction.</param>
+    public ToolRegistryBuilder(IToolRegistry registry, ILoggerFactory loggerFactory)
     {
         _registry = registry;
+        _loggerFactory = loggerFactory;
     }
 
     /// <inheritdoc />
     public void AddTool(ITool tool)
     {
         var result = _registry.Register(tool);
-        if (result.IsFailure)
+        if (result.IsFailure) // §4.6-ok: void-контракт, программная ошибка регистрации → исключение.
         {
             throw new InvalidOperationException(result.Error);
         }
@@ -228,4 +232,13 @@ public sealed class ToolRegistryBuilder : IToolRegistryBuilder
 
     /// <inheritdoc />
     public void AddTool(Func<ITool> factory) => AddTool(factory());
+
+    /// <summary>
+    ///     Register a tool via a factory interface.
+    /// </summary>
+    /// <param name="factory">The factory producing the tool instance.</param>
+    public void AddTool(IToolFactory factory) => AddTool(factory.CreateTool(_loggerFactory));
+
+    /// <inheritdoc />
+    public void AddTool(Func<ILoggerFactory, ITool> factory) => AddTool(factory(_loggerFactory));
 }

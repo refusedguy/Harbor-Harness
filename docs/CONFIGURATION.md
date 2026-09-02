@@ -108,6 +108,35 @@ live on `CommonConfig` itself (`CommonConfig.cs`):
 | `CompactionKeepRecentTokens` | `int` | `20000` | Target token count for kept tail. |
 | `CompactionTailTurns` | `int` | `2` | Minimum recent turns to keep verbatim. |
 | `ConfigDirectory` | `string` (init) | `~/.harbor` | Absolute dir. Init-only so tests can override. |
+
+#### `ui.consoleEx` (ConsoleEx renderer tuning)
+
+The ConsoleEx path is selected by `tui: "consoleex"` or the
+`HARBOR_TUI=consoleex` env var; this nested section is its kill-switch and
+frame-wrapper knob (`Harbor.Application.Configuration.ConfigSections.cs`):
+
+```jsonc
+// ~/.harbor/config.json
+{
+  "ui": {
+    "consoleEx": {
+      "enabled": true,       // false → a consoleex selection falls back to ANSI with a log line
+      "syncUpdates": true    // wrap frames in synchronized-update pair CSI ?2026 h/l (DECSYNC)
+    }
+  }
+}
+```
+
+A legacy root-level `"consoleEx": {...}` key is still **read** for backward
+compat but is no longer written — the nested `ui.consoleEx` form is canonical.
+
+#### Presentation fields on config.json
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `ui.tui` | `"ansi"` | Preferred TUI renderer id (only `consoleex` honors this file; `cli.json` wins for others). |
+| `ui.storage` | `"jsonl"` | Storage backend presentation default. |
+| `ui.onboarded` | `false` | Onboarding completion marker. |
 | `ConfigFileName` | `string` | `"config.json"` | Filename (no dir). |
 | `ConfigFilePath` | `string` (computed) | `~/.harbor/config.json` | Absolute path. |
 
@@ -126,7 +155,7 @@ fields.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `DefaultTuiRenderer` | `string` | `"auto"` | `auto` \| `ansi` \| `plain` \| `spectre` \| `spectre-tui` \| `fullscreen` \| `terminal-gui` \| `termina` \| `razor`. `auto` resolves to `spectre-tui`. Env `HARBOR_TUI` overrides. |
+| `DefaultTuiRenderer` | `string` | `"auto"` | `auto` \| `ansi` \| `plain` \| `spectre` \| `spectre-tui` \| `fullscreen` \| `terminal-gui` \| `termina` \| `razor` \| `consoleex`. `auto` resolves to `spectre-tui` (compiled-in default), `plain` if Spectre renderers are excluded at build time. Env `HARBOR_TUI` overrides. |
 | `EnableOnboardingWizard` | `bool` | `true` | Whether to run first-run onboarding on next launch. |
 | `EnableSlashCommands` | `bool` | `true` | Whether to register builtin slash commands (`/help`, `/clear`, `/agents`). |
 | `DisabledTools` | `ImmutableList<string>` | `Empty` | Tool IDs NOT registered at startup. |
@@ -147,7 +176,7 @@ fields.
 | `ShowSessionSidebar` | `bool` | `true` | Left session-sidebar visible. |
 | `OpenTabs` | `ImmutableList<string>` | `Empty` | Session IDs open in tabs (L-to-R). |
 
-### WpfConfig (`apps/Harbor.App.Wpf/Configuration/WpfConfig.cs`)
+### WpfConfig (`contrib/apps/Harbor.App.Wpf/Configuration/WpfConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -157,14 +186,14 @@ fields.
 | `WindowMaximized` | `bool` | `false` | Open maximized on next launch. |
 | `UseAvalonDock` | `bool` | `true` | Use AvalonDock (Dirkster.AvalonDock) as panel system. |
 
-### MauiConfig (`apps/Harbor.App.Maui/Configuration/MauiConfig.cs`)
+### MauiConfig (`contrib/apps/Harbor.App.Maui/Configuration/MauiConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `UseDarkMode` | `bool` | `true` | Force dark mode. `false` forces light. |
 | `LastPlatform` | `string` | `"windows"` | `windows` \| `maccatalyst` \| `ios` \| `android`. |
 
-### BlazorConfig (`apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs`)
+### BlazorConfig (`contrib/apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs`)
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -535,9 +564,9 @@ Harbor.Desktop.Abstractions/Configuration/
 
 apps/Harbor.App.Cli/Configuration/CliConfig.cs         ← sealed record : AppConfigBase
 apps/Harbor.App.Avalonia/Configuration/AvaloniaConfig.cs
-apps/Harbor.App.Wpf/Configuration/WpfConfig.cs
-apps/Harbor.App.Maui/Configuration/MauiConfig.cs
-apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs
+contrib/apps/Harbor.App.Wpf/Configuration/WpfConfig.cs
+contrib/apps/Harbor.App.Maui/Configuration/MauiConfig.cs
+contrib/apps/Harbor.App.Blazor/Configuration/BlazorConfig.cs
 ```
 
 Each app's composition root wires BOTH layers:
@@ -604,7 +633,8 @@ synchronously.
 
 Each app's test project asserts that BOTH `ICommonConfigStore` + `CommonConfig`
 (shared) AND `IAppConfigStore<TAppConfig>` + `TAppConfig` (app-specific) AND
-`CompositeConfig<TAppConfig>` (composite) are registered:
+`CompositeConfig<TAppConfig>` (composite) are registered
+(Wpf/Maui/Blazor test projects live in `contrib/tests/` since sprint-2):
 
 | Test project | Test file | Assertions |
 | --- | --- | --- |

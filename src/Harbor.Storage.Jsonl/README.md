@@ -1,6 +1,6 @@
 # Harbor.Storage.Jsonl
 
-JSONL (newline-delimited JSON) session storage backend. Each session is a single `.jsonl` file under `~/.harbor/sessions/` — append-only writes, compaction rewrites the file in place. Default backend for the CLI.
+JSONL (newline-delimited JSON) session storage backend. Each session is a single `.jsonl` file under `<HarborDir>/sessions/` — append-only writes. Default backend for the CLI (`HARBOR_STORAGE=jsonl`, `src/Harbor.Hosting/Modules/StorageModule.cs:20-35`).
 
 ## Layer
 
@@ -13,19 +13,21 @@ Infrastructure — session/persistence backend. References `Harbor.Abstractions`
 
 ## Public API
 
-- `JsonlSessionStore` — implements `ISessionStore` from Harbor.Abstractions
-- `JsonlSessionFormat` — low-level line serialization helpers
-- `JsonlCompactor` — anchored-summary compactor that folds old turns into a single summary line
+- `JsonlSessionStore(sessionsDir, logger)` — implements `ISessionStore` from Harbor.Abstractions
+- `JsonlMessageCodec` — line serialization helpers for messages
+- `JsonlCodecContext` — AOT-compatible compile-time `JsonSerializerContext` for the wire format (`JsonlCodecContext.cs:1-34`; per-line parsing avoids reflection on hot paths)
 
 ## Usage
 
-Registered via DI in the composition root:
+Registered via DI by the host's `StorageModule`:
 
 ```csharp
-services.AddSingleton<ISessionStore, JsonlSessionStore>();
+string sessionsDir = Path.Combine(ctx.Options.HarborDir, "sessions");
+services.AddSingleton<ISessionStore>(new JsonlSessionStore(sessionsDir, logger));
 ```
 
-The `AgentLoop` resolves `ISessionStore` and calls `AppendAsync` / `LoadAsync` / `CompactAsync` as messages flow.
+The agent persists messages as they flow via `ISessionStore.AppendMessageAsync`
+(see `src/Harbor.Application/Agents/DefaultAgent.cs:293`). Anchored-summary compaction is owned by `CompactionService` in `Harbor.Application` (`src/Harbor.Application/Sessions/CompactionService.cs`) and folds old turns into a summary line in the same store.
 
 ## See also
 

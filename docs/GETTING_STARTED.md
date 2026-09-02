@@ -28,16 +28,16 @@ export HARBOR_MODEL=kilocode/tencent/hy3:free
 export HARBOR_TUI=plain    # простой вывод, удобно для первого запуска
 
 # 4. Запусти one-shot промпт
-dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 # 5. Или запусти интерактивный REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### Что ты увидишь (реальный stdout, E2E-verified 2026-07-16)
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 [agent_start] session=8f3c2a01e9d74f5f9b8c1a2b3c4d5e6f
 [turn_start] turn=1
@@ -73,7 +73,7 @@ status: kilocode/tencent/hy3:free | agent: code | $0.0000 | 142↑ 87↓ | idle
 ### Task 1: Ask a coding question
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask \
+$ dotnet run --project apps/Harbor.App.Cli -- ask \
     "What's the difference between IEnumerable<T> and IQueryable<T> in C#?"
 ```
 
@@ -84,18 +84,18 @@ LLM ответит текстом без tool calls. Event sequence:
 
 ```bash
 $ export HARBOR_TUI=ansi   # ANSI для интерактивности
-$ dotnet run --project src/Harbor.Cli
-harbor> Add a TODO comment to the top of src/Harbor.Core/Agents/AgentLoop.cs
+$ dotnet run --project apps/Harbor.App.Cli
+harbor> Add a TODO comment to the top of src/Harbor.Application/Agents/AgentLoop.cs
 ```
 
 LLM вызовет `read` (чтобы увидеть файл), затем `edit` (добавить строку). Permission
 system спросит подтверждение, если сработает `Ask`-rule.
 
 ```bash
-[tool_execution_start] id=tc_1 tool=read args={"path":"src/Harbor.Core/Agents/AgentLoop.cs"}
+[tool_execution_start] id=tc_1 tool=read args={"path":"src/Harbor.Application/Agents/AgentLoop.cs"}
 [tool_execution_end]   id=tc_1 ok=true
 [tool_execution_start] id=tc_2 tool=edit args={"path":"...","old":"...","new":"..."}
-[permission] edit wants to access src/Harbor.Core/Agents/AgentLoop.cs
+[permission] edit wants to access src/Harbor.Application/Agents/AgentLoop.cs
   [a] allow  [d] deny  [A] always allow
 ```
 
@@ -181,20 +181,20 @@ ollama serve  # in another terminal
 
 ```bash
 # Interactive REPL
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # One-shot prompt
 # (E2E-verified free example using the Kilocode free model)
 export KILO_API_KEY=klo_...
 export HARBOR_MODEL=kilocode/tencent/hy3:free
-dotnet run --project src/Harbor.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
+dotnet run --project apps/Harbor.App.Cli -- ask "Write a Python one-liner that prints the first 10 Fibonacci numbers."
 
 # List available providers
-dotnet run --project src/Harbor.Cli -- providers
+dotnet run --project apps/Harbor.App.Cli -- providers
 
 # List available models
-dotnet run --project src/Harbor.Cli -- models
-dotnet run --project src/Harbor.Cli -- models kilocode
+dotnet run --project apps/Harbor.App.Cli -- models
+dotnet run --project apps/Harbor.App.Cli -- models kilocode
 ```
 
 ### 5. Real output (E2E verified, 2026-07-16)
@@ -206,7 +206,7 @@ Running the one-shot prompt above produces output like this (captured with
 $ export KILO_API_KEY=klo_…
 $ export HARBOR_MODEL=kilocode/tencent/hy3:free
 $ export HARBOR_TUI=plain
-$ dotnet run --project src/Harbor.Cli -- ask "Print hello world in 3 languages"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "Print hello world in 3 languages"
 
 [agent_start] session=8f3c…
 [turn_start] turn=1
@@ -258,9 +258,17 @@ export HARBOR_TUI=ansi
 # No colors — for pipes, CI, accessibility
 export HARBOR_TUI=plain
 
-# Rich panels/tables via Spectre.Console
+# Rich interactive shell (contrib renderers are compiled into the CLI by default)
 export HARBOR_TUI=spectre
+
+# Second interactive shell (raw mode, cell-diff output) — opt-in
+export HARBOR_TUI=consoleex
 ```
+
+> The rich renderers (`spectre-tui`, `spectre`, `fullscreen`, `termina`,
+> `terminal-gui`, `razor`) live in [`contrib/tui/`](../contrib/tui/) and are
+> compiled into the CLI by the default-on `HarborWithSpectreTui` MSBuild flag;
+> `HARBOR_MINIMAL=true` excludes them (then such ids fall back to `plain`).
 
 See all options: `harbor tui`
 
@@ -345,12 +353,19 @@ harbor providers  # verify it's loaded
 | Command | Description |
 |---|---|
 | `/help` | Show available commands |
+| `/setup` | Interactive onboarding wizard |
+| `/auth` | Provider authentication |
+| `/model` | Switch model without restarting the REPL |
+| `/agent`, `/mode` | Switch agent mode (`code` / `plan` / `explore`) |
+| `/config` | Inspect configuration |
 | `/providers` | List registered providers |
-| `/models [provider]` | List models (all or by provider) |
 | `/sessions` | List saved sessions |
 | `/tui` | Show TUI renderer options |
 | `/storage` | Show storage backend options |
-| `/exit` | Quit |
+| `exit`, `quit`, `:q` | Quit the REPL |
+
+> There is no `/tools` slash command — see the tools table below and
+> [TOOLS_CATALOG.md](./TOOLS_CATALOG.md) for the full reference.
 
 ## Session management
 
@@ -362,6 +377,9 @@ harbor sessions  # list
 
 ## Tools available to the agent
 
+Full set (`HarborToolSetKind.Full14`, the CLI default — see
+[TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
+
 | Tool | Description |
 |---|---|
 | `read` | Read file contents (text or image, with line numbers) |
@@ -372,6 +390,15 @@ harbor sessions  # list
 | `grep` | Search file contents (regex) |
 | `ls` | List directory contents |
 | `task` | Delegate to a sub-agent (e.g. `explore`, `plan`) |
+| `webfetch` | Fetch URL → markdown (HTML stripped, code kept) |
+| `patch` | Apply a unified-diff patch atomically |
+| `notebook` | Persistent per-session markdown notes |
+| `ripgrep` | Fast content search via `rg` binary (gitignore-aware) |
+| `tree` | ASCII directory tree (gitignore-aware) |
+| `mcp` | Bridge to registered MCP servers |
+
+The Avalonia desktop host registers the smaller `Standard10` set (without
+`task`, `webfetch`, `ripgrep`, `mcp`).
 
 ## Agents (modes)
 
@@ -431,12 +458,12 @@ export KILO_API_KEY=klo_...    # get one at https://kilo.ai (free)
 **Как это выглядит в терминале** (реальный stderr):
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "hello"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "hello"
 fail: Harbor.Providers.OpenAiCompatible.ConfigAuthResolver[0]
       Auth failed for provider 'kilocode': Set $KILO_API_KEY
       Expected env var: KILO_API_KEY
       Got: (null)
-fail: Harbor.Cli.Program[0]
+fail: Harbor.App.Cli.Program[0]
       Unhandled exception in CLI entry point
       Harbor.Abstractions.Providers.ProviderAuthException: Auth failed for provider 'kilocode'
          at Harbor.Providers.OpenAiCompatible.ConfigAuthResolver.GetApiKeyAsync()
@@ -462,7 +489,7 @@ Fix:
 
 ```bash
 # 1. Список всех доступных моделей
-dotnet run --project src/Harbor.Cli -- models anthropic
+dotnet run --project apps/Harbor.App.Cli -- models anthropic
 
 # 2. Используй точное имя модели
 export HARBOR_MODEL=anthropic/claude-sonnet-4-20250514   # exact id
@@ -479,7 +506,7 @@ curl http://localhost:11434/api/tags  # should return JSON
 **Типичная ошибка**:
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- ask "hi"
+$ dotnet run --project apps/Harbor.App.Cli -- ask "hi"
 fail: Harbor.Providers.Ollama.OllamaLlmClient[0]
       Failed to connect to Ollama at http://localhost:11434
       System.Net.Http.HttpRequestException: Connection refused (localhost:11434)
@@ -496,9 +523,9 @@ Fix: запусти `ollama serve` в отдельном терминале.
 **Пример невалидного JSON** (trailing comma):
 
 ```bash
-$ dotnet run --project src/Harbor.Cli -- providers
-warn: Harbor.Core.Configuration.JsonConfigStore[0]
-      Failed to parse providers/myllm.json: Unexpected token ',' at position 142
+$ dotnet run --project apps/Harbor.App.Cli -- providers
+warn: Harbor.Hosting.JsonProviderDiscovery[0]
+      Skipping provider config 'providers/myllm.json': Unexpected token ',' at position 142
 ```
 
 Fix: убери trailing comma, запусти `python3 -m json.tool providers/myllm.json`
@@ -537,28 +564,29 @@ var events = await bus.GetScrollbackAsync(cts.Token);
 ```bash
 # 1. Попробуй plain renderer (no colors, no escape codes)
 export HARBOR_TUI=plain
-dotnet run --project src/Harbor.Cli
+dotnet run --project apps/Harbor.App.Cli
 
 # 2. Если работает — проблема в твоём terminal emulator
 #    Проверь TERM variable
 echo $TERM    # должно быть xterm-256color или screen-256color
 
 # 3. Для CI / pipes — всегда используй plain
-HARBOR_TUI=plain dotnet run --project src/Harbor.Cli -- ask "..." | grep foo
+HARBOR_TUI=plain dotnet run --project apps/Harbor.App.Cli -- ask "..." | grep foo
 ```
 
 ### "Tool 'X' is not registered" в логах
 
-Plugin не загрузился. Проверь `~/.harbor/plugins/` и логи CsPluginLoader.
+Plugin не загрузился. Проверь `~/.harbor/plugins/` и лог
+(`~/.harbor/logs/harbor-cli-*.log`).
 
 ```bash
 $ ls ~/.harbor/plugins/
 hello.cs  webhook.cs
 
-$ tail -50 ~/.harbor/harbor.log | grep -i plugin
-info: Harbor.Core.Plugins.CsPluginLoader[0]
-     Loaded plugin 'hello' from ~/.harbor/plugins/hello.cs
-warn: Harbor.Core.Plugins.CsPluginLoader[0]
+$ grep -i plugin ~/.harbor/logs/harbor-cli-*.log | tail -5
+info: Harbor.Plugins.Hosting.PluginHost[0]
+     Loaded 1 CS plugin(s)
+warn: Harbor.Plugins.Runtime.CsPluginLoader[0]
      Failed to compile ~/.harbor/plugins/webhook.cs: (12,17): error CS0103: The name 'HttpClient' does not exist in the current context
 ```
 
@@ -566,29 +594,17 @@ Fix: добавь `using System.Net.Http;` в `webhook.cs`, перезапуст
 
 ### Agent отвечает "I don't have a tool for that"
 
-LLM пытается вызвать tool, который не зарегистрирован. Проверь что tool
-реально есть:
-
-```bash
-harbor> /tools
-  read     Read file contents
-  write    Write/create files
-  edit     String replacement
-  bash     Execute shell commands
-  glob     Find files by pattern
-  grep     Search file contents
-  ls       List directory
-  task     Delegate to sub-agent
-```
-
-Если нужного tool нет — поставь plugin (см. [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md)).
+LLM пытается вызвать tool, который не зарегистрирован. Зарегистрированные tools
+видны в логе и в [TOOLS_CATALOG.md §1](./TOOLS_CATALOG.md#1-inventory) (REPL-команды
+`/tools` нет). Если нужного tool нет — поставьте plugin
+(см. [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md)).
 
 ### Streaming залипает на одном месте
 
-Возможно LLM-strim ждёт tool-call но tool не валидируется. Проверь логи:
+Возможно LLM-стрим ждёт tool-call, но tool не валидируется. Проверь лог:
 
 ```bash
-tail -100 ~/.harbor/harbor.log | grep -E "tool|stream"
+tail -100 ~/.harbor/logs/harbor-cli-*.log | grep -E "tool|stream"
 ```
 
 Если видишь `Validating tool call args... failed: Missing 'path' argument` —
@@ -600,7 +616,7 @@ Compaction должен срабатывать автоматически ког
 Если не срабатывает — проверь `HeuristicTokenEstimator` и `CompactionService`:
 
 ```bash
-$ HARBOR_LOG_LEVEL=debug dotnet run --project src/Harbor.Cli
+$ HARBOR_LOGLEVEL=debug dotnet run --project apps/Harbor.App.Cli
 # В логах должно быть:
 # debug: CompactionService.ShouldCompact: estimated=12345 / context=8192 → true
 # info:  Compaction triggered for session abc123

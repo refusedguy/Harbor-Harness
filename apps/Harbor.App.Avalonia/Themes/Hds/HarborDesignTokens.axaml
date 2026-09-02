@@ -1,0 +1,165 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        HDS HarborDesignTokens — the "Harbor Terminal" theme built from the
+        HDS v1 terminal token catalog (docs/design-system-report-20260827.html
+        §Design Tokens / src/Harbor.DesignSystem TerminalColorPalette):
+
+          accent #39BAE6 · success #7FD962 · warning #FFB454 · error #FF6B6B
+          tool #D2A6FF · system #F29668 · text #B3B9C5 · muted #5C6773
+          bg #0A0E14 · panel #0D1117 · surface #131820 · surface2 #1A1F2B
+          border #1F2430
+
+        Key names mirror the CatppuccinMocha baseline so ThemeParityTests can
+        verify full coverage and ThemeService.ApplyHds can hot-swap this
+        dictionary by name ("HarborDesignTokens").
+
+        A few state tones (hover/pressed accents, secondary text steps) are
+        derived from the catalog colors — marked "(derived)" below; every
+        base role uses the exact catalog value.
+    -->
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Harbor.App.Avalonia/Themes/Hds/BaseTokens.axaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- ════════════ Catalog surfaces ════════════ -->
+    <Color x:Key="MochaBase">#0A0E14</Color><!-- BG -->
+    <Color x:Key="MochaMantle">#0D1117</Color><!-- PANEL -->
+    <Color x:Key="MochaCrust">#0A0E14</Color>
+    <Color x:Key="MochaSurface0">#131820</Color><!-- SURFACE -->
+    <Color x:Key="MochaSurface1">#1A1F2B</Color><!-- SURFACE2 -->
+    <Color x:Key="MochaSurface2">#5C6773</Color><!-- MUTED -->
+
+    <!-- ════════════ Catalog text tiers ════════════ -->
+    <Color x:Key="MochaText">#B3B9C5</Color><!-- TEXT -->
+    <Color x:Key="MochaSubtext1">#C7CCD4</Color><!-- (derived: Text lifted) -->
+    <Color x:Key="MochaSubtext0">#8D97A3</Color><!-- (derived: Muted lifted) -->
+    <Color x:Key="MochaOverlay2">#5C6773</Color><!-- MUTED -->
+    <Color x:Key="MochaOverlay1">#78828F</Color><!-- (derived) -->
+    <Color x:Key="MochaOverlay0">#606B79</Color><!-- (derived) -->
+
+    <!-- ════════════ Catalog accents ════════════ -->
+    <Color x:Key="MochaBlue">#39BAE6</Color><!-- ACCENT -->
+    <Color x:Key="MochaLavender">#D2A6FF</Color><!-- TOOL -->
+    <Color x:Key="MochaSapphire">#66C8EC</Color><!-- (derived: accent hover) -->
+    <Color x:Key="MochaSky">#39BAE6</Color><!-- ACCENT -->
+    <Color x:Key="MochaTeal">#39BAE6</Color><!-- ACCENT -->
+    <Color x:Key="MochaGreen">#7FD962</Color><!-- SUCCESS -->
+    <Color x:Key="MochaYellow">#FFB454</Color><!-- WARNING -->
+    <Color x:Key="MochaPeach">#F29668</Color><!-- SYSTEM -->
+    <Color x:Key="MochaMaroon">#FF6B6B</Color><!-- ERROR -->
+    <Color x:Key="MochaRed">#FF6B6B</Color><!-- ERROR -->
+    <Color x:Key="MochaMauve">#D2A6FF</Color><!-- TOOL -->
+    <Color x:Key="MochaPink">#D2A6FF</Color><!-- TOOL -->
+    <Color x:Key="MochaFlamingo">#B3B9C5</Color><!-- TEXT -->
+    <Color x:Key="MochaRosewater">#C7CCD4</Color><!-- (derived: Subtext1) -->
+
+    <!-- ════════════ Semantic colors ════════════ -->
+    <Color x:Key="AccentColor">#39BAE6</Color>
+    <Color x:Key="AccentHoverColor">#66C8EC</Color><!-- (derived) -->
+    <Color x:Key="AccentPressedColor">#2394C2</Color><!-- (derived) -->
+    <Color x:Key="SuccessColor">#7FD962</Color>
+    <Color x:Key="WarningColor">#FFB454</Color>
+    <Color x:Key="ErrorColor">#FF6B6B</Color>
+    <Color x:Key="InfoColor">#39BAE6</Color>
+
+    <!-- ════════════ Chat role brushes ════════════ -->
+    <SolidColorBrush x:Key="ChatUserBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="ChatAssistantBrush" Color="#B3B9C5" />
+    <SolidColorBrush x:Key="ChatThinkingBrush" Color="#5C6773" />
+    <SolidColorBrush x:Key="ChatToolBrush" Color="#D2A6FF" />
+    <SolidColorBrush x:Key="ChatToolResultBrush" Color="#7FD962" />
+    <SolidColorBrush x:Key="ChatSystemBrush" Color="#F29668" />
+    <SolidColorBrush x:Key="ChatErrorBrush" Color="#FF6B6B" />
+
+    <!-- ════════════ Background brushes (depth hierarchy) ════════════ -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0A0E14" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#0D1117" />
+    <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#0D1117" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#0D1117" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#131820" />
+    <SolidColorBrush x:Key="CardElevatedBackgroundBrush" Color="#1A1F2B" />
+    <SolidColorBrush x:Key="HoverBackgroundBrush" Color="#131820" />
+    <SolidColorBrush x:Key="HoverStrongBackgroundBrush" Color="#1A1F2B" />
+    <SolidColorBrush x:Key="SelectedBackgroundBrush" Color="#1A1F2B" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#1F2430" /><!-- BORDER -->
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="#1F2430" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#995C6773" /><!-- (MUTED @ 60%) -->
+    <SolidColorBrush x:Key="SeparatorBrush" Color="#1F2430" />
+
+    <!-- ════════════ Accent + state brushes ════════════ -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#66C8EC" /><!-- (derived) -->
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#2394C2" /><!-- (derived) -->
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#0A0E14" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="#0A0E14" />
+    <FontFamily x:Key="FontUi">avares://Avalonia.Fonts.Inter/Assets#Inter, Segoe UI, system-ui, sans-serif</FontFamily>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#7FD962" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFB454" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FF6B6B" />
+    <SolidColorBrush x:Key="InfoBrush" Color="#39BAE6" />
+
+    <!-- ════════════ Text brushes ════════════ -->
+    <SolidColorBrush x:Key="TextBrush" Color="#B3B9C5" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#B3B9C5" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#8D97A3" />
+    <SolidColorBrush x:Key="TextSubtleBrush" Color="#8D97A3" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#5C6773" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#78828F" />
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="#606B79" />
+
+    <!-- ════════════ Status brushes ════════════ -->
+    <SolidColorBrush x:Key="StatusIdleBrush" Color="#8D97A3" />
+    <SolidColorBrush x:Key="StatusRunningBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="StatusErrorBrush" Color="#FF6B6B" />
+    <SolidColorBrush x:Key="StatusSuccessBrush" Color="#7FD962" />
+
+    <!-- ════════════ State brushes (HDS token names) ════════════ -->
+    <SolidColorBrush x:Key="AccentPrimaryBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="AccentHoverBrush_HDS" Color="#66C8EC" /><!-- (derived) -->
+    <SolidColorBrush x:Key="AccentMutedBrush" Color="#39BAE6" Opacity="0.1" />
+    <SolidColorBrush x:Key="StateErrorBrush" Color="#FF6B6B" />
+    <SolidColorBrush x:Key="StateWarningBrush" Color="#FFB454" />
+    <SolidColorBrush x:Key="StateSuccessBrush" Color="#7FD962" />
+    <SolidColorBrush x:Key="StateRunningBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="StateIdleBrush" Color="#5C6773" />
+    <SolidColorBrush x:Key="StateInfoBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="StatePendingBrush" Color="#5C6773" />
+
+    <!-- ════════════ Surface semantic brushes (HDS token names) ════════════ -->
+    <SolidColorBrush x:Key="BgAppBrush" Color="#0A0E14" />
+    <SolidColorBrush x:Key="BgSubtleBrush" Color="#131820" />
+    <SolidColorBrush x:Key="BgInputBrush" Color="#131820" />
+    <SolidColorBrush x:Key="BgPanelElevatedBrush" Color="#1A1F2B" />
+    <SolidColorBrush x:Key="BgOverlayBrush" Color="#80000000" />
+    <SolidColorBrush x:Key="BgGlassBrush" Color="#131820" />
+
+    <!-- ════════════ Legacy aliases (for Dark.axaml / HarborDark.axaml compat) ════════════ -->
+    <SolidColorBrush x:Key="BgPanelBrush" Color="#0D1117" />
+    <SolidColorBrush x:Key="BgRailBrush" Color="#0D1117" />
+    <SolidColorBrush x:Key="BgHoverBrush" Color="#131820" />
+    <SolidColorBrush x:Key="BgSelectedBrush" Color="#1A1F2B" />
+
+    <!-- ════════════ Stepper brushes ════════════ -->
+    <SolidColorBrush x:Key="StepperActiveBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="StepperDoneBrush" Color="#39BAE6" />
+    <SolidColorBrush x:Key="StepperPendingBrush" Color="#1A1F2B" />
+    <SolidColorBrush x:Key="StepperConnectorBrush" Color="#1F2430" />
+
+    <!-- ════════════ Cost brushes ════════════ -->
+    <SolidColorBrush x:Key="CostLowBrush" Color="#7FD962" />
+    <SolidColorBrush x:Key="CostMidBrush" Color="#FFB454" />
+    <SolidColorBrush x:Key="CostHighBrush" Color="#FF6B6B" />
+
+    <!-- ════════════ Cost text colors ════════════ -->
+    <Color x:Key="CostLowColor">#7FD962</Color>
+    <Color x:Key="CostMidColor">#FFB454</Color>
+    <Color x:Key="CostHighColor">#FF6B6B</Color>
+
+    <!-- ════════════ Window caption colors ════════════ -->
+    <Color x:Key="WindowCaptionHoverColor">#131820</Color>
+    <Color x:Key="WindowCaptionActiveColor">#1A1F2B</Color>
+
+</ResourceDictionary>

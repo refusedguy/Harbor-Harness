@@ -75,7 +75,7 @@ public sealed class SessionSwitcher
             foreach (var msg in messages.Value)
             {
                 (var role, string text) = SessionFactory.MessageToChatLine(msg);
-                targetStore.Transition(s => s.AddLine(role, text));
+                targetStore.Dispatch(new UiMsg.AppendLine(role, text));
             }
         }
 

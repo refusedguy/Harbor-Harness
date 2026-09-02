@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>harbor-plugins-host</AssemblyName>
+    <RootNamespace>Harbor.Plugins.Host</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!--
+      This host MUST run as a normal JIT process: it compiles CS-source plugins
+      with Roslyn, which is incompatible with NativeAOT. It is spawned out-of-process
+      by the AOT core (e.g. via mcp.json "harbor-csharp-plugins"), so the core never
+      references Roslyn or Microsoft.CodeAnalysis directly.
+    -->
+    <PublishAot>false</PublishAot>
+    <Description>Out-of-process MCP stdio server that exposes Harbor's C# (Roslyn) ITool plugins to the AOT core.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Compilation\Harbor.Plugins.Compilation.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
+    <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+  </ItemGroup>
+
+</Project>

@@ -73,6 +73,18 @@ public sealed record UiState
     /// <summary>Live streaming message (text + thinking) for the current turn.</summary>
     public ActiveMessage Active { get; init; } = ActiveMessage.Empty;
 
+    /// <summary>
+    ///     Text deltas not yet concatenated into
+    ///     <see cref="Active.TextBuffer" /> (flush policy: <see cref="StreamingSync" />).
+    /// </summary>
+    public ChunkedBuffer PendingStreamText { get; init; } = ChunkedBuffer.Empty;
+
+    /// <summary>
+    ///     Thinking deltas not yet concatenated into
+    ///     <see cref="Active.ThinkBuffer" /> (flush policy: <see cref="StreamingSync" />).
+    /// </summary>
+    public ChunkedBuffer PendingStreamThink { get; init; } = ChunkedBuffer.Empty;
+
     /// <summary>Whether a message is actively streaming right now.</summary>
     public bool IsStreaming { get; init; }
 
@@ -206,6 +218,8 @@ public sealed record UiState
     {
         Lines = ImmutableArray<ChatLine>.Empty,
         Active = ActiveMessage.Empty,
+        PendingStreamText = ChunkedBuffer.Empty,
+        PendingStreamThink = ChunkedBuffer.Empty,
         IsStreaming = false,
         Input = InputModel.Empty,
         ScrollOffset = 0,

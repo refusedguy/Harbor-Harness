@@ -1,0 +1,115 @@
+# golden: ce3-chat-screen
+## grid art (64x14)
+› please fix the parser                                         
+Looking at it.                                                  
+- step one                                                      
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+                                                                
+fix the bug in |                                                
+                                                                
+                                                                
+⠙ kilocode/hy3 ▰▰▰▱▱▱ 12.4k↑ 5.2k↓ $0.0021                      
+## cells (x,y: rune fg/bg/attrs width)
+0,0: '›' rgb(57,186,230)/d/B w1
+1,0: ' ' rgb(57,186,230)/d/B w1
+2,0: 'p' d/d/B w1
+3,0: 'l' d/d/B w1
+4,0: 'e' d/d/B w1
+5,0: 'a' d/d/B w1
+6,0: 's' d/d/B w1
+7,0: 'e' d/d/B w1
+8,0: ' ' d/d/B w1
+9,0: 'f' d/d/B w1
+10,0: 'i' d/d/B w1
+11,0: 'x' d/d/B w1
+12,0: ' ' d/d/B w1
+13,0: 't' d/d/B w1
+14,0: 'h' d/d/B w1
+15,0: 'e' d/d/B w1
+16,0: ' ' d/d/B w1
+17,0: 'p' d/d/B w1
+18,0: 'a' d/d/B w1
+19,0: 'r' d/d/B w1
+20,0: 's' d/d/B w1
+21,0: 'e' d/d/B w1
+22,0: 'r' d/d/B w1
+0,1: 'L' d/d/- w1
+1,1: 'o' d/d/- w1
+2,1: 'o' d/d/- w1
+3,1: 'k' d/d/- w1
+4,1: 'i' d/d/- w1
+5,1: 'n' d/d/- w1
+6,1: 'g' d/d/- w1
+8,1: 'a' d/d/B w1
+9,1: 't' d/d/B w1
+11,1: 'i' d/d/- w1
+12,1: 't' d/d/- w1
+13,1: '.' d/d/- w1
+0,2: '-' i4/d/- w1
+1,2: ' ' i4/d/- w1
+2,2: 's' d/d/- w1
+3,2: 't' d/d/- w1
+4,2: 'e' d/d/- w1
+5,2: 'p' d/d/- w1
+7,2: 'o' d/d/- w1
+8,2: 'n' d/d/- w1
+9,2: 'e' d/d/- w1
+0,10: 'f' d/d/- w1
+1,10: 'i' d/d/- w1
+2,10: 'x' d/d/- w1
+4,10: 't' d/d/- w1
+5,10: 'h' d/d/- w1
+6,10: 'e' d/d/- w1
+8,10: 'b' d/d/- w1
+9,10: 'u' d/d/- w1
+10,10: 'g' d/d/- w1
+12,10: 'i' d/d/- w1
+13,10: 'n' d/d/- w1
+15,10: '|' d/d/- w1
+16,10: ' ' d/d/R w1
+0,13: '⠙' i4/d/B w1
+2,13: 'k' i4/d/B w1
+3,13: 'i' i4/d/B w1
+4,13: 'l' i4/d/B w1
+5,13: 'o' i4/d/B w1
+6,13: 'c' i4/d/B w1
+7,13: 'o' i4/d/B w1
+8,13: 'd' i4/d/B w1
+9,13: 'e' i4/d/B w1
+10,13: '/' i4/d/B w1
+11,13: 'h' i4/d/B w1
+12,13: 'y' i4/d/B w1
+13,13: '3' i4/d/B w1
+15,13: '▰' i2/d/- w1
+16,13: '▰' i2/d/- w1
+17,13: '▰' i2/d/- w1
+18,13: '▱' i2/d/- w1
+19,13: '▱' i2/d/- w1
+20,13: '▱' i2/d/- w1
+22,13: '1' d/d/D w1
+23,13: '2' d/d/D w1
+24,13: '.' d/d/D w1
+25,13: '4' d/d/D w1
+26,13: 'k' d/d/D w1
+27,13: '↑' d/d/D w1
+28,13: ' ' d/d/D w1
+29,13: '5' d/d/D w1
+30,13: '.' d/d/D w1
+31,13: '2' d/d/D w1
+32,13: 'k' d/d/D w1
+33,13: '↓' d/d/D w1
+35,13: '$' d/d/D w1
+36,13: '0' d/d/D w1
+37,13: '.' d/d/D w1
+38,13: '0' d/d/D w1
+39,13: '0' d/d/D w1
+40,13: '2' d/d/D w1
+41,13: '1' d/d/D w1
+## frames
+## frame 1 (342 bytes)
+\e[?2026h\e[1;1H\e[0m\e[1m\e[38;2;57;186;230m› \e[39mplease fix the parser\e[2;1H\e[0mLooking\e[2;9H\e[1mat\e[2;12H\e[0mit.\e[3;1H\e[38;5;4m- \e[0mstep\e[3;8Hone\e[11;1Hfix\e[11;5Hthe\e[11;9Hbug\e[11;13Hin\e[11;16H|\e[7m \e[14;1H\e[27;1m\e[38;5;4m⠙\e[14;3Hkilocode/hy3\e[14;16H\e[22m\e[38;5;2m▰▰▰▱▱▱\e[14;23H\e[2m\e[39m12.4k↑ 5.2k↓\e[14;36H$0.0021\e[?2026l

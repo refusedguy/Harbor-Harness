@@ -38,6 +38,20 @@ public interface IMcpRegistry
     public IReadOnlyList<string> GetServerNames();
 
     /// <summary>
+    ///     Aggregated snapshot of the instructions reported by registered MCP
+    ///     servers (ROP-D Z3). Sources: a static <c>instructions</c> hint in
+    ///     <c>mcp.json</c>, and the <c>instructions</c> field of an
+    ///     <c>initialize</c> response observed through <see cref="InvokeAsync" />.
+    /// </summary>
+    /// <remarks>
+    ///     Existence-tolerant by contract: servers that have not reported any
+    ///     instructions are simply absent from the snapshot — never a failure.
+    ///     Implementations MUST be thread-safe and return a stable snapshot.
+    /// </remarks>
+    /// <returns>A read-only list, empty when no server reported instructions.</returns>
+    public IReadOnlyList<McpServerInstructions> GetInstructions();
+
+    /// <summary>
     ///     Invoke a method on a registered MCP server and return the JSON response.
     /// </summary>
     /// <param name="server">Server name.</param>

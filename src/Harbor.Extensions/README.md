@@ -20,13 +20,12 @@
 
 | Dependency                         | Why                                                                                                                                                                                                                                                                                   |
 |------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Harbor.Domain` (project)          | `MemoryPackExtensions.ToMemoryPackBytes<T>` is constrained to `IMemoryPackable<T>` — types like `Session`, `AgentMessage`, `ToolResult` (declared in `Harbor.Domain`) implement this interface. Without the project ref, the extension methods couldn't be tested against real types. |
-| `CommunityToolkit.HighPerformance` | `FrozenDictionary<TKey, TValue>` / `FrozenSet<T>` are actually in-box (`System.Collections.Frozen`), but the toolkit is referenced for incidental helpers and consistency with the rest of the codebase.                                                                              |
-| `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point.                                                                                                                                                          |
+| `CommunityToolkit.HighPerformance` | FrozenDictionary/FrozenSet helpers and incidental performance types used across the pooling code.                                                                                                                                                                                      |
+| `MemoryPack`                       | `MemoryPackSerializer.Serialize<T>` / `Deserialize<T>` — the `IMemoryPackable<T>` constraint and the serializer entry-point. `MemoryPackExtensions` is generic over `IMemoryPackable<T>`, so **no** concrete Harbor assembly is required.                                              |
 
 `System.Buffers` (`ArrayPool<T>`) is in-box for `net10.0` — no package ref needed.
 
-**No references to `Harbor.Abstractions`** (the facade), no references to `Harbor.Core` / `Harbor.Application` / `Harbor.Registries`, no references to Infrastructure siblings (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`), no references to Presentation (`Harbor.Tui.*`, `Harbor.Desktop.*`). This invariant is enforced by `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs::Extensions_ReferencesOnlyDomain`.
+**Zero Harbor project references** (F1 decoupling): no ref to `Harbor.Abstractions.Contracts`, no ref to the `Harbor.Abstractions` facade, no refs to `Harbor.Core` / `Harbor.Application` / `Harbor.Registries`, no refs to Infrastructure siblings (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.*`), no refs to Presentation (`Harbor.Tui.*`, `Harbor.Desktop.*`). This invariant is enforced by the test `Extensions_HasZeroHarborProjectReferences` in [`tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs`](../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs). Consumers that use these helpers reference `Harbor.Extensions` directly — it is **not** transitively re-exported by the facade.
 
 ## Namespaces preserved
 
@@ -38,7 +37,7 @@ All files in `Harbor.Extensions` keep their original `Harbor.Abstractions.Extens
 | `CollectionExtensions.cs` | `Harbor.Abstractions.Extensions` |
 | `MemoryPackExtensions.cs` | `Harbor.Abstractions.Extensions` |
 
-This means **zero consumer code changes** — every project that does `using Harbor.Abstractions.Extensions;` keeps compiling and resolves to the types in `Harbor.Extensions.dll` via the transitive project reference chain `Harbor.Abstractions → Harbor.Extensions`.
+This means **zero consumer code changes** — every project that does `using Harbor.Abstractions.Extensions;` keeps compiling as long as it adds its own direct reference to `Harbor.Extensions`.
 
 ## Public API surface (most-used types)
 
@@ -75,7 +74,7 @@ Session restored = bytes.FromMemoryPackBytes<Session>();
 
 ## See also
 
-- `src/Harbor.Domain/README.md` — the domain layer this project references
-- `src/Harbor.Abstractions/README.md` — the interface facade that re-exports these helpers transitively
+- [../Harbor.Abstractions.Contracts/](../Harbor.Abstractions.Contracts/) — namespace-preserved model types ([MemoryPackable]) referenced by the generic MemoryPack helpers
+- [../Harbor.Abstractions/README.md](../Harbor.Abstractions/README.md) — the interface facade (deliberately does not re-export this layer)
 - `docs/ARCHITECTURE_LAYERS.md` — full layering matrix
-- `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs::Extensions_ReferencesOnlyDomain` — enforces this layer's invariants
+- [`tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs`](../../tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs) (`Extensions_HasZeroHarborProjectReferences`) — enforces this layer's invariants

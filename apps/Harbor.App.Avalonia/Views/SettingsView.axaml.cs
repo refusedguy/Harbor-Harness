@@ -20,7 +20,7 @@ public partial class SettingsView : UserControl
 
     private void Close_Click(object? sender, RoutedEventArgs e)
     {
-        ShellChrome.CloseOverlay("settings");
+        ShellChrome.CloseOverlay(OverlayIds.Settings);
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e)
@@ -46,7 +46,7 @@ public partial class SettingsView : UserControl
 
     private void CloseModal()
     {
-        ShellChrome.CloseOverlay("settings");
+        ShellChrome.CloseOverlay(OverlayIds.Settings);
     }
 
     private void OnThemePreviewClick(object? sender, PointerPressedEventArgs e)

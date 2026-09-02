@@ -1,60 +1,48 @@
 # Plan — Harbor.Core
 
-## Status: Stable
+## Status: Deprecated — frozen
 
-The Application layer is stable. Public API changes follow the same stability promise as `Harbor.Abstractions`.
+`Harbor.Core` is a backward-compatibility shell (see README). It receives no
+features and no fixes; its single source file is `FacadeMarker.cs`. Real work
+happens in `Harbor.Application` (use cases) and `Harbor.Registries` (registry
+implementations).
 
 ## Done
 
-- [x] `AgentLoop` — full orchestrator (LLM call -> tool dispatch -> loop)
-- [x] `IEventBus` + `InMemoryEventBus` (pub/sub)
-- [x] `ProviderRegistry`, `ToolRegistry`, `AgentRegistry` (FrozenDictionary + NonBlocking mutation)
-- [x] `SessionManager` — load / save / list / compact sessions
-- [x] `CompactionEngine` — anchored-summary compaction
-- [x] `PermissionService` — `Allow | Ask | Deny` per tool per glob
-- [x] System prompt builder (tools, agents, context, compaction summary)
-- [x] Streaming response handling (`IAsyncEnumerable<AgentEvent>`)
-- [x] Sub-agent delegation (`task` tool spawns `code` / `plan` / `explore`)
-- [x] Cancellation token propagation through all async paths
-- [x] ZLinq drop-in (zero-allocation LINQ)
-- [x] Full XML docs on public API
+- [x] S1 split: all use cases extracted to `Harbor.Application`
+      (`Agents/AgentLoop.cs:10`, `Sessions/CompactionService.cs`)
+- [x] S1 split: all registry impls extracted to `Harbor.Registries`
+      (`Events/InMemoryEventBus.cs`, `Providers/ProviderRegistry.cs`,
+      `Tools/ToolRegistry.cs`, `Tools/InMemoryMcpRegistry.cs`,
+      `Agents/AgentRegistry.cs`)
+- [x] Facade assembly kept compiling via two transitive project references
+      (`Harbor.Core.csproj`) + `FacadeMarker.Type` sentinel so reflection-based
+      layer tests always load it
+- [x] ROP-D Z1: types now declare namespaces matching their assembly of
+      residence (`Harbor.Application.*`, `Harbor.Registries.*`) instead of the
+      legacy `Harbor.Core.*`
 
 ## TODO
 
-- [ ] Concurrent agent runs (multiple `AgentLoop.RunAsync` on the same session — needs session locking)
-- [ ] Sub-agent cancellation cascade (parent cancel -> children cancel)
-- [ ] Retry policy for transient provider errors (429 / 5xx)
-- [ ] Token budget enforcement (hard cap on prompt tokens)
-- [ ] Streaming tool-call output (currently buffered per tool call)
-- [ ] Multi-modal system prompt builder (vision content blocks)
-- [ ] Provider failover (primary provider down -> fallback provider)
-- [ ] Session branching (fork a session at a given turn)
+- [ ] Remove the facade entirely (v0.5 target, same horizon as the obsolete
+      `CsPluginLoader` wrapper) once no consumer references `Harbor.Core`.
 
 ## Known issues
 
-- `AgentLoop` is not safe for concurrent runs on the same session — caller must serialize.
-- Retry logic is ad-hoc per provider — should be centralized in `Harbor.Core`.
-- No token budget enforcement — long sessions can blow past model context windows (mitigated by compaction).
+- Any consumer still referencing `Harbor.Core` silently pulls both halves
+  (`Application` + `Registries`) even if it needs just one.
+- The `[Obsolete]` signal is only carried in docs/csproj metadata — consider
+  adding package deprecation metadata when packing.
 
 ## Next priorities
 
-1. **P0**: Concurrent run safety (session-level AsyncLock)
-2. **P0**: Centralized retry policy for provider 429/5xx
-3. **P1**: Token budget enforcement (pre-flight check, prompt trimming)
-4. **P1**: Sub-agent cancellation cascade
-5. **P2**: Session branching
-6. **P2**: Provider failover
-7. **P2**: Streaming tool-call output
+1. **P0**: Audit consumers (`apps/*`, samples) and switch them to direct
+   project references.
+2. **P2**: Delete this project after the audit lands.
 
-## Performance targets
+## See also
 
-See [../../docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) for current numbers. Targets:
-
-- AgentLoop iteration overhead: <100us (excluding LLM latency)
-- Event publish latency: <10us per subscriber
-- Registry lookup: <100ns (FrozenDictionary)
-- Compaction: <500ms for 100-message session
-
-## Stability promise
-
-Same as `Harbor.Abstractions` — no breaking changes within a major version. Deprecation via `[Obsolete]` for one minor version before removal.
+- [README.md](README.md) — migration guide
+- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
+- [../Harbor.Application/PLAN.md](../Harbor.Application/PLAN.md) — active plan for the use-case half
+- [../Harbor.Registries/PLAN.md](../Harbor.Registries/PLAN.md) — active plan for the registry half

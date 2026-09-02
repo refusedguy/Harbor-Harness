@@ -44,10 +44,14 @@ internal static class ArchitectureTestHelpers
             }
         }
 
-        // Force-load every Harbor assembly referenced by the entry assembly so the
-        // full set is available for inventory. Assembly.Load is a no-op if already
-        // loaded.
-        var entry = Assembly.GetEntryAssembly();
+        // Force-load every Harbor assembly referenced by THIS test assembly so
+        // the full set is available for inventory. (Not Assembly.GetEntryAssembly:
+        // under Microsoft.TestingPlatform the entry assembly is testhost, which
+        // only references the test dll — not the individual Harbor projects.)
+        // Note: Roslyn omits UNUSED assembly references from the ref list, so a
+        // project this test dll never touches would be missed here — the bin-dir
+        // sweep below closes that gap.
+        var entry = typeof(ArchitectureTestHelpers).Assembly;
         if (entry is not null)
         {
             foreach (var refName in entry.GetReferencedAssemblies())
@@ -73,6 +77,27 @@ internal static class ArchitectureTestHelpers
                     // per-assembly tests will surface the actual layering failures.
                     _ = ex;
                 }
+            }
+        }
+
+        // Sweep the bin directory for every Harbor*.dll the csproj graph copied
+        // local — deterministic inventory independent of which refs survived in
+        // the test assembly's own reference list.
+        string binDir = AppContext.BaseDirectory;
+        string[] dlls;
+        try { dlls = Directory.GetFiles(binDir, "Harbor*.dll"); }
+        catch { dlls = []; }
+        foreach (string path in dlls)
+        {
+            try
+            {
+                var name = AssemblyName.GetAssemblyName(path);
+                if (name.Name is null || result.ContainsKey(name.Name)) continue;
+                result[name.Name] = Assembly.Load(name);
+            }
+            catch
+            {
+                // Not a managed assembly or unloadable — skip.
             }
         }
         return result;

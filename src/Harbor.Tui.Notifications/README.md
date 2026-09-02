@@ -26,7 +26,7 @@ window and wants to be notified when the agent needs attention.
 ## Dependencies
 
 - `Harbor.Abstractions`
-- `Harbor.Tui.Abstractions`
+- `Harbor.Terminal.Abstractions` (`BaseTuiRenderer`, `ITuiRenderContext`)
 - `Microsoft.Extensions.Logging.Abstractions`
 
 No external NuGet packages — uses only `System.Diagnostics.Process` to shell
@@ -34,13 +34,14 @@ out to the OS notification tool.
 
 ## Files
 
-- `Harbor.Tui.Notifications.csproj` — `net10.0`, references `Harbor.Tui.Abstractions`.
-- `NotificationTuiRenderer.cs` — sealed `BaseTuiRenderer` subclass. Listens to
+- `Harbor.Tui.Notifications.csproj` — `net10.0`, references `Harbor.Terminal.Abstractions`.
+- `NotificationTuiRenderer.cs` — sealed `NotificationTuiRenderer : BaseTuiRenderer`. Listens to
   `AgentEndEvent`, `AgentErrorEvent`, `CompactionCompletedEvent`, and
   `ToolExecutionEndEvent` (errors only); routes each to the detected backend.
 - `INotificationBackend` — platform abstraction with `Notify(title, body, isError)`.
-- Concrete backends: `LinuxNotifySendBackend`, `MacOsascriptBackend`,
+- Concrete backends (all in the same file): `LinuxNotifySendBackend`, `MacOsascriptBackend`,
   `WindowsToastBackend`, `NullNotificationBackend`.
+- `NotificationRenderContext : ITuiRenderContext` — absorbs render calls; this renderer is output-free.
 
 ## Event → notification mapping
 

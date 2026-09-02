@@ -78,8 +78,19 @@ public class ViewInflationTests
     [Test]
     public async Task ChatView_Inflates()
     {
-        var view = new Views.ChatView();
-        await Assert.That(view).IsNotNull();
+        // ChatView's timeline sets ListBox.ItemContainerTheme with
+        // BasedOn={StaticResource {x:Type ListBoxItem}} — that lookup needs the
+        // app theme (Fluent) to be loaded, which only exists once the App is
+        // booted. Bare `new ChatView()` on a platform-less thread therefore
+        // throws KeyNotFoundException. Same headless pattern as
+        // SettingsView_Inflates below: boot a HeadlessUnitTestSession and
+        // inflate on its UI thread.
+        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
+        await session.Dispatch(async () =>
+        {
+            var view = new Views.ChatView();
+            await Assert.That(view).IsNotNull();
+        }, CancellationToken.None);
     }
 
     [Test]

@@ -88,7 +88,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
                     TaskContinuationOptions.OnlyOnFaulted);
                 break;
             case TuiEffect.QuitApp:
-                _store.Transition(s => s with { ShouldQuit = true });
+                _store.Dispatch(new UiMsg.Quit());
                 break;
         }
     }
@@ -96,7 +96,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
 
     private async Task PromptAsync(string text)
     {
-        _store.Transition(s => s with { IsAgentRunning = true, Status = "running" });
+        _store.Dispatch(new UiMsg.AgentStarted());
         try
         {
             var result = await _agent.PromptAsync(text, _appCt).ConfigureAwait(false);
@@ -106,14 +106,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             if (result.IsFailure)
             {
                 _logger?.LogError("Agent failed: {Error}", result.Error);
-                _store.Transition(s => s with
-                {
-                    IsAgentRunning = false,
-                    Status = "error",
-                    IsStreaming = false,
-                    Active = ActiveMessage.Empty
-                });
-                _store.Transition(s => s.AddLine(ChatRole.Error, result.Error));
+                _store.Dispatch(new UiMsg.AgentEnded("error", result.Error));
             }
         }
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
@@ -124,30 +117,18 @@ public sealed class TuiEffectHost : ITuiEffectRunner
             // catch treated this as an error and set the status bar to
             // "error". The user just wanted to abort — route to a clean
             // "idle" transition instead.
-            _store.Transition(s => s with { Status = "idle" });
+            _store.Dispatch(new UiMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "PromptAsync failed");
-            _store.Transition(s => s with
-            {
-                IsAgentRunning = false,
-                Status = "error",
-                IsStreaming = false,
-                Active = ActiveMessage.Empty
-            });
+            _store.Dispatch(new UiMsg.AgentEnded("error"));
         }
         finally
         {
             // Ensure IsAgentRunning is always reset — even on success path
             // where the agent loop might not have published AgentEndEvent yet.
-            _store.Transition(s => s with
-            {
-                IsAgentRunning = false,
-                IsStreaming = false,
-                Active = ActiveMessage.Empty,
-                Status = s.Status == "error" ? "error" : "idle"
-            });
+            _store.Dispatch(new UiMsg.AgentEnded());
         }
     }
 
@@ -155,7 +136,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
     {
         if (_slash is null)
         {
-            _store.Transition(s => s.AddLine(ChatRole.Error, $"no handler for {command}"));
+            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, $"no handler for {command}"));
             return;
         }
 
@@ -166,11 +147,11 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         catch (OperationCanceledException) when (_appCt.IsCancellationRequested)
         {
             // §3.4: same rationale as PromptAsync — abort ≠ error.
-            _store.Transition(s => s with { Status = "idle" });
+            _store.Dispatch(new UiMsg.StatusChanged("idle"));
         }
         catch (Exception ex)
         {
-            _store.Transition(s => s.AddLine(ChatRole.Error, ex.Message));
+            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
         }
     }
 
@@ -194,7 +175,7 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         }
         catch (Exception ex)
         {
-            _store.Transition(s => s.AddLine(ChatRole.Error, ex.Message));
+            _store.Dispatch(new UiMsg.AppendLine(ChatRole.Error, ex.Message));
         }
 
         // Recreate the abort source so the next PromptAsync call observes a
@@ -204,6 +185,6 @@ public sealed class TuiEffectHost : ITuiEffectRunner
         // OperationCanceledException.
         _agent.ResetAbortSource();
 
-        _store.Transition(s => s with { IsAgentRunning = false, Status = "idle" });
+        _store.Dispatch(new UiMsg.AgentEnded("idle"));
     }
 }

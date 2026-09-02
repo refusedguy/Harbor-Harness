@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!--
+      Renderer perf gate (renderer-unification sprint Phase 6.1). The name
+      intentionally does not end in ".Tests" so the Directory.Build.targets
+      name convention does not fire; IsTestProject is set explicitly to opt
+      into the TUnit + MTP test-host wiring. Runnable as a reproducible local
+      benchmark: dotnet run -c Release -p tests/Harbor.Tui.PerfTests
+    -->
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+</Project>

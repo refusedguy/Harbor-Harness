@@ -8,7 +8,7 @@
     Blazor CSS transitions).
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
-      ✅ Harbor.Desktop.Abstractions (for RgbColor used in ColorTransition)
+      ✅ Harbor.DesignSystem (for RgbColor used in ColorTransition)
       ❌ NO Avalonia / WPF / MAUI / Blazor
   -->
 
@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
   </ItemGroup>
 
 </Project>

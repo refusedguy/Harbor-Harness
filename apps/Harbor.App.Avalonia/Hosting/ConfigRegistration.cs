@@ -1,6 +1,7 @@
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Desktop.Abstractions.Configuration;
+using Harbor.Abstractions.Providers;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.Ui.Framework.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,15 +78,15 @@ internal static class ConfigRegistration
         // JsonAppConfigStore<T>.
         var bootstrapCommonLogger = bootstrapLoggerFactory.CreateLogger<JsonCommonConfigStore>();
         var commonStore = new JsonCommonConfigStore(
-            new CommonConfig(),
+            new CommonConfig { ConfigDirectory = harborDir },
             bootstrapCommonLogger);
         var commonConfigResult = await commonStore.LoadAsync().ConfigureAwait(false);
         var commonConfig = commonConfigResult.IsSuccess
             ? commonConfigResult.Value
-            : new CommonConfig();
+            : new CommonConfig { ConfigDirectory = harborDir };
         services.AddSingleton<ICommonConfigStore>(sp =>
             new JsonCommonConfigStore(
-                new CommonConfig(),
+                new CommonConfig { ConfigDirectory = harborDir },
                 sp.GetRequiredService<ILogger<JsonCommonConfigStore>>()));
         services.AddSingleton(commonConfig);
 

@@ -76,6 +76,8 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     [NotifyPropertyChangedFor(nameof(RunningDurationText))]
     [NotifyPropertyChangedFor(nameof(AnimatedCostText))]
     [NotifyPropertyChangedFor(nameof(ShowAnimatedCost))]
+    [NotifyPropertyChangedFor(nameof(HasCost))]
+    [NotifyPropertyChangedFor(nameof(ShowLiveCost))]
     private decimal _costUsd;
 
     public bool IsCommandPaletteOpen
@@ -212,6 +214,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         : base(shell.Dispatcher, shell.Logger)
     {
         _contentHost = (AvaloniaContentHost)contentHost;
+        // Palette-driven navigation (shellChrome.Navigate → TryNavigate)
+        // bypasses SwitchViewCommand; mirror the route into ActiveView so the
+        // tab strip and IsVisible bindings follow (CommandPalette_Enter test).
+        _contentHost.RouteNavigated += route => Dispatcher.Post(() => ActiveView = route);
         _effects = shell.EffectHost;
         _theme = shell.ThemeService;
         _toasts = shell.ToastService;
@@ -221,17 +227,34 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         _commandPalette = commandPalette;
         _messenger = shell.Messenger;
 
-        _overlayController.Register("palette", v => IsCommandPaletteOpen = v);
-        _overlayController.Register("settings", v => IsSettingsOpen = v);
-        _overlayController.Register("providerBrowser", v => IsProviderBrowserOpen = v);
-        _overlayController.Register("modelPicker", v => IsModelPickerOpen = v);
-        _overlayController.Register("diff", v => IsDiffOpen = v);
-        _overlayController.Register("tokenUsage", v => IsTokenUsageOpen = v);
-        _overlayController.Register("focusSession", v => IsFocusSessionOpen = v);
-        _overlayController.Register("sessionsFlyout", v => IsSessionsFlyoutOpen = v);
+        _overlayController.Register(OverlayIds.Palette, v => IsCommandPaletteOpen = v);
+        _overlayController.Register(OverlayIds.Settings, v => IsSettingsOpen = v);
+        _overlayController.Register(OverlayIds.ProviderBrowser, v => IsProviderBrowserOpen = v);
+        _overlayController.Register(OverlayIds.ModelPicker, v => IsModelPickerOpen = v);
+        _overlayController.Register(OverlayIds.Diff, v => IsDiffOpen = v);
+        _overlayController.Register(OverlayIds.TokenUsage, v => IsTokenUsageOpen = v);
+        _overlayController.Register(OverlayIds.FocusSession, v => IsFocusSessionOpen = v);
+        _overlayController.Register(OverlayIds.SessionsFlyout, v => IsSessionsFlyoutOpen = v);
 
         HasOverlay = _overlayController.HasOverlay;
         _costAnimator.Tick += () => OnPropertyChanged(nameof(AnimatedCostText));
+
+        // C2: declare state→VM projections ONCE, in the constructor. They
+        // were previously re-registered inside OnStoreChanged on EVERY
+        // transition AND never applied (ApplySelectors was not called), so
+        // MessageCount / StatusText / token labels stayed at their initial
+        // values forever while the raw ShellStatus writes moved — the status
+        // bar showed "0 msgs" after messages were sent.
+        Select(s => s.Status, v => StatusText = v);
+        Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Model, v => ModelLabel = PrettifyModel(v));
+        Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
+        Select(s => s.Cost.TokensIn, v => TokensIn = v);
+        Select(s => s.Cost.TokensOut, v => TokensOut = v);
+        Select(s => s.Cost.CostUsd, v => CostUsd = v);
+        Select(s => s.IsAgentRunning, v => IsRunning = v);
+        Select(s => Math.Max(1, _contentHost.Sessions.Sessions.Count), v => ActiveSessionCount = v);
+        Select(s => s.Lines.Length, v => MessageCount = v);
 
         _messenger.Register<ModelPickedMessage>(this, (_, _) =>
         {
@@ -266,26 +289,39 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     public string StatusBrushKey => StatusMappers.StatusToBrushKey(StatusText);
     public string TokensInText => StatusMappers.TokensToCompact(TokensIn);
     public string TokensOutText => StatusMappers.TokensToCompact(TokensOut);
+    /// <summary>C2: raw provider ids like "kilo-auto/free" render as the
+    /// friendly tail ("kilo free") instead of plumbing jargon.</summary>
+    private static string PrettifyModel(string? model)
+    {
+        if (string.IsNullOrEmpty(model))
+        {
+            return "—";
+        }
+
+        if (model.StartsWith("kilo-auto/", StringComparison.Ordinal))
+        {
+            return model.Replace("kilo-auto/", "kilo ", StringComparison.Ordinal);
+        }
+
+        return model;
+    }
+
     public string CostText => StatusMappers.CostToUsd(CostUsd);
     public string RunningDurationText => _runningStartTime is { } start ? FormatDuration(DateTime.UtcNow - start) : string.Empty;
     public string AnimatedCostText => StatusMappers.CostToUsd(_displayCost);
     public bool ShowAnimatedCost => _runningStartTime is not null;
+
+    /// <summary>B6: hide the money readout entirely while nothing was spent.</summary>
+    public bool HasCost => CostUsd > 0m;
+    public bool ShowLiveCost => ShowAnimatedCost && _displayCost > 0m;
     public IThemeService ThemeService => _theme;
 
     protected override void OnStoreChanged(UiState state)
     {
         var wasRunning = IsRunning;
 
-        Select(s => s.Status, v => StatusText = v);
-        Select(s => s.Provider, v => ProviderLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Model, v => ModelLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.AgentName, v => AgentLabel = string.IsNullOrEmpty(v) ? "—" : v);
-        Select(s => s.Cost.TokensIn, v => TokensIn = v);
-        Select(s => s.Cost.TokensOut, v => TokensOut = v);
-        Select(s => s.Cost.CostUsd, v => CostUsd = v);
-        Select(s => s.IsAgentRunning, v => IsRunning = v);
-        Select(s => Math.Max(1, _contentHost.Sessions.Sessions.Count), v => ActiveSessionCount = v);
-        Select(s => s.Lines.Length, v => MessageCount = v);
+        // C2: apply the projections registered once in the constructor.
+        ApplySelectors(state);
 
         var statusBar = StatusProjector.ProjectStatusBar(state);
 
@@ -377,7 +413,17 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     }
 
     [RelayCommand]
-    private void SwitchView(string view) => ActiveView = view;
+    private void SwitchView(string view)
+    {
+        ActiveView = view;
+        // A2 (sprint 4.5): the sessions board reads the session store on
+        // demand — refresh it when its tab becomes visible so the user never
+        // sees a stale/empty board after chatting in another tab.
+        if (view == "board")
+        {
+            _ = _contentHost.Board.RefreshCommand.ExecuteAsync(null);
+        }
+    }
 
     [RelayCommand]
     private void ToggleRightDrawer(string? tab)

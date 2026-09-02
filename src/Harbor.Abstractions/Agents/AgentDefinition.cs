@@ -34,6 +34,12 @@ namespace Harbor.Abstractions.Agents;
 /// <param name="SystemPromptAppend">Optional extra instructions appended to the base system prompt.</param>
 /// <param name="IsSubAgent">Whether this agent can be invoked via the <c>task</c> tool.</param>
 /// <param name="Hidden">When <see langword="true" />, the agent is hidden from <c>/agents</c> listings.</param>
+/// <param name="ToolTimeoutSeconds">
+///     A9 (sprint 5): per-tool-call execution timeout in seconds. When set, a
+///     hanging tool is cancelled at this deadline and returns an error result
+///     instead of blocking the loop forever. <see langword="null"/> (default)
+///     preserves the legacy unbounded behaviour.
+/// </param>
 public sealed record AgentDefinition(
     AgentName Name,
     string DisplayName,
@@ -46,7 +52,8 @@ public sealed record AgentDefinition(
     ReasoningEffort? ReasoningEffort = null,
     string? SystemPromptAppend = null,
     bool IsSubAgent = false,
-    bool Hidden = false)
+    bool Hidden = false,
+    int? ToolTimeoutSeconds = null)
 {
     /// <summary>
     ///     Returns the default <c>code</c> agent — full read/write/edit/bash permissions, 50 steps.

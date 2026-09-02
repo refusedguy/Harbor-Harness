@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.App.Maui.Tests — DI registration tests for the .NET MAUI
+    composition root.
+
+    MAUI requires the maui-windows / maui-maccatalyst workloads which are NOT
+    available on the Linux CI sandbox. This test project therefore targets
+    net10.0-windows and only builds + runs on Windows.
+
+    See apps/Harbor.App.Maui/Harbor.App.Maui.csproj for the matching TFM
+    configuration. On Linux/macOS CI this project is excluded from the
+    solution build (see Harbor.slnx — it's listed but `dotnet test` skips it
+    if the workload is missing).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('OSX'))">net10.0-windows;net10.0-maccatalyst</TargetFrameworks>
+    <UseMaui>true</UseMaui>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CA1707;S2931;S3881;CA1416</NoWarn>
+    <SkipValidateMauiImplicitPackageReferences>true</SkipValidateMauiImplicitPackageReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Maui\Harbor.App.Maui.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls"/>
+    <PackageReference Include="Microsoft.Maui.Controls.Xaml"/>
+    <PackageReference Include="Microsoft.Maui.Essentials"/>
+    <PackageReference Include="Microsoft.Maui.Core"/>
+    <PackageReference Include="Microsoft.Maui.Controls.Build.Tasks" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.Maui.Resizetizer" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
+  </ItemGroup>
+
+</Project>

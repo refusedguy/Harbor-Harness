@@ -9,8 +9,8 @@ and delegates to configure its own animation primitives (Avalonia
 
 - **`EasingFunctions`**: `Linear`, `EaseIn`, `EaseOut`, `EaseInOut`,
   `CubicInOut`, `QuarticOut`, `QuinticInOut`, `Spring` — plus a
-  `Resolve(name)` factory that maps design-system easing names
-  (e.g. `"cubicInOut"`) to delegates.
+  `Resolve(name)` factory that maps design-system easing names declared in
+  **`AnimationTokens`** (e.g. `AnimationTokens.EasingCubicInOut`) to delegates.
 - **`AnimationDurations`**: `Instant`, `Fast` (150ms), `Normal` (300ms),
   `Slow` (500ms), `Slower` (800ms), plus convenience aliases (`Fade`,
   `Slide`, `Scale`, `Toast`, `Palette`).

@@ -27,14 +27,16 @@ public sealed class RequestDispatcher
 {
     private readonly EventBroadcaster _broadcaster;
     private readonly IServiceProvider _serviceProvider;
+    private readonly SessionLeaseRegistry _leases;
 
     /// <summary>
     ///     Construct a dispatcher backed by the host's service provider.
     /// </summary>
-    public RequestDispatcher(IServiceProvider serviceProvider, EventBroadcaster broadcaster)
+    public RequestDispatcher(IServiceProvider serviceProvider, EventBroadcaster broadcaster, SessionLeaseRegistry? leases = null)
     {
         _serviceProvider = serviceProvider;
         _broadcaster = broadcaster;
+        _leases = leases ?? new SessionLeaseRegistry();
     }
 
     /// <summary>
@@ -53,17 +55,22 @@ public sealed class RequestDispatcher
     ///     with the dispatcher's response frames on the same stream.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="clientId">
+    ///     The calling connection's id — required for session-lease
+    ///     acquisition (StartAgent) and addressed subscription.
+    /// </param>
     public async Task<HarborResponse> DispatchAsync(
         HarborRequest request,
         Stream? replyStream,
         SemaphoreSlim? replyWriteLock,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? clientId = null)
     {
         try
         {
             return request switch
             {
-                StartAgentRequest r => await HandleStartAgentAsync(r, ct).ConfigureAwait(false),
+                StartAgentRequest r => await HandleStartAgentAsync(r, clientId, ct).ConfigureAwait(false),
                 AbortAgentRequest r => HandleAbortAgent(r),
                 SendPromptRequest r => await HandleSendPromptAsync(r, ct).ConfigureAwait(false),
                 CreateSessionRequest r => await HandleCreateSessionAsync(r, ct).ConfigureAwait(false),
@@ -74,7 +81,7 @@ public sealed class RequestDispatcher
                 ListProvidersRequest r => await HandleListProvidersAsync(r, ct).ConfigureAwait(false),
                 ListModelsRequest r => await HandleListModelsAsync(r, ct).ConfigureAwait(false),
                 ListToolsRequest r => await HandleListToolsAsync(r, ct).ConfigureAwait(false),
-                SubscribeToEventsRequest r => HandleSubscribeToEvents(r, replyStream, replyWriteLock),
+                SubscribeToEventsRequest r => await HandleSubscribeToEventsAsync(r, replyStream, replyWriteLock, clientId).ConfigureAwait(false),
                 ConnectRequest r => new OkResponse { RequestId = r.RequestId },
                 DisconnectRequest r => new OkResponse { RequestId = r.RequestId },
                 _ => new ErrorResponse { RequestId = request.RequestId, Message = $"Unknown request type: {request.GetType().Name}" }
@@ -86,9 +93,15 @@ public sealed class RequestDispatcher
         }
     }
 
+    /// <summary>Release all session leases owned by this connection (teardown).</summary>
+    public void ReleaseClientLeases(string clientId) => _leases.ReleaseAll(clientId);
+
+    /// <summary>The owner of a leased session (diagnostics/tests).</summary>
+    public string? GetLeaseOwner(string sessionId) => _leases.GetOwner(sessionId);
+
     // ── Agent ──────────────────────────────────────────────────────────────
 
-    private async Task<HarborResponse> HandleStartAgentAsync(StartAgentRequest r, CancellationToken ct)
+    private async Task<HarborResponse> HandleStartAgentAsync(StartAgentRequest r, string? clientId, CancellationToken ct)
     {
         var agent = _serviceProvider.GetRequiredService<IAgent>();
         var agents = _serviceProvider.GetRequiredService<IAgentRegistry>();
@@ -105,6 +118,17 @@ public sealed class RequestDispatcher
         var sessionResult = await sessions.GetAsync(r.SessionId, ct).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return new ErrorResponse { RequestId = r.RequestId, Message = sessionResult.Error };
+
+        // A3: the second client may not re-initialize the agent mid-run —
+        // an owned session refuses with a structured, machine-parsable error.
+        if (!string.IsNullOrEmpty(clientId) && !_leases.TryAcquire(r.SessionId, clientId!))
+        {
+            return new ErrorResponse
+            {
+                RequestId = r.RequestId,
+                Message = $"SESSION_BUSY:{r.SessionId}:owner={_leases.GetOwner(r.SessionId)}"
+            };
+        }
 
         agent.Initialize(sessionResult.Value, agentDefResult.Value);
         return new OkResponse { RequestId = r.RequestId };
@@ -221,17 +245,26 @@ public sealed class RequestDispatcher
 
     // ── Streaming events ───────────────────────────────────────────────────
 
-    private HarborResponse HandleSubscribeToEvents(
+    private async Task<HarborResponse> HandleSubscribeToEventsAsync(
         SubscribeToEventsRequest r,
         Stream? replyStream,
-        SemaphoreSlim? replyWriteLock)
+        SemaphoreSlim? replyWriteLock,
+        string? clientId)
     {
         if (replyStream is null || replyWriteLock is null)
         {
             return new ErrorResponse { RequestId = r.RequestId, Message = "Cannot subscribe: no reply stream / write lock" };
         }
 
-        _broadcaster.Register(replyStream, replyWriteLock);
-        return new OkResponse { RequestId = r.RequestId };
+        EventBroadcaster.SubscriptionAckData ack = await _broadcaster
+            .RegisterAsync(replyStream, replyWriteLock, r.LastSequence, clientId ?? "anonymous")
+            .ConfigureAwait(false);
+
+        return new OkResponse
+        {
+            RequestId = r.RequestId,
+            Payload = WireCodec.SerializeDomain(
+                new SubscriptionAck { ServerSequence = ack.ServerSequence, ResyncRequired = ack.ResyncRequired })
+        };
     }
 }

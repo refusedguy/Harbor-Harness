@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Harbor.App.Blazor</RootNamespace>
+    <AssemblyName>Harbor.App.Blazor</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Description>Harbor — Blazor Server desktop app (Kestrel on http://localhost:5000).</Description>
+    <PackageTags>harbor;blazor;desktop;web</PackageTags>
+    <!-- App projects don't ship XML docs as NuGet packages. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <!-- Expose internals to the DI test project. Program.BuildApp is internal. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Blazor.Tests"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Core\Harbor.Core.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Storage.Memory\Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <PackageReference Include="Markdig"/>
+  </ItemGroup>
+
+</Project>

@@ -8,7 +8,7 @@
 - [EXAMPLES.md §Plugins](./EXAMPLES.md#plugins) — короткие рецепты.
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
 - [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
-- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (planned by subagent #5).
+- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
 
 ---
 
@@ -58,10 +58,7 @@ public sealed class HelloTool : ITool
 Запусти Harbor:
 
 ```bash
-$ dotnet run --project src/Harbor.Cli
-harbor> /plugins
-  hello  v1.0.0  Says hello
-
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> ask "Say hello to Alice"
 [tool_execution_start] id=tc_1 tool=hello args={"name":"Alice"}
 [tool_execution_end]   id=tc_1 ok=true
@@ -69,16 +66,16 @@ Hello, Alice!
 ```
 
 Что произошло:
-1. **CsPluginLoader** нашёл `~/.harbor/plugins/hello.cs` при запуске.
-2. **Roslyn** скомпилировал его в in-memory assembly (JIT mode).
-3. Loader нашёл тип `HelloPlugin`, реализующий `IToolPlugin`.
-4. Вызвал `Initialize(context)` → `RegisterTools(builder)`.
+1. **PluginHost** (в `Harbor.Plugins.Hosting`) нашёл `~/.harbor/plugins/hello.cs`
+   при запуске через `FileSystemPluginSource`.
+2. **Roslyn** скомпилировал его в in-memory assembly (JIT mode) (`Harbor.Plugins.Compilation`).
+3. `ReflectionPluginInstantiator` нашёл тип `HelloPlugin`, реализующий `IToolPlugin`.
+4. `SafePluginRegistrar` вызвал `Initialize(context)` → `RegisterTools(builder)`.
 5. `HelloTool` зарегистрирован в `ToolRegistry`.
 6. LLM увидел `hello` в tool definitions и смог его вызвать.
 
-> **TODO: confirm with subagent #1** — exact Roslyn API surface (`CsPluginLoader`
-> is being built). The plugin contract above is the expected API; the loader
-> implementation may differ slightly.
+> В REPL нет команды `/plugins`; загруженные плагины видны в логе
+> (`~/.harbor/logs/harbor-cli-*.log`: «Loaded N CS plugin(s)»).
 
 ---
 
@@ -138,24 +135,23 @@ public interface ITuiPlugin : IPlugin
 }
 ```
 
-### `ITuiPanelPlugin` (new, subagent #2) — adds a dockable TUI panel
+### `ITuiPanelPlugin` — adds a dockable TUI panel
 
-> **TODO: confirm with subagent #2** — `ITuiPanelPlugin` API is being designed
-> for the panel system. Expected contract:
+The final contract lives in `src/Harbor.Ui.Framework.State/Panels/ITuiPanelPlugin.cs`:
 
 ```csharp
 public interface ITuiPanelPlugin : IPlugin
 {
-    TuiPanelDescriptor CreatePanel();
+    // Called once after Initialize, once the IPanelRegistry is available. May be
+    // called again if panels are re-registered (registry replaces by id).
+    void RegisterPanels(IPanelRegistry registry);
 }
-
-public sealed record TuiPanelDescriptor(
-    string Id,
-    string DisplayName,
-    TuiPanelPlacement Placement,             // Left | Right | Bottom | Floating
-    Func<ITuiViewModel> ViewModelFactory,
-    Func<ITuiView> ViewFactory);
 ```
+
+Panels may register lazily — even after the renderer has started — and appear in the
+next frame. Panel plugins MUST NOT reference `Harbor.Core`: agent state flows in via
+`PanelContext.State` (an immutable `UiState`), side effects go through `UiStore.Dispatch`
+retrieved from `PanelContext.Services`.
 
 ---
 
@@ -241,7 +237,7 @@ up changes.
 
 ```bash
 # After editing a plugin
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### NativeAOT limitations
@@ -256,35 +252,34 @@ When Harbor is published as NativeAOT (v0.8+), Roslyn in-process compilation
 ### Multi-type .cs files
 
 A single `.cs` file can contain multiple types (plugin + tool + view model).
-`CsPluginLoader` scans all public types implementing `IPlugin`.
+`ReflectionPluginInstantiator` scans all public types implementing `IPlugin`.
 
 ### `using` directives
 
-The loader auto-injects common usings:
+A `.cs` plugin is compiled verbatim — the compiler does **not** auto-inject `using`s
+(see `RoslynPluginCompiler.CompileAsync`). Include the ones you need, as the canonical
+sample does:
 
 ```csharp
-global using System;
-global using System.Threading;
-global using System.Threading.Tasks;
-global using System.Collections.Generic;
-global using Harbor.Abstractions.Models;
-global using Harbor.Abstractions.Models.Identifiers;
-global using Harbor.Abstractions.Plugins;
-global using Harbor.Abstractions.Tools;
-global using CSharpFunctionalExtensions;
+using System.Text.Json;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Plugins;
+using Harbor.Abstractions.Tools;
 ```
 
-You can omit these in your plugin file.
+You can reference any type from assemblies already loaded in the host AppDomain.
 
 ---
 
 ## Debugging: reading compilation errors
 
-If your plugin fails to compile, `CsPluginLoader` logs the errors:
+If your plugin fails to compile, the plugin runtime logs the errors:
 
 ```bash
-$ tail -100 ~/.harbor/harbor.log | grep -A 5 "CsPluginLoader"
-warn: Harbor.Core.Plugins.CsPluginLoader[0]
+$ grep -A 5 "plugin" ~/.harbor/logs/harbor-cli-*.log | tail -20
+warn: Harbor.Plugins.Runtime.CsPluginLoader[0]
       Failed to compile ~/.harbor/plugins/webhook.cs:
       (12, 17): error CS0103: The name 'HttpClient' does not exist in the current context
       (15, 32): error CS0246: The type or namespace name 'JsonDocument' could not be found
@@ -720,7 +715,7 @@ public sealed class AutoLintPlugin : IPlugin
 
     private static string? ExtractPath(string output)
     {
-        // "Edited: src/Harbor.Core/Agents/AgentLoop.cs"
+        // "Edited: src/Harbor.Application/Agents/AgentLoop.cs"
         var idx = output.IndexOf("Edited: ");
         if (idx < 0) return null;
         var start = idx + "Edited: ".Length;
@@ -733,8 +728,6 @@ public sealed class AutoLintPlugin : IPlugin
 ```
 
 ### Example 5: `LspDiagnosticsPanel` — TUI panel showing LSP diagnostics
-
-> **TODO: confirm with subagent #2** — `ITuiPanelPlugin` API.
 
 ```csharp
 // ~/.harbor/plugins/lsp_diag.cs
@@ -833,12 +826,12 @@ EOF
 # 3. Build
 $ dotnet build samples/plugins/Harbor.Plugin.MyPlugin -c Release
 
-# 4. Copy DLL (+ dependencies) to ~/.harbor/plugins/
-$ cp samples/plugins/Harbor.Plugin.MyPlugin/bin/Release/net10.0/Harbor.Plugin.MyPlugin.dll ~/.harbor/plugins/
-$ cp samples/plugins/Harbor.Plugin.MyPlugin/bin/Release/net10.0/*.dll ~/.harbor/plugins/  # deps
+# 4. DLL plugins are NOT file-drop loaded: ~/.harbor/plugins/ only scans *.cs
+#    (see FileSystemPluginSource). A compiled plugin must be registered by host
+#    code (IPluginRegistrar) or served out-of-process via src/Harbor.Plugins.Host.
 
 # 5. Run Harbor
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### After (Roslyn .cs plugin)
@@ -850,8 +843,8 @@ public sealed class MyPlugin : IToolPlugin { /* ... */ }
 public sealed class MyTool : ITool { /* ... */ }
 EOF
 
-# 2. Run Harbor — CsPluginLoader compiles it on startup
-$ dotnet run --project src/Harbor.Cli
+# 2. Run Harbor — the plugin runtime (PluginHost + Roslyn compiler) compiles it on startup
+$ dotnet run --project apps/Harbor.App.Cli
 ```
 
 ### What you lose going to .cs
@@ -891,6 +884,9 @@ scripts:
   Jint is the in-process fallback when `sharpts` is not installed.
 - **F# scripts** (`.fsx`) — via the `FsharpTool` plugin above.
 
+Note: the scripting projects live in `contrib/scripting/` (sprint-2 move) and the
+main-solution CLI does not support `--script`.
+
 See [SCRIPTING.md](./SCRIPTING.md) for the layered architecture (Engines /
 Storage / Compilation / Hosting / Bridge), the four interfaces
 (`IScriptEngine`, `IScriptStore`, `IScriptCompiler`, `ScriptGlobals`), and
@@ -900,20 +896,31 @@ script authoring examples.
 
 ## MCP alternative
 
-> **TODO: confirm with subagent #4** — `McpToolTool` is being built (v0.4+).
-
 If your tool already exists as an MCP server (e.g. `@modelcontextprotocol/server-filesystem`),
-Harbor will wrap it as a native tool:
+Harbor wraps it via the `mcp` builtin bridge (see
+[TOOLS_CATALOG.md §9](./TOOLS_CATALOG.md#9-mcp-integration--adding-an-mcp-server)).
+Register it in an `mcp.json` file:
 
 ```bash
-# Planned API:
-$ harbor mcp add filesystem -- npx -y @modelcontextprotocol/server-filesystem /tmp
-$ harbor
-harbor> /tools
-  read_file (mcp:filesystem)   Read a file from /tmp
-  write_file (mcp:filesystem)  Write a file to /tmp
-  list_files (mcp:filesystem)  List files in /tmp
+$ cat > ~/.harbor/mcp.json << 'EOF'
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${harborHome}"]
+    }
+  }
+}
+EOF
+
+# Run Harbor — ToolsCatalog.CreateMcpRegistry loads it on startup
+$ dotnet run --project apps/Harbor.App.Cli
 ```
+
+Config overlay order (later wins): `$HARBOR_MCP_CONFIG`, then `~/.harbor/mcp.json`,
+then `<project>/.harbor/mcp.json`. From the REPL, ask the agent to call the `mcp`
+tool with `{"server":"filesystem","method":"tools/list"}` to discover available
+tools, then `method: "tools/call"` with `{"name": ..., "arguments": ...}` to invoke one.
 
 No plugin code needed — MCP servers expose their own tool schemas.
 
@@ -973,7 +980,7 @@ public async Task Plugin_Tool_IsCallable_By_LLM()
 ### Manual smoke test
 
 ```bash
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   todowrite  v1.0.0  Todo list management for agents
 
@@ -998,7 +1005,7 @@ $ gh gist create myplugin.cs --public
 
 # User installs
 $ curl -fsSL https://gist.githubusercontent.com/user/myplugin.cs/raw > ~/.harbor/plugins/myplugin.cs
-$ dotnet run --project src/Harbor.Cli
+$ dotnet run --project apps/Harbor.App.Cli
 harbor> /plugins
   myplugin  v1.0.0
 ```
@@ -1108,5 +1115,5 @@ using Harbor.Abstractions.Events;   // AgentEvent comes from here
 - [DEVELOPMENT.md §Workflow: contribute a plugin](./DEVELOPMENT.md#workflow-contribute-a-plugin).
 - [ARCHITECTURE.md §Plugin contract](./ARCHITECTURE.md#8-plugin-contract).
 - [specs/02-plugins.md](../specs/02-plugins.md) — design rationale.
-- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (planned).
+- [SCRIPTING.md](./SCRIPTING.md) — scripting alternative (shipped under `contrib/scripting/`).
 - [specs/06-mcp.md](../specs/06-mcp.md) — MCP server integration.

@@ -1,10 +1,11 @@
 using Harbor.Build.Components;
-using Harbor.Build.Extensions;
+using Harbor.Build.Meta;
 using Nuke.Common.IO;
 namespace Harbor.Build.Targets;
 /// <summary>
 ///     Archive target — wraps a publish output directory into a
 ///     <c>.tar.gz</c> or <c>.zip</c> archive using <see cref="ArchiveBuilder" />.
+///     Dry-run reports the planned archive path without touching the filesystem.
 /// </summary>
 public static class ArchiveTarget
 {
@@ -21,25 +22,26 @@ public static class ArchiveTarget
         string appName,
         PublishVariant variant,
         BuildSettings settings,
-        ArchiveFormat format)
+        ArchiveFormat format,
+        BuildOutput output)
     {
         if (format == ArchiveFormat.None)
         {
-            Console.WriteLine("==> Archive: skipped (format=None)");
+            output.Info("Archive", "skipped (format=None)");
             return null;
         }
-
-        Console.WriteLine($"==> Archive: {format} <- {publishOutputDir}");
-
+        output.Info("Archive", $"{format} <- {publishOutputDir}");
         string baseName = resolver.GetArchiveBaseName(appName, variant, settings.Runtime);
         var archiveDir = resolver.GetArchiveOutputDir();
-        Directory.CreateDirectory(archiveDir);
-        var archivePath = archiveBuilder.Create(publishOutputDir, archiveDir, baseName, format);
-
-        if (archivePath is not null)
+        var archivePath = archiveBuilder.Create(publishOutputDir, archiveDir, baseName, format, output.IsDryRun);
+        if (archivePath is not null && !output.IsDryRun)
         {
-            string size = archivePath.GetHumanReadableSize();
-            Console.WriteLine($"==> Archive: done — {archivePath} ({size})");
+            long bytes = new FileInfo(archivePath).Length;
+            output.Artifact("Archive", archivePath.ToString(), bytes);
+        }
+        else if (archivePath is not null)
+        {
+            output.Artifact("Archive", archivePath.ToString(), bytes: null, planned: true);
         }
         return archivePath;
     }

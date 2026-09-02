@@ -63,7 +63,7 @@ public partial class ProviderBrowserView : UserControl
 
     private void CloseModal()
     {
-        ShellChrome.CloseOverlay("providerBrowser");
+        ShellChrome.CloseOverlay(OverlayIds.ProviderBrowser);
     }
 
     private IShellChrome? _shellChrome;

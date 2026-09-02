@@ -92,6 +92,32 @@ public sealed class MemorySessionStore : ISessionStore
         return Task.FromResult(Result.Success());
     }
 
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        if (!_messages.TryGetValue(sessionId, out var list))
+            return Task.FromResult(Result.Failure<int>($"Session '{sessionId}' not found."));
+
+        lock (list)
+        {
+            // Insertion order is the list order; the target itself stays.
+            int tailIndex = list.FindIndex(m => m.Id == messageId);
+            if (tailIndex < 0)
+                return Task.FromResult(Result.Failure<int>(
+                    $"Message '{messageId}' not found in session '{sessionId}'."));
+
+            int removed = list.Count - (tailIndex + 1);
+            if (removed > 0)
+                list.RemoveRange(tailIndex + 1, removed);
+
+            if (_sessions.TryGetValue(sessionId, out var session))
+            {
+                _sessions[sessionId] = session with { UpdatedAt = DateTimeOffset.UtcNow };
+            }
+
+            return Task.FromResult(Result.Success(removed));
+        }
+    }
+
     public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
         if (_sessions.TryGetValue(sessionId, out var session))

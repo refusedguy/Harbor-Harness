@@ -5,8 +5,10 @@
 - ✅ `HarborIpcServer` — `IHarborServer` impl composing transport + dispatcher + broadcaster
 - ✅ `ServerPipeTransport` — Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) accept loop
 - ✅ `MessagePackRpcServer` — per-client request loop, concurrent multi-client
-- ✅ `RequestDispatcher` — dispatches all 14 HarborRequest types via host's DI
+- ✅ `RequestDispatcher` — dispatches all 15 HarborRequest types via host's DI
 - ✅ `EventBroadcaster` — `IEventBus` → all connected client streams, dead-client isolation
+- ✅ TCP transport for cross-host clients (`Transport/TcpServerTransport.cs`)
+- ✅ Session leasing (`Protocol/SessionLeaseRegistry.cs`) + resilient frame reading
 - ✅ `UseHarborIpcServer()` DI helper
 - ✅ README.md
 

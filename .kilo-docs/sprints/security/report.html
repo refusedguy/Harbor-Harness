@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Harbor Sprint Report — Security &amp; Sandboxing</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 62rem; margin: 2rem auto; padding: 0 1.25rem; line-height: 1.55; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid #8884; padding-bottom: .4rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+  th, td { border: 1px solid #8884; padding: .45rem .6rem; text-align: left; vertical-align: top; }
+  th { background: #8881; }
+  code, pre { background: #8882; border-radius: 4px; font-family: ui-monospace, "Cascadia Code", monospace; font-size: .88em; }
+  pre { padding: .8rem 1rem; overflow-x: auto; }
+  .ok { color: #1a7f37; font-weight: 600; }
+  .warn { color: #9a6700; font-weight: 600; }
+  .sha { font-family: ui-monospace, monospace; font-size: .82em; }
+  blockquote { border-left: 3px solid #8886; margin: .8rem 0; padding: .2rem 1rem; color: inherit; opacity: .85; }
+</style>
+</head>
+<body>
+
+<h1>Sprint Report — Security &amp; Sandboxing</h1>
+<p><b>Sprint:</b> <code>security</code> &nbsp;·&nbsp; <b>Branch:</b> <code>dev</code> &nbsp;·&nbsp; <b>Head verified:</b> <span class="sha">50b1a5b</span> &nbsp;·&nbsp; <b>Date:</b> 2026-08-30</p>
+
+<h2>1. Goal</h2>
+<p>Defence in depth for CS-source plugins on top of the existing <code>IPluginTrustPolicy</code> gate: sandbox ALC with capability-driven deny-list, per-capability approval persisted in <code>trust.json</code> v2, execution timeout + memory guard around every plugin tool call, and an append-only capability audit log. Fail-closed everywhere; granular, approved-once rights instead of all-or-nothing.</p>
+
+<h2>2. Delivered</h2>
+<table>
+  <tr><th>Deliverable</th><th>Where</th><th>Behavior</th></tr>
+  <tr>
+    <td>Collectible sandbox ALC + deny-list</td>
+    <td><code>src/Harbor.Plugins.Compilation/CollectiblePluginLoadContext.cs</code></td>
+    <td><code>isCollectible: true</code>. <code>Load()</code> throws <code>FileNotFoundException</code> for <code>System.IO.FileSystem</code> / <code>System.Diagnostics.Process</code> / <code>System.Net.Http</code> unless the matching capability is granted. Host-owned assemblies (Harbor.Abstractions, Harbor.Abstractions.Contracts, Harbor.Plugins.Abstractions) resolve from the host ALC so plugin types are identity-equal. <code>IDisposable</code> → cooperative <code>Unload()</code>.</td>
+  </tr>
+  <tr>
+    <td>Capability manifest</td>
+    <td><code>src/Harbor.Plugins.Abstractions/PluginCapabilities.cs</code>, <code>PluginScript.cs</code></td>
+    <td>Six capabilities: <code>read_files, write_files, run_processes, http_requests, sub_agents, read_env</code>, declared via <code>// harbor:capabilities ...</code>. Unknown token ⇒ invalid manifest ⇒ deny (fail-closed).</td>
+  </tr>
+  <tr>
+    <td>trust.json v2 (per-capability approval)</td>
+    <td><code>src/Harbor.Plugins.Storage/FileTrustPolicy.cs</code></td>
+    <td>Entries keyed by <code>(path, sha256)</code> + approved capability list. Editing a plugin changes the hash ⇒ entry invalidated ⇒ re-approval at next start. Persisted grants are intersected with the manifest — stale grants are dropped, never granted. <code>GetGrantedCapabilities</code> is part of the <code>IPluginTrustPolicy</code> contract; <code>TrustingPluginSource</code> narrows each trusted script to the approved subset (<code>PluginScript.WithGrantedCapabilities</code>) so the sandbox ALC and the tool sandbox enforce approved grants, not the declared superset. Startup prompt is interactive per-capability (<code>RegistriesModule</code>); non-interactive hosts pass no hook and fail closed.</td>
+  </tr>
+  <tr>
+    <td>Execution timeout + memory guard</td>
+    <td><code>src/Harbor.Plugins.Registration/SandboxedPluginTool.cs</code></td>
+    <td>Every plugin-contributed tool wrapped: 30&nbsp;s linked CTS + <code>WaitAsync</code> race; 10&nbsp;MB allocated-bytes delta budget. Overrun ⇒ <code>ToolResult.Error("[sandbox:timeout|memory] …")</code> to the agent loop, <code>PluginBlockedEvent</code> published, <code>deny</code> audit line appended. Agent-loop cancellation propagates untouched.</td>
+  </tr>
+  <tr>
+    <td>Append-only audit log</td>
+    <td><code>src/Harbor.Plugins.Storage/PluginAuditLog.cs</code></td>
+    <td><code>~/.harbor/logs/plugin-audit.jsonl</code>: one JSON line per capability use — <code>{timestamp, plugin, capability, target, result, detail?}</code>. Opened <code>FileMode.Append</code>, no truncate/rewrite/delete path; IO failures logged, never thrown; outside the plugin data root. Plugins run with unprivileged host credentials and cannot rewrite the trail. (Hardening note: a host OS-level ACL on <code>logs/</code> is a deployment concern — see §6.)</td>
+  </tr>
+</table>
+
+<h2>3. Pipeline integrity</h2>
+<p>CachingCompiler, Roslyn CS-source compile (<code>CsPluginLoader</code> / <code>PluginHostBuilder</code>) and the existing trust-prompt flow are unchanged; the sandbox is layered behind them: trust gate (capability set narrowed to approved grants, invalid manifests rejected at the seam) → compile (approved capabilities attached) → collectible ALC load → tool registration wraps each contributed tool in <code>SandboxedPluginTool</code>.</p>
+
+<h2>4. Verification</h2>
+<table>
+  <tr><th>Gate</th><th>Result</th></tr>
+  <tr><td><code>dotnet build Harbor.slnx -c Release</code></td><td><span class="ok">0 errors</span> (re-verified at final head <span class="sha">54c8497</span>; re-run at <span class="sha">eedb970</span>, <span class="sha">41f1531</span> and sprint-close <span class="sha">e5959d0</span>)</td></tr>
+  <tr><td><code>dotnet test tests/Harbor.Plugins.Runtime.Tests/ -c Release</code></td><td><span class="ok">64 / 64</span> × 7 consecutive runs (final at sprint-close <span class="sha">e5959d0</span>) — includes: SandboxAlcTests (7: deny/allow/load/shared-types/unload-GC), SandboxedPluginToolTests (7: timeout kill incl. token-ignoring tool, memory guard, block event, allow/deny audit, cancellation propagation), PluginAuditLogTests (4: JSONL lines, append-only seed survival, IO-failure swallow, full GoogleSearch acceptance flow), TrustCapabilityTests (6: approved subset persisted with path+sha256+canonical names, restart without re-prompt, empty-approval still trusted but grants nothing, legacy v1 entry fail-closed, stale/unknown fail-closed, stored over-grant dropped), TrustLayerTests (10: pre-existing trust semantics + seam narrowing — yielded scripts carry only the approved subset with hash preserved, grants never widen beyond the manifest, global scope keeps declared capabilities, unknown capability token skips the plugin even when the policy would trust it). Sprint test files are CS0618-clean (deprecated TUnit <code>HasCount</code> migrated to <code>Count().IsEqualTo</code>); the only remaining warnings are the intentionally-legacy <code>CsPluginLoader</code> usages.</td></tr>
+  <tr><td><code>tests/Harbor.Architecture.Tests/</code></td><td><span class="ok">47 / 47</span></td></tr>
+  <tr><td><code>tests/Harbor.Abstractions.Tests/</code></td><td><span class="ok">53 / 53</span> (after JsonDerivedType fix)</td></tr>
+  <tr><td><code>tests/Harbor.Core.Tests/</code> / <code>Harbor.Hosting.Tests/</code> / <code>Harbor.App.Cli.Tests/</code></td><td><span class="ok">92 / 10 / 78</span>, 0 failures</td></tr>
+  <tr><td>Acceptance: plugin calls <code>File.Delete</code> without capability</td><td><code>FileNotFoundException</code> at the call site (covered by <code>Load_SensitiveAssemblyWithoutCapability_ThrowsFileNotFoundException</code>)</td></tr>
+  <tr><td>Acceptance: edited plugin requires re-approval</td><td>sha256 binding in <code>FileTrustPolicy</code> (covered by TrustLayerTests, pre-existing + unchanged)</td></tr>
+  <tr><td>Acceptance: infinite-loop tool killed in 30&nbsp;s, agent continues</td><td><code>Execute_InnerIgnoresToken_WaitAsyncStillKills</code> + <code>Execute_InnerHonorsBudgetCancellation_BlocksAsTimeout</code>; loop receives error result and proceeds</td></tr>
+  <tr><td>Acceptance: <code>alc.Unload()</code> frees memory</td><td><code>Unload_AfterLoadingPluginImage_IsGarbageCollected</code> — WeakReference + GC.Collect loop over a collectible context that loaded a real PE image</td></tr>
+  <tr><td>Acceptance: GoogleSearch install → audit entries</td><td><code>GoogleSearchInstall_AuditTrail_ContainsReadFilesOnSourceAndHttpRequestOnUrl</code>: line 1 = <code>read_files</code> on the .cs source (trust gate), line 2 = <code>http_requests</code> on the URL (first tool call)</td></tr>
+</table>
+<blockquote>Flake resolved at root cause: <code>Rename_SignalsRemovedForOldAndAddedForNew</code> failed twice in parallel full runs — the test awaited a bare <code>received.Count &gt;= 2</code>, which can be satisfied by <code>[Added(before), Removed(old)]</code> before the near-simultaneous <code>Added(new)</code> debounced timer lands. Fixed to await both rename signals specifically (commit <span class="sha">54c8497</span>); a standalone FSW probe under CPU/churn load confirmed event delivery itself is correct. 3 consecutive clean 64/64 full-suite runs afterwards.</blockquote>
+<blockquote>Second flake of the same class, fixed in the component: <code>Delete_OutranksEarlierModifications</code> failed once under parallel load — inotify may deliver a stale <code>Changed</code> event <i>after</i> <code>Deleted</code> for the same path within one debounce window, and the watcher's last-event-wins rule then reported <code>Modified</code> for a file that no longer exists. <code>DebouncedPluginWatcher</code> now checks filesystem truth at fire time: a non-<code>Added</code> kind whose file is gone is classified <code>Removed</code> (commit <span class="sha">41f1531</span>). 6 consecutive clean 64/64 full-suite runs afterwards.</blockquote>
+
+<blockquote>Final independent re-verification at sprint head <span class="sha">50b1a5b</span> (fresh session, no code changes): <code>dotnet build Harbor.slnx -c Release -warnaserror</code> 0 errors / 0 warnings; <code>tests/Harbor.Plugins.Runtime.Tests</code> 64/64; <code>tests/Harbor.Architecture.Tests</code> 47/47; <code>tests/Harbor.Abstractions.Tests</code> 53/53. Deliverable wiring re-audited end-to-end: <code>PluginRuntimeComposer</code> composes <code>PluginAuditLog</code> + <code>FileTrustPolicy</code>, <code>RoslynPluginCompiler</code>/<code>CachingCompiler</code> load into <code>CollectiblePluginLoadContext.ForScript</code>, <code>PluginRegistrar</code> wraps every contributed tool in <code>SandboxedPluginTool</code>, per-capability prompt lives in <code>RegistriesModule</code>.</blockquote>
+
+<h2>5. Commit trail (sprint range)</h2>
+<p>Earlier sprint commits (capabilities model, ALC, trust v2, sandbox wrapper, audit sink, composition wiring) plus this session's:</p>
+<table>
+  <tr><th>SHA</th><th>Subject</th></tr>
+  <tr><td class="sha">ffa0192</td><td>fix(plugins): collectible sandbox ALC implements IDisposable via cooperative Unload</td></tr>
+  <tr><td class="sha">87bb0b9</td><td>test(plugins): RecordingEventBus test double and Contracts project reference for runtime tests</td></tr>
+  <tr><td class="sha">703efcb</td><td>test(plugins): sandbox ALC contract — capability deny-list, shared types, leak-free unload</td></tr>
+  <tr><td class="sha">7b007d3</td><td>fix(plugins): capability directive accepts optional colon before the list</td></tr>
+  <tr><td class="sha">10160ff</td><td>test(plugins): execution sandbox — timeout kill, memory guard, block event, audit trail</td></tr>
+  <tr><td class="sha">0515cfb</td><td>fix(plugins): allow-path audits only evidenced capabilities; JSONL append-only audit tests</td></tr>
+  <tr><td class="sha">883c64f</td><td>fix(ide): restore missing usings in IdeBridgeRunner so the solution builds</td></tr>
+  <tr><td class="sha">fb60d3a</td><td>fix(plugins): register PluginBlockedEvent as AgentEvent JsonDerivedType</td></tr>
+  <tr><td class="sha">767c37b</td><td>test(plugins): trust.json v2 per-capability approval contract tests</td></tr>
+  <tr><td class="sha">66da1b1</td><td>docs(sprint): security report — 60/60 suite incl. trust v2 capability tests</td></tr>
+  <tr><td class="sha">b2ce47a</td><td>feat(plugins): promote GetGrantedCapabilities to IPluginTrustPolicy contract</td></tr>
+  <tr><td class="sha">6d7be18</td><td>feat(plugins): narrow plugin capability set to approved grants at the trust seam</td></tr>
+  <tr><td class="sha">a636a68</td><td>fix(plugins): fail closed on invalid capability manifest in the trust gate</td></tr>
+  <tr><td class="sha">0e0f1bb</td><td>feat(plugins): interactive per-capability approval at startup</td></tr>
+  <tr><td class="sha">45b7fbf</td><td>test(plugins): trust-seam capability narrowing + invalid-manifest rejection</td></tr>
+  <tr><td class="sha">54c8497</td><td>test(plugins): fix rename race — await both rename signals, not a bare event count</td></tr>
+  <tr><td class="sha">12985a4</td><td>test(plugins): migrate deprecated TUnit HasCount assertions to Count().IsEqualTo</td></tr>
+  <tr><td class="sha">fe2fabc</td><td>test(plugins): migrate remaining HasCount assertions in TrustLayerTests</td></tr>
+  <tr><td class="sha">41f1531</td><td>fix(plugins): report Removed when a watched file vanished by fire time</td></tr>
+  <tr><td class="sha">de84a31</td><td>docs(sprint): security report — delete/modify FSW flake fixed in component, 64/64 x6 at 41f1531</td></tr>
+  <tr><td class="sha">8a8e1e8</td><td>test(plugins): drain late creation echo before asserting save-burst collapse</td></tr>
+  <tr><td class="sha">e5959d0</td><td>chore(sprint): security status head → 8a8e1e8 (sprint-close verification: build 0 errors, plugins 64/64, arch 47/47)</td></tr>
+</table>
+
+<h2>6. Residual risks / next hardening</h2>
+<ul>
+  <li><b>Deny-list granularity:</b> blocking <code>System.IO.FileSystem</code>/<code>System.Net.Http</code> at assembly resolution stops direct references; a plugin holding a host-shared <code>Stream</code> or an already-created <code>HttpClient</code> instance still has process-level powers — full enforcement needs OS-level isolation (out-of-process plugins, AGENTS.md "two-process architecture").</li>
+  <li><b>Memory guard is retroactive:</b> allocation delta is measured after the call returns; a long-running call over budget is cut by the timeout, and the abandoned task is GC'd — but the allocation may already have happened. Acceptable for a solo-dev threat model; noted for the out-of-process design.</li>
+  <li><b>Audit log ownership:</b> append-only by code path and directory placement; for a defense-in-depth guarantee against host-level tampering, set OS ACLs (read-only for non-host users) at install time.</li>
+  <li><b>Capability prompt UX:</b> the per-capability flow is wired end-to-end at the CLI (interactive y/N per declared capability in <code>RegistriesModule</code>, persisted via <code>FileTrustPolicy</code>); a richer TUI presentation is left to a UI sprint.</li>
+  <li><b>Zero-approval still loads:</b> declining every capability loads the plugin with an empty grant set — the sandbox ALC blocks the sensitive assemblies, but the plugin's code still executes in-process. A "decline ⇒ skip entirely" option belongs to the TUI UX pass.</li>
+</ul>
+
+</body>
+</html>

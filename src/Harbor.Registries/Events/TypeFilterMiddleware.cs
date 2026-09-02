@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Core.Events;
+namespace Harbor.Registries.Events;
 
 /// <summary>
 ///     Type-allowlist middleware. Only events whose runtime type matches one

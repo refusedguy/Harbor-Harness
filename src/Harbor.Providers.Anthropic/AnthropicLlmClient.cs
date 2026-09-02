@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.Anthropic;
 /// <summary>
@@ -32,7 +33,7 @@ public sealed class AnthropicLlmClient : ILlmClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly IAnthropicAuthResolver _auth;
+    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation and conditional logic on the hot path.
@@ -45,7 +46,7 @@ public sealed class AnthropicLlmClient : ILlmClient
     public AnthropicLlmClient(
         HttpClient http,
         AnthropicConfig config,
-        IAnthropicAuthResolver auth,
+        IAuthResolver auth,
         ILogger<AnthropicLlmClient> logger)
     {
         _http = http;
@@ -73,58 +74,21 @@ public sealed class AnthropicLlmClient : ILlmClient
         {
             try
             {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
                 if (apiKeyResult.IsFailure)
                 {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}"), cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
                 var httpRequest = BuildRequest(request, apiKeyResult.Value);
-                HttpResponseMessage response;
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent($"HTTP request failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent($"Anthropic API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        // Anthropic SSE format: "event: type\ndata: {...}"
-                        if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        // Slice the payload portion without allocating a new substring when
-                        // possible — Substring is the cleanest cross-target helper here.
-                        string data = line.Substring(6);
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        await WriteAnthropicEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                // Shared pump (ROP-A ПР.1): exactly one FinishEvent on graceful
+                // end-of-stream; parsers never emit FinishEvent themselves.
+                await SsePump.RunSseAsync(
+                    writer, _http, httpRequest,
+                    (data, token) => WriteAnthropicEventsAsync(data, writer, token),
+                    "Anthropic API", _logger, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -132,7 +96,9 @@ public sealed class AnthropicLlmClient : ILlmClient
             }
             catch (Exception ex)
             {
-                await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(new ErrorEvent(
+                    $"Stream failed: {ex.Message}", ex.ToString(),
+                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -449,7 +415,7 @@ public sealed class AnthropicLlmClient : ILlmClient
                 break;
 
             case "message_stop":
-                yield return new FinishEvent();
+                // No FinishEvent here (ROP-A ПР.1): the shared pump emits exactly one.
                 break;
         }
     }
@@ -463,40 +429,6 @@ public sealed class AnthropicConfig
     public string? BaseUrl { get; set; }
     public string? ApiVersion { get; set; }
     public string? BetaFeatures { get; set; }
-}
-
-/// <summary>
-///     Auth resolver specifically for Anthropic.
-/// </summary>
-public interface IAnthropicAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
-}
-
-/// <summary>
-///     Default env-var based auth resolver for Anthropic.
-/// </summary>
-public sealed class EnvVarAnthropicAuthResolver : IAnthropicAuthResolver
-{
-    private const string EnvVarName = "ANTHROPIC_API_KEY";
-    private readonly string? _override;
-
-    public EnvVarAnthropicAuthResolver(string? overrideKey = null)
-    {
-        _override = overrideKey;
-    }
-
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
-    {
-        if (!string.IsNullOrEmpty(_override))
-            return Task.FromResult(Result.Success(_override));
-
-        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
-        if (string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --anthropic-api-key."));
-
-        return Task.FromResult(Result.Success(envValue));
-    }
 }
 
 /// <summary>

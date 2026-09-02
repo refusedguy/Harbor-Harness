@@ -22,10 +22,10 @@
       * Harbor.Registries — registry implementations (AgentRegistry, ToolRegistry,
         InMemoryMcpRegistry, ProviderRegistry, InMemoryEventBus).
 
-    Both new assemblies keep the original `Harbor.Core.*` and `Harbor.Abstractions.*`
-    namespaces, so existing `using Harbor.Core.Sessions;` directives resolve
-    unchanged. New consumers should reference Harbor.Application and/or
-    Harbor.Registries directly.
+    Types declare namespaces matching their assembly of residence (ROP-D Z1):
+    use cases live in `Harbor.Application.*`, registries in
+    `Harbor.Abstractions.*` / `Harbor.Registries.*`. New consumers should
+    reference Harbor.Application and/or Harbor.Registries directly.
 
     See README.md for the migration guide.
   -->

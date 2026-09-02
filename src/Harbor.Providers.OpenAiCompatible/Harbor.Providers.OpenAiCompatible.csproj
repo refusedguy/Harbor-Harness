@@ -9,6 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Harbor.Providers.Shared\SsePump.cs" LinkBase="Shared" />
+    <Compile Include="..\Harbor.Providers.Shared\OpenAiWire.cs" LinkBase="Shared" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- §ARCH-003: Infrastructure references Domain (Harbor.Abstractions) ONLY.
          The previous Harbor.Core reference was vestigial — no `using Harbor.Core.*`
          exists in this project. Removed by arch-cleaner. -->
@@ -18,6 +23,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Http"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.App.Cli"/>
+    <InternalsVisibleTo Include="Harbor.Benchmarks"/>
   </ItemGroup>
 
 </Project>

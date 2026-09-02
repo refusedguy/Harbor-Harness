@@ -3,7 +3,7 @@ using System.Text;
 using Harbor.Abstractions.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Core.Sessions;
+namespace Harbor.Application.Sessions;
 /// <summary>
 ///     Default system prompt builder. Implements Builder pattern (GOF).
 ///     Assembles: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files.

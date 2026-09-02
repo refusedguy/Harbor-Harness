@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Harbor Sprint Report — 27.08.2026</title>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #0d1117; --border: #1f2430;
+    --text: #b3b9c5; --dim: #5c6773; --accent: #39bae6;
+    --ok: #7fd962; --warn: #ffb454; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 8px; color: var(--accent); }
+  h2 { font-size: 16px; margin: 16px 0 8px; color: var(--accent); }
+  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--text); }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px; margin: 8px 0;
+  }
+  .title {
+    color: var(--dim); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td {
+    text-align: left; padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--dim); font-weight: normal; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  .warn { color: var(--warn); }
+  .accent { color: var(--accent); }
+  code {
+    background: #131820; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 6px; font-size: 11px;
+    color: #d2a6ff;
+  }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .finding {
+    background: rgba(255,107,107,0.05);
+    border-left: 2px solid var(--err);
+    padding: 8px; margin: 6px 0;
+  }
+  .finding.high { border-left-color: var(--err); }
+  .finding.medium { border-left-color: var(--warn); }
+  .finding.low { border-left-color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Harbor Sprint Report</h1>
+    <div class="sub">Generated: 27.08.2026 18:30 · Branch: dev · HEAD: 64a2f76</div>
+  </div>
+
+  <div class="card">
+    <div class="title">Sprint Queue</div>
+    <table>
+      <tr><th>Sprint</th><th>State</th><th>Commits</th><th>Last Activity</th></tr>
+      <tr><td><span class="accent">ui-final</span></td><td><span class="ok">done</span></td><td>14</td><td>2026-08-27T18:00:00+05:00</td></tr>
+      <tr><td><span class="accent">ui-v2</span></td><td><span class="warn">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">multi-agent</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">performance</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">ide-integration</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">security</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">release-engineering</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+      <tr><td><span class="accent">testing-strategy</span></td><td><span class="accent">queued</span></td><td>0</td><td>—</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="title">Top Findings from Code Audit</div>
+    <h3>Critical mismatches</h3>
+    <div class="finding high">ConsoleExTuiRenderer.cs referenced in docs but does not exist in src/. ConsoleEx wired via ChatScreenBridge/ScreenSession instead.</div>
+    <div class="finding high">UiMsg claims MousePress/MouseRelease/MouseWheel/Paste/TerminalResized records — none exist in actual UiMsg.cs.</div>
+    <div class="finding high">Input adapter files (KittyKeyboardAdapter.cs, LegacyKeyAdapter.cs, MouseAdapter.cs, PasteAdapter.cs) not implemented.</div>
+    <div class="finding high">FEATURE_RESEARCH.md references src/Harbor.Tui.Avalonia/ which does not exist. Actual app is apps/Harbor.App.Avalonia (Avalonia 12.1).</div>
+    <div class="finding medium">ROADMAP.md tech-debt table has wrong line counts: HostBuilder.cs 114 (not 644), OpenAILlmClient 519 (not 656).</div>
+    <div class="finding medium">ANTIPATTERNS.md presents resolved bugs as live issues: _toolCallIndexToId, switch(ProviderId), PermissionService.CheckAsync crash.</div>
+    <div class="finding low">docs say 27 test projects; actual is 28. contrib/ has 10 csproj, not 26.</div>
+  </div>
+
+  <div class="card">
+    <div class="title">Infrastructure Status</div>
+    <ul>
+      <li>sprint-chain.sh: updated with status.json tracking</li>
+      <li>md-to-report.sh: generates HTML reports</li>
+      <li>status-ping.sh: single-line status for telegram</li>
+      <li>kilo process: not running</li>
+      <li>chain log: .kilo-docs/scripts/sprint-chain.log</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

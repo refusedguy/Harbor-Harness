@@ -23,7 +23,7 @@ public partial class ToolCallCardView : UserControl
         if (DataContext is not ToolCallVm vm || vm.DiffFull is null)
             return;
 
-        ShellChrome.OpenOverlay("diff");
+        ShellChrome.OpenOverlay(OverlayIds.Diff);
     }
 
     private IShellChrome? _shellChrome;

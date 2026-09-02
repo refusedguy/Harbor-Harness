@@ -1,5 +1,6 @@
-using Harbor.Cli.Logging;
-namespace Harbor.Cli.Commands;
+using Harbor.App.Cli.Logging;
+using System.Threading.Tasks;
+namespace Harbor.App.Cli.Commands;
 /// <summary>
 ///     <c>harbor logs</c> — inspect per-run log files written by
 ///     <see cref="FileLoggerProvider" /> to <c>~/.harbor/logs/</c>.
@@ -36,17 +37,15 @@ namespace Harbor.Cli.Commands;
 ///         <c>tail -f</c> can read a file the CLI is actively writing to.
 ///     </para>
 /// </remarks>
-public sealed class LogsCommand
+public sealed class LogsCommand : ICommand
 {
     private static readonly string LogDir = HarborLogManager.DefaultLogDirectory;
 
     private readonly TextWriter _error;
     private readonly TextWriter _output;
 
-    /// <summary>
-    ///     Create a <c>logs</c> command handler writing to <paramref name="output" />
-    ///     and <paramref name="error" />.
-    /// </summary>
+    public string Name => "logs";
+
     public LogsCommand(TextWriter output, TextWriter error)
     {
         _output = output;
@@ -57,11 +56,13 @@ public sealed class LogsCommand
     ///     Execute the parsed subcommand.
     /// </summary>
     /// <param name="args">Args after the <c>logs</c> keyword.</param>
+    /// <param name="ct">Cancellation token.</param>
     /// <returns>Process exit code (0 = success, 1 = usage error, 2 = IO error).</returns>
-    public int Execute(string[] args)
+    public async Task<int> ExecuteAsync(string[] args, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         if (args.Length == 0 || args[0] is "--list" or "-l")
-            return ListFiles(all: args.Length > 0);
+            return await ListFilesAsync(all: args.Length > 0).ConfigureAwait(false);
 
         switch (args[0].ToLowerInvariant())
         {
@@ -69,11 +70,11 @@ public sealed class LogsCommand
                 PrintUsage();
                 return 0;
             case "--last" or "-n":
-                return PrintLast(follow: false);
+                return await PrintLastAsync(follow: false, ct).ConfigureAwait(false);
             case "--follow" or "-f":
-                return PrintLast(follow: true);
+                return await PrintLastAsync(follow: true, ct).ConfigureAwait(false);
             case "--clean" or "-c":
-                return Clean();
+                return await CleanAsync(ct).ConfigureAwait(false);
             default:
                 _error.WriteLine($"Unknown subcommand: {args[0]}");
                 PrintUsage();
@@ -99,7 +100,7 @@ public sealed class LogsCommand
                           """);
     }
 
-    private int ListFiles(bool all)
+    private async Task<int> ListFilesAsync(bool all)
     {
         if (!Directory.Exists(LogDir))
         {
@@ -151,12 +152,12 @@ public sealed class LogsCommand
         return 0;
     }
 
-    private int PrintLast(bool follow)
+    private async Task<int> PrintLastAsync(bool follow, CancellationToken ct)
     {
         if (!Directory.Exists(LogDir))
         {
             _error.WriteLine($"No log directory yet: {LogDir}");
-            return 2;
+            return 0;
         }
         FileInfo? latest;
         try
@@ -198,12 +199,10 @@ public sealed class LogsCommand
             if (!follow)
                 return 0;
 
-            // Tail new lines. FileLoggerProvider has AutoFlush=true, so new
-            // writes are immediately visible to us (FileShare.Read on the
-            // writer's side; we open with FileShare.ReadWrite).
             _output.WriteLine("--- following (Ctrl-C to exit) ---");
             while (true)
             {
+                ct.ThrowIfCancellationRequested();
                 line = reader.ReadLine();
                 if (line is not null)
                 {
@@ -212,7 +211,14 @@ public sealed class LogsCommand
                 }
                 else
                 {
-                    Thread.Sleep(250);
+                    try
+                    {
+                        await Task.Delay(250, ct).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return 0;
+                    }
                 }
             }
         }
@@ -227,8 +233,9 @@ public sealed class LogsCommand
         }
     }
 
-    private int Clean()
+    private async Task<int> CleanAsync(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!Directory.Exists(LogDir))
         {
             _output.WriteLine($"No log directory yet: {LogDir}");

@@ -36,14 +36,19 @@ public sealed class PluginAssemblyReferences
     {
         "System.Runtime.dll",
         "System.Collections.dll",
+        "System.Collections.Concurrent.dll",
+        "System.Text.RegularExpressions.dll",
+        "System.Diagnostics.Process.dll",
         "System.Threading.Tasks.dll",
         "System.Threading.dll",
         "System.Resources.ResourceManager.dll",
+        "System.Runtime.InteropServices.RuntimeInformation.dll",
         "System.Runtime.InteropServices.dll",
         "System.Private.Uri.dll",
         "System.Text.Json.dll",
         "System.Linq.dll",
-        "System.Console.dll"
+        "System.Console.dll",
+        "System.Net.Http.dll"
     };
     private readonly ILogger<PluginAssemblyReferences> _logger;
 
@@ -151,7 +156,8 @@ public sealed class PluginAssemblyReferences
                 string path = Path.Combine(runtimeDir, wellKnown);
                 if (File.Exists(path) && seen.Add(path))
                 {
-                    try { refs.Add(MetadataReference.CreateFromFile(path)); }
+                    try
+                    { refs.Add(MetadataReference.CreateFromFile(path)); }
                     catch (IOException)
                     { /* best-effort */
                     }

@@ -1,5 +1,8 @@
 # Desktop Shell Architecture Reconnaissance
 
+> **Note:** snapshot generated 2026-08-12, before sprint-2. `Harbor.Tui.{Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel}` now live in `contrib/tui/`, `Harbor.App.{Wpf,Maui,Blazor}` in `contrib/apps/`, their tests in `contrib/tests/`. Paths below are not updated.
+> **Status (2026-08-27):** АРХИВНАЯ разведка десктопного шелла; актуальное состояние — `docs/PROJECT_STATUS.md`.
+
 ## 1. MainViewModel Constructors
 
 ### Avalonia `MainViewModel`

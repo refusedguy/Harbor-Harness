@@ -576,3 +576,10 @@ dotnet_diagnostic.DI003.severity = suggestion
 dotnet_diagnostic.DI006.severity = suggestion
 dotnet_diagnostic.DI008.severity = suggestion
 dotnet_diagnostic.DI014.severity = suggestion
+
+# Renderer golden-frame tests (Phase 5): no diagnostics fire in this file
+# today; the section is reserved for the NickConsoleEx capture test, which
+# drives SharpConsoleUI window-system internals that may trip TUnit
+# analyzers as they evolve.
+[tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs]
+dotnet_diagnostic.TUnit0055.severity = none

@@ -16,14 +16,14 @@ public sealed class ThemeService : IThemeService
     private const string DefaultHdsTheme = "CatppuccinMocha.axaml";
 
     private readonly ILogger<ThemeService> _logger;
-    private Application? _app;
+    private global::Avalonia.Application? _app;
 
     public ThemeService(ILogger<ThemeService> logger)
     {
         _logger = logger;
     }
 
-    public Application Application
+    public global::Avalonia.Application Application
     {
         get => _app ?? throw new InvalidOperationException("ThemeService.Application is not set yet.");
         set => _app = value;

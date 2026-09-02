@@ -8,6 +8,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Providers.Internal;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Providers.OpenAI;
 /// <summary>
@@ -28,7 +29,7 @@ public sealed class OpenAILlmClient : ILlmClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-    private readonly IOpenAIAuthResolver _auth;
+    private readonly IAuthResolver _auth;
 
     // Pre-computed base URL with trailing slash stripped — avoids per-request
     // string manipulation on the hot path.
@@ -41,7 +42,7 @@ public sealed class OpenAILlmClient : ILlmClient
     public OpenAILlmClient(
         HttpClient http,
         OpenAIConfig config,
-        IOpenAIAuthResolver auth,
+        IAuthResolver auth,
         ILogger<OpenAILlmClient> logger)
     {
         _http = http;
@@ -69,10 +70,10 @@ public sealed class OpenAILlmClient : ILlmClient
         {
             try
             {
-                var apiKeyResult = await _auth.ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+                var apiKeyResult = await _auth.ResolveApiKeyAsync(ProviderId.Value, cancellationToken).ConfigureAwait(false);
                 if (apiKeyResult.IsFailure)
                 {
-                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}"), cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(new ErrorEvent($"Auth failed: {apiKeyResult.Error}", Kind: ProviderErrorKind.Auth), cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
@@ -82,60 +83,27 @@ public sealed class OpenAILlmClient : ILlmClient
                     ? BuildResponsesRequest(request, apiKeyResult.Value)
                     : BuildChatCompletionsRequest(request, apiKeyResult.Value);
 
-                HttpResponseMessage response;
+                // ROP-A ПР.3/ПР.4: per-stream tool-call id map + malformed counter.
+                var chunkState = new ChunkStreamState();
 
-                try
-                {
-                    response = await _http.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    await writer.WriteAsync(new ErrorEvent($"HTTP request failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                using (response)
-                {
-                    if (!response.IsSuccessStatusCode)
+                // Shared pump (ROP-A ПР.1): send/status/line-loop/error handling
+                // live in SsePump; it emits exactly one FinishEvent on graceful
+                // end-of-stream ([DONE] or EOF) and none on error/cancel.
+                await SsePump.RunSseAsync(
+                    writer, _http, httpRequest,
+                    (data, token) => useResponsesApi
+                        ? WriteResponsesEventsAsync(data, writer, token)
+                        : WriteChatChunkEventsAsync(data, writer, chunkState, token),
+                    "OpenAI API", _logger, cancellationToken,
+                    onComplete: () =>
                     {
-                        string errorBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                        await writer.WriteAsync(new ErrorEvent($"OpenAI API error {(int)response.StatusCode}: {errorBody}"), cancellationToken).ConfigureAwait(false);
-                        return;
-                    }
-
-                    await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                    using var reader = new StreamReader(stream);
-
-                    string? line;
-                    while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        string data = line.Substring(6);
-                        if (data == "[DONE]")
+                        if (chunkState.MalformedChunks > 0)
                         {
-                            await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
-                            return;
+                            _logger.LogInformation(
+                                "OpenAI stream completed with {Count} malformed chunk(s) skipped",
+                                chunkState.MalformedChunks);
                         }
-
-                        // Stream events directly into the channel while the JsonDocument is
-                        // still alive — avoids the per-chunk .ToList() materialization that
-                        // would otherwise be required to keep JsonElement valid after dispose.
-                        if (useResponsesApi)
-                        {
-                            await WriteResponsesEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            await WriteChatChunkEventsAsync(data, writer, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
-                }
-
-                await writer.WriteAsync(new FinishEvent(), cancellationToken).ConfigureAwait(false);
+                    }).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -143,7 +111,9 @@ public sealed class OpenAILlmClient : ILlmClient
             }
             catch (Exception ex)
             {
-                await writer.WriteAsync(new ErrorEvent($"Stream failed: {ex.Message}", ex.ToString()), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(new ErrorEvent(
+                    $"Stream failed: {ex.Message}", ex.ToString(),
+                    ProviderErrors.FromException(ex, cancellationToken)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {
@@ -180,7 +150,7 @@ public sealed class OpenAILlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(8)
         {
             ["model"] = request.Model,
-            ["messages"] = BuildChatMessages(request),
+            ["messages"] = BuildChatMessages(request, _logger),
             ["stream"] = true,
             ["stream_options"] = new { include_usage = true }
         };
@@ -237,7 +207,7 @@ public sealed class OpenAILlmClient : ILlmClient
         var payload = new Dictionary<string, object?>(6)
         {
             ["model"] = request.Model,
-            ["input"] = BuildResponsesInput(request),
+            ["input"] = BuildResponsesInput(request, _logger),
             ["stream"] = true
         };
 
@@ -275,7 +245,7 @@ public sealed class OpenAILlmClient : ILlmClient
         return msg;
     }
 
-    private static List<object> BuildChatMessages(LlmRequest request)
+    private static List<object> BuildChatMessages(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -291,7 +261,8 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
                 },
                 LlmAssistantMessage a => new
                 {
@@ -317,7 +288,7 @@ public sealed class OpenAILlmClient : ILlmClient
         return result;
     }
 
-    private static List<object> BuildResponsesInput(LlmRequest request)
+    private static List<object> BuildResponsesInput(LlmRequest request, ILogger logger)
     {
         var result = new List<object>(request.Messages.Count + 1);
 
@@ -333,7 +304,8 @@ public sealed class OpenAILlmClient : ILlmClient
                 LlmUserMessage u => new
                 {
                     role = "user",
-                    content = u.Content.OfType<LlmTextBlock>().Select(b => b.Text).FirstOrDefault() ?? ""
+                    // ROP-A ПР.12: non-text blocks dropped loudly.
+                    content = ProviderPayload.FirstTextOrEmpty(u.Content, logger, "openai")
                 },
                 LlmAssistantMessage a => new
                 {
@@ -355,95 +327,14 @@ public sealed class OpenAILlmClient : ILlmClient
 
     /// <summary>
     ///     Parse one SSE data line and write any emitted events directly into the channel.
-    ///     Streaming inside the JsonDocument's `using` scope eliminates the per-chunk .ToList()
-    ///     materialization that the previous MapChatCompletionsChunk helper required to keep
-    ///     JsonElement values alive after dispose.
+    ///     Chunk parsing is delegated to the shared <see cref="OpenAiWire" /> helpers
+    ///     (ROP-A ПР.2) with the unified skip-and-count malformed-chunk policy (ПР.4).
     /// </summary>
-    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, CancellationToken ct)
+    private async Task WriteChatChunkEventsAsync(string data, ChannelWriter<LlmEvent> writer, ChunkStreamState chunkState, CancellationToken ct)
     {
-        try
+        foreach (var evt in OpenAiWire.TryParseChatChunkLine(data, chunkState, _logger))
         {
-            using var doc = JsonDocument.Parse(data);
-            foreach (var evt in MapChatChunkFromDocument(doc.RootElement))
-            {
-                await writer.WriteAsync(evt, ct).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse OpenAI chunk: {Data}", data);
-        }
-    }
-
-    private IEnumerable<LlmEvent> MapChatChunkFromDocument(JsonElement root)
-    {
-        // Enumerate choices lazily; only materialize the first choice we actually use.
-        if (!root.TryGetProperty("choices", out var choicesEl) || choicesEl.ValueKind != JsonValueKind.Array)
-        {
-            if (root.TryGetProperty("usage", out var usage))
-            {
-                yield return new StepFinishEvent(0, "stop", new Usage(
-                    usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
-                    usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0));
-            }
-            yield break;
-        }
-
-        // First choice only — OpenAI streams one choice at a time for non-parallel tool calls.
-        using var choicesIter = choicesEl.EnumerateArray();
-        if (!choicesIter.MoveNext()) yield break;
-        var choice = choicesIter.Current;
-        var delta = choice.TryGetProperty("delta", out var d) ? d : default;
-        string? finishReason = choice.TryGetProperty("finish_reason", out var fr) ? fr.GetString() : null;
-
-        if (delta.ValueKind == JsonValueKind.Object)
-        {
-            if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
-            {
-                string? text = content.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new TextDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("reasoning_content", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
-            {
-                string? text = reasoning.GetString();
-                if (!string.IsNullOrEmpty(text))
-                    yield return new ThinkingDeltaEvent("0", text);
-            }
-
-            if (delta.TryGetProperty("tool_calls", out var tcs) && tcs.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var tc in tcs.EnumerateArray())
-                {
-                    string id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
-                    var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
-
-                    if (fn.ValueKind == JsonValueKind.Object)
-                    {
-                        string? name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
-                        if (!string.IsNullOrEmpty(name))
-                            yield return new ToolCallStartEvent(id, name!);
-
-                        if (fn.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.String)
-                        {
-                            string? argsStr = args.GetString();
-                            if (!string.IsNullOrEmpty(argsStr))
-                                yield return new ToolCallDeltaEvent(id, argsStr);
-                        }
-                    }
-                }
-            }
-        }
-
-        if (finishReason is not null)
-        {
-            var usage = root.TryGetProperty("usage", out var u) ? u : default;
-            yield return new StepFinishEvent(0, finishReason, usage.ValueKind == JsonValueKind.Object
-                ? new Usage(
-                    usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
-                    usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0)
-                : null);
+            await writer.WriteAsync(evt, ct).ConfigureAwait(false);
         }
     }
 
@@ -529,8 +420,8 @@ public sealed class OpenAILlmClient : ILlmClient
                         usageEl.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0,
                         usageEl.TryGetProperty("output_tokens_details", out var od) && od.TryGetProperty("reasoning_tokens", out var rt) ? rt.GetInt32() : null)
                     : null;
+                // No FinishEvent here (ROP-A ПР.1): the shared pump emits exactly one.
                 yield return new StepFinishEvent(0, "stop", usage);
-                yield return new FinishEvent();
                 break;
         }
     }
@@ -540,34 +431,6 @@ public sealed class OpenAIConfig
 {
     public string? BaseUrl { get; set; }
     public bool ForceResponsesApi { get; set; }
-}
-
-public interface IOpenAIAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default);
-}
-
-public sealed class EnvVarOpenAIAuthResolver : IOpenAIAuthResolver
-{
-    private const string EnvVarName = "OPENAI_API_KEY";
-    private readonly string? _override;
-
-    public EnvVarOpenAIAuthResolver(string? overrideKey = null)
-    {
-        _override = overrideKey;
-    }
-
-    public Task<Result<string>> ResolveApiKeyAsync(CancellationToken ct = default)
-    {
-        if (!string.IsNullOrEmpty(_override))
-            return Task.FromResult(Result.Success(_override));
-
-        string? envValue = Environment.GetEnvironmentVariable(EnvVarName);
-        if (string.IsNullOrEmpty(envValue))
-            return Task.FromResult(Result.Failure<string>($"Set ${EnvVarName} or pass --openai-api-key."));
-
-        return Task.FromResult(Result.Success(envValue));
-    }
 }
 
 public static class OpenAIModels

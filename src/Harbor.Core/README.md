@@ -1,135 +1,65 @@
 # Harbor.Core
 
-The **Application layer** of Harbor — orchestrates use cases by combining Domain contracts (`Harbor.Abstractions`) with Infrastructure implementations (providers, storage, tools, plugins). Contains the agent loop, event bus, registries, compaction engine, and system prompt builder.
-
-> This is where Harbor's business logic lives. Domain describes *what*; `Harbor.Core` describes *how*.
-
-## Layer
-
-Application — sits above `Harbor.Abstractions` (Domain), below Infrastructure (`Harbor.Providers.*`, `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Plugins.*`) and Presentation (`Harbor.Tui.*`). Infrastructure and Presentation depend on `Harbor.Core` for the agent loop, event bus, and registries.
+**DEPRECATED thin facade.** After the S1 split (and subsequent ROP-D namespace
+fixes), `Harbor.Core` contains **no code of its own** — only a `FacadeMarker`
+sentinel type. All former content moved into two focused assemblies; this
+project exists purely so existing consumers that still reference `Harbor.Core`
+keep compiling.
 
 ## What's in it
 
-| Subfolder        | Contents                                                                     |
-|------------------|------------------------------------------------------------------------------|
-| `Agents/`        | `AgentLoop` (the core orchestrator), `AgentRunner`, `AgentContext`           |
-| `Configuration/` | `HarborOptions`, `ProviderOptions`, `StorageOptions` (Strongly-typed config) |
-| `Events/`        | `IEventBus`, `InMemoryEventBus` (pub/sub)                                    |
-| `Onboarding/`    | First-run setup, config bootstrap                                            |
-| `Permissions/`   | `PermissionService` (default impl of `IPermissionService`)                   |
-| `Providers/`     | `ProviderRegistry` (FrozenDictionary), `LlmClientFactory`                    |
-| `Sessions/`      | `SessionManager`, `CompactionEngine` (anchored-summary fold)                 |
-| `Tools/`         | `ToolRegistry` (FrozenDictionary), `ToolDispatcher`                          |
+| File              | Purpose                                                                       |
+|-------------------|-------------------------------------------------------------------------------|
+| `FacadeMarker.cs` | `Harbor.Core.FacadeMarker` — assembly identity for reflection-based layer tests. No members with behavior. |
 
-## Dependencies
+The `.csproj` carries two `<ProjectReference>` entries (`Harbor.Application`,
+`Harbor.Registries`) which transitively re-export every former type.
 
-- `Harbor.Abstractions` (Domain)
-- `Microsoft.Extensions.DependencyInjection` + `Logging` + `Configuration` + `Hosting.Abstractions` + `Options`
-- `CommunityToolkit.HighPerformance`
-- `NonBlocking` (lock-free `ConcurrentDictionary` alternative for hot registries)
-- `DotNext` + `DotNext.Threading` (async locks, value-type delegates)
-- `KZDev.PerfUtils` (FastHashSet / FastDictionary for hot paths)
-- `ZLinq` + `ZLinq.DropInGenerator`
+## Where everything went
 
-## Public API (highlights)
+| Former type                              | Now lives in            | Namespace                    |
+|------------------------------------------|-------------------------|------------------------------|
+| `AgentLoop`, `DefaultAgent`, `AgentContext` | `src/Harbor.Application/Agents/` | `Harbor.Application.*`  |
+| `CompactionService`, `SystemPromptBuilder`, `CachingSystemPromptBuilder`, `MessageConverter`, `TokenTracker`, `WorkspaceContextSource` | `src/Harbor.Application/Sessions/` | `Harbor.Application.*` |
+| `PermissionService`                      | `src/Harbor.Application/Permissions/` | `Harbor.Application.*`   |
+| `HarborConfig`, `ConfigStore`, `AuthStore`, `ProviderPresets` | `src/Harbor.Application/Configuration/` | `Harbor.Application.*` |
+| `OnboardingWizard`                       | `src/Harbor.Application/Onboarding/` | `Harbor.Application.*`    |
+| `RetryPolicyExtensions`                  | `src/Harbor.Application/Resilience/` | `Harbor.Application.*`     |
+| `ProviderHealthCheck` (`IProviderHealthCheck`) | `src/Harbor.Application/Providers/` | `Harbor.Application.*`   |
+| `AgentRegistry`, `ToolRegistry`, `ProviderRegistry` | `src/Harbor.Registries/`  | `Harbor.Abstractions.*` / `Harbor.Registries.*` |
+| `InMemoryEventBus` (+ event middleware)  | `src/Harbor.Registries/Events/` | `Harbor.Abstractions.Events` / `Harbor.Registries.Events` |
+| `InMemoryMcpRegistry`                    | `src/Harbor.Registries/Tools/`  | `Harbor.Registries.Tools`    |
 
-### AgentLoop — the orchestrator
+> Namespaces moved to the assembly of residence (ROP-D Z1): use cases declare
+> `Harbor.Application.*`, registries keep their original `Harbor.Abstractions.*`
+> namespaces or use `Harbor.Registries.*`. Consumer `using` directives may need
+> a one-time update when you switch from the facade.
 
-```csharp
-public sealed class AgentLoop
-{
-    public AgentLoop(
-        ProviderRegistry providers,
-        ToolRegistry tools,
-        IEventBus eventBus,
-        ISessionStore sessions,
-        IPermissionService permissions,
-        ILogger<AgentLoop> logger);
-
-    public IAsyncEnumerable<AgentEvent> RunAsync(
-        SessionId sessionId,
-        string userInput,
-        CancellationToken ct);
-}
-```
-
-Each `RunAsync` call:
-
-1. Loads the session from `ISessionStore`.
-2. Resolves the active provider + model.
-3. Builds the system prompt (tools, agents, context).
-4. Streams the LLM response as `AgentEvent`s.
-5. If the LLM emits tool calls, dispatches each to `ToolRegistry` (via `PermissionService`).
-6. Feeds tool results back to the LLM, loops until no more tool calls.
-7. Persists the session (with compaction if `CompactionSummary` threshold is hit).
-
-### IEventBus — pub/sub
+## Migration
 
 ```csharp
-public interface IEventBus
-{
-    IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> handler)
-        where TEvent : AgentEvent;
-    Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct)
-        where TEvent : AgentEvent;
-}
-```
-
-The agent loop publishes `AgentEvent`s. TUI renderers, loggers, plugins, and the desktop GUIs subscribe.
-
-### Registries — FrozenDictionary
-
-`ProviderRegistry`, `ToolRegistry`, `AgentRegistry` use `FrozenDictionary` for O(1) lookup after a warm-up phase. Mutations (adding tools at runtime via plugins) go through a `NonBlocking` dictionary and a swap-and-freeze.
-
-### CompactionEngine
-
-```csharp
-public sealed class CompactionEngine
-{
-    public Task<Result<CompactionSummary>> CompactAsync(
-        IReadOnlyList<Message> messages,
-        CancellationToken ct);
-}
-```
-
-When a session exceeds `MaxMessages`, the engine folds old turns into an anchored Markdown summary (sections: User Intent, Work Done, Files Modified, Open Questions, Next Steps). The summary is the new anchor; recent turns are preserved verbatim.
-
-## Usage
-
-```csharp
-// In your composition root (e.g. apps/Harbor.App.Cli/Hosting/HostBuilder.cs):
-services.AddSingleton<IEventBus, InMemoryEventBus>();
-services.AddSingleton<ProviderRegistry>();
-services.AddSingleton<ToolRegistry>();
-services.AddSingleton<AgentRegistry>();
-services.AddSingleton<ISessionStore, JsonlSessionStore>();  // or InMemory / Sqlite
-services.AddSingleton<IPermissionService, PermissionService>();
+// Before:
 services.AddSingleton<AgentLoop>();
+services.AddSingleton<ProviderRegistry>();
+
+// After — reference the real projects:
+//   <ProjectReference Include="..\..\src\Harbor.Application\..." />
+//   <ProjectReference Include="..\..\src\Harbor.Registries\..." />
 ```
 
-Then resolve `AgentLoop` and call `RunAsync`:
+## Why keep the shell?
 
-```csharp
-var loop = host.Services.GetRequiredService<AgentLoop>();
-await foreach (var evt in loop.RunAsync(sessionId, "Refactor Program.cs", ct))
-{
-    if (evt is AgentEvent.StreamDelta delta) Console.Write(delta.Text);
-}
-```
+- Consumers (entry points, older plugins) still `<ProjectReference>` this
+  assembly; removing it would be a hard break before v0.5.
+- Reflection-based rules in `tests/Harbor.Architecture.Tests/` load assemblies
+  by name — an empty-looking assembly still needs at least one type.
 
-## Performance notes
-
-- `ZLinq` drop-in generator replaces `System.Linq` for zero-allocation pipelines (the implicit `System.Linq` using is removed in the .csproj).
-- `FrozenDictionary` for read-only registries after warm-up.
-- `NonBlocking` dictionary for hot mutable registries (no lock contention).
-- `ArrayPool<T>` for transient buffers in the agent loop.
-- `IReadOnlyCollection<T>` on all public registry APIs — callers can't mutate the underlying storage.
+Do not add new types here — add them to `Harbor.Application` (use cases) or
+`Harbor.Registries` (registry implementations).
 
 ## See also
 
-- [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)
-- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)
-- [../../docs/PATTERNS.md](../../docs/PATTERNS.md) — AgentLoop, EventBus, registries
-- [../../docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) — performance numbers
-- [../../docs/CODE_PRINCIPLES_AUDIT.md](../../docs/CODE_PRINCIPLES_AUDIT.md)
-- [../Harbor.Abstractions/README.md](../Harbor.Abstractions/README.md) — Domain layer
+- [../Harbor.Application/README.md](../Harbor.Application/README.md) — use cases (agent loop, compaction, prompts)
+- [../Harbor.Registries/README.md](../Harbor.Registries/README.md) — registry implementations + event bus
+- [../Harbor.Abstractions/README.md](../Harbor.Abstractions/README.md) — interface contracts
+- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md) — canonical layering matrix

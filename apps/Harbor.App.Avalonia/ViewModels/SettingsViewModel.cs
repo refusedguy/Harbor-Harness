@@ -6,7 +6,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Services;
 using Harbor.Ui.Framework.Services;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Providers.OpenAiCompatible;
 using Microsoft.Extensions.Logging;
@@ -89,8 +89,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Load synchronously — the constructor runs once on app start and
         // the stores complete IO in <10ms on a local disk. Blocking here
         // keeps the rest of the VM simple (no async init dance).
+#pragma warning disable RS0030 // One-shot ctor load of local-disk config (<10ms); async-init dance not worth it. Catalogued in BannedSymbols.txt.
         _common = _commonStore.LoadAsync().GetAwaiter().GetResult().Value;
         _app = _appStore.LoadAsync().GetAwaiter().GetResult().Value;
+#pragma warning restore RS0030
 
         ThemeSettings = new ThemeSettingsViewModel(theme)
         {
@@ -112,6 +114,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     ///     <c>{Binding ThemeSettings.ApplyThemeCommand}</c>.
     /// </summary>
     public ThemeSettingsViewModel ThemeSettings { get; }
+
+    /// <summary>Diagnostics (A11): theme as seen by the LAST store load.</summary>
+    public string DebugPersistedTheme => _common.Theme;
+
+    /// <summary>Diagnostics (A11): directory the common store reads/writes.</summary>
+    public string DebugConfigDirectory => _common.ConfigDirectory;
 
     /// <summary>
     ///     Per-provider configuration rows (API key input + auth status +
@@ -146,7 +154,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             bool authenticated = false;
             try
             {
+#pragma warning disable RS0030 // Sync settings build from ctor path; auth probe is a fast local check and failure is caught below. Catalogued in BannedSymbols.txt.
                 authenticated = _authResolver.ResolveApiKeyAsync(id).GetAwaiter().GetResult().IsSuccess;
+#pragma warning restore RS0030
             }
             catch (Exception ex)
             {

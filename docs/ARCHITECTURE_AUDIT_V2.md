@@ -6,6 +6,13 @@
 > architectural improvements (4 already implemented in this sprint) with
 > concrete file:line references and implementation sketches.
 
+> **Historical snapshot (2026-07-19).** Числа и пути отражают состояние на дату аудита:
+> тогда было ~38 src-проектов, `Harbor.Domain.dll`, Scripting/`contrib` ещё не вынесены.
+> Сейчас (2026-08-27): 51 src-проект, `Harbor.Domain` → `Harbor.Abstractions.Contracts`
+> (F1 decoupling, ADR-007), plugin pipeline decomposed into `Harbor.Plugins.*`,
+> появился ConsoleEx; часть renderers/apps/scripting — в `contrib/`. Пути ниже не
+> переписывались — сверяйтесь с [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md).
+
 **Date:** 2026-07-19 (revised)
 **Auditor:** Subagent A2 (`arch-audit-v2`)
 **Scope:** all `src/` projects (~38 projects, 5 apps, 13 test projects, ~25 000 LoC)
@@ -1725,7 +1732,7 @@ renderer is the bottleneck — the LLM generates tokens faster than the
 terminal can repaint.
 
 The current mitigation is the `ChatTranscriptCache`
-(`src/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`) which caches
+(`contrib/tui/Harbor.Tui.SpectreTui/View/ChatTranscriptCache.cs`) which caches
 the rendered `IRenderable` for already-seen lines so only the new line
 needs rendering. But the *write* to the terminal is still full-screen —
 `AnsiConsole.Write(renderable)` redraws every row.
@@ -1926,8 +1933,8 @@ documented with implementation sketches in §3.
   in-memory Roslyn compile; not AOT-friendly.
 - `src/Harbor.Plugins.Instantiation/ReflectionPluginInstantiator.cs` —
   `Assembly.Load(byte[])` into default ALC (no unload, §3.8).
-- `src/Harbor.Scripting.Hosting/ScriptHost.cs` — script-host facade.
-- `src/Harbor.Scripting.Engines/JintScriptEngine.cs` —
+- `contrib/scripting/Harbor.Scripting.Hosting/ScriptHost.cs` — script-host facade.
+- `contrib/scripting/Harbor.Scripting.Engines/JintScriptEngine.cs` —
   per-call `Engine` instance (thread safety); JSON serialization fallback
   for return values.
 - `src/Harbor.Storage.Jsonl/JsonlSessionStore.cs` —

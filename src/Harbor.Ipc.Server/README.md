@@ -1,6 +1,6 @@
 # Harbor.Ipc.Server
 
-Hosts the AgentLoop + registries and exposes them via MessagePack RPC over Named Pipe (Windows) or Unix Domain Socket (Linux/Mac). Used when `HARBOR_MODE=ipc-server`.
+Hosts the AgentLoop + registries and exposes them via MessagePack RPC over Named Pipe (Windows), Unix Domain Socket (Linux/Mac), or TCP. Used when `HARBOR_MODE=ipc-server`.
 
 ## When to use
 
@@ -51,7 +51,10 @@ Hosts the AgentLoop + registries and exposes them via MessagePack RPC over Named
 | `Protocol/RequestDispatcher.cs`    | Dispatches `HarborRequest` → `HarborResponse` via the host's DI services.         |
 | `Protocol/MessagePackRpcServer.cs` | Per-client request loop; concurrent multi-client.                                 |
 | `Protocol/EventBroadcaster.cs`     | Subscribes to `IEventBus`, pushes `HarborEvent`s to all connected client streams. |
+| `Protocol/ResilientFrameReader.cs` | Fault-tolerant frame reading across flaky connections.                            |
+| `Protocol/SessionLeaseRegistry.cs` | Session ownership tracking for multi-client access.                               |
 | `Transport/ServerPipeTransport.cs` | Named Pipe (Windows) / Unix Domain Socket (Linux/Mac) accept loop.                |
+| `Transport/TcpServerTransport.cs`  | TCP accept loop for cross-host clients.                                           |
 
 ## Registration
 
@@ -75,6 +78,5 @@ await server.StopAsync();
 
 ## See also
 
-- `docs/IPC.md` — full architecture, transport, security, performance notes.
 - `Harbor.Ipc.Abstractions/README.md` — protocol contract.
 - `Harbor.Ipc.Client/README.md` — remote client.

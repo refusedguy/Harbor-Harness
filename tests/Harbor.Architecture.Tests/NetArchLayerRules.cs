@@ -13,32 +13,24 @@
 // enforce.
 
 using Harbor.Abstractions.Models;
-using Harbor.Core.Agents;
-using Harbor.Core.Tools;
+using Harbor.Application.Agents;
+using Harbor.Registries.Tools;
 using Harbor.Plugins.Hosting;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
-using Harbor.Scripting.Abstractions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
-using Harbor.Tui.Ansi;
-using Harbor.Tui.Plain;
-using Harbor.Tui.RazorConsole;
-using Harbor.Tui.Spectre;
-using Harbor.Tui.Spectre.Fullscreen;
-using Harbor.Tui.Termina;
-using Harbor.Tui.TerminalGui;
+using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.State;
+using Harbor.Terminal.Abstractions.Renderers;
 using NetArchTest.Rules;
-// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Core.Agents namespace for backward compat
-// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Core.Tools namespace for backward compat
-// Use a using-alias to disambiguate the two SpectreTuiRenderer types
-// (Harbor.Tui.Spectre.SpectreTuiRenderer vs Harbor.Tui.SpectreTui.SpectreTuiRenderer).
-using SpectreTuiProjectRenderer = Harbor.Tui.SpectreTui.SpectreTuiRenderer;
+// AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat
+// InMemoryMcpRegistry — now lives in Harbor.Registries.dll, kept in Harbor.Registries.Tools namespace for backward compat
+// Alternative TUI renderers moved to contrib/tui in sprint 2 — outside main layer scope.
 using TestResult = NetArchTest.Rules.TestResult;
 
 namespace Harbor.Architecture.Tests;
@@ -85,7 +77,7 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     // The full list of Harbor assemblies that are NOT in the Infrastructure
@@ -99,7 +91,7 @@ public sealed class NetArchLayerRules
         "Harbor.Plugins.Runtime",
         "Harbor.Scripting",
         "Harbor.Terminal.Abstractions",
-        "Harbor.Cli",
+        "Harbor.App.Cli",
         // Sibling Infrastructure assemblies (no cross-Infrastructure edges):
         "Harbor.Providers.OpenAiCompatible",
         "Harbor.Providers.Anthropic",
@@ -130,7 +122,7 @@ public sealed class NetArchLayerRules
         "Harbor.Storage.Memory",
         "Harbor.Storage.Sqlite",
         "Harbor.Tools.Builtin",
-        "Harbor.Cli"
+        "Harbor.App.Cli"
     ];
 
     /// <summary>
@@ -154,17 +146,47 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
             .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
             .And().NotHaveDependencyOn("Harbor.Scripting")
-            .And().NotHaveDependencyOn("Harbor.Cli")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
 
     /// <summary>
-    ///     Harbor.Terminal.Abstractions (Domain) may reference Harbor.Abstractions
-    ///     but no other Harbor assembly.
+    ///     Harbor.Terminal.Abstractions (Domain vocabulary) may reference
+    ///     Harbor.Abstractions and the Ui.Framework family it is layered on,
+    ///     but no Application / Infrastructure assembly.
+    ///     ROP-D Z2: previously probed <c>typeof(UiStore)</c> from
+    ///     Harbor.Ui.Framework.State — Terminal.Abstractions itself had zero
+    ///     NetArch rules.
     /// </summary>
     [Test]
     public async Task NetArch_TuiAbstractions_DoesNotDependOn_Application_Or_Infrastructure()
+    {
+        var types = Types.InAssembly(typeof(ITuiRenderContext).Assembly);
+        var result = types
+            .Should()
+            .NotHaveDependencyOn("Harbor.Core")
+            .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
+            .And().NotHaveDependencyOn("Harbor.Scripting")
+            .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
+            .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
+            .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
+            .And().NotHaveDependencyOn("Harbor.Providers.Ollama")
+            .And().NotHaveDependencyOn("Harbor.Storage.Jsonl")
+            .And().NotHaveDependencyOn("Harbor.Storage.Memory")
+            .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
+            .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
+            .GetResult();
+        await Assert.That(result.IsSuccessful).IsTrue();
+    }
+
+    /// <summary>
+    ///     Harbor.Ui.Framework.State (Presentation state store) must NOT depend
+    ///     on Application or Infrastructure.
+    /// </summary>
+    [Test]
+    public async Task NetArch_UiFrameworkState_DoesNotDependOn_Application_Or_Infrastructure()
     {
         var types = Types.InAssembly(typeof(UiStore).Assembly);
         var result = types
@@ -180,7 +202,7 @@ public sealed class NetArchLayerRules
             .And().NotHaveDependencyOn("Harbor.Storage.Memory")
             .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
             .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .And().NotHaveDependencyOn("Harbor.Cli")
+            .And().NotHaveDependencyOn("Harbor.App.Cli")
             .GetResult();
         await Assert.That(result.IsSuccessful).IsTrue();
     }
@@ -362,34 +384,6 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Scripting (Application) must NOT depend on Harbor.Core,
-    ///     Harbor.Application, Harbor.Registries, Harbor.Terminal.Abstractions, or
-    ///     Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_Scripting_DoesNotDependOn_Core_Application_Registries_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(ScriptGlobals).Assembly);
-        var result = types
-            .Should()
-            .NotHaveDependencyOn("Harbor.Core")
-            .And().NotHaveDependencyOn("Harbor.Application")
-            .And().NotHaveDependencyOn("Harbor.Registries")
-            .And().NotHaveDependencyOn("Harbor.Terminal.Abstractions")
-            .And().NotHaveDependencyOn("Harbor.Plugins.Runtime")
-            .And().NotHaveDependencyOn("Harbor.Providers.OpenAiCompatible")
-            .And().NotHaveDependencyOn("Harbor.Providers.Anthropic")
-            .And().NotHaveDependencyOn("Harbor.Providers.OpenAI")
-            .And().NotHaveDependencyOn("Harbor.Providers.Ollama")
-            .And().NotHaveDependencyOn("Harbor.Storage.Jsonl")
-            .And().NotHaveDependencyOn("Harbor.Storage.Memory")
-            .And().NotHaveDependencyOn("Harbor.Storage.Sqlite")
-            .And().NotHaveDependencyOn("Harbor.Tools.Builtin")
-            .GetResult();
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
     ///     Harbor.Providers.OpenAiCompatible (Infrastructure) must NOT depend
     ///     on Harbor.Core, sibling Infrastructure, or Presentation.
     /// </summary>
@@ -523,78 +517,6 @@ public sealed class NetArchLayerRules
     }
 
     /// <summary>
-    ///     Harbor.Tui.Spectre (Presentation) must NOT depend on Application
-    ///     or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectre_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(SpectreTuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.Spectre.Fullscreen (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectreFullscreen_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(FullscreenTuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.SpectreTui (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiSpectreTui_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(SpectreTuiProjectRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.TerminalGui (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiTerminalGui_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(TerminalGuiRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.Termina (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiTermina_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(TerminaRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
-    ///     Harbor.Tui.RazorConsole (Presentation) must NOT depend on
-    ///     Application or Infrastructure.
-    /// </summary>
-    [Test]
-    public async Task NetArch_TuiRazorConsole_DoesNotDependOn_Application_Or_Infrastructure()
-    {
-        var types = Types.InAssembly(typeof(RazorConsoleRenderer).Assembly);
-        var result = BuildNoDependencyResult(types, ForbiddenForPresentation);
-        await Assert.That(result.IsSuccessful).IsTrue();
-    }
-
-    /// <summary>
     ///     Sanity check: NetArchTest sees at least one type in each Harbor
     ///     assembly under test. If a ProjectReference is accidentally removed
     ///     from this test project, the corresponding InAssembly(...) call
@@ -613,7 +535,6 @@ public sealed class NetArchLayerRules
             ArchitectureTestHelpers.LoadHarborAssemblies()["Harbor.Core"]
             ?? throw new InvalidOperationException("Harbor.Core assembly not loaded"),
             typeof(PluginHost).Assembly,
-            typeof(ScriptGlobals).Assembly,
             typeof(OpenAiCompatibleLlmClient).Assembly,
             typeof(AnthropicLlmClient).Assembly,
             typeof(OpenAILlmClient).Assembly,
@@ -624,11 +545,6 @@ public sealed class NetArchLayerRules
             typeof(ReadTool).Assembly,
             typeof(AnsiTuiRenderer).Assembly,
             typeof(PlainTuiRenderer).Assembly,
-            typeof(SpectreTuiProjectRenderer).Assembly,
-            typeof(FullscreenTuiRenderer).Assembly,
-            typeof(TerminalGuiRenderer).Assembly,
-            typeof(TerminaRenderer).Assembly,
-            typeof(RazorConsoleRenderer).Assembly
         };
         foreach (var asm in assemblies)
         {

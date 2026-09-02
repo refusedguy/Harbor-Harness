@@ -93,7 +93,9 @@ public sealed class AvaloniaDispatcherAdapter : IDispatcherAdapter
         // Dispatcher.UIThread.InvokeAsync returns a Task<T> that we wait on
         // synchronously — ViewModels call this from non-UI threads expecting
         // a blocking invoke (matches WPF Dispatcher.Invoke semantics).
+#pragma warning disable RS0030 // Blocking invoke IS the adapter contract (WPF Dispatcher.Invoke semantics); caller is a non-UI thread. Catalogued in BannedSymbols.txt.
         return Dispatcher.UIThread.InvokeAsync(func).GetAwaiter().GetResult();
+#pragma warning restore RS0030
     }
 
     /// <summary>

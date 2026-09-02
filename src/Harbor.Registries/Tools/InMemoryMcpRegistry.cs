@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
+using Harbor.Abstractions.Tools;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Core.Tools;
+namespace Harbor.Registries.Tools;
 /// <summary>
 ///     In-memory <see cref="IMcpRegistry" />. Tracks registrations but always returns
 ///     <see cref="Result{T}.Failure" /> for <see cref="InvokeAsync" /> — a real MCP client
@@ -58,6 +59,10 @@ public sealed class InMemoryMcpRegistry : IMcpRegistry
             names[i++] = k;
         return names;
     }
+
+    /// <inheritdoc />
+    public IReadOnlyList<McpServerInstructions> GetInstructions() =>
+        Array.Empty<McpServerInstructions>();
 
     /// <inheritdoc />
     public Task<Result<string>> InvokeAsync(

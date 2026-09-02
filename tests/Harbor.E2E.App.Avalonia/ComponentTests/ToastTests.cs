@@ -20,7 +20,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 public sealed class ToastTests : ComponentTestBase
 {
     [Before(HookType.Test)]
-    public async Task SetupAsync() => await GetDriverAsync().ConfigureAwait(false);
+    public async Task SetupAsync() => await GetDriverAsync("Toast").ConfigureAwait(false);
 
     /// <summary>
     ///     Info toast: blue accent border, "Info" kind label, message visible.

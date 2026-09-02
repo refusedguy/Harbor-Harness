@@ -34,7 +34,10 @@
                      Background="Transparent"
                      AutomationProperties.AutomationId="SessionsFlyout_List">
                 <ListBox.ItemTemplate>
-                    <DataTemplate DataType="vm:SessionRowViewModel" x:DataType="vm:SessionRowViewModel">
+                    <!-- FIX: items are SessionItemViewModel (SessionListViewModel.Sessions),
+                         NOT SessionRowViewModel — the stale DataType made compiled
+                         bindings fail the runtime cast and render blank titles. -->
+                    <DataTemplate DataType="vm:SessionItemViewModel" x:DataType="vm:SessionItemViewModel">
                         <Border Background="Transparent"
                                 CornerRadius="{DynamicResource RadiusSm}"
                                 Padding="8"

@@ -53,6 +53,8 @@ public static partial class AppReducer
             ScrollOffset = 0,
             StreamingBuffer = string.Empty,
             ThinkingBuffer = string.Empty,
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty,
             IsThinking = false,
             Chrome = state.Chrome ?? new AppState.ChromeState()
         };
@@ -77,29 +79,88 @@ public static partial class AppReducer
         Active = ActiveMessage.Empty,
         StreamingBuffer = string.Empty,
         ThinkingBuffer = string.Empty,
+        PendingStreamText = ChunkedBuffer.Empty,
+        PendingStreamThink = ChunkedBuffer.Empty,
         IsThinking = false
     };
 
     private static AppState OnMessageUpdate(AppState state, MessageUpdateEvent mu) => mu.LlmEvent switch
     {
-        TextDeltaEvent td => state with
-        {
-            Active = state.Active with { TextBuffer = state.Active.TextBuffer + td.Delta },
-            StreamingBuffer = state.StreamingBuffer + td.Delta
-        },
-        ThinkingDeltaEvent thd => state with
-        {
-            Active = state.Active with { ThinkBuffer = state.Active.ThinkBuffer + thd.Delta },
-            ThinkingBuffer = state.ThinkingBuffer + thd.Delta,
-            IsThinking = true
-        },
-        ToolCallStartEvent tcs => state with
+        TextDeltaEvent td => WithTextDelta(state, td.Delta),
+        ThinkingDeltaEvent thd => WithThinkingDelta(state, thd.Delta),
+        ToolCallStartEvent tcs => FlushPending(state) with
         {
             Lines = state.Lines.Add(new ChatLine(ChatRole.Tool, $"→ {tcs.ToolName}", tcs.Id))
         },
-        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(state, sf.Usage),
+        StepFinishEvent sf when sf.Usage is not null => OnStepFinish(FlushPending(state), sf.Usage),
         _ => state
     };
+
+    /// <summary>
+    ///     Append a text delta to the chunked pending buffer and rebuild the
+    ///     synced <see cref="AppState.StreamingBuffer" /> /
+    ///     <see cref="ActiveMessage.TextBuffer" /> strings only when
+    ///     <see cref="StreamingSync.ShouldFlush" /> demands it.
+    /// </summary>
+    private static AppState WithTextDelta(AppState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state;
+
+        ChunkedBuffer pending = state.PendingStreamText.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.StreamingBuffer.Length, pending.Length))
+            return state with { PendingStreamText = pending };
+
+        string full = StreamingSync.Concat(state.StreamingBuffer, pending);
+        return state with
+        {
+            StreamingBuffer = full,
+            Active = state.Active with { TextBuffer = full },
+            PendingStreamText = ChunkedBuffer.Empty
+        };
+    }
+
+    /// <summary>Thinking-delta counterpart of <see cref="WithTextDelta" />.</summary>
+    private static AppState WithThinkingDelta(AppState state, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+            return state with { IsThinking = true };
+
+        ChunkedBuffer pending = state.PendingStreamThink.Append(delta);
+        if (!StreamingSync.ShouldFlush(state.ThinkingBuffer.Length, pending.Length))
+            return state with { PendingStreamThink = pending, IsThinking = true };
+
+        string full = StreamingSync.Concat(state.ThinkingBuffer, pending);
+        return state with
+        {
+            ThinkingBuffer = full,
+            Active = state.Active with { ThinkBuffer = full },
+            PendingStreamThink = ChunkedBuffer.Empty,
+            IsThinking = true
+        };
+    }
+
+    /// <summary>
+    ///     Materialize any pending chunks into the synced buffer strings so
+    ///     pause points (tool calls, step finish, message end) observe the
+    ///     complete text.
+    /// </summary>
+    private static AppState FlushPending(AppState state)
+    {
+        if (state.PendingStreamText.Length == 0 && state.PendingStreamThink.Length == 0)
+            return state;
+
+        string text = StreamingSync.Concat(state.StreamingBuffer, state.PendingStreamText);
+        string think = StreamingSync.Concat(state.ThinkingBuffer, state.PendingStreamThink);
+        return state with
+        {
+            StreamingBuffer = text,
+            ThinkingBuffer = think,
+            Active = state.Active with { TextBuffer = text, ThinkBuffer = think },
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty
+        };
+    }
 
     private static AppState OnStepFinish(AppState state, Usage usage)
     {
@@ -116,7 +177,7 @@ public static partial class AppReducer
 
     private static AppState OnMessageEnd(AppState state)
     {
-        var next = state;
+        var next = FlushPending(state);
         if (!string.IsNullOrEmpty(next.ThinkingBuffer))
             next = next with { Lines = next.Lines.Add(new ChatLine(ChatRole.Thinking, next.ThinkingBuffer.Trim())) };
         if (!string.IsNullOrEmpty(next.StreamingBuffer))
@@ -127,6 +188,8 @@ public static partial class AppReducer
             Active = ActiveMessage.Empty,
             StreamingBuffer = string.Empty,
             ThinkingBuffer = string.Empty,
+            PendingStreamText = ChunkedBuffer.Empty,
+            PendingStreamThink = ChunkedBuffer.Empty,
             IsThinking = false
         };
     }
@@ -176,6 +239,8 @@ public static partial class AppReducer
         Active = ActiveMessage.Empty,
         StreamingBuffer = string.Empty,
         ThinkingBuffer = string.Empty,
+        PendingStreamText = ChunkedBuffer.Empty,
+        PendingStreamThink = ChunkedBuffer.Empty,
         IsThinking = false
     };
 

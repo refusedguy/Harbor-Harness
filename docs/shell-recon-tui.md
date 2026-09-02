@@ -1,5 +1,8 @@
 # TUI Shell Architecture Reconnaissance — Spectre.Console Renderer
 
+> **Note:** snapshot generated 2026-08-12, before sprint-2. `Harbor.Tui.{Spectre,Spectre.Fullscreen,SpectreTui,TerminalGui,Termina,RazorConsole,Sixel}` now live in `contrib/tui/`, `Harbor.App.{Wpf,Maui,Blazor}` in `contrib/apps/`, their tests in `contrib/tests/`. Paths below are not updated.
+> **Status (2026-08-27):** АРХИВНАЯ разведка Spectre-рендерера; после снапшота добавлен ConsoleEx (`src/Harbor.Tui.ConsoleEx/`, CE-0…CE-5) — см. его README и `docs/SPECTRE_TUI_DEEP_DIVE.md` для contrib-SpectreTui.
+
 ## 1. UiState properties
 
 | Property | Type | Purpose |

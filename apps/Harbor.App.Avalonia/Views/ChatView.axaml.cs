@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.VisualTree;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Harbor.App.Avalonia.ViewModels;
@@ -57,6 +58,10 @@ public partial class ChatView : UserControl
         var vm = Vm;
         if (vm is null) return;
 
+        // B2: both composers (hero + docked) share this handler; refocus
+        // whichever box the user was typing in.
+        var originBox = sender as TextBox ?? InputBox;
+
         bool isPlainEnter = e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool isCtrlEnter = e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Control);
 
@@ -67,7 +72,7 @@ public partial class ChatView : UserControl
             if (vm.SendCommand.CanExecute(null))
             {
                 vm.SendCommand.Execute(null);
-                InputBox.Focus();
+                originBox.Focus();
             }
         }
     }
@@ -79,7 +84,12 @@ public partial class ChatView : UserControl
     private void ChatScrollViewer_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (Vm is not { } vm) return;
-        if (ChatScrollViewer is not { } scrollViewer) return;
+
+        // Ф-A1b: the timeline ListBox is now the scroller; resolve its inner
+        // ScrollViewer once (the template creates it lazily on layout).
+        var scrollViewer = this.FindControl<ScrollViewer>("PART_ContentViewer")
+            ?? TimelineList?.FindDescendantOfType<ScrollViewer>();
+        if (scrollViewer is null) return;
 
         bool atTop = scrollViewer.Offset.Y <= 0;
         bool scrollingUp = e.Delta.Y < 0;

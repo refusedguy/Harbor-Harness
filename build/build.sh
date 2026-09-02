@@ -7,13 +7,15 @@
 # the Harbor solution layout: .NET 10 SDK at $HOME/.dotnet, build project at
 # ./build/_build.csproj, solution file at ./Harbor.slnx).
 #
-# Examples:
-#   ./build.sh                       # default target (Compile)
-#   ./build.sh Compile               # build the solution
-#   ./build.sh Test                  # run all tests
-#   ./build.sh PublishCliMinimal     # publish minimal CLI variant
-#   ./build.sh PublishAll            # publish every artifact
-#   ./build.sh Clean Compile Test    # chain targets
+# Examples (never invent commands — ask the build itself):
+#   ./build.sh                                  # default target (Compile)
+#   ./build.sh list --format json               # machine-readable target catalog
+#   ./build.sh doctor --format json             # environment health checks
+#   ./build.sh what --path src/Foo/Bar.cs       # what to run after editing a file
+#   ./build.sh Compile --dry-run --format json  # plan without executing
+#   ./build.sh Compile                          # build the solution
+#   ./build.sh Test                             # run all tests
+#   ./build.sh Clean Compile Test               # chain targets
 #   ./build.sh Compile --configuration Debug
 
 set -euo pipefail

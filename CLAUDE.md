@@ -2,7 +2,7 @@
 
 > This file is read by Claude Code (and other AI agents) when working on this codebase. It encodes the project's conventions, patterns, and gotchas.
 >
-> **Project state (v0.4.0-alpha, R31):** build green (0/0), 240+ unit tests passing, 12 E2E tests passing, 3 pre-existing Avalonia 12 headless bugs + 8 IPC timing bugs (Linux). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card and [docs/ROADMAP.md](./docs/ROADMAP.md) for the full plan.
+> **Project state (branch dev):** two `.slnx` solutions (`Harbor.slnx` main, `Harbor.Samples.slnx`); tests run per-project (`dotnet test tests/<Project> -c Release --no-build`) because whole-solution test runs break under the Microsoft.Testing.Platform host. Known/flaky failures (Avalonia-12 headless "Stack empty", Linux IPC pipe timing, occasional ChatView flake) are tracked in [docs/ROADMAP.md](./docs/ROADMAP.md). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card.
 
 ## Companion documents
 
@@ -12,7 +12,7 @@
 - **[docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md)** — reusable UI components (StatusBadge, ChatBubble, SessionRow) across Avalonia/Blazor/WPF.
 - **[docs/ARCHITECTURE_LAYERS.md](./docs/ARCHITECTURE_LAYERS.md)** — canonical Clean / Hexagonal / Onion layering rules. The allowed/forbidden `<ProjectReference>` matrix is mechanically enforced by `tests/Harbor.Architecture.Tests`. **Read this before adding any `<ProjectReference>` to a `.csproj`.**
 - **[docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md)** — detailed audit of OOP/SOLID/GoF/FP/ROP/perf with 41 findings and prioritized refactoring plan, plus §ARCH-001..§ARCH-NNN layering violations. Every `TODO(principles)` in code references this file.
-- **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of `Harbor.Tui.SpectreTui` for adding features from opencode/kilocode/pi-agent.
+- **[docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md)** — full anatomy of the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`; compiled into the default CLI build) for adding features from opencode/kilocode/pi-agent.
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
 - **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
 - **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 18 pattern catalog with real code (Strategy, Registry, Observer, Builder, Adapter, Command, Specification, Value Object, Factory, Plugin, Repository, Chain of Resp, Flyweight, Object Pool, MVVM, Decorator, TEA, DU).
@@ -35,49 +35,44 @@ Harbor is a modular .NET 10 AI coding agent harness. The architecture prioritize
 ## Solution layout
 
 ```
-src/
-├── Harbor.Abstractions/              — interfaces, models, events (zero deps)
-├── Harbor.Core/                      — EventBus, AgentLoop, registries, config, onboarding
-├── Harbor.Storage.Jsonl/             — JSONL session store (default, zero native deps)
-├── Harbor.Storage.Memory/            — in-memory store (tests/ephemeral)
-├── Harbor.Storage.Sqlite/            — SQLite store (indexed queries)
-├── Harbor.Providers.Anthropic/       — native Anthropic Messages API (cache_control, thinking)
-├── Harbor.Providers.OpenAI/          — native OpenAI (Chat Completions + Responses API)
-├── Harbor.Providers.Ollama/          — native Ollama (NDJSON, local)
-├── Harbor.Providers.OpenAiCompatible/— generic OpenAI-compat adapter (13 JSON configs)
-├── Harbor.Tools.Builtin/             — 14 builtin tools (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
-├── Harbor.Tui.Abstractions/          — MVVM: Views + ViewModels + ITuiRenderContext
-├── Harbor.Tui.Ansi/                  — ANSI streaming renderer (default)
-├── Harbor.Tui.Plain/                 — plain text renderer (pipes/CI)
-├── Harbor.Tui.Spectre/               — Spectre.Console renderer
-├── Harbor.Tui.Spectre.Fullscreen/    — Full-screen interactive renderer (scroll, hotkeys, markdown)
-└── Harbor.Cli/                       — entry point, DI wiring, onboarding, slash-commands
+src/                                   — ~50 projects (all included in Harbor.slnx unless noted)
+├── Harbor.Abstractions/               — base contracts (zero deps)
+├── Harbor.Abstractions.Contracts/     — models, events, ValueObjects, PermissionRuleset
+├── Harbor.Core/                       — EventBus, AgentLoop, config, onboarding, compaction
+├── Harbor.Registries/                 — Agent/Tool/Provider registries (builtin agents: code, plan, explore)
+├── Harbor.Application/                — sessions, permissions, configuration
+├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
+├── Harbor.Storage.{Jsonl,Memory,Sqlite}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
+├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients
+├── Harbor.Tools.Builtin/              — 14 builtin tools under Tools/
+│                                        (read/write/edit/bash/glob/grep/ls/task + webfetch/patch/notebook/ripgrep/tree/mcp)
+├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
+├── Harbor.Tui.{Ansi,Plain}/           — ANSI streaming + plain-text renderers
+├── Harbor.Tui.ConsoleEx/              — second in-process terminal renderer (raw-mode input,
+│                                        cell-diff output; opt-in via HARBOR_TUI=consoleex)
+├── Harbor.Tui.Notifications/          — desktop OS notifications renderer
+├── Harbor.Ui.Framework*/              — TEA-style UI state/reducers/projection/services shared by apps
+├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
+│                    Hosting,Runtime,Host,Storage}/  — layered plugin hosting (Roslyn CS loader in Runtime)
+├── Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ + Harbor.Transport.Remote/ — daemon/remote IPC
+└── ...Logging, Telemetry.{Core,Otlp}, Desktop.{Abstractions,Shared,Animations}, CodeGen, ...
 
-samples/plugins/
-├── Harbor.Plugin.WebSearch/          — DuckDuckGo search (no API key)
-├── Harbor.Plugin.TodoWrite/          — per-session todo list
-├── Harbor.Plugin.GitTools/           — safe git wrapper
-└── Harbor.Plugin.FileTree/           — directory tree visualization
+apps/Harbor.App.Cli/                   — CLI entry point, slash commands, REPL, HostBuilder DI root
+apps/Harbor.App.Avalonia/              — cross-platform desktop GUI
 
-tests/
-├── Harbor.Abstractions.Tests/        — 35 tests (identifiers, sessions, permissions)
-├── Harbor.Core.Tests/                — 53 tests (event bus, registries, agent loop, compaction, converter, permissions, system prompt)
-├── Harbor.Tools.Builtin.Tests/       — 70+ tests (all 14 builtin tools, incl. webfetch/patch/notebook/ripgrep/tree/mcp)
-├── Harbor.Storage.Jsonl.Tests/       — 4 tests (JSONL CRUD)
-├── Harbor.Storage.Tests/             — 27 tests (Memory + SQLite CRUD)
-├── Harbor.Providers.Tests/           — 39 tests (models, config, auth, catalog, provider IDs)
-├── Harbor.Config.Tests/              — 36 tests (config store, auth store, presets, onboarding wizard)
-├── Harbor.Tui.Tests/                 — 104 tests (view models, render context, view registry, builtin views)
-├── Harbor.Tui.E2E.Tests/             — 8 tests (renderer output verification)
-├── Harbor.Architecture.Tests/        — 21 tests (layering invariants, see ARCHITECTURE_LAYERS.md)
-└── Harbor.Benchmarks/                — 7 BenchmarkDotNet benchmarks
+contrib/tui/                           — extra interactive shells compiled into the default CLI build:
+                                         SpectreTui shell, Spectre.Fullscreen, TerminalGui, Termina, RazorConsole
+contrib/apps/, contrib/scripting/      — WPF/Maui/Blazor apps + scripting stack (own Contrib.slnx)
 
-providers/   — 13 JSON LLM provider configs (embedded + filesystem)
-specs/       — 16 design specification documents
-docs/        — architecture, benchmarks, build, dev, getting started, plugin dev, roadmap
+samples/plugins/                       — 4 DLL-based sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
+samples/plugins-cs/                    — CS-source sample plugin (HelloWorldPlugin.cs)
+samples/mcp/                           — sample MCP servers (node/python/rust/csharp-hello)
+
+tests/                                 — 27 test/bench project directories (TUnit), incl. shared Harbor.TestKit
+providers/   — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
+specs/       — design specification documents
+docs/        — architecture, benchmarks, build, dev, getting started, plugin dev, roadmap, ...
 ```
-
-**Total: 334 tests passed, 1 skipped, 0 failed. 0 warnings, 0 errors. 0% unsafe code.**
 
 ## Layering rules — Clean / Hexagonal / Onion Architecture
 
@@ -94,8 +89,8 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 | **Domain**       | `Harbor.Abstractions`, `Harbor.Tui.Abstractions`                                                             | BCL only (no other Harbor project, except Tui.Abstractions → Abstractions) |
 | **Application**  | `Harbor.Core`, `Harbor.Plugins.Runtime`, `Harbor.Scripting`                                                  | Domain only (NOT each other, NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`                                           | Domain only (NOT `Harbor.Core`, NOT each other) |
-| **Presentation** | `Harbor.Cli`, `Harbor.Tui.Ansi/Plain/Spectre/Spectre.Fullscreen/SpectreTui/TerminalGui/Termina/RazorConsole/Sixel/Notifications/Wpf/Avalonia/Maui/Blazor` | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
-| **Composition Root** | `Harbor.Cli/Hosting/HostBuilder.cs` (inside Presentation)                                              | Everything — the ONLY place that `new`s concrete impls |
+| **Presentation** | `Harbor.App.Cli`, `Harbor.App.Avalonia`, `Harbor.Tui.Plain/Ansi/ConsoleEx/Notifications`, `contrib/tui/*` (SpectreTui shell, Fullscreen, TerminalGui, Termina, RazorConsole) | Domain only (NOT Application, NOT Infrastructure, NOT each other) |
+| **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`) | Everything — the ONLY place that `new`s concrete impls |
 
 ### Hard rules (CI-enforced via `Harbor.Architecture.Tests`)
 
@@ -103,18 +98,19 @@ innermost layer (Domain/Abstractions) references nothing but the BCL.
 2. `Harbor.Tui.Abstractions` references only `Harbor.Abstractions`.
 3. `Harbor.Core` references only `Harbor.Abstractions`.
 4. `Harbor.Plugins.Runtime` references `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
-5. `Harbor.Scripting` references `Harbor.Abstractions` only.
+5. `Harbor.Scripting` (moved to `contrib/scripting`) references `Harbor.Abstractions` only.
 6. `Harbor.Providers.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
 7. `Harbor.Storage.*` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
 8. `Harbor.Tools.Builtin` references `Harbor.Abstractions` only — **NOT** `Harbor.Core`.
 9. `Harbor.Tui.*` concrete renderers reference `Harbor.Abstractions` + `Harbor.Tui.Abstractions` only.
-10. `Harbor.Cli` may reference everything (it is the Composition Root host).
+10. `Harbor.App.Cli` may reference everything (it is the Composition Root host).
 
 ### Soft rules (code-review-enforced — not mechanically checkable)
 
 - Concrete impl types (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`,
   `DefaultAgent`, `InMemoryEventBus`, etc.) are `new`'d only inside
-  `Harbor.Cli/Hosting/HostBuilder.cs`. `Program.cs` resolves them from DI by interface.
+  `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and the DI modules in
+  `src/Harbor.Hosting/Modules/`. `Program.cs` resolves them from DI by interface.
 - New interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only
   contracts), never in `Harbor.Core`.
 - New value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
@@ -218,7 +214,8 @@ for `using ZLinq;` + `.AsValueEnumerable()` is mechanical.
 
 ### CommunityToolkit.Mvvm patterns
 
-TUI view models live in `Harbor.Tui.Abstractions/ViewModels/` and inherit from
+TUI view models live in `Harbor.Terminal.Abstractions/ViewModels/` (with the TEA-style
+shared VMs in `Harbor.Ui.Framework.ViewModels`) and inherit from
 `ObservableObject`. Use the source generators — don't write INPC by hand:
 
 ```csharp
@@ -686,7 +683,8 @@ Rules:
 
 ### Full-screen TUI development
 
-`FullscreenTuiRenderer` (in `Harbor.Tui.Spectre.Fullscreen`) is a full-screen interactive
+`FullscreenTuiRenderer` (physically in `contrib/tui/Harbor.Tui.Spectre.Fullscreen`,
+compiled into the default CLI build) is a full-screen interactive
 renderer using Spectre.Console 0.57.2 `Live` display. It owns the REPL lifecycle.
 
 | Hotkey | Action |
@@ -719,14 +717,13 @@ will delegate the REPL to it instead of running the default line-buffered loop.
 # Build everything
 dotnet build
 
-# Run all tests
-dotnet test
-
-# Run a specific test project (TUnit uses --treenode-filter, NOT --filter)
-dotnet test tests/Harbor.Core.Tests
+# Run a specific test project — tests MUST be run per project.
+# Whole-solution dotnet test breaks under the Microsoft.Testing.Platform host.
+# TUnit uses --treenode-filter, NOT --filter.
+dotnet test tests/Harbor.Core.Tests -c Release --no-build
 
 # Run the CLI
-dotnet run --project src/Harbor.Cli -- help
+dotnet run --project apps/Harbor.App.Cli -- help
 ```
 
 ## Common tasks
@@ -737,21 +734,21 @@ dotnet run --project src/Harbor.Cli -- help
 > tool's args schema, 3+ examples, "when to use X vs Y" matrix, and a complete
 > WebFetchTool walkthrough showing how to design a tool from scratch.
 
-1. Create `src/Harbor.Tools.Builtin/<Name>/<Name>Tool.cs`.
+1. Create `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs`.
 2. Implement `ITool` interface (sealed class, XML docs on every public member,
    `ConfigureAwait(false)` everywhere, `ArrayPool`/`StringBuilderPool` for buffers).
-3. Register in `src/Harbor.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
+3. Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` — in `CreateToolRegistry`,
    `tb.AddTool(() => new YourTool(loggerFactory.CreateLogger<YourTool>()))`.
    If the tool needs a DI dependency, construct it eagerly and pass the instance —
    `ToolContext.Services` is not populated by the default `AgentLoop` (see
    `McpToolTool` registration for the pattern).
 4. Add a permission rule to `PermissionRuleset.Default` in
-   `src/Harbor.Abstractions/Permissions/PermissionRuleset.cs`.
+   `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`.
 5. Add tests in `tests/Harbor.Tools.Builtin.Tests/<Name>ToolTests.cs` — one file per
    tool. See `WebFetchToolTests.cs` / `McpToolToolTests.cs` for canonical patterns.
 6. Build + test.
 
-See `src/Harbor.Tools.Builtin/Read/ReadTool.cs` as a reference.
+See `src/Harbor.Tools.Builtin/Tools/Read/ReadTool.cs` as a reference.
 
 Minimal real example:
 
@@ -781,7 +778,7 @@ public sealed class TimeTool : ITool
 }
 ```
 
-Register in `src/Harbor.Cli/Hosting/HostBuilder.cs`:
+Register in `apps/Harbor.App.Cli/Hosting/HostBuilder.cs`:
 
 ```csharp
 tb.AddTool(() => new TimeTool(loggerFactory.CreateLogger<TimeTool>()));
@@ -816,10 +813,10 @@ export HARBOR_MODEL=myllm/my-model-id
 ### Add a new native LLM provider
 
 1. Create `src/Harbor.Providers.<Name>/` project.
-2. Reference `Harbor.Abstractions` and `Harbor.Core`.
+2. Reference `Harbor.Abstractions.Contracts`.
 3. Implement `ILlmClient`.
-4. Register in `src/Harbor.Cli/Program.cs` `BuildHost()`.
-5. Add to solution: `dotnet sln add src/Harbor.Providers.<Name>/...`.
+4. Register in the DI modules (`src/Harbor.Hosting/Modules/`, see `ProviderFactories.cs` / `JsonProviderDiscovery.cs`).
+5. Add to solution: `dotnet sln Harbor.slnx add src/Harbor.Providers.<Name>/...`.
 
 ```csharp
 public sealed class MyLlmClient : ILlmClient
@@ -847,7 +844,8 @@ public sealed class MyLlmClient : ILlmClient
 
 1. Create `src/Harbor.Storage.<Name>/` project.
 2. Implement `ISessionStore`.
-3. Register in `src/Harbor.Cli/Program.cs` — add to the `switch` on `HARBOR_STORAGE` env var.
+3. Register in the DI modules — the `HARBOR_STORAGE` switch lives in
+   `src/Harbor.Hosting/Modules/StorageModule.cs`.
 4. Add tests.
 
 ```csharp
@@ -865,13 +863,13 @@ public sealed class RedisSessionStore : ISessionStore
 
 ### Add a new TUI renderer
 
-1. Create `src/Harbor.Tui.<Framework>/` project.
-2. Implement `ITuiRenderer` from `Harbor.Tui.Abstractions` (or extend
+1. Create `src/Harbor.Tui.<Framework>/` project (or `contrib/tui/...` for optional shells).
+2. Implement `ITuiRenderer` from `Harbor.Terminal.Abstractions` (or extend
    `BaseTuiRenderer` / `IInteractiveTuiRenderer` if you need full-screen or
    own the input loop).
-3. Register in DI: add to the `switch` on `HARBOR_TUI` in
-   `src/Harbor.Cli/Hosting/HostBuilder.cs` `RegisterTui`. Also add a
-   `ProjectReference` to `Harbor.Cli.csproj`.
+3. Register in DI: add to the renderer switch in
+   `src/Harbor.Hosting/Modules/TuiModule.cs` (`AddHarborTui`). Also add a
+   `ProjectReference` to `Harbor.App.Cli.csproj`.
 4. Update `Program.PrintTuiOptions()` to list the new option.
 5. Done — no other changes needed (event-bus decoupling).
 
@@ -948,7 +946,7 @@ Real error if you try `AssemblyLoadContext` collectible under AOT:
 $ dotnet publish -c Release -r linux-x64 /p:PublishAot=true
 ILCompiler.CompilerException: AssemblyLoadContext.LoadFromAssemblyPath is not supported
   in NativeAOT (collectible ALCs require reflection emit).
-  at Harbor.Core.Plugins.DllPluginLoader.Load(string path)
+  at (historical) Harbor.Plugins.DllPluginLoader.Load(string path)
 ```
 
 Fix: use Roslyn `.cs` plugin loader (works under JIT), or out-of-process plugin host.
@@ -1085,7 +1083,7 @@ public async IAsyncEnumerable<LlmEvent> StreamAsync(...)
 Real plugin compile error:
 
 ```
-warn: Harbor.Core.Plugins.CsPluginLoader[0]
+warn: Harbor.Plugins.Runtime.CsPluginLoader[0]
       Failed to compile ~/.harbor/plugins/webhook.cs:
       (12, 17): error CS0103: The name 'HttpClient' does not exist in the current context
       (15, 32): error CS0246: The type 'JsonDocument' could not be found
@@ -1100,7 +1098,7 @@ using System.Text.Json;
 
 ### Provider config
 - `id` field must be lowercase alphanumeric + dash.
-- JSON configs are embedded as resources via `<EmbedProviders>true</EmbedProviders>` in `Harbor.Cli.csproj`.
+- JSON configs are embedded as resources via `<EmbedProviders>true</EmbedProviders>` in `Harbor.App.Cli.csproj`.
 - After `dotnet publish`, builtin providers work without external JSON files.
 
 Real error — invalid `id` field:
@@ -1142,7 +1140,7 @@ Diagnose with:
 
 ```bash
 dotnet tool install -g dotnet-gcdump
-dotnet-gcdump collect -n Harbor.Cli -o harbor.dump
+dotnet-gcdump collect -n Harbor.App.Cli -o harbor.dump
 # Open in PerfView or dotnet-heapstat
 ```
 
@@ -1186,7 +1184,7 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] `ILlmClient` and `ITool` impls — explicitly thread-safe for concurrent calls.
 - [ ] NativeAOT: 0 IL2026 warnings in `dotnet build -c Release`.
 - [ ] **Layering:** every new `<ProjectReference>` is allowed per [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md). Run `dotnet test tests/Harbor.Architecture.Tests/` — it must stay green.
-- [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `Harbor.Cli/Hosting/HostBuilder.cs`. `Program.cs` resolves services by interface from DI.
+- [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and `src/Harbor.Hosting/Modules/`. `Program.cs` resolves services by interface from DI.
 - [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Tui.Abstractions` for UI-only contracts), never in `Harbor.Core`.
 - [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Core`.
 

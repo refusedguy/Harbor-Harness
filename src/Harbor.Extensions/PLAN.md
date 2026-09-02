@@ -2,14 +2,14 @@
 
 ## Status
 
-**Stable.** Extracted from `Harbor.Abstractions` in round 6 (Task A1) as the infrastructure-helper layer. Namespaces preserved — zero consumer code changes.
+**Stable.** Extracted from `Harbor.Abstractions` in round 6 (Task A1); decoupled to zero Harbor project references in F1. Namespaces preserved — zero consumer code changes.
 
 ## Done
 
 - [x] Split `Harbor.Abstractions` god-project: extension helpers moved to `Harbor.Extensions`
-- [x] Dependency invariant: references `Harbor.Domain` only (for `IMemoryPackable<T>` types); zero `Microsoft.Extensions.*`, zero `Harbor.Abstractions` / `Harbor.Core` / `Harbor.Application` / `Harbor.Registries` / sibling-Infrastructure / Presentation refs
+- [x] F1 decoupling: **zero Harbor project references** — helpers are pure BCL/NuGet wrappers; zero `Microsoft.Extensions.*`, zero `Harbor.Abstractions` / `Harbor.Abstractions.Contracts` / `Harbor.Core` / `Harbor.Application` / `Harbor.Registries` / sibling-Infrastructure / Presentation refs
 - [x] Namespace preserved (`Harbor.Abstractions.Extensions`) — consumers' `using` lines unchanged
-- [x] Architecture test `Extensions_ReferencesOnlyDomain` added in `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs`
+- [x] Architecture test `Extensions_HasZeroHarborProjectReferences` added in `tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs:196`
 
 ## TODO
 

@@ -548,6 +548,86 @@ public sealed class TuiDriver : IE2eDriver
     }
 
     /// <summary>
+    ///     Capture a sequence of PNG frames of the live TUI — the building
+    ///     block for GIF/MP4 demo recordings. Frames are timed snapshots of the
+    ///     current <see cref="AnsiTerminalBuffer" /> grid spaced
+    ///     <paramref name="frameIntervalMs" /> apart; PNG rendering happens
+    ///     after capture so the slow per-frame browser render cannot skew the
+    ///     recording cadence.
+    /// </summary>
+    /// <param name="framesDir">Output directory for <c>frame_NNNN.png</c> files. Created on demand.</param>
+    /// <param name="frameIntervalMs">Delay between frames; 100 ms yields a 10 fps GIF.</param>
+    /// <param name="maxFrames">Hard cap so a hung child cannot spin the loop forever.</param>
+    /// <param name="startMarker">
+    ///     Optional text that must appear on screen before the first frame is
+    ///     saved — skips the boot/blank frames so recordings start on real content.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Ordered list of saved frame paths.</returns>
+    public async Task<IReadOnlyList<string>> CaptureFramesAsync(
+        string framesDir,
+        int frameIntervalMs = 100,
+        int maxFrames = 200,
+        string? startMarker = null,
+        CancellationToken ct = default)
+    {
+        if (_terminalProcess is not null)
+            throw new InvalidOperationException("CaptureFramesAsync requires PTY mode. Pass no screenshotDir to TuiDriver.");
+
+        Directory.CreateDirectory(framesDir);
+        var frames = new List<string>();
+
+        // Phase 1: wait for the boot marker (or child exit) before spending
+        // capture time on a blank screen.
+        if (startMarker is not null)
+        {
+            var bootDeadline = Stopwatch.StartNew();
+            while (bootDeadline.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                ct.ThrowIfCancellationRequested();
+                bool markerSeen;
+                lock (_terminalBuffer)
+                {
+                    markerSeen = _terminalBuffer.ContainsText(startMarker);
+                }
+                if (markerSeen || !IsRunning)
+                    break;
+                await Task.Delay(frameIntervalMs, ct).ConfigureAwait(false);
+            }
+        }
+
+        // Phase 2: snapshot the live grid on the frame cadence. Snapshots are
+        // pure in-memory HTML (microseconds) — PNG rendering is decoupled into
+        // phase 3 because one Chromium/ImageMagick render costs ~1-3s and would
+        // otherwise blow past the lifetime of a short demo scene (2 frames max).
+        var snapshots = new List<(string Html, string Path)>();
+        while (snapshots.Count < maxFrames)
+        {
+            ct.ThrowIfCancellationRequested();
+            string html;
+            lock (_terminalBuffer)
+            {
+                html = _terminalBuffer.ToHtml();
+            }
+            snapshots.Add((html, Path.Combine(framesDir, $"frame_{snapshots.Count:D4}.png")));
+
+            if (!IsRunning)
+                break;
+            await Task.Delay(frameIntervalMs, ct).ConfigureAwait(false);
+        }
+
+        // Phase 3: materialize the snapshots as PNGs. The last frame is always
+        // included, so the final screen state lands in the recording.
+        foreach ((string html, string path) in snapshots)
+        {
+            await TerminalScreenshotRenderer.RenderHtmlToPngAsync(html, path, ct).ConfigureAwait(false);
+            frames.Add(path);
+        }
+
+        return frames;
+    }
+
+    /// <summary>
     ///     Take a screenshot of the TUI window.
     ///     Only works in terminal emulator mode with Xvfb.
     /// </summary>
@@ -670,8 +750,42 @@ public sealed class TuiDriver : IE2eDriver
                     return true;
             }
             await Task.Delay(100, ct).ConfigureAwait(false);
+
+            // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
+            // or repaint mid-line split the pattern across grid rows / leave
+            // interleaved repaint artifacts in the flat log. Collapsing ALL
+            // whitespace on both sides matches when every character is present
+            // in order, regardless of layout. Only consulted after exact matching
+            // fails, so strict tests are unaffected.
+            string needle = CollapseWhitespace(pattern);
+            if (needle.Length == 0)
+                continue;
+
+            lock (_terminalBuffer)
+            {
+                string visible = _terminalBuffer.GetVisibleText();
+                if (CollapseWhitespace(visible).Contains(needle, StringComparison.Ordinal))
+                    return true;
+            }
+
+            if (CollapseWhitespace(screen).Contains(needle, StringComparison.Ordinal))
+                return true;
         }
         return false;
+    }
+
+    /// <summary>Removes every whitespace character, used by the tear-tolerant matcher.</summary>
+    private static string CollapseWhitespace(string input)
+    {
+        if (input.IndexOf(' ') < 0 && input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && input.IndexOf('\t') < 0)
+            return input;
+        var sb = new System.Text.StringBuilder(input.Length);
+        foreach (char ch in input)
+        {
+            if (!char.IsWhiteSpace(ch))
+                sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     /// <inheritdoc />

@@ -16,7 +16,7 @@ public class LlmClientProviderIdTests
         var client = new AnthropicLlmClient(
             new HttpClient(),
             new AnthropicConfig(),
-            StubAnthropicAuthResolver.Instance,
+            StubAuthResolver.Instance,
             NullLogger<AnthropicLlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("anthropic");
@@ -28,7 +28,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAILlmClient(
             new HttpClient(),
             new OpenAIConfig(),
-            StubOpenAIAuthResolver.Instance,
+            StubAuthResolver.Instance,
             NullLogger<OpenAILlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("openai");
@@ -58,7 +58,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAiCompatibleLlmClient(
             new HttpClient(),
             config,
-            StubGenericAuthResolver.Instance,
+            StubAuthResolver.Instance,
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
@@ -79,7 +79,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAiCompatibleLlmClient(
             new HttpClient(),
             config,
-            StubGenericAuthResolver.Instance,
+            StubAuthResolver.Instance,
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 

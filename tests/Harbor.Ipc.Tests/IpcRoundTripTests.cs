@@ -29,7 +29,8 @@ namespace Harbor.Ipc.Tests;
 ///         parallel without colliding on the same socket file.
 ///     </para>
 /// </remarks>
-public class IpcRoundTripTests
+[NotInParallel]
+    public class IpcRoundTripTests
 {
     /// <summary>
     ///     CreateSession should round-trip through the server and return

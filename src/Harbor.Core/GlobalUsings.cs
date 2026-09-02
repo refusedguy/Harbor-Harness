@@ -12,7 +12,7 @@
 //                           InMemoryMcpRegistry, ProviderRegistry, InMemoryEventBus).
 //
 // Both new assemblies preserve the original `Harbor.Core.*` and
-// `Harbor.Abstractions.*` namespaces, so existing `using Harbor.Core.Sessions;`
+// `Harbor.Abstractions.*` namespaces, so existing `using Harbor.Application.Sessions;`
 // directives resolve unchanged — the C# compiler searches all referenced
 // assemblies for namespace contents, and Harbor.Core transitively references
 // both Harbor.Application and Harbor.Registries via ProjectReference.

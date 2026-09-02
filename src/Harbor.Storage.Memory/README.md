@@ -1,6 +1,6 @@
 # Harbor.Storage.Memory
 
-In-memory session storage backend — sessions live in a `ConcurrentDictionary` for the lifetime of the process. Used by tests and ephemeral desktop GUI sessions (no persistence across restarts).
+In-memory session storage backend — sessions live in dictionaries for the lifetime of the process. Used by tests and ephemeral desktop GUI sessions (no persistence across restarts); it is the default backend for desktop apps (`HarborComposeOptions.cs:49`: CLI default `jsonl`, desktop default `memory`).
 
 ## Layer
 
@@ -12,18 +12,17 @@ Infrastructure — session/persistence backend. References `Harbor.Abstractions`
 
 ## Public API
 
-- `InMemorySessionStore` — implements `ISessionStore` from Harbor.Abstractions
-- `InMemorySessionStore` — thread-safe in-memory implementation
+- `MemorySessionStore` — thread-safe in-memory implementation of `ISessionStore`
 
 ## Usage
 
-Registered via DI in the composition root:
+Selected via `HARBOR_STORAGE=memory` or config; registered by the host's `StorageModule`:
 
 ```csharp
-services.AddSingleton<ISessionStore, InMemorySessionStore>();
+"memory" => new MemorySessionStore()
 ```
 
-The `AgentLoop` resolves `ISessionStore` and calls `AppendAsync` / `LoadAsync` / `CompactAsync` as messages flow.
+(`src/Harbor.Hosting/Modules/StorageModule.cs:31`). The agent persists messages through the same `ISessionStore` contract as every other backend (`AppendMessageAsync`, `GetMessagesAsync`, …).
 
 ## See also
 

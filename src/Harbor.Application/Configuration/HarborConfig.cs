@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-namespace Harbor.Core.Configuration;
+namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Harbor application configuration.
 ///     Stored at ~/.harbor/config.json. No env vars required.
@@ -36,8 +36,18 @@ public sealed class HarborConfig
     /// <summary>Compaction tuning.</summary>
     public CompactionConfig Compaction { get; set; } = CompactionConfig.Default;
 
+    /// <summary>
+    ///     Ф8/A3: optional cheap model reference (<c>"provider/model"</c>) used
+    ///     for background summarization (compaction). Empty/null → the primary
+    ///     model summarizes (previous behavior).
+    /// </summary>
+    public string? SecondaryModel { get; set; }
+
     /// <summary>Run limits (max steps per agent run).</summary>
     public RunLimitsConfig Run { get; set; } = RunLimitsConfig.Default;
+
+    /// <summary>Persisted per-agent permission overrides (user decisions from Ask prompts).</summary>
+    public Dictionary<string, List<PermissionRule>> Permissions { get; set; } = new();
 
     /// <summary>API keys per provider.</summary>
     public Dictionary<string, string> ApiKeys { get; set; } = new();
@@ -176,6 +186,10 @@ public sealed class HarborConfig
         Tui = Ui.Tui,
         Storage = Ui.Storage,
         Onboarded = Ui.Onboarded,
+        // Persist the CellForge section (nested under `ui`) only when it
+        // diverges from defaults — keeps config.json free of knob noise for
+        // users who never touched it.
+        Ui = Ui.CellForge == CellForgeUiConfig.Default ? null : new UiRawDto { CellForge = Ui.CellForge },
         DefaultProvider = Identity.Provider?.Value,
         DefaultModel = Identity.Model?.ToString(),
         OnboardingCompleted = Ui.Onboarded,
@@ -185,9 +199,12 @@ public sealed class HarborConfig
         Providers = Providers,
         EnabledPlugins = Tooling.EnabledPlugins.ToList(),
         DisabledTools = Tooling.DisabledTools.ToList(),
+        AutoReloadPlugins = !Tooling.AutoReloadPlugins, // null when default — keep config.json free of knob noise
         MaxSteps = Run.MaxSteps,
         CostLimit = Cost.Limit,
-        Compaction = Compaction
+        Compaction = Compaction,
+        SecondaryModel = SecondaryModel,
+        Permissions = Permissions.Count == 0 ? null : Permissions
     };
 
     /// <summary>
@@ -195,28 +212,31 @@ public sealed class HarborConfig
     ///     message so the config store can surface them instead of silently
     ///     falling back to defaults.
     /// </summary>
+    /// <remarks>
+    ///     ROP-B П.14: the manual errors[] + join aggregation is exactly
+    ///     <see cref="Result.Combine(IEnumerable{Result})" /> — every failure
+    ///     joined with "; " by the standard combinator, so adding a section
+    ///     cannot let the join format drift.
+    /// </remarks>
     public Result<HarborConfig> Validate()
     {
-        var results = new Result[]
-            {
-                Identity.EffectiveModel(),
-                Tooling.Validate(),
-                Cost.Validate(),
-                Compaction.Validate(),
-                Ui.Validate(),
-                Run.Validate()
-            }
-            .AsValueEnumerable()
-            .Concat(Providers.Values.AsValueEnumerable().Select(static e => (Result)e.Validate()));
+        var sections = new List<Result>(capacity: 6 + Providers.Count)
+        {
+            Identity.EffectiveModel(),
+            Tooling.Validate(),
+            Cost.Validate(),
+            Compaction.Validate(),
+            Ui.Validate(),
+            Run.Validate()
+        };
 
-        string[] errors = results
-            .Where(static r => r.IsFailure)
-            .Select(static r => r.Error)
-            .ToArray();
+        // Cold path (config load) — plain enumeration is fine here.
+        foreach (var entry in Providers.Values)
+        {
+            sections.Add(entry.Validate());
+        }
 
-        return errors.Length == 0
-            ? Result.Success(this)
-            : Result.Failure<HarborConfig>(string.Join("; ", errors));
+        return Result.Combine(sections).Map(() => this);
     }
 }
 
@@ -228,12 +248,20 @@ public sealed class HarborConfig
 /// </summary>
 public sealed class RawConfigDto
 {
-    public string? Provider { get; set; }
-    public string? Model { get; set; }
-    public string? Agent { get; set; }
-    public string? Tui { get; set; }
-    public string? Storage { get; set; }
-    public bool? Onboarded { get; set; }
+    [JsonPropertyName("provider")] public string? Provider { get; set; }
+    [JsonPropertyName("model")] public string? Model { get; set; }
+    [JsonPropertyName("agent")] public string? Agent { get; set; }
+    [JsonPropertyName("tui")] public string? Tui { get; set; }
+    [JsonPropertyName("storage")] public string? Storage { get; set; }
+    [JsonPropertyName("onboarded")] public bool? Onboarded { get; set; }
+
+    /// <summary>Nested UI section (<c>ui.consoleEx</c>) — the canonical shape.</summary>
+    [JsonPropertyName("ui")] public UiRawDto? Ui { get; set; }
+
+    /// <summary>Legacy root-level alias for <c>ui.consoleEx</c> — still read, no longer written.</summary>
+    [JsonPropertyName("consoleEx")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CellForgeUiConfig? CellForge { get; set; }
 
     [JsonPropertyName("defaultProvider")] public string? DefaultProvider { get; set; }
     [JsonPropertyName("defaultModel")] public string? DefaultModel { get; set; }
@@ -241,13 +269,26 @@ public sealed class RawConfigDto
     [JsonPropertyName("storageBackend")] public string? StorageBackend { get; set; }
     [JsonPropertyName("logLevel")] public string? LogLevelConfig { get; set; }
 
-    public Dictionary<string, string>? ApiKeys { get; set; }
-    public Dictionary<string, ProviderConfigEntry>? Providers { get; set; }
-    public List<string>? EnabledPlugins { get; set; }
-    public List<string>? DisabledTools { get; set; }
-    public int? MaxSteps { get; set; }
-    public decimal? CostLimit { get; set; }
-    public CompactionConfig? Compaction { get; set; }
+    [JsonPropertyName("apiKeys")] public Dictionary<string, string>? ApiKeys { get; set; }
+    [JsonPropertyName("providers")] public Dictionary<string, ProviderConfigEntry>? Providers { get; set; }
+    [JsonPropertyName("enabledPlugins")] public List<string>? EnabledPlugins { get; set; }
+    [JsonPropertyName("disabledTools")] public List<string>? DisabledTools { get; set; }
+    [JsonPropertyName("autoReloadPlugins")] public bool? AutoReloadPlugins { get; set; }
+    [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
+    [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
+    [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
+    [JsonPropertyName("secondaryModel")] public string? SecondaryModel { get; set; }
+    [JsonPropertyName("permissions")] public Dictionary<string, List<PermissionRule>>? Permissions { get; set; }
+}
+
+/// <summary>
+///     Nested <c>ui</c> section of config.json. Currently carries only the
+///     CellForge renderer knobs; future UI preferences land here instead of
+///     growing new root-level keys.
+/// </summary>
+public sealed class UiRawDto
+{
+    [JsonPropertyName("consoleEx")] public CellForgeUiConfig? CellForge { get; set; }
 }
 
 /// <summary>
@@ -258,50 +299,124 @@ public sealed class RawConfigDto
 /// </summary>
 public static class ConfigNormalizer
 {
+    /// <summary>
+    ///     Normalize a raw config into a canonical <see cref="HarborConfig" />.
+    /// </summary>
+    /// <remarks>
+    ///     ROP-B П.13: nullable default ladders (canonical field → legacy alias)
+    ///     are expressed as Maybe chains (<c>From → Where → Or → AsNullable</c>);
+    ///     mandatory parses are fail-fast preconditions over
+    ///     <see cref="Result.FirstFailureOrSuccess" />, so an invalid section
+    ///     reports its own error without a ladder of manual
+    ///     <c>if (IsFailure) return Failure</c> passthroughs.
+    /// </remarks>
     public static Result<HarborConfig> Normalize(RawConfigDto raw)
     {
         var config = new HarborConfig();
 
         // ── Identity: canonical "provider"/"model"/"agent" win; legacy
         // "defaultProvider"/"defaultModel" are only used as fallback. ──
-        string? providerStr = !string.IsNullOrEmpty(raw.Provider)
-            ? raw.Provider
-            : raw.DefaultProvider;
-        if (!string.IsNullOrEmpty(providerStr))
+        string? providerStr = FirstNonEmpty(raw.Provider, raw.DefaultProvider);
+        string? modelStr = FirstNonEmpty(raw.Model, raw.DefaultModel);
+
+        return Result.FirstFailureOrSuccess(
+                SetProvider(config, providerStr),
+                SetModel(config, modelStr),
+                SetAgent(config, raw.Agent),
+                SetSecondary(config, raw.SecondaryModel))
+            .Map(() =>
+            {
+                ApplyPresentation(config, raw);
+                ApplyTooling(config, raw);
+                ApplyLimits(config, raw);
+                ApplyPermissions(config, raw);
+                return config;
+            });
+    }
+
+    /// <summary>
+    ///     The "first non-empty wins" nullable ladder as a Maybe chain
+    ///     (ROP-B П.13 reference pattern): <c>From → Where → Or(lazy)</c>,
+    ///     unfolded back into the nullable world at the boundary.
+    /// </summary>
+    private static string? FirstNonEmpty(string? primary, string? fallback)
+    {
+        var candidate = Maybe.From(primary)
+            .Where(static s => !string.IsNullOrEmpty(s))
+            .Or(() => Maybe.From(fallback).Where(static s => !string.IsNullOrEmpty(s)));
+
+        return candidate.TryGetValue(out var value) ? value : null;
+    }
+
+    private static Result SetProvider(HarborConfig config, string? providerStr)
+    {
+        if (providerStr is null)
         {
-            var pr = ProviderId.TryCreate(providerStr);
-            if (pr.IsFailure) return Result.Failure<HarborConfig>(pr.Error);
-            config.Identity = config.Identity with { Provider = pr.Value };
+            return Result.Success();
         }
 
-        string? modelStr = !string.IsNullOrEmpty(raw.Model)
-            ? raw.Model
-            : raw.DefaultModel;
-        if (!string.IsNullOrEmpty(modelStr))
+        return ProviderId.TryCreate(providerStr)
+            .Tap(id => config.Identity = config.Identity with { Provider = id });
+    }
+
+    private static Result SetModel(HarborConfig config, string? modelStr)
+    {
+        if (modelStr is null)
         {
-            var mr = ModelRef.TryParse(modelStr);
-            if (mr.IsFailure) return Result.Failure<HarborConfig>(mr.Error);
-            config.Identity = config.Identity with { Model = mr.Value };
+            return Result.Success();
         }
 
-        if (!string.IsNullOrEmpty(raw.Agent))
+        return ModelRef.TryParse(modelStr)
+            .Tap(model => config.Identity = config.Identity with { Model = model });
+    }
+
+    private static Result SetAgent(HarborConfig config, string? agentStr)
+    {
+        if (string.IsNullOrEmpty(agentStr))
         {
-            var ar = AgentName.TryCreate(raw.Agent);
-            if (ar.IsFailure) return Result.Failure<HarborConfig>(ar.Error);
-            config.Identity = config.Identity with { Agent = ar.Value };
+            return Result.Success();
         }
 
+        return AgentName.TryCreate(agentStr)
+            .Tap(agent => config.Identity = config.Identity with { Agent = agent });
+    }
+
+    private static Result SetSecondary(HarborConfig config, string? secondaryStr)
+    {
+        if (string.IsNullOrEmpty(secondaryStr))
+        {
+            return Result.Success();
+        }
+
+        return ModelRef.TryParse(secondaryStr)
+            .Tap(_ => config.SecondaryModel = secondaryStr);
+    }
+
+    private static void ApplyPresentation(HarborConfig config, RawConfigDto raw)
+    {
         // ── Presentation ──
+        // CellForge knobs: canonical `ui.consoleEx` wins; the legacy root-level
+        // `consoleEx` key is still honored so pre-CE-4-final configs keep working.
         config.Ui = new PresentationConfig(
             raw.Tui ?? PresentationConfig.Default.Tui,
             raw.Storage ?? raw.StorageBackend ?? PresentationConfig.Default.Storage,
-            raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded);
+            raw.Onboarded ?? raw.OnboardingCompleted ?? PresentationConfig.Default.Onboarded)
+        {
+            CellForge = raw.Ui?.CellForge ?? raw.CellForge ?? CellForgeUiConfig.Default,
+        };
+    }
 
+    private static void ApplyTooling(HarborConfig config, RawConfigDto raw)
+    {
         // ── Tooling ──
         config.Tooling = new ToolingConfig(
             (raw.EnabledPlugins ?? new List<string>()).AsReadOnly(),
-            (raw.DisabledTools ?? new List<string>()).AsReadOnly());
+            (raw.DisabledTools ?? new List<string>()).AsReadOnly(),
+            raw.AutoReloadPlugins ?? true);
+    }
 
+    private static void ApplyLimits(HarborConfig config, RawConfigDto raw)
+    {
         // ── Run / Cost / Compaction ──
         config.Run = new RunLimitsConfig(raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps);
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
@@ -310,7 +425,11 @@ public static class ConfigNormalizer
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;
         if (raw.Providers is not null) config.Providers = raw.Providers;
+    }
 
-        return Result.Success(config);
+    private static void ApplyPermissions(HarborConfig config, RawConfigDto raw)
+    {
+        if (raw.Permissions is null) return;
+        config.Permissions = raw.Permissions;
     }
 }

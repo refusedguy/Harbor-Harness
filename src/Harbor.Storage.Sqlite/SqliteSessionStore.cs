@@ -1,7 +1,9 @@
 using System.Data.Common;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -46,7 +48,18 @@ public sealed class SqliteSessionStore : ISessionStore
                                   CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
                                   CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
                                   """;
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+
+    private static JsonSerializerOptions CreateJsonOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        };
+        options.Converters.Add(new ContentPartJsonConverter());
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
 
     private readonly string _connectionString;
     private readonly object _lock = new();
@@ -65,7 +78,7 @@ public sealed class SqliteSessionStore : ISessionStore
         string directory, string agentName, string providerId, string modelId,
         CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             var session = Session.Create(directory, agentName, providerId, modelId);
 
@@ -91,18 +104,27 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.ExecuteNonQuery();
             }
 
-            return Task.FromResult(Result.Success(session));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create session");
-            return Task.FromResult(Result.Failure<Session>(ex.Message));
-        }
+            return session;
+        }, ResultErrors.Message))
+        .TapError(e => _logger.LogError("Failed to create session: {Error}", e));
     }
 
     public async Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return (await ReadRowAsync(sessionId, ct).ConfigureAwait(false))
+            .Bind(row => row.ToResult($"Session '{sessionId}' not found."));
+    }
+
+    /// <summary>
+    ///     Read one session row. Query failures travel the Result channel
+    ///     (cancellation rethrown via <see cref="ResultErrors.Message" />);
+    ///     a missing row is absence (<see cref="Maybe{T}.None" />), not an
+    ///     error — "not found" stays distinguishable from a storage failure
+    ///     instead of sharing the same Error channel (ROP-B П.24).
+    /// </summary>
+    private Task<Result<Maybe<Session>>> ReadRowAsync(string sessionId, CancellationToken ct)
+    {
+        return Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -111,19 +133,15 @@ public sealed class SqliteSessionStore : ISessionStore
 
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             if (!await reader.ReadAsync(ct).ConfigureAwait(false))
-                return Result.Failure<Session>($"Session '{sessionId}' not found.");
+                return Maybe<Session>.None;
 
-            return Result.Success(ReadSession(reader));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<Session>(ex.Message);
-        }
+            return Maybe.From(ReadSession(reader));
+        }, ResultErrors.Message);
     }
 
     public async Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
     {
-        try
+        return await Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -144,17 +162,14 @@ public sealed class SqliteSessionStore : ISessionStore
             {
                 result.Add(ReadSession(reader));
             }
-            return Result.Success<IReadOnlyList<Session>>(result);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<Session>>(ex.Message);
-        }
+
+            return (IReadOnlyList<Session>)result;
+        }, ResultErrors.Message).ConfigureAwait(false);
     }
 
-    public async Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -186,20 +201,14 @@ public sealed class SqliteSessionStore : ISessionStore
 
                 tx.Commit();
             }
-
-            return await Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to append message");
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message))
+        .TapError(e => _logger.LogError("Failed to append message to session {SessionId}: {Error}", sessionId, e));
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         // For SQLite we replace by id
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -216,17 +225,12 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@payload", JsonSerializer.Serialize(message, message.GetType(), JsonOptions));
                 cmd.ExecuteNonQuery();
             }
-            return Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
+        }, ResultErrors.Message));
     }
 
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return await Result.Try(async () =>
         {
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
@@ -244,17 +248,14 @@ public sealed class SqliteSessionStore : ISessionStore
                 var msg = DeserializeMessage(role, payload);
                 if (msg is not null) result.Add(msg);
             }
-            return Result.Success<IReadOnlyList<AgentMessage>>(result);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<IReadOnlyList<AgentMessage>>(ex.Message);
-        }
+
+            return (IReadOnlyList<AgentMessage>)result;
+        }, ResultErrors.Message).ConfigureAwait(false);
     }
 
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -264,38 +265,95 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@id", sessionId);
                 cmd.ExecuteNonQuery();
             }
-            return Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
+        }, ResultErrors.Message));
+    }
+
+    /// <summary>
+    ///     "Rewind to here": delete every message ordered after the target row.
+    ///     Ordering follows the same created_at ASC used by
+    ///     <see cref="GetMessagesAsync" /> (ISO-8601 text sorts chronologically),
+    ///     with rowid as the deterministic tie-breaker for equal timestamps.
+    /// </summary>
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        return Task.FromResult(Result.Try(() =>
         {
-            return Task.FromResult(Result.Failure(ex.Message));
-        }
+            lock (_lock)
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                int deleted;
+                using (var scope = conn.BeginTransaction())
+                {
+                    // Anchor: created_at of the kept message; ties broken by its rowid.
+                    cmd.Transaction = scope;
+                    cmd.CommandText = """
+                        SELECT created_at, rowid FROM messages
+                        WHERE session_id = @sid AND id = @mid LIMIT 1
+                        """;
+                    cmd.Parameters.AddWithValue("@sid", sessionId);
+                    cmd.Parameters.AddWithValue("@mid", messageId);
+
+                    string anchorCreatedAt;
+                    long anchorRowId;
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (!reader.Read())
+                        {
+                            throw new InvalidOperationException(
+                                $"Message '{messageId}' not found in session '{sessionId}'.");
+                        }
+
+                        anchorCreatedAt = reader.GetString(0);
+                        anchorRowId = reader.GetInt64(1);
+                    }
+
+                    cmd.CommandText = """
+                        DELETE FROM messages
+                        WHERE session_id = @sid
+                          AND (created_at > @anchor OR (created_at = @anchor AND rowid > @rid))
+                        """;
+                    cmd.Parameters.AddWithValue("@anchor", anchorCreatedAt);
+                    cmd.Parameters.AddWithValue("@rid", anchorRowId);
+                    deleted = cmd.ExecuteNonQuery();
+
+                    using var upd = conn.CreateCommand();
+                    upd.Transaction = scope;
+                    upd.CommandText = "UPDATE sessions SET updated_at = @now WHERE id = @sid";
+                    upd.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
+                    upd.Parameters.AddWithValue("@sid", sessionId);
+                    upd.ExecuteNonQuery();
+
+                    scope.Commit();
+                }
+
+                return deleted;
+            }
+        }, ResultErrors.Message));
     }
 
     public async Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
     {
-        try
-        {
-            using var conn = OpenConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
-            cmd.Parameters.AddWithValue("@id", sessionId);
+        return await Result.Try(async () =>
+            {
+                using var conn = OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT metadata FROM sessions WHERE id = @id";
+                cmd.Parameters.AddWithValue("@id", sessionId);
 
-            object? meta = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-            if (meta is null or DBNull)
-                return Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.");
-
-            return Result.Success(JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions) ?? SessionMetadata.Empty);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<SessionMetadata>(ex.Message);
-        }
+                return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
+            }, ResultErrors.Message)
+            .Bind(meta => meta is null or DBNull
+                ? Result.Failure<SessionMetadata>($"Session '{sessionId}' not found.")
+                : Result.Success(
+                    JsonSerializer.Deserialize<SessionMetadata>((string)meta, JsonOptions)
+                    ?? SessionMetadata.Empty))
+            .ConfigureAwait(false);
     }
 
-    public async Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
+    public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
     {
-        try
+        return Task.FromResult(Result.Try(() =>
         {
             lock (_lock)
             {
@@ -306,44 +364,33 @@ public sealed class SqliteSessionStore : ISessionStore
                 cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(metadata, JsonOptions));
                 cmd.ExecuteNonQuery();
             }
-            await Task.CompletedTask.ConfigureAwait(false);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure(ex.Message);
-        }
+        }, ResultErrors.Message));
     }
 
-    public async Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
     {
-        try
-        {
-            lock (_lock)
+        return Task.FromResult(Result.Try(() =>
             {
-                using var conn = OpenConnection();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
-                                  UPDATE sessions SET 
-                                      title = @title, 
-                                      updated_at = @updated 
-                                  WHERE id = @id
-                                  """;
-                cmd.Parameters.AddWithValue("@id", session.Id);
-                cmd.Parameters.AddWithValue("@title", session.Title);
-                cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
-                int rows = cmd.ExecuteNonQuery();
-                if (rows == 0)
-                    return Result.Failure($"Session '{session.Id}' not found.");
-            }
-            await Task.CompletedTask.ConfigureAwait(false);
-            return Result.Success();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to update session");
-            return Result.Failure(ex.Message);
-        }
+                lock (_lock)
+                {
+                    using var conn = OpenConnection();
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = """
+                                      UPDATE sessions SET 
+                                          title = @title, 
+                                          updated_at = @updated 
+                                      WHERE id = @id
+                                      """;
+                    cmd.Parameters.AddWithValue("@id", session.Id);
+                    cmd.Parameters.AddWithValue("@title", session.Title);
+                    cmd.Parameters.AddWithValue("@updated", DateTimeOffset.UtcNow.ToString("O"));
+                    return cmd.ExecuteNonQuery();
+                }
+            }, ResultErrors.Message))
+            .TapError(e => _logger.LogError("Failed to update session {SessionId}: {Error}", session.Id, e))
+            .Bind(rows => rows == 0
+                ? Result.Failure($"Session '{session.Id}' not found.")
+                : Result.Success());
     }
 
     private void Initialize()
@@ -419,5 +466,59 @@ public sealed class SqliteSessionStore : ISessionStore
             createdAt,
             updatedAt,
             meta);
+    }
+
+    private sealed class ContentPartJsonConverter : JsonConverter<ContentPart>
+    {
+        public override ContentPart? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var doc = JsonDocument.ParseValue(ref reader);
+            var el = doc.RootElement;
+            string? type = el.TryGetProperty("type", out var tp) ? tp.GetString() : el.TryGetProperty("Type", out var tp2) ? tp2.GetString() : null;
+            return type switch
+            {
+                "text" => new TextPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
+                "thinking" => new ThinkingPart(el.TryGetProperty("text", out var t) ? t.GetString()! : el.GetProperty("Text").GetString()!),
+                "tool_call" => new ToolCallPart(
+                    el.TryGetProperty("id", out var id) ? id.GetString()! : el.GetProperty("Id").GetString()!,
+                    el.TryGetProperty("toolName", out var tn) ? tn.GetString()! : el.GetProperty("ToolName").GetString()!,
+                    el.TryGetProperty("args", out var a) ? a.Clone() : el.TryGetProperty("Args", out var a2) ? a2.Clone() : default),
+                "file" => new FilePart(
+                    el.TryGetProperty("path", out var p) ? p.GetString()! : el.GetProperty("Path").GetString()!,
+                    el.TryGetProperty("mimeType", out var mt) ? mt.GetString()! : el.GetProperty("MimeType").GetString()!,
+                    el.TryGetProperty("sizeBytes", out var sb) ? sb.GetInt64() : el.GetProperty("SizeBytes").GetInt64()),
+                _ => null
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, ContentPart value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            switch (value)
+            {
+                case TextPart t:
+                    writer.WriteString("type", "text");
+                    writer.WriteString("text", t.Text);
+                    break;
+                case ThinkingPart th:
+                    writer.WriteString("type", "thinking");
+                    writer.WriteString("text", th.Text);
+                    break;
+                case ToolCallPart tc:
+                    writer.WriteString("type", "tool_call");
+                    writer.WriteString("id", tc.Id);
+                    writer.WriteString("toolName", tc.ToolName);
+                    writer.WritePropertyName("args");
+                    JsonSerializer.Serialize(writer, tc.Args, options);
+                    break;
+                case FilePart f:
+                    writer.WriteString("type", "file");
+                    writer.WriteString("path", f.Path);
+                    writer.WriteString("mimeType", f.MimeType);
+                    writer.WriteNumber("sizeBytes", f.SizeBytes);
+                    break;
+            }
+            writer.WriteEndObject();
+        }
     }
 }

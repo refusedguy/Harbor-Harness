@@ -18,11 +18,14 @@ public sealed class KeyboardShortcutService
 {
     private readonly IShellChrome _shellChrome;
     private readonly IWorkspaceCommands _workspaceCommands;
+    private readonly IFloatingTerminals? _floatingTerminals;
 
-    public KeyboardShortcutService(IShellChrome shellChrome, IWorkspaceCommands workspaceCommands)
+    public KeyboardShortcutService(IShellChrome shellChrome, IWorkspaceCommands workspaceCommands,
+        IFloatingTerminals? floatingTerminals = null)
     {
         _shellChrome = shellChrome;
         _workspaceCommands = workspaceCommands;
+        _floatingTerminals = floatingTerminals;
     }
 
     public bool HandleKeyDown(KeyEventArgs e)
@@ -39,7 +42,7 @@ public sealed class KeyboardShortcutService
         // Ctrl+P / Ctrl+Shift+P → command palette.
         if (ctrl && e.Key == Key.P)
         {
-            _shellChrome.OpenOverlay("palette");
+            _shellChrome.OpenOverlay(OverlayIds.Palette);
             return true;
         }
 
@@ -75,6 +78,13 @@ public sealed class KeyboardShortcutService
         if (ctrl && e.Key == Key.L)
         {
             _workspaceCommands.ClearChat();
+            return true;
+        }
+
+        // Ctrl+` → toggle the floating PTY terminal pane.
+        if (ctrl && e.Key == Key.OemTilde && _floatingTerminals is not null)
+        {
+            _floatingTerminals.TogglePane();
             return true;
         }
 

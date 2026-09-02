@@ -1,6 +1,50 @@
 # Benchmarks — Harbor
 
-> **Real measurements** taken on the actual codebase with .NET 10.0.302 SDK.
+> **Latest rerun: 2026-08-22** (i5-8250U, 4C/8T, .NET 10.0.10, Release). Full data: `/tmp/benchmark-report.md`.
+> Suite: `tests/Harbor.Benchmarks` — 24 benchmark classes / 72+ cases, `[MemoryDiagnoser]`, Release, 0 warnings.
+> Run: `dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter "*<Category>*" --buildTimeout 600 --keepFiles`
+
+## Bottlenecks (P0→P3, measured)
+
+| # | Target | Evidence | Fix direction |
+|---|---|---|---|
+| P0 | `AppReducer` streaming concat | 1.72 ms / **19.4 MB** per 1000 TextDelta (O(N²) string +) | pooled StringBuilder / chunk list, materialize on MessageEnd |
+| P0 | `MessageConverter` large msgs | serialize 2.35 ms / 1.2 MB per msg; 100×large round-trip **545 ms** | Utf8Json source-gen (audit §PERF-002) |
+| P1 | `CompactionService.ShouldCompact` | 598 µs @1000 msgs **каждый turn** | incremental token counter |
+| P1 | `EventBroadcaster` | 9–11 ms / **8 MB** per 1000 events, не зависит от числа клиентов | serialize once, reuse buffers |
+| P1 | `EventBus.PublishAsync` | фикс. 8.1 KB alloc даже при 0 подписчиков | ring-buffer scrollback |
+| P2 | `StreamingCoalescer` tool-call Materialize | 481 µs @1000 дельт (35–48× медленнее текста) | кэш разобранных аргументов |
+| P2 | `PatchTool` apply | 10.1 ms / **9.3 MB** @5000 hunks | стримить вместо List<string>+Join |
+| P2 | `DefaultUiProjector` | 20.8 ms @5000 строк за кадр | инкрементальная проекция по revision |
+| P3 | `SessionId` Dictionary key | медленнее string (7.9 vs 6.3 µs), HashSet быстрее — проверить GetHashCode | override hash |
+| P3 | `OpenAiSseParser` | плоские ~10 µs floor на любой чанк | Utf8JsonReader поверх span без ToString() |
+
+## Key numbers (2026-08-22, Release JIT)
+
+| Operation | Mean | Allocated |
+|---|--:|--:|
+| AgentLoop turn (no tool) | 10.2–11.8 µs | 5.5 KB |
+| AgentLoop turn (+tool) | 16.6–26.6 µs | 7.5 KB |
+| EventBus.PublishAsync (0 sub) | 8.1 µs | 8.1 KB |
+| WireCodec roundtrip 64B / raw frame 64B | 6.2 µs / 0.25 µs | 1.8 KB / 0 |
+| OpenAiSse.ParseChunk 32B→4KB | 10.2–10.6 µs | 3.9–6.8 KB |
+| JsonlSessionStore.Append ×100 | 1.74 ms | 187 KB |
+| Sqlite WAL Append ×10 | 2.2–2.6 ms | 155 KB |
+| AppStore.Dispatch TextDelta ×1000 | 1.72 ms | 19.4 MB |
+| DefaultUiProjector 5000 lines | 20.8 ms | ~MB |
+| Terminal ANSI vs plain blit | 364 / 330 µs | 12 / 10 KB |
+| PatchTool apply 5000 hunks | 10.1 ms | 9.3 MB |
+| PermissionRuleset.Evaluate | 0.11–0.29 µs | 0 |
+| ToolRegistry.ResolveTools frozen @4 | 0.094 µs | 344 B |
+| ToolRegistry.GetTool | 0.8–1.6 µs | 80 B |
+| ProviderRegistry.GetClient frozen | 0.77 µs | 80 B |
+| Identifiers: HashSet<SessionId> vs string | 2.1 vs 2.7 µs | 2.3 vs 7.3 KB |
+| SystemPromptBuilder (16 tools, large) | 3.8 µs | 12.1 KB |
+| StateDiff Record.Equals identical | 0.59 ns | 0 |
+
+---
+
+> **Historical measurements (2026-07-18)** taken on the actual codebase with .NET 10.0.302 SDK.
 > Previous versions of this doc contained inflated numbers (5 MB binary, 28 MB RSS) — those were Debug JIT DLL sizes and debug-process RSS. This version measures what users actually see.
 
 ## 1. Environment
@@ -26,11 +70,14 @@
 
 | Category | Count |
 |---|---:|
-| App projects (`apps/`) | 5 |
-| Source projects (`src/`) | 38 |
-| Test projects (`tests/`) | 13 |
+| App projects (`apps/`) | 2 (`Harbor.App.Cli`, `Harbor.App.Avalonia`; WPF/MAUI/Blazor переехали в `contrib/apps/`) |
+| Source projects (`src/`) | 51 |
+| Test projects (`tests/`, csproj dirs) | 27 |
 | Sample plugins (`samples/`) | 4 |
-| **Total in `Harbor.slnx`** | **60** |
+| **Total in `Harbor.slnx`** | **~84** (без contrib; по данным текущего `Harbor.slnx`: src+tests+apps+samples+build-проект) |
+
+> Составы ниже соответствуют состоянию на дату замера (2026-07-18) — тогда в слюнксе
+> было ~60 проектов; сегодня счётчик выше приведён к актуальной структуре.
 
 ### 2.2 Build time
 
@@ -60,9 +107,9 @@ App DLL only — not counting dependencies.
 |---|---|---:|
 | `Harbor.App.Cli` | net10.0 | 101 KB |
 | `Harbor.App.Avalonia` | net10.0 | 207 KB |
-| `Harbor.App.Wpf` | net10.0-windows10.0.19041 | 125 KB |
-| `Harbor.App.Blazor` | net10.0 | 132 KB |
-| `Harbor.App.Maui` | net10.0-windows | (skeleton — TBD) |
+| `contrib/apps/Harbor.App.Wpf` | net10.0-windows10.0.19041 | 125 KB |
+| `contrib/apps/Harbor.App.Blazor` | net10.0 | 132 KB |
+| `contrib/apps/Harbor.App.Maui` | net10.0-windows | (skeleton — TBD) |
 
 ### 3.2 Publish folder size (JIT, framework-dependent)
 
@@ -72,20 +119,20 @@ Includes the app DLL + all NuGet deps + runtime deps. **This is what `dotnet pub
 |---|---:|
 | `Harbor.App.Cli` | **109 MB** |
 | `Harbor.App.Avalonia` | ~140 MB (estimated; Avalonia + Skia + AvaloniaEdit) |
-| `Harbor.App.Wpf` | ~120 MB (estimated; Windows-only) |
-| `Harbor.App.Blazor` | ~115 MB (estimated; ASP.NET Core runtime) |
-| `Harbor.App.Maui` | ~150 MB (estimated; MAUI workload) |
+| `contrib/apps/Harbor.App.Wpf` | ~120 MB (estimated; Windows-only) |
+| `contrib/apps/Harbor.App.Blazor` | ~115 MB (estimated; ASP.NET Core runtime) |
+| `contrib/apps/Harbor.App.Maui` | ~150 MB (estimated; MAUI workload) |
 
 > The 109 MB CLI publish folder is dominated by `Microsoft.Extensions.*`, `Spectre.Console`, `Spectre.Tui`, `Microsoft.CodeAnalysis.CSharp` (Roslyn — 30+ MB alone for plugin compilation), and `MemoryPack` source-gen assemblies.
 
 ### 3.3 NativeAOT
 
 **Status: not yet supported.** Harbor CLI cannot be NativeAOT-published today because of:
-- `Spectre.Console` reflection usage (JSON serialization, ANSI detection)
+- `Spectre.Console` reflection usage (optional Spectre renderers referenced via the `HARBOR_WITH_SPECTRE_TUI` build flag; contrib projects)
 - `Microsoft.CodeAnalysis.CSharp` (Roslyn) — not AOT-compatible
-- `Harbor.Plugins.Compilation/RoslynPluginCompiler` — dynamically compiles .cs plugins at runtime
+- In-process CS-source plugin compilation: `src/Harbor.Plugins.Compilation/RoslynPluginCompiler.cs`
 
-**Roadmap:** Once `RoslynPluginCompiler` is moved to an out-of-process plugin host (planned v0.7), and Spectre.Console is replaced with Spectre.TUI source-gen, the CLI can be AOT-published. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
+**Roadmap:** out-of-process plugin host skeleton already exists (`Harbor.Plugins.Host` exe, MCP stdio); finishing the split (planned v0.9 two-process milestone) plus dropping in-process Roslyn and Spectre reflection unlocks AOT for the main process. Expected AOT binary size: ~14-20 MB (typical for .NET 10 AOT console apps with similar deps).
 
 If you still want to try AOT today:
 ```bash
@@ -168,7 +215,42 @@ dotnet run -c Release --project tests/Harbor.Benchmarks -- --filter '*'
 | `TokenEstimator.Estimate` (1k chars) | 0.8 µs | 0.1 µs | 0 B |
 | `MessageConverter.ToLlmMessages` (10 msgs) | 2.5 µs | 0.3 µs | 1.5 KB |
 
+### ConsoleEx cell-diff core (`DiffEngineBenchmark`, 2026-08-26, Release)
+
+Frame-budget targets from `specs/07-tui.md` (< 16 ms/frame) and celldiff §7 — all met with an order of magnitude of headroom. Flush = real DiffEngine scan + AnsiWriter SGR/cursor encoding into a discarding backend (no tty I/O).
+
+| Benchmark | Mean | Allocated | Target (celldiff §7) |
+|---|--:|--:|--:|
+| Idle frame, row-hash skip, 200×50 | **51.3 µs** | 0 B | ~0.05 ms ✅ |
+| Token frame (~300 changed cells), 200×50 | **52.8 µs** | 0 B | ≤ 1 ms ✅ |
+| Full repaint 200×50 | **137 µs** | 0 B | — |
+| Full repaint 400×120 | **665 µs** | 0–184 B¹ | ~6 ms ✅ |
+| Layout cold solve, 20 panels | **0.72 µs** | 184 B | < 0.01 ms ✅ |
+
+¹ Allocation comes solely from the layout solver's cache-replay snapshot; all diff/encode paths are zero-alloc steady-state.
+
 > All zero-allocation benchmarks (`0 B`) confirm the `ArrayPool` / `StringBuilderPool` / `FrozenDictionary` / `StringPool` strategy is working. The `JsonlSessionStore.GetMessages` is the biggest allocation hot spot — the `Utf8JsonReader` rewrite (planned) will cut this by ~80%.
+
+### Renderer-moat probes (`RendererMoatPerfTests`, 2026-08-31, Release)
+
+Live probes over a real 120×500 chat timeline (virtualized feed, spinner tick, ~2× viewport of content) — not synthetic grids. Run:
+```bash
+dotnet exec tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/Harbor.Tui.CellForge.Tests.dll \
+  --treenode-filter "/*/*/RendererMoatPerfTests/*"
+```
+
+| Probe | Before (pre-sprint full scan) | After (T1 partial scan + T3 effects) | Budget |
+|---|--:|--:|--:|
+| Diff time, full scan, 120×500 | 0.65–0.72 ms | 0.717 ms | < 2 ms ✅ |
+| Diff time, hinted steady frame, 120×500 | — (always full) | **0.317 ms** (T1: 0.347 ms) | < 2 ms ✅ |
+| Frame time (solve+paint+hinted diff+encode) | 0.433 ms (T1) | **0.805 ms**¹ | 16 ms ✅ |
+| Frame time with armed post-fx glow (status row) | — | **0.671 ms**² | 16 ms ✅ |
+| Steady-frame allocations, 2 000 hinted frames | 0 B (T1) | **0 B** (armed-empty pipeline) | 0 B ✅ |
+
+¹ Frame time varies with feed width/machine load across probe runs (0.43→0.81 ms between sprints); the hard acceptance is the diff budget (< 2 ms), which holds with 6× headroom.
+² Armed pipeline over an animated glow region measures within noise of the disarmed path — the armed-empty steady state stays byte-identical and allocation-free (test-enforced).
+
+Machine: Linux x64, .NET 10 Release JIT, no tty I/O (discarding backend).
 
 ## 6. Test suite
 
@@ -232,7 +314,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Binary | 207 KB DLL | + ~140 MB publish folder (estimated) |
 | Features | code editor, sessions, command palette, diff, charts, toasts, themes | Production-ready |
 
-### 8.3 WPF (`apps/Harbor.App.Wpf`)
+### 8.3 WPF (`contrib/apps/Harbor.App.Wpf`)
 
 | Aspect | Status | Notes |
 |---|---|---|
@@ -240,7 +322,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Run | ❌ Windows only | Cannot run on Linux |
 | Binary | 125 KB DLL | + ~120 MB publish (estimated) |
 
-### 8.4 MAUI (`apps/Harbor.App.Maui`)
+### 8.4 MAUI (`contrib/apps/Harbor.App.Maui`)
 
 | Aspect | Status | Notes |
 |---|---|---|
@@ -248,7 +330,7 @@ dotnet test tests/Harbor.Core.Tests --no-build
 | Run | ❌ untested | Skeleton only — no real UI |
 | Status | Draft | Needs CollectionView + Entry + chat page |
 
-### 8.5 Blazor (`apps/Harbor.App.Blazor`)
+### 8.5 Blazor (`contrib/apps/Harbor.App.Blazor`)
 
 | Aspect | Status | Notes |
 |---|---|---|

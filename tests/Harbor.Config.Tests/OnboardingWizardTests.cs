@@ -1,5 +1,5 @@
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
 /// <summary>
@@ -78,6 +78,247 @@ public class OnboardingWizardTests
             var loaded = await store.LoadAsync();
             await Assert.That(loaded.Value.Provider).IsEqualTo("ollama");
             await Assert.That(loaded.Value.Agent).IsEqualTo("plan");
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    // ---- PROD-UI-0 З.2: "test connection" step in the wizard ----
+
+    /// <summary>Fake probe with a canned outcome, records the probed provider ids.</summary>
+    private sealed class FakeHealthCheck(
+        Harbor.Abstractions.Providers.ProviderHealth? outcome,
+        string? error = null) : Harbor.Abstractions.Providers.IProviderHealthCheck
+    {
+        public List<string> Probed { get; } = [];
+
+        public Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ProviderHealth>> CheckAsync(
+            Harbor.Abstractions.Models.Identifiers.ProviderId providerId,
+            CancellationToken cancellationToken = default)
+        {
+            Probed.Add(providerId.Value);
+            return Task.FromResult(outcome is not null && error is null
+                ? CSharpFunctionalExtensions.Result.Success(outcome.Value)
+                : CSharpFunctionalExtensions.Result.Failure<Harbor.Abstractions.Providers.ProviderHealth>(error ?? "?"));
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_HealthCheckSuccess_ReportsConnectionOk_AndContinues()
+    {
+        var health = new FakeHealthCheck(new Harbor.Abstractions.Providers.ProviderHealth(42, 7));
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance, health);
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        var responses = new Queue<string>(new[] { "ollama", "", "1" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(health.Probed).Contains("ollama");
+            await Assert.That(output.Any(l => l.Contains("Connection OK"))).IsTrue();
+
+            // The check succeeded → the wizard must still persist the config.
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Onboarded).IsTrue();
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_HealthCheckFails_WarnsButDoesNotAbort()
+    {
+        var health = new FakeHealthCheck(null, error: "API key is invalid or missing (401/403 from provider)");
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance, health);
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        var responses = new Queue<string>(new[] { "anthropic", "sk-bad-key", "", "1" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(output.Any(l => l.Contains("Connection test failed"))).IsTrue();
+
+            // The failed probe must NOT abort: config is still written so the
+            // user can fix the key later via /auth or Settings.
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Provider).IsEqualTo("anthropic");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ANTHROPIC_API_KEY", null);
+            Cleanup(path);
+        }
+    }
+
+    // ---- PROD-UI-0 З.4: live model list in the wizard's model step ----
+
+    /// <summary>Fake registry serving a canned model list for every provider.</summary>
+    private sealed class FakeLiveRegistry(string[] modelIds) : Harbor.Abstractions.Providers.IProviderRegistry
+    {
+        private bool _clientsDisabled;
+
+        public void DisableClients() => _clientsDisabled = true;
+
+        public IReadOnlyList<Harbor.Abstractions.Models.Identifiers.ProviderId> GetRegisteredProviderIds() => [];
+
+        public CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient> GetClient(
+            Harbor.Abstractions.Models.Identifiers.ProviderId providerId) =>
+            _clientsDisabled
+                ? CSharpFunctionalExtensions.Result.Failure<Harbor.Abstractions.Providers.ILlmClient>(
+                    $"Provider '{providerId.Value}' is not registered.")
+                : new FakeCatalogClient(providerId, modelIds);
+
+        public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(CSharpFunctionalExtensions.Result.Failure<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>("n/a"));
+
+        public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetModelsCachedAsync(
+            Harbor.Abstractions.Models.Identifiers.ProviderId providerId, CancellationToken cancellationToken = default) =>
+            GetAllModelsAsync(cancellationToken);
+
+        public void Register(Harbor.Abstractions.Models.Identifiers.ProviderId providerId, Func<Harbor.Abstractions.Providers.ILlmClient> factory) { }
+
+        public CSharpFunctionalExtensions.Result Unregister(Harbor.Abstractions.Models.Identifiers.ProviderId providerId) =>
+            CSharpFunctionalExtensions.Result.Failure("n/a");
+
+        private sealed class FakeCatalogClient : Harbor.Abstractions.Providers.ILlmClient
+        {
+            private readonly string[] _modelIds;
+
+            public FakeCatalogClient(Harbor.Abstractions.Models.Identifiers.ProviderId providerId, string[] modelIds)
+            {
+                ProviderId = providerId;
+                _modelIds = modelIds;
+            }
+
+            public Harbor.Abstractions.Models.Identifiers.ProviderId ProviderId { get; }
+
+            public IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent> StreamAsync(
+                Harbor.Abstractions.Providers.LlmRequest request, CancellationToken cancellationToken = default)
+            {
+                async IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent> Empty()
+                {
+                    await Task.CompletedTask;
+                    yield break;
+                }
+                return Empty();
+            }
+
+            public Task<CSharpFunctionalExtensions.Result<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+                Task.FromResult(CSharpFunctionalExtensions.Result.Success<IReadOnlyList<Harbor.Abstractions.Models.ModelInfo>>(
+                    _modelIds.Select(id => new Harbor.Abstractions.Models.ModelInfo(
+                        id, ProviderId.Value, id, 8192, 4096, false, false, false,
+                        Harbor.Abstractions.Models.Pricing.Unknown, "openai")).ToList()));
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_LiveModelList_NumberSelection_PicksListedModel()
+    {
+        var registry = new FakeLiveRegistry(["zzz-first", "aaa-second", "mmm-third"]);
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance, providers: registry);
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        // Pick ollama → skip key → live list shown → choose #2 → agent code.
+        var responses = new Queue<string>(new[] { "ollama", "2", "1" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Model).IsEqualTo("ollama/aaa-second");
+            await Assert.That(output.Any(l => l.Contains("Available models for"))).IsTrue();
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_LiveModelList_EmptyInput_DefaultsToPresetModel_WhenPresentInList()
+    {
+        // ollama preset default is llama3.2 — put it into the live list.
+        var registry = new FakeLiveRegistry(["devstral", "llama3.2"]);
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance, providers: registry);
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        var responses = new Queue<string>(new[] { "ollama", "", "", "" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Model).IsEqualTo("ollama/llama3.2");
+        }
+        finally
+        {
+            Cleanup(path);
+        }
+    }
+
+    [Test]
+    public async Task RunAsync_UnreachableProvider_DegradesToFreeText()
+    {
+        // Registry with NO clients → GetClient fails for any id.
+        var registry = new FakeLiveRegistry([]);
+        registry.DisableClients();
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-onboarding-{Guid.NewGuid():N}", "config.json");
+        var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+        var auth = new AuthStore(store, NullLogger<AuthStore>.Instance);
+        var wizard = new OnboardingWizard(store, auth, NullLogger<OnboardingWizard>.Instance, providers: registry);
+        var output = new List<string>();
+        Action<string> writer = s => output.Add(s);
+
+        var responses = new Queue<string>(new[] { "ollama", "custom-model", "" });
+        Func<string, Task<string>> reader = _ => Task.FromResult(responses.Dequeue());
+
+        Environment.SetEnvironmentVariable("OLLAMA_API_KEY", null);
+        try
+        {
+            var result = await wizard.RunAsync(reader, writer);
+
+            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(output.Any(l => l.Contains("manual entry"))).IsTrue();
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.Value.Model).IsEqualTo("ollama/custom-model");
         }
         finally
         {

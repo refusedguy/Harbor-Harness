@@ -1,33 +1,28 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
-using Harbor.Cli.Commands;
-using Harbor.Cli.Hosting;
-using Harbor.Cli.Logging;
-using Harbor.Cli.Repl;
-using Harbor.Core.Configuration;
-using Harbor.Core.Onboarding;
+using Harbor.App.Cli.Commands;
+using Harbor.App.Cli.Hosting;
+using Harbor.App.Cli.Logging;
+using Harbor.App.Cli.Repl;
+using Harbor.Application.Configuration;
+using Harbor.Application.Onboarding;
 using Harbor.Ipc;
+using Harbor.Ipc.Protocol;
+using Harbor.Tui.AnsiPlain;
 using Harbor.Terminal.Abstractions;
 using Harbor.Ui.Framework.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
-#if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Abstractions;
-#endif
+using System.Runtime.InteropServices;
 #if HARBOR_WITH_PLUGINS
 #endif
-#if HARBOR_WITH_SCRIPTING
-using Harbor.Scripting.Compilation;
-using Harbor.Scripting.Engines;
-using Harbor.Scripting.Hosting;
-using Harbor.Scripting.Storage;
-#endif
-namespace Harbor.Cli;
+namespace Harbor.App.Cli;
 /// <summary>
 ///     Entry point — thin dispatcher. All logic delegated to HostBuilder, ReplRunner, SlashCommandDispatcher.
 /// </summary>
@@ -118,24 +113,40 @@ public static class Program
                 return await RunInteractiveAsync(args, scriptPath);
             }
 
-            string command = args[0].ToLowerInvariant();
-            _logger.LogInformation("Command: {Command}", command);
-            return command switch
-            {
-                "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
-                "providers" => await RunListProvidersAsync(),
-                "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
-                "sessions" => await RunListSessionsAsync(),
-                "tui" => PrintTuiOptions(),
-                "storage" => PrintStorageOptions(),
-                "setup" => await RunSetupAsync(),
-                "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
-                "config" => await RunConfigAsync(args.Skip(1).ToArray()),
-                "logs" => RunLogsCommand(args.Skip(1).ToArray()),
-                "help" or "--help" or "-h" => PrintHelp(),
-                "version" or "--version" or "-v" => PrintVersion(),
-                _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
-            };
+        string command = args[0].ToLowerInvariant();
+        if (command == "--demo")
+            command = "demo"; // `harbor --demo` is the documented alias of `harbor demo`
+        _logger.LogInformation("Command: {Command}", command);
+
+        var cliCommands = new ICommand[]
+        {
+            new LogsCommand(Console.Out, Console.Error),
+            new DaemonCommand(Console.Out, Console.Error),
+            new StatusCommand(Console.Out, Console.Error),
+            new PluginsCommand(Console.Out, Console.Error),
+            new DemoCommand(Console.Out, Console.Error),
+        };
+        if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
+            return exitCode;
+
+        return command switch
+        {
+            "ask" => await RunAskAsync(args.Skip(1).ToArray(), scriptPath),
+            "ide" => await RunIdeAsync(args.Skip(1).ToArray()),
+            "--headless" or "headless" => await RunHeadlessAsync(args.Skip(1).ToArray()),
+            "run" => await RunRunAsync(args.Skip(1).ToArray()),
+            "providers" => await RunListProvidersAsync(),
+            "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
+            "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
+            "tui" => PrintTuiOptions(),
+            "storage" => PrintStorageOptions(),
+            "setup" => await RunSetupAsync(),
+            "auth" => await RunAuthAsync(args.Skip(1).ToArray()),
+            "config" => await RunConfigAsync(args.Skip(1).ToArray()),
+            "help" or "--help" or "-h" => PrintHelp(),
+            "version" or "--version" or "-v" => PrintVersion(),
+            _ => await RunInteractiveAsync(Array.Empty<string>(), scriptPath)
+        };
         }
         catch (Exception ex)
         {
@@ -162,6 +173,108 @@ public static class Program
         return exitCode;
     }
 
+    /// <summary>
+    ///     <c>harbor run task agent=&lt;name&gt; &lt;prompt&gt;</c> — drive the sub-agent
+    ///     runner directly (same isolation path as the <c>task</c> tool) without a
+    ///     parent agent turn.
+    /// </summary>
+    private static async Task<int> RunRunAsync(string[] args)
+    {
+        string sub = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
+        if (sub != "task")
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor run task agent=<name> <prompt>
+                                      run task agent=explore "find all .cs files"
+                                    """);
+            return sub.Length == 0 ? 2 : 1;
+        }
+
+        using var host = HostBuilder.Build(args);
+        return await TaskRunRunner.RunAsync(Console.Out, Console.Error, host.Services, args.Skip(1).ToArray())
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Headless daemon mode (<c>harbor --headless</c>, also used by
+    ///     <c>harbor daemon start</c>): run the full agent host (EventBus,
+    ///     tools, providers, storage) plus the IPC server — no UI, no REPL,
+    ///     no console interaction — and block until SIGINT/SIGTERM. Remote
+    ///     clients connect over IPC; the spawning parent typically redirects
+    ///     stdin/stdout.
+    /// </summary>
+    private static async Task<int> RunHeadlessAsync(string[] args)
+    {
+        _logger.LogInformation("Starting headless daemon mode");
+
+        // A headless host without a transport serves nobody: default to
+        // ipc-server unless the operator pinned another mode explicitly.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+        {
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-server");
+        }
+
+        using var host = HostBuilder.Build(args);
+        var server = host.Services.GetService<IHarborServer>();
+        if (server is null)
+        {
+            _logger.LogError(
+                "Headless mode requires an IPC server, but no IHarborServer is registered (HARBOR_MODE={Mode})",
+                Environment.GetEnvironmentVariable("HARBOR_MODE"));
+            Console.Error.WriteLine("daemon: IPC server unavailable — cannot run headless.");
+            return 1;
+        }
+
+        await StartIpcAsync(host.Services).ConfigureAwait(false);
+        Console.WriteLine($"harbor daemon listening on '{server.Endpoint}'");
+        PrintPairingBlock(host.Services);
+        _logger.LogInformation("Daemon ready on {Endpoint} — waiting for clients or shutdown signal", server.Endpoint);
+
+        using var shutdownCts = new CancellationTokenSource();
+
+        // Ctrl+C (SIGINT): cancel the wait but stay alive long enough for the
+        // graceful IPC stop + host dispose below.
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            shutdownCts.Cancel();
+        };
+
+        // SIGTERM (`kill`, `harbor daemon stop`). Registration is best-effort:
+        // without it the process still exits on SIGTERM, just ungracefully.
+        try
+        {
+            using PosixSignalRegistration sigterm = PosixSignalRegistration.Create(
+                PosixSignal.SIGTERM, _ => shutdownCts.Cancel());
+            await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
+        }
+        catch (PlatformNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "POSIX signal handling unavailable — falling back to SIGINT only");
+            await WaitForShutdownAsync(shutdownCts.Token).ConfigureAwait(false);
+        }
+
+        _logger.LogInformation("Shutdown requested — stopping IPC server");
+        await StopIpcAsync(host.Services).ConfigureAwait(false);
+        return 0;
+    }
+
+    /// <summary>
+    ///     Park the caller until the shutdown token fires. An infinite delay
+    ///     arms no timer — the await completes only via cancellation.
+    /// </summary>
+    private static async Task WaitForShutdownAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected shutdown path — the token is cancelled by SIGINT/SIGTERM.
+        }
+    }
+
     private static async Task<int> RunAskAsync(string[] args, string? scriptPath = null)
     {
         if (args.Length == 0)
@@ -185,6 +298,51 @@ public static class Program
     }
 
     /// <summary>
+    ///     <c>harbor ide --session &lt;id&gt;</c> — NDJSON JSON-RPC stdio bridge
+    ///     for external editors. Protocol frames own stdout: console logging is
+    ///     silenced (the file log keeps full Debug detail) and no renderer is
+    ///     initialized. Defaults to <c>HARBOR_MODE=ipc-client</c> so the bridge
+    ///     attaches to a running daemon/TUI instead of spawning its own agent.
+    /// </summary>
+    private static async Task<int> RunIdeAsync(string[] args)
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_LOGLEVEL")))
+            Environment.SetEnvironmentVariable("HARBOR_LOGLEVEL", "None");
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HARBOR_MODE")))
+            Environment.SetEnvironmentVariable("HARBOR_MODE", "ipc-client");
+
+        _logger.LogInformation("Starting IDE bridge (attach mode)");
+        using var host = HostBuilder.Build(args);
+        return await IdeBridgeRunner.RunAsync(host.Services, args).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     When a networked listener is configured, print the pairing block:
+    ///     the canonical harbor:// pairing code plus its QR (address follows
+    ///     tailscale &gt; lan &gt; loopback priority, so peers outside the
+    ///     LAN get the tailnet address — never eth0). Best-effort: a QR
+    ///     failure never blocks daemon startup.
+    /// </summary>
+    private static void PrintPairingBlock(IServiceProvider services)
+    {
+        var pairing = services.GetService<DaemonPairingInfo>();
+        if (pairing is null) return;
+
+        Console.WriteLine();
+        Console.WriteLine("Remote pairing:");
+        Console.WriteLine($"  {pairing.Code}");
+        Console.WriteLine($"  PSK file: {PskStore.DefaultPath}");
+        try
+        {
+            Console.WriteLine(TerminalQrRenderer.Render(new Uri(pairing.Code)));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "QR rendering failed; the text pairing code above remains authoritative");
+        }
+    }
+
+    /// <summary>
     ///     Start the IPC layer based on the active HARBOR_MODE:
     ///     <list type="bullet">
     ///         <item><c>inprocess</c> — no-op (InProcessHarborClient has no transport).</item>
@@ -199,8 +357,9 @@ public static class Program
         string mode = Environment.GetEnvironmentVariable("HARBOR_MODE") ?? "inprocess";
         if (string.Equals(mode, "ipc-server", StringComparison.OrdinalIgnoreCase))
         {
-            var server = services.GetService<IHarborServer>();
-            if (server is not null)
+            // Every registered server starts: the local pipe/UDS listener and
+            // — when HARBOR_LISTEN is configured — the networked TCP one.
+            foreach (var server in services.GetServices<IHarborServer>())
             {
                 _logger.LogInformation("Starting IPC server at {Endpoint}", server.Endpoint);
                 await server.StartAsync().ConfigureAwait(false);
@@ -244,9 +403,8 @@ public static class Program
     }
 
     /// <summary>
-    ///     Run a script file at startup via <see cref="ScriptHost" />. The script's
-    ///     <c>Harbor.registerTool</c> calls register tools in the live
-    ///     <see cref="IToolRegistry" />, making them available to the agent.
+    ///     Run a script file at startup. Scripting moved to contrib/scripting
+    ///     (sprint 2) — the main CLI reports --script as unsupported.
     /// </summary>
     /// <returns>Success, or failure with an error message. Never throws for expected script failures.</returns>
     private static async Task<Result> RunStartupScriptAsync(IServiceProvider services, string? scriptPath)
@@ -255,61 +413,14 @@ public static class Program
         {
             return Result.Success();
         }
-#if !HARBOR_WITH_SCRIPTING
-        // No-scripting build excludes the entire Harbor.Scripting.* stack —
-        // --script is reported as unsupported rather than silently ignored.
+
+        // Scripting moved to contrib/scripting (sprint 2) — the main CLI no
+        // longer ships Harbor.Scripting.*. --script is reported as unsupported
+        // rather than silently ignored.
         _ = services;
-        _logger.LogWarning("--script flag ignored: HARBOR_WITH_SCRIPTING build flag is off");
+        _logger.LogWarning("--script flag ignored: scripting lives in contrib/scripting and is not part of the main CLI build");
         return CSharpFunctionalExtensions.Result.Failure(
-            "Scripting is disabled in this build. Use the full build (./build.sh Publish) with --with-scripting to enable --script.");
-#else
-        var tools = services.GetRequiredService<IToolRegistry>();
-        var providers = services.GetRequiredService<IProviderRegistry>();
-        var agents = services.GetRequiredService<IAgentRegistry>();
-        var loggerFactory = services.GetRequiredService<ILoggerFactory>();
-
-        // Compose the script host: SharpTS engine (default) + tsc compiler
-        // fallback + in-memory store seeded with the one-shot script path.
-        // SharpTS handles TypeScript natively (no tsc needed); if `sharpts`
-        // is not on PATH, the host falls back to the Jint engine.
-        var sharpTsLogger = loggerFactory.CreateLogger<SharpTsScriptEngine>();
-        var jintLogger = loggerFactory.CreateLogger("Harbor.Scripting.Jint");
-        var tscLogger = loggerFactory.CreateLogger<TscCompiler>();
-        var hostLogger = loggerFactory.CreateLogger<ScriptHost>();
-
-        var sharpTs = new SharpTsScriptEngine(sharpTsLogger);
-        IScriptEngine engine = sharpTs.IsAvailable
-            ? sharpTs
-            : new JintScriptEngine(jintLogger);
-        IScriptCompiler compiler = engine is SharpTsScriptEngine
-            ? new PassThroughCompiler()
-            : new TscCompiler(tscLogger);
-
-        var globals = new ScriptGlobals
-        {
-            Tools = tools,
-            Providers = providers,
-            Agents = agents,
-            Logger = loggerFactory.CreateLogger("Harbor.Script")
-        };
-
-        var host = new ScriptHost(engine, new InMemoryScriptStore(), compiler, hostLogger);
-        string fullPath = Path.GetFullPath(scriptPath);
-        string source;
-        try
-        {
-            source = File.ReadAllText(fullPath);
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure($"Failed to read script '{fullPath}': {ex.Message}");
-        }
-
-        var result = await host.EvaluateAsync(fullPath, source, globals).ConfigureAwait(false);
-        return result.IsSuccess
-            ? Result.Success()
-            : Result.Failure(result.Error ?? "Script evaluation failed.");
-#endif
+            "Scripting is not available in this build. Build contrib/Contrib.slnx for the scripting-enabled projects.");
     }
 
     /// <summary>
@@ -375,8 +486,10 @@ public static class Program
             host.Services.GetRequiredService<IProviderRegistry>(),
             host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
-        await cmd.ExecuteAsync(args, ctx);
-        return 0;
+        // Propagate the command's own result (0 = success, non-zero = failure)
+        // instead of unconditionally reporting success.
+        var authResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
+        return authResult.IsSuccess ? 0 : 1;
     }
 
     private static async Task<int> RunConfigAsync(string[] args)
@@ -390,8 +503,10 @@ public static class Program
             host.Services.GetRequiredService<IProviderRegistry>(),
             host.Services.GetRequiredService<IToolRegistry>(),
             writer, _ => Task.FromResult(string.Empty));
-        await cmd.ExecuteAsync(args, ctx);
-        return 0;
+        // Propagate the command's own result (0 = success, non-zero = failure)
+        // instead of unconditionally reporting success.
+        var configResult = await cmd.ExecuteAsync(args, ctx).ConfigureAwait(false);
+        return configResult.IsSuccess ? 0 : 1;
     }
 
     private static async Task<int> RunListProvidersAsync()
@@ -472,6 +587,251 @@ public static class Program
         return 0;
     }
 
+    /// <summary>
+    ///     `harbor sessions` family: list (default), rename, export, import.
+    ///     Rename persists a new title via ISessionStore.UpdateAsync; export/import
+    ///     round-trip one session through the portable line payload built by
+    ///     <c>ISessionPorter</c> (see StorageModule for the backend wiring).
+    /// </summary>
+    private static async Task<int> RunSessionsAsync(string[] args)
+    {
+        string sub = args.Length > 0 ? args[0].ToLowerInvariant() : "list";
+        switch (sub)
+        {
+            case "list":
+                return await RunListSessionsAsync();
+            case "rename":
+                return await RunRenameSessionAsync(args.Skip(1).ToArray());
+            case "export":
+                return await RunExportSessionAsync(args.Skip(1).ToArray());
+            case "import":
+                return await RunImportSessionAsync(args.Skip(1).ToArray());
+            case "search":
+                return await RunSearchSessionsAsync(args.Skip(1).ToArray());
+            case "revert":
+                return await RunRevertSessionAsync(args.Skip(1).ToArray());
+            case "fork":
+                return await RunForkSessionAsync(args.Skip(1).ToArray());
+            default:
+                Console.Error.WriteLine("""
+                                        Usage: harbor sessions [list|rename|export|import|search|revert|fork]
+                                          sessions                        list all sessions
+                                          sessions rename <id> <title>    rename a session
+                                          sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
+                                          sessions import <file>          import an exported file as a NEW session
+                                          sessions search <query> [--session <id>]   find messages by substring
+                                          sessions revert <id> <message-id>          rewind session to the given message
+                                          sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
+                                        """);
+                return 2;
+        }
+    }
+
+    private static async Task<int> RunRenameSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions rename <session-id> <new-title>");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string title = string.Join(' ', args.Skip(1));
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var loaded = await store.GetAsync(sessionId).ConfigureAwait(false);
+        if (loaded.IsFailure)
+        {
+            _logger.LogError("Rename failed: {Error}", loaded.Error);
+            Console.Error.WriteLine($"Cannot rename '{sessionId}': {loaded.Error}");
+            return 1;
+        }
+
+        var renamed = loaded.Value with { Title = title, UpdatedAt = DateTimeOffset.UtcNow };
+        var saved = await store.UpdateAsync(renamed).ConfigureAwait(false);
+        if (saved.IsFailure)
+        {
+            _logger.LogError("Rename persist failed: {Error}", saved.Error);
+            Console.Error.WriteLine($"Cannot persist rename: {saved.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Renamed {sessionId} → \"{title}\"");
+        return 0;
+    }
+
+    private static async Task<int> RunExportSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions export <session-id> [file]");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.jsonl";
+        using var host = HostBuilder.Build();
+        var porter = host.Services.GetRequiredService<ISessionPorter>();
+        await using var output = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
+
+        var exported = await porter.ExportAsync(host.Services.GetRequiredService<ISessionStore>(), sessionId, output)
+            .ConfigureAwait(false);
+        if (exported.IsFailure)
+        {
+            _logger.LogError("Export failed: {Error}", exported.Error);
+            Console.Error.WriteLine($"Export failed: {exported.Error}");
+            return 1;
+        }
+
+        Console.WriteLine($"Exported session {sessionId} → {path}");
+        return 0;
+    }
+
+    private static async Task<int> RunImportSessionAsync(string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions import <file>");
+            return 2;
+        }
+
+        string path = args[0];
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"File not found: {path}");
+            return 1;
+        }
+
+        using var host = HostBuilder.Build();
+        var porter = host.Services.GetRequiredService<ISessionPorter>();
+        await using var stream = File.OpenRead(path);
+        using var reader = new StreamReader(stream);
+
+        var imported = await porter.ImportAsync(host.Services.GetRequiredService<ISessionStore>(), reader)
+            .ConfigureAwait(false);
+        if (imported.IsFailure)
+        {
+            _logger.LogError("Import failed: {Error}", imported.Error);
+            Console.Error.WriteLine($"Import failed: {imported.Error}");
+            return 1;
+        }
+
+        string newId = imported.Value;
+        var created = await host.Services.GetRequiredService<ISessionStore>().GetAsync(newId).ConfigureAwait(false);
+        string title = created.IsSuccess ? created.Value.Title : "?";
+        Console.WriteLine($"Imported {Path.GetFileName(path)} → new session {newId} \"{title}\"");
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions search &lt;query&gt; [--session &lt;id&gt;]</c> —
+    ///     case-insensitive substring scan over persisted messages; the core
+    ///     lives in <see cref="SessionSearchRunner" /> (read-only).
+    /// </summary>
+    private static async Task<int> RunSearchSessionsAsync(string[] args)
+    {
+        string? sessionFilter = null;
+        List<string> rest = [];
+        int i = 0;
+        while (i < args.Length)
+        {
+            if (args[i] is "--session" or "-s" && i + 1 < args.Length)
+            {
+                sessionFilter = args[i + 1];
+                i += 2;
+                continue;
+            }
+
+            rest.Add(args[i]);
+            i++;
+        }
+
+        if (rest.Count == 0)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions search <query> [--session <id>]
+                                      Search all persisted messages (case-insensitive substring).
+                                    """);
+            return 2;
+        }
+
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        return await SessionSearchRunner.RunAsync(Console.Out, Console.Error, store, string.Join(' ', rest), sessionFilter)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions revert &lt;session-id&gt; &lt;message-id&gt;</c> —
+    ///     rewind the session to the given message: it and everything before it
+    ///     stays, everything after is deleted (backend-level "rewind to here").
+    /// </summary>
+    private static async Task<int> RunRevertSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions revert <session-id> <message-id>
+                                      Delete every message AFTER the given one (the target itself is kept).
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string messageId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+
+        var reverted = await store.DeleteMessagesAfterAsync(sessionId, messageId).ConfigureAwait(false);
+        if (reverted.IsFailure)
+        {
+            _logger.LogError("Revert failed: {Error}", reverted.Error);
+            Console.Error.WriteLine($"Cannot revert '{sessionId}' to '{messageId}': {reverted.Error}");
+            return 1;
+        }
+
+        var messages = await store.GetMessagesAsync(sessionId).ConfigureAwait(false);
+        int remaining = messages.IsSuccess ? messages.Value.Count : -1;
+        Console.WriteLine($"Reverted session {sessionId}: deleted {reverted.Value} message(s), {remaining} remain.");
+        return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions fork &lt;session-id&gt; &lt;message-id&gt;</c> —
+    ///     branch a NEW session that copies every message up to and including the
+    ///     given one (the source session is left untouched). The fork records its
+    ///     lineage via <c>ParentSessionId</c> and a "(fork)" title suffix.
+    /// </summary>
+    private static async Task<int> RunForkSessionAsync(string[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("""
+                                    Usage: harbor sessions fork <session-id> <message-id>
+                                      Create a NEW session with all messages up to AND INCLUDING the given one.
+                                    """);
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string messageId = args[1];
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        var runner = new Harbor.App.Cli.Commands.SessionForkRunner(store);
+
+        var forked = await runner.ForkAsync(sessionId, messageId).ConfigureAwait(false);
+        if (forked.IsFailure)
+        {
+            _logger.LogError("Fork failed: {Error}", forked.Error);
+            Console.Error.WriteLine(forked.Error);
+            return 1;
+        }
+
+        Console.WriteLine($"Forked session {sessionId} → {forked.Value.ForkId}: copied {forked.Value.Copied} message(s) up to '{messageId}'.");
+        return 0;
+    }
+
     private static int PrintTuiOptions()
     {
         Console.WriteLine("""
@@ -484,7 +844,7 @@ public static class Program
 
                           See docs/ALTERNATIVE_UIS.md for the full comparison.
                           Note: wpf/avalonia/maui/blazor/sixel/notifications require adding the
-                          corresponding Harbor.Tui.* project reference to Harbor.Cli.csproj
+                          corresponding Harbor.Tui.* project reference to Harbor.App.Cli.csproj
                           (and the matching workload — e.g. `dotnet workload install maui`).
                           """);
         return 0;
@@ -499,7 +859,12 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+
+                          demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
+                                            Scripted demo with an in-process mock LLM — no API keys.
+                                            The GIF recorder (tests/Harbor.E2E.Framework/TuiDemoRecorder)
+                                            and the VHS tapes (demo/*.tape) drive this command.
 
                           --script <path>   Run a .js or .ts script at startup (registers tools via Harbor.registerTool).
                                             See docs/SCRIPTING.md for the full comparison of CS / Jint / SharpTS / MCP.
@@ -523,10 +888,10 @@ public static class Program
     ///     <c>--last</c> (print the latest file), <c>--follow</c> (tail -f),
     ///     <c>--clean</c> (delete all log files).
     /// </summary>
-    private static int RunLogsCommand(string[] args)
+    private static async Task<int> RunLogsCommand(string[] args)
     {
         var cmd = new LogsCommand(Console.Out, Console.Error);
-        return cmd.Execute(args);
+        return await cmd.ExecuteAsync(args).ConfigureAwait(false);
     }
 
     // ── Helpers ──

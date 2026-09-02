@@ -1,0 +1,114 @@
+{
+  "audit_timestamp": "2026-08-27T18:15:00Z",
+  "repository": "Harbor-Harness",
+  "branch": "dev",
+  "ahead_of_origin": 14,
+  "total_commits": 490,
+  "uncommitted_changes": [
+    "src/Harbor.Tui.ConsoleEx/Rendering/Graphics.cs",
+    "tests/Harbor.Tui.ConsoleEx.Tests/GraphicsTests.cs",
+    "tests/Harbor.Tui.ConsoleEx.Tests/ScreenshotHashTests.cs"
+  ],
+  "untracked_files_count": 13,
+  "chain_status": {
+    "config_file": ".kilo-docs/sprint-chain.md",
+    "sprints_defined": 8,
+    "log_file_exists": false,
+    "log_file_path": ".kilo-docs/scripts/sprint-chain.log",
+    "dispatch_script": ".kilo-docs/scripts/sprint-chain.sh",
+    "dispatch_script_bugs": [
+      "Line 122: RC=${PIPESTATUS[0]:-$?} is invalid bash syntax; PIPESTATUS is an array and :- default operator is misapplied. Should be RC=${PIPESTATUS[0]:-0} or simply use $? after || true."
+    ]
+  },
+  "prompt_coverage": {
+    "total_prompt_files": 11,
+    "chain_referenced_prompts": 8,
+    "chain_prompts_existing": 2,
+    "chain_prompts_missing": 6,
+    "orphaned_prompts": 9,
+    "existing_prompts": [
+      "kilo-prompt-ui-final.md",
+      "kilo-prompt-ui-v2.md",
+      "kilo-prompt-agentloop-decomp.md",
+      "kilo-prompt-docs-sync.md",
+      "kilo-prompt-docs-zero.md",
+      "kilo-prompt-mvp-delivery.md",
+      "kilo-prompt-mvp-delivery-v2.md",
+      "kilo-prompt-mvp-delivery-v3.md",
+      "kilo-prompt-mvp-delivery-v4.md",
+      "kilo-prompt-prod-ui-polish.md",
+      "kilo-prompt-prod-ui-polish-v2.md"
+    ],
+    "missing_prompts": [
+      "kilo-prompt-multi-agent.md",
+      "kilo-prompt-performance.md",
+      "kilo-prompt-ide-integration.md",
+      "kilo-prompt-security.md",
+      "kilo-prompt-release-engineering.md",
+      "kilo-prompt-testing.md"
+    ],
+    "orphaned_prompts": [
+      "kilo-prompt-agentloop-decomp.md",
+      "kilo-prompt-docs-sync.md",
+      "kilo-prompt-docs-zero.md",
+      "kilo-prompt-mvp-delivery.md",
+      "kilo-prompt-mvp-delivery-v2.md",
+      "kilo-prompt-mvp-delivery-v3.md",
+      "kilo-prompt-mvp-delivery-v4.md",
+      "kilo-prompt-prod-ui-polish.md",
+      "kilo-prompt-prod-ui-polish-v2.md"
+    ]
+  },
+  "execution_state": {
+    "kilo_processes_running": false,
+    "dispatch_script_exists": true,
+    "dispatch_script_path": "/home/nbook/.hermes/skills/autonomous-ai-agents/kilo-dispatch/scripts/kilo-dispatch.sh",
+    "chain_ever_executed": false,
+    "last_chain_execution": null
+  },
+  "issues": [
+    {
+      "severity": "critical",
+      "category": "missing_files",
+      "description": "6 of 8 chain-referenced prompt files are missing. The chain will fail at the first missing prompt (Multi-Agent).",
+      "affected_sprints": [
+        "Multi-Agent",
+        "Performance",
+        "IDE Integration",
+        "Security & Sandboxing",
+        "Release Engineering",
+        "Testing Strategy"
+      ]
+    },
+    {
+      "severity": "critical",
+      "category": "script_bug",
+      "description": "sprint-chain.sh line 122 has invalid bash syntax: RC=${PIPESTATUS[0]:-$?} will cause the script to fail when capturing dispatch output via pipe.",
+      "file": ".kilo-docs/scripts/sprint-chain.sh",
+      "line": 122
+    },
+    {
+      "severity": "high",
+      "category": "orphaned_artifacts",
+      "description": "9 prompt files exist but are not referenced by the chain config. They appear to be legacy/iteration prompts (mvp-delivery v2-v4, prod-ui-polish v1-v2, etc.) that clutter the agent-prompts directory.",
+      "count": 9
+    },
+    {
+      "severity": "medium",
+      "category": "uncommitted_work",
+      "description": "Branch dev is 14 commits ahead of origin with uncommitted changes. If the chain pushes, it will push these 14 commits plus any new ones, potentially with dirty working tree.",
+      "uncommitted_files": 3,
+      "untracked_files": 13
+    },
+    {
+      "severity": "low",
+      "category": "no_execution_log",
+      "description": "sprint-chain.log does not exist, indicating the chain has never been executed or the log was deleted."
+    },
+    {
+      "severity": "low",
+      "category": "hardcoded_model",
+      "description": "All chain sprints use the same hardcoded model openrouter/z-ai/glm-5.3-flash. No model variation or fallback is configured."
+    }
+  ]
+}

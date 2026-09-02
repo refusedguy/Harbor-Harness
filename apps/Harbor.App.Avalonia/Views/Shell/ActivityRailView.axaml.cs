@@ -19,18 +19,48 @@ public partial class ActivityRailView : UserControl
     private IShellChrome? _shellChrome;
     private IShellChrome ShellChrome => _shellChrome ??= App.Services.GetRequiredService<IShellChrome>();
 
+    /// <summary>C4: the accent "active" rail state follows the last click —
+    /// it used to be hardcoded on the sessions button regardless of use.</summary>
+    private void MarkActive(object? sender)
+    {
+        if (sender is not Button clicked)
+        {
+            return;
+        }
+
+        foreach (var button in new[] { Rail_BoardButton, Rail_SearchButton, Rail_DiffButton })
+        {
+            if (button is null)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(button, clicked))
+            {
+                button.Classes.Add("RailButtonActive");
+            }
+            else
+            {
+                button.Classes.Remove("RailButtonActive");
+            }
+        }
+    }
+
     private void Board_Click(object? sender, RoutedEventArgs e)
     {
-        ShellChrome.OpenOverlay("sessionsFlyout");
+        MarkActive(sender);
+        ShellChrome.OpenOverlay(OverlayIds.SessionsFlyout);
     }
 
     private void Search_Click(object? sender, RoutedEventArgs e)
     {
-        ShellChrome.OpenOverlay("palette");
+        MarkActive(sender);
+        ShellChrome.OpenOverlay(OverlayIds.Palette);
     }
 
     private void Diff_Click(object? sender, RoutedEventArgs e)
     {
+        MarkActive(sender);
         ShellChrome.ToggleSidebar();
     }
 
@@ -41,6 +71,6 @@ public partial class ActivityRailView : UserControl
 
     private void Settings_Click(object? sender, RoutedEventArgs e)
     {
-        ShellChrome.OpenOverlay("settings");
+        ShellChrome.OpenOverlay(OverlayIds.Settings);
     }
 }

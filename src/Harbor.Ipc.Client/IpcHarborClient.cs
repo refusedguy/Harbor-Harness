@@ -27,7 +27,7 @@ public sealed class IpcHarborClient : IHarborClient
     private readonly EventSubscription _eventSubscription;
     private readonly ILogger<IpcHarborClient> _logger;
     private readonly MessagePackRpcClient _rpc;
-    private readonly ClientPipeTransport _transport;
+    private readonly IIpcClientTransport _transport;
     private int _connected;
     private int _disposed;
 
@@ -48,11 +48,31 @@ public sealed class IpcHarborClient : IHarborClient
     ///     Construct an IPC client with a pre-built transport (advanced — for tests).
     /// </summary>
     public IpcHarborClient(ClientPipeTransport transport, ILogger<IpcHarborClient> logger)
+        : this(transport, logger, psk: null)
+    {
+    }
+
+    /// <summary>
+    ///     Construct an IPC client over any dialable transport with an
+    ///     optional PSK (required against TCP/tailscale daemons).
+    /// </summary>
+    public IpcHarborClient(IIpcClientTransport transport, ILogger<IpcHarborClient> logger, string? psk)
     {
         _logger = logger;
         _transport = transport;
-        _rpc = new MessagePackRpcClient(_transport, logger);
+        _rpc = new MessagePackRpcClient(_transport, logger, psk);
         _eventSubscription = new EventSubscription(_rpc);
+    }
+
+    /// <summary>
+    ///     Construct an IPC client targeting a networked daemon (host:port)
+    ///     and authenticating with the given PSK immediately after dialing.
+    /// </summary>
+    public IpcHarborClient(string host, int port, ILogger<IpcHarborClient> logger, string? psk)
+        : this(new TcpClientTransport(host, port,
+                  (ILogger)logger ?? throw new ArgumentNullException(nameof(logger))),
+              logger, psk)
+    {
     }
 
     /// <inheritdoc />

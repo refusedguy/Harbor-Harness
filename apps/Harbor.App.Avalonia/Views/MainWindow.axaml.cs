@@ -88,7 +88,7 @@ public partial class MainWindow : Window
     {
         if (ReferenceEquals(e.Source, sender) && _vm is { } vm)
         {
-            _shellChrome.CloseOverlay("modelPicker");
+            _shellChrome.CloseOverlay(OverlayIds.ModelPicker);
         }
     }
 
@@ -96,7 +96,7 @@ public partial class MainWindow : Window
     {
         if (_vm is { } vm)
         {
-            _shellChrome.CloseOverlay("modelPicker");
+            _shellChrome.CloseOverlay(OverlayIds.ModelPicker);
         }
     }
 }

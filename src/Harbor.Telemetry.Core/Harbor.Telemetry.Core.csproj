@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.Telemetry.Core</PackageId>
+    <Description>Harbor telemetry — System.Diagnostics ActivitySource/Meter implementations and boundary decorators (tool/LLM/agent). AOT-safe: no reflection emit, no OTEL SDK.</Description>
+    <PackageTags>harbor;telemetry;tracing;metrics;activity-sources</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- sprint3-C: Telemetry.Core depends on the contracts ONLY.
+         OTEL SDK stays physically out of this graph (Harbor.Telemetry.Otlp). -->
+    <ProjectReference Include="..\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+  </ItemGroup>
+
+</Project>

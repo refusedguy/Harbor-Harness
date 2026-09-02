@@ -8,7 +8,7 @@ using Harbor.Desktop.Abstractions.Messages;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Harbor.Core.Configuration;
+using Harbor.Application.Configuration;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.Messaging;

@@ -47,7 +47,7 @@ public sealed partial class StatusDot : UserControl
 
     public StatusDot()
     {
-        if (Application.Current is not null)
+        if (global::Avalonia.Application.Current is not null)
         {
             InitializeComponent();
             UpdateState();
@@ -62,7 +62,7 @@ public sealed partial class StatusDot : UserControl
         var state = _states[(int)State];
         Dot.Classes.Set("running", state.pulse);
 
-        if (Application.Current?.Resources[state.brushKey] is SolidColorBrush brush)
+        if (global::Avalonia.Application.Current?.Resources[state.brushKey] is SolidColorBrush brush)
             Dot.Fill = brush;
     }
 

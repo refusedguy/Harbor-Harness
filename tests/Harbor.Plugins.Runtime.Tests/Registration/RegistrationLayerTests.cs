@@ -25,7 +25,8 @@ public sealed class RegistrationLayerTests
         var host = new FakePluginLoadHost();
         var registrar = new PluginRegistrar(
             "/home/me/.harbor/plugins",
-            NullLogger<PluginRegistrar>.Instance);
+            NullLogger<PluginRegistrar>.Instance,
+            NullLoggerFactory.Instance);
         var plugin = new FakeToolPlugin("reg-tool-1", "tool_reg_1");
         var loaded = new LoadedPlugin(
             plugin,
@@ -78,7 +79,8 @@ public sealed class RegistrationLayerTests
         var host = new FakePluginLoadHost();
         var registrar = new PluginRegistrar(
             "/home/me/.harbor/plugins",
-            NullLogger<PluginRegistrar>.Instance);
+            NullLogger<PluginRegistrar>.Instance,
+            NullLoggerFactory.Instance);
         var plugin = new ThrowingInitializePlugin();
         var loaded = new LoadedPlugin(
             plugin,
@@ -106,7 +108,8 @@ public sealed class RegistrationLayerTests
         var host = new FakePluginLoadHost();
         var registrar = new PluginRegistrar(
             "/home/me/.harbor/plugins",
-            NullLogger<PluginRegistrar>.Instance);
+            NullLogger<PluginRegistrar>.Instance,
+            NullLoggerFactory.Instance);
         var plugin = new ContextCapturingPlugin("capture-1");
         var loaded = new LoadedPlugin(
             plugin,

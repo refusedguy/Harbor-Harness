@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.DesignSystem — the standalone HDS v1 design-system package.
+
+    Zero ProjectReferences by design (sprint "Design System as Product"):
+    this assembly is the canonical home of the color primitives (RgbColor),
+    cell/screen style primitives (StyleAttr, PackedColor, CellStyle), the
+    theme catalog (HarborTheme, TerminalColorPalette, ThemeOverrideSet),
+    ChatPalette, and the design tokens (DesignTokens, Typography). Consumer
+    apps reference only this package — no Harbor.Tui.*, Harbor.App.*, or UI
+    framework dependency may be added here (enforced by
+    tests/Harbor.Architecture.Tests FullLayerMatrixTests: Allowed set is empty).
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.DesignSystem</PackageId>
+    <Description>Harbor design system — standalone HDS v1 design tokens, terminal color palettes, theme catalog, and cell styles for terminal/desktop/web. Zero dependencies.</Description>
+    <PackageTags>harbor;design-system;tokens;colors;themes;animations</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!-- Public package: must stay trim/AOT-clean (zero IL2xxx warnings). -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+</Project>

@@ -24,6 +24,18 @@ public sealed class ProviderRegistry : IProviderRegistry
     private readonly ConcurrentDictionary<ProviderId, Lazy<ILlmClient>> _clients = new();
     private readonly ILogger<ProviderRegistry> _logger;
     private readonly ConcurrentDictionary<ProviderId, IReadOnlyList<ModelInfo>> _modelCache = new();
+
+    // ROP-C П.7: shared short-TTL catalog cache keyed by provider id.
+    // GetModelsAsync is a real HTTP round-trip on some providers (Ollama),
+    // yet the catalog rarely changes within minutes. The registry owns the
+    // entry so every consumer shares one round-trip budget instead of each
+    // AgentLoop instance keeping its own map. Failures are never cached.
+    private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
+
+    private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
+
+    /// <summary>TTL-cached model catalog entry (ROP-C П.7).</summary>
+    private sealed record CatalogEntry(IReadOnlyList<ModelInfo> Models, DateTimeOffset ExpiresAt);
     /// <summary>
     ///     The frozen lookup table for fast lock-free reads; <see langword="null" /> until
     ///     <see cref="Freeze" /> is called. Marked <c>volatile</c> so reads have
@@ -63,37 +75,48 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// <inheritdoc />
     public Result<ILlmClient> GetClient(ProviderId providerId)
     {
-        // Try frozen snapshot first (fast path, lock-free, no dictionary lookup overhead)
+        // ROP-B П.23: both lookup branches share one Instantiate seam — the
+        // duplicated catch blocks (and the error text they format) live in
+        // exactly one place now.
         var frozen = _frozenClients;
         if (frozen is not null && frozen.TryGetValue(providerId, out var lazy))
         {
-            try
-            {
-                return Result.Success(lazy.Value);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
-                return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
-            }
+            return Instantiate(lazy, providerId);
         }
 
-        // Fallback to concurrent dictionary
         if (_clients.TryGetValue(providerId, out var lazyClient))
         {
-            try
-            {
-                return Result.Success(lazyClient.Value);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Provider instantiation failed: {ProviderId}: {Error}", providerId, ex.Message);
-                return Result.Failure<ILlmClient>($"Failed to instantiate provider '{providerId}': {ex.Message}");
-            }
+            return Instantiate(lazyClient, providerId);
         }
 
         _logger.LogDebug("Provider not registered: {ProviderId}", providerId);
         return Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
+    }
+
+    /// <summary>Force the lazy factory and classify any instantiation failure.</summary>
+    private Result<ILlmClient> Instantiate(Lazy<ILlmClient> lazy, ProviderId providerId) =>
+        Result.Success(lazy)
+            .MapTry(static l => l.Value,
+                ex => $"Failed to instantiate provider '{providerId}': {ex.Message}")
+            .TapError(e => _logger.LogWarning(
+                "Provider instantiation failed: {ProviderId}: {Error}", providerId, e));
+
+    /// <inheritdoc />
+    public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
+    {
+        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
+        {
+            return Result.Success(cached.Models);
+        }
+
+        var client = GetClient(providerId);
+        if (client.IsFailure) // §4.6-ok: одиночный passthrough после cache-miss (граница честности).
+        {
+            return Result.Failure<IReadOnlyList<ModelInfo>>(client.Error);
+        }
+
+        var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);
+        return models.Tap(v => _catalogCache[providerId] = new CatalogEntry(v, DateTimeOffset.UtcNow.Add(ModelCatalogTtl)));
     }
 
     /// <inheritdoc />
@@ -128,7 +151,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         }
 
                         var client = GetClient(pid);
-                        if (client.IsFailure)
+                        if (client.IsFailure) // §4.6-ok: батч-перечисление — ранний выход в record ошибки провайдера.
                         {
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), client.Error);
                         }
@@ -136,7 +159,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         using var perProviderCts = new CancellationTokenSource(PerProviderTimeoutMs);
                         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, perProviderCts.Token);
                         var models = await client.Value.GetModelsAsync(linkedCts.Token).ConfigureAwait(false);
-                        if (models.IsFailure)
+                        if (models.IsFailure) // §4.6-ok: батч-перечисление — частичный результат собирается как данные.
                         {
                             return new ModelBatch(pid, Array.Empty<ModelInfo>(), models.Error);
                         }
@@ -213,6 +236,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         var lazy = new Lazy<ILlmClient>(() => factory(), LazyThreadSafetyMode.ExecutionAndPublication);
         _clients[providerId] = lazy;
         _modelCache.TryRemove(providerId, out _);
+        _catalogCache.TryRemove(providerId, out _);
         InvalidateFrozenSnapshot();
     }
 
@@ -222,6 +246,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         if (_clients.TryRemove(providerId, out _))
         {
             _modelCache.TryRemove(providerId, out _);
+            _catalogCache.TryRemove(providerId, out _);
             InvalidateFrozenSnapshot();
             return Result.Success();
         }
@@ -234,7 +259,11 @@ public sealed class ProviderRegistry : IProviderRegistry
     ///     <see cref="GetAllModelsAsync" /> will re-fetch the model list from the provider.
     /// </summary>
     /// <param name="providerId">The provider whose model cache to invalidate.</param>
-    public void InvalidateModelCache(ProviderId providerId) => _modelCache.TryRemove(providerId, out _);
+    public void InvalidateModelCache(ProviderId providerId)
+    {
+        _modelCache.TryRemove(providerId, out _);
+        _catalogCache.TryRemove(providerId, out _);
+    }
 
     /// <summary>
     ///     Freeze the current provider set for fast lock-free lookups.
@@ -274,14 +303,17 @@ public sealed class ProviderRegistry : IProviderRegistry
 public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
 {
     private readonly IProviderRegistry _registry;
+    private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>
     ///     Construct a builder backed by the supplied registry.
     /// </summary>
     /// <param name="registry">The registry to wrap.</param>
-    public ProviderRegistryBuilder(IProviderRegistry registry)
+    /// <param name="loggerFactory">Logger factory for provider construction.</param>
+    public ProviderRegistryBuilder(IProviderRegistry registry, ILoggerFactory loggerFactory)
     {
         _registry = registry;
+        _loggerFactory = loggerFactory;
     }
 
     /// <inheritdoc />
@@ -326,11 +358,21 @@ public sealed class ProviderRegistryBuilder : IProviderRegistryBuilder
     public void AddProvider(string providerId, Func<ILlmClient> factory)
     {
         var result = ProviderId.TryCreate(providerId);
-        if (result.IsFailure)
+        if (result.IsFailure) // §4.6-ok: ArgumentException с nameof — контракт API, не поток управления.
         {
             throw new ArgumentException(result.Error, nameof(providerId));
         }
 
         _registry.Register(result.Value, factory);
+    }
+
+    /// <summary>
+    ///     Register a provider via a factory interface.
+    /// </summary>
+    /// <param name="factory">The factory producing the client instance.</param>
+    public void AddProvider(IProviderFactory factory)
+    {
+        var pid = factory.ProviderId;
+        _registry.Register(pid, () => factory.CreateClient(_loggerFactory));
     }
 }

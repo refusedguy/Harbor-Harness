@@ -124,6 +124,18 @@ public sealed record AppState
     /// <summary>Current thinking buffer for the active assistant message.</summary>
     public string ThinkingBuffer { get; init; } = string.Empty;
 
+    /// <summary>
+    ///     Streaming-text deltas not yet concatenated into
+    ///     <see cref="StreamingBuffer" /> (flush policy: <see cref="StreamingSync" />).
+    /// </summary>
+    public ChunkedBuffer PendingStreamText { get; init; } = ChunkedBuffer.Empty;
+
+    /// <summary>
+    ///     Thinking deltas not yet concatenated into
+    ///     <see cref="ThinkingBuffer" /> (flush policy: <see cref="StreamingSync" />).
+    /// </summary>
+    public ChunkedBuffer PendingStreamThink { get; init; } = ChunkedBuffer.Empty;
+
     // ── Chrome ────────────────────────────────────────────────────────────
 
     /// <summary>Application chrome state (navigation, modals, toasts).</summary>

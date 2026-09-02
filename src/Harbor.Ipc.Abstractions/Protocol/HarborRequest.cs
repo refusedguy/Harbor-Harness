@@ -18,16 +18,18 @@ namespace Harbor.Ipc.Protocol;
 ///         Concrete derived records therefore start their own keys at
 ///         <c>[Key(1)]</c> and MUST NOT redeclare <see cref="RequestId" />.
 ///     </para>
-///     <para>
-///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
-///         ModelInfo, ProviderId, ToolResult) are carried inside the
-///         concrete request/response payloads as
-///         <see cref="PayloadBytes" /> — a MessagePack-typeless-serialized
-///         <c>byte[]</c>. The TypelessContractlessStandardResolver handles
-///         them transparently (they are POCOs with public get/init properties).
-///         This keeps the wire contract small and decoupled from the domain
-///         layer's [MemoryPackable] attributes.
-///     </para>
+    /// <para>
+    ///         <b>Domain objects</b> (Session, AgentMessage, ToolDescriptor,
+    ///         ModelInfo, ProviderId, ToolResult) are carried inside the
+    ///         concrete request/response payloads as
+    ///         <see cref="OkResponse.Payload" />-style <c>byte[]</c> —
+    ///         MessagePack-serialized via
+    ///         <see cref="WireCodec.SerializeDomain{T}" /> (typed, no wire
+    ///         type metadata; they are POCOs with public get/init properties
+    ///         handled by the StandardResolver). This keeps the wire contract
+    ///         small and decoupled from the domain layer's [MemoryPackable]
+    ///         attributes.
+    ///     </para>
 /// </remarks>
 [MessagePackObject]
 [Union(0, typeof(StartAgentRequest))]
@@ -44,6 +46,7 @@ namespace Harbor.Ipc.Protocol;
 [Union(11, typeof(SubscribeToEventsRequest))]
 [Union(12, typeof(ConnectRequest))]
 [Union(13, typeof(DisconnectRequest))]
+[Union(14, typeof(PskAuthRequest))]
 public abstract record HarborRequest
 {
     /// <summary>
@@ -161,7 +164,23 @@ public sealed record ListToolsRequest : HarborRequest;
 ///     frames (out-of-band, not as a normal response).
 /// </summary>
 [MessagePackObject]
-public sealed record SubscribeToEventsRequest : HarborRequest;
+public sealed record SubscribeToEventsRequest : HarborRequest
+{
+    /// <summary>
+    ///     Last envelope sequence the client already processed (sprint 6 A1).
+    ///     Null = first subscription (no replay expected). The server replays
+    ///     buffered envelopes with sequence &gt; this value when the gap fits
+    ///     its replay buffer, or signals a resync otherwise.
+    /// </summary>
+    [Key(1)]
+    public ulong? LastSequence { get; init; }
+
+    /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
+    public SubscribeToEventsRequest() { }
+
+    /// <summary>Full ctor.</summary>
+    public SubscribeToEventsRequest(ulong? lastSequence) => LastSequence = lastSequence;
+}
 
 /// <summary>Connect handshake.</summary>
 [MessagePackObject]
@@ -170,3 +189,17 @@ public sealed record ConnectRequest : HarborRequest;
 /// <summary>Disconnect handshake.</summary>
 [MessagePackObject]
 public sealed record DisconnectRequest : HarborRequest;
+
+/// <summary>
+///     Pre-shared-key authentication frame. Required as the FIRST request
+///     on any connection to a PSK-gated listener (TCP / tailscale); UDS
+///     listeners may opt in via configuration. The server compares in
+///     constant time and closes the connection on a failed attempt.
+/// </summary>
+[MessagePackObject]
+public sealed record PskAuthRequest(
+    [property: Key(1)] string Psk) : HarborRequest
+{
+    /// <summary>Parameterless ctor for MessagePack deserialization.</summary>
+    public PskAuthRequest() : this(string.Empty) { }
+}

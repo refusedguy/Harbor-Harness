@@ -5,6 +5,7 @@ global using System.IO;
 // The SDK implicit "System.Linq" using is removed in Harbor.Application.csproj.
 global using ZLinq;
 global using System.Text.Json;
+global using System.Text.Json.Serialization;
 global using System.Threading;
 global using System.Threading.Tasks;
 global using CSharpFunctionalExtensions;

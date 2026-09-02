@@ -140,7 +140,7 @@ public partial class Sparkline : UserControl
         double stepX = w / (values.Count - 1);
 
         var baseBrush = StrokeBrush
-                    ?? (Application.Current?.TryFindResource("StateWarningBrush", out object? r) == true
+                    ?? (global::Avalonia.Application.Current?.TryFindResource("StateWarningBrush", out object? r) == true
                         ? r as IBrush
                         : null)
                     ?? Brushes.OrangeRed;

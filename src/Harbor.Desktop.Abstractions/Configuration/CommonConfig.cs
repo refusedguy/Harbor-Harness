@@ -53,6 +53,31 @@ namespace Harbor.Desktop.Abstractions.Configuration;
 public sealed record CommonConfig
 {
     /// <summary>
+    ///     Process-wide snapshot of the Harbor home directory (<c>~/.harbor</c>).
+    ///     Resolved lazily at first access; test hosts may pin it via
+    ///     <see cref="OverrideHarborHomeForTests" /> BEFORE building the app
+    ///     host (A11: per-class isolation — the previous process-wide
+    ///     one-shot snapshot froze the FIRST test class's home for every
+    ///     later class, cross-wiring their config files).
+    /// </summary>
+    public static string HarborHome => _harborHomeOverride ?? ComputeDefaultHarborHome();
+
+    private static string? _harborHomeOverride;
+
+    /// <summary>Pin the harbor home for the current test scope. Not for production use.</summary>
+    public static void OverrideHarborHomeForTests(string harborDirectory)
+        => _harborHomeOverride = harborDirectory;
+
+    private static string ComputeDefaultHarborHome() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) is { Length: > 0 } profile
+                ? profile
+                : Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } homeEnv
+                    ? homeEnv
+                    : AppContext.BaseDirectory,
+            ".harbor");
+
+    /// <summary>
     ///     Schema version of the common config file. Bumped whenever the JSON
     ///     shape changes in a backward-incompatible way. The loader refuses to
     ///     read a file with a newer <c>ConfigVersion</c> and surfaces a
@@ -117,11 +142,12 @@ public sealed record CommonConfig
 
     /// <summary>
     ///     Session storage backend: <c>"jsonl"</c>, <c>"sqlite"</c>, or
-    ///     <c>"memory"</c>. Defaults to <c>"jsonl"</c>. Each app's
-    ///     composition root may honour an env-var override (e.g.
-    ///     <c>HARBOR_STORAGE</c>) that wins over this persisted value.
+    ///     <c>"memory"</c>. Empty (the default) means "not chosen" — each
+    ///     app's composition preset then supplies its own fallback (CLI:
+    ///     <c>jsonl</c>, desktop: <c>memory</c>), overridable via env (e.g.
+    ///     <c>HARBOR_STORAGE</c>) that wins over both.
     /// </summary>
-    public string StorageBackend { get; init; } = "jsonl";
+    public string StorageBackend { get; init; } = "";
 
     /// <summary>
     ///     Optional override for the session-storage directory. Empty (the
@@ -245,10 +271,15 @@ public sealed record CommonConfig
     ///     on Windows, <c>$HOME/.harbor</c> on Linux/macOS). Init-only so
     ///     tests can override via <c>new CommonConfig { ConfigDirectory = ... }</c>.
     /// </summary>
-    public string ConfigDirectory { get; init; } =
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".harbor");
+    /// <remarks>
+    ///     Resolved through <see cref="HarborHome"/> so the HOME lookup happens
+    ///     exactly once per process. Calling Environment.GetFolderPath(UserProfile)
+    ///     lazily is a trap: on Linux it re-resolves $HOME on every call, and after
+    ///     a mid-process HOME change (E2E driver, su, systemd unit) it can return
+    ///     the EMPTY string — silently turning '~/.harbor' into a CWD-relative
+    ///     '.harbor'. Snapshotted at type-init instead.
+    /// </remarks>
+    public string ConfigDirectory { get; init; } = HarborHome;
 
     /// <summary>
     ///     Filename (no directory) of the common JSON config file:

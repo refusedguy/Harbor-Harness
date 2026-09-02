@@ -1,4 +1,4 @@
-namespace Harbor.Cli.Logging;
+namespace Harbor.App.Cli.Logging;
 /// <summary>
 ///     Keeps the <c>~/.harbor/logs/</c> directory from growing without bound.
 ///     On each process startup, <see cref="Cleanup" /> deletes the oldest

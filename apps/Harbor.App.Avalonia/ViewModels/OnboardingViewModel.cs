@@ -13,8 +13,10 @@ public sealed partial class OnboardingViewModel : Harbor.Desktop.Abstractions.Vi
         IThemeService theme,
         IToastService toasts,
         ILogger<OnboardingViewModel> logger,
-        IMessenger messenger)
-        : base(configStore, theme, toasts, logger, messenger)
+        IMessenger messenger,
+        Harbor.Abstractions.Providers.IProviderHealthCheck? healthCheck = null,
+        Harbor.Abstractions.Providers.IProviderRegistry? providers = null)
+        : base(configStore, theme, toasts, logger, messenger, healthCheck, providers)
     {
     }
 }

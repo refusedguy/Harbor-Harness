@@ -131,7 +131,13 @@ public abstract class E2eTestBase
         // Quiet logging so test stdout isn't drowned in MS log noise.
         ["HARBOR_LOGLEVEL"] = "Warning",
         // Bypass the onboarding wizard gate (also set in config.json, belt + braces).
-        ["HARBOR_SKIP_ONBOARDING"] = "1"
+        ["HARBOR_SKIP_ONBOARDING"] = "1",
+        // Keep the child .NET process quiet: a fresh CI runner + fresh temp
+        // HOME would otherwise print telemetry / first-run banners into the
+        // captured stdout of the very first spawned CLI.
+        ["DOTNET_NOLOGO"] = "1",
+        ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1",
+        ["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
     };
 
     /// <summary>

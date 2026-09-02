@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 using Harbor.Plugins.Abstractions;
 using Microsoft.CodeAnalysis;
@@ -25,6 +26,7 @@ namespace Harbor.Plugins.Compilation;
 public sealed class RoslynPluginCompiler : IPluginCompiler
 {
     private readonly PluginAssemblyReferences _references;
+    private readonly Func<PluginScript, Assembly>? _assemblyLoader;
 
     /// <summary>
     ///     Construct a new Roslyn compiler.
@@ -34,9 +36,16 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
     ///     of <see cref="AppDomain.CurrentDomain" /> is taken via
     ///     <see cref="PluginAssemblyReferences" />.
     /// </param>
-    public RoslynPluginCompiler(PluginAssemblyReferences references)
+    /// <param name="assemblyLoader">
+    ///     Optional custom loader used to place the compiled PE image into an
+    ///     <see cref="AssemblyLoadContext" />. When <see langword="null" />, the assembly
+    ///     loads into a fresh <see cref="CollectiblePluginLoadContext" /> sandbox built
+    ///     from the script's declared capabilities (fail-closed deny-list).
+    /// </param>
+    public RoslynPluginCompiler(PluginAssemblyReferences references, Func<PluginScript, Assembly>? assemblyLoader = null)
     {
         _references = references ?? throw new ArgumentNullException(nameof(references));
+        _assemblyLoader = assemblyLoader;
     }
 
     /// <inheritdoc />
@@ -51,7 +60,7 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
 
         var compilation = CSharpCompilation.Create(
             $"Harbor.Plugin.Dynamic.{script.Hash}",
-            new[] { syntaxTree },
+            new[] { BuildImplicitUsingsSyntaxTree(), syntaxTree },
             _references.References,
             new CSharpCompilationOptions(
                 OutputKind.DynamicallyLinkedLibrary,
@@ -71,9 +80,54 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
         }
 
         byte[] assemblyBytes = ms.ToArray();
-        var asm = Assembly.Load(assemblyBytes);
-        var compiled = new CompiledPluginAssembly(asm, script.Hash, script.Path, assemblyBytes);
+        var sandbox = _assemblyLoader is null
+            ? CollectiblePluginLoadContext.ForScript(script)
+            : null;
+        var asm = _assemblyLoader?.Invoke(script)
+            ?? sandbox!.LoadFromImage(assemblyBytes);
+        var compiled = new CompiledPluginAssembly(
+            asm,
+            script.Hash,
+            script.Path,
+            assemblyBytes,
+            FromCache: false,
+            script.DeclaredCapabilities);
         return Task.FromResult(CompilationResult.Fresh(compiled));
+    }
+
+    /// <summary>
+    ///     Namespaces injected as <c>global using</c> directives into every
+    ///     compiled plugin. Plugin authors typically copy sources from the
+    ///     shipped samples, whose DLL projects rely on
+    ///     <c>&lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;</c>; a raw
+    ///     Roslyn compilation has no SDK-level implicit usings, so without this
+    ///     prelude those copies fail with CS0246 for even basic BCL types
+    ///     (<c>Version</c>, <c>Task</c>, <c>Directory</c>). Duplicates of an
+    ///     explicit using in the source are legal C# and produce no diagnostics.
+    /// </summary>
+    private static readonly string[] ImplicitUsingNamespaces =
+    {
+        // The .NET SDK implicit-usings set.
+        "System",
+        "System.Collections.Generic",
+        "System.IO",
+        "System.Linq",
+        "System.Net.Http",
+        "System.Threading",
+        "System.Threading.Tasks",
+        // Harbor contract namespaces referenced by every plugin shape.
+        "Harbor.Abstractions.Models",
+        "Harbor.Abstractions.Plugins",
+        "Harbor.Abstractions.Tools",
+        "Microsoft.Extensions.Logging",
+    };
+
+    private static SyntaxTree BuildImplicitUsingsSyntaxTree()
+    {
+        var prelude = string.Join(
+            Environment.NewLine,
+            ImplicitUsingNamespaces.Select(ns => $"global using {ns};"));
+        return CSharpSyntaxTree.ParseText(prelude, path: "<harbor-plugin-implicit-usings>");
     }
 
     private static IEnumerable<string> FormatAll(IReadOnlyList<Diagnostic> diagnostics)

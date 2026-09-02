@@ -1,0 +1,611 @@
+{
+  "audit_metadata": {
+    "repository": "Harbor-Harness",
+    "path": "/mnt/projects/Harbor-Harness",
+    "framework": ".NET 10",
+    "audit_date": "2026-08-27",
+    "total_tests_run": 2271,
+    "test_result_source": "TestResults/*.tunit-report.json"
+  },
+  "test_projects": {
+    "total_test_projects": 33,
+    "projects": [
+      {
+        "name": "Harbor.Abstractions.Tests",
+        "path": "tests/Harbor.Abstractions.Tests",
+        "has_tests": true,
+        "test_count": 53,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.App.Avalonia.Tests",
+        "path": "tests/Harbor.App.Avalonia.Tests",
+        "has_tests": true,
+        "test_count": 215,
+        "framework": "TUnit",
+        "status": "1_failure"
+      },
+      {
+        "name": "Harbor.App.Blazor.Tests",
+        "path": "contrib/tests/Harbor.App.Blazor.Tests",
+        "has_tests": true,
+        "test_count": 20,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.App.Cli.Tests",
+        "path": "tests/Harbor.App.Cli.Tests",
+        "has_tests": true,
+        "test_count": 78,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Application.Tests",
+        "path": "tests/Harbor.Application.Tests",
+        "has_tests": true,
+        "test_count": 136,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Architecture.Tests",
+        "path": "tests/Harbor.Architecture.Tests",
+        "has_tests": true,
+        "test_count": 46,
+        "framework": "NUnit+NetArchTest",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Config.Tests",
+        "path": "tests/Harbor.Config.Tests",
+        "has_tests": true,
+        "test_count": 57,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Core.Tests",
+        "path": "tests/Harbor.Core.Tests",
+        "has_tests": true,
+        "test_count": 92,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.DesignSystem.Tests",
+        "path": "tests/Harbor.DesignSystem.Tests",
+        "has_tests": true,
+        "test_count": 5,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Domain.Tests",
+        "path": "tests/Harbor.Domain.Tests",
+        "has_tests": true,
+        "test_count": 22,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.E2E.App.Avalonia",
+        "path": "tests/Harbor.E2E.App.Avalonia",
+        "has_tests": true,
+        "test_count": 100,
+        "framework": "TUnit",
+        "status": "1_skipped"
+      },
+      {
+        "name": "Harbor.E2E.App.Blazor",
+        "path": "contrib/tests/Harbor.E2E.App.Blazor",
+        "has_tests": true,
+        "test_count": 29,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.E2E.Cli",
+        "path": "tests/Harbor.E2E.Cli",
+        "has_tests": true,
+        "test_count": 36,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.E2E.Framework",
+        "path": "tests/Harbor.E2E.Framework",
+        "has_tests": true,
+        "test_count": 26,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.E2E.Tui.RazorConsole",
+        "path": "contrib/tests/Harbor.E2E.Tui.RazorConsole",
+        "has_tests": true,
+        "test_count": 41,
+        "framework": "TUnit",
+        "status": "12_failures"
+      },
+      {
+        "name": "Harbor.E2E.Tui.SpectreTui",
+        "path": "contrib/tests/Harbor.E2E.Tui.SpectreTui",
+        "has_tests": true,
+        "test_count": 43,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.E2E.Tui.Termina",
+        "path": "contrib/tests/Harbor.E2E.Tui.Termina",
+        "has_tests": true,
+        "test_count": 41,
+        "framework": "TUnit",
+        "status": "2_failures"
+      },
+      {
+        "name": "Harbor.E2E.Tui.TerminalGui",
+        "path": "contrib/tests/Harbor.E2E.Tui.TerminalGui",
+        "has_tests": true,
+        "test_count": 41,
+        "framework": "TUnit",
+        "status": "15_failures"
+      },
+      {
+        "name": "Harbor.Hosting.Tests",
+        "path": "tests/Harbor.Hosting.Tests",
+        "has_tests": true,
+        "test_count": 10,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Ipc.Tests",
+        "path": "tests/Harbor.Ipc.Tests",
+        "has_tests": true,
+        "test_count": 83,
+        "framework": "TUnit",
+        "status": "4_skipped"
+      },
+      {
+        "name": "Harbor.Plugins.Runtime.Tests",
+        "path": "tests/Harbor.Plugins.Runtime.Tests",
+        "has_tests": true,
+        "test_count": 37,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Providers.Tests",
+        "path": "tests/Harbor.Providers.Tests",
+        "has_tests": true,
+        "test_count": 48,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Scripting.Tests",
+        "path": "contrib/tests/Harbor.Scripting.Tests",
+        "has_tests": true,
+        "test_count": 51,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Storage.Jsonl.Tests",
+        "path": "tests/Harbor.Storage.Jsonl.Tests",
+        "has_tests": true,
+        "test_count": 36,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Storage.Tests",
+        "path": "tests/Harbor.Storage.Tests",
+        "has_tests": true,
+        "test_count": 35,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Telemetry.Tests",
+        "path": "tests/Harbor.Telemetry.Tests",
+        "has_tests": true,
+        "test_count": 8,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Tools.Builtin.Tests",
+        "path": "tests/Harbor.Tools.Builtin.Tests",
+        "has_tests": true,
+        "test_count": 170,
+        "framework": "TUnit",
+        "status": "2_skipped"
+      },
+      {
+        "name": "Harbor.Transport.Remote.Tests",
+        "path": "tests/Harbor.Transport.Remote.Tests",
+        "has_tests": true,
+        "test_count": 11,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Tui.ConsoleEx.PtyTests",
+        "path": "tests/Harbor.Tui.ConsoleEx.PtyTests",
+        "has_tests": true,
+        "test_count": 39,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Tui.ConsoleEx.Tests",
+        "path": "tests/Harbor.Tui.ConsoleEx.Tests",
+        "has_tests": true,
+        "test_count": 488,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Tui.E2E.Tests",
+        "path": "tests/Harbor.Tui.E2E.Tests",
+        "has_tests": true,
+        "test_count": 8,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Tui.Tests",
+        "path": "tests/Harbor.Tui.Tests",
+        "has_tests": true,
+        "test_count": 113,
+        "framework": "TUnit",
+        "status": "passing"
+      },
+      {
+        "name": "Harbor.Ui.Framework.Tests",
+        "path": "tests/Harbor.Ui.Framework.Tests",
+        "has_tests": true,
+        "test_count": 53,
+        "framework": "TUnit",
+        "status": "passing"
+      }
+    ]
+  },
+  "source_projects_without_tests": {
+    "total": 16,
+    "projects": [
+      {
+        "name": "Harbor.CodeGen",
+        "path": "src/Harbor.CodeGen/Harbor.CodeGen.csproj",
+        "files": 4
+      },
+      {
+        "name": "Harbor.Desktop.Abstractions",
+        "path": "src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj",
+        "files": 98
+      },
+      {
+        "name": "Harbor.Desktop.Animations",
+        "path": "src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj",
+        "files": 11
+      },
+      {
+        "name": "Harbor.Desktop.Shared",
+        "path": "src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj",
+        "files": 16
+      },
+      {
+        "name": "Harbor.Diagnostics.Abstractions",
+        "path": "src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj",
+        "files": 9
+      },
+      {
+        "name": "Harbor.Extensions",
+        "path": "src/Harbor.Extensions/Harbor.Extensions.csproj",
+        "files": 10
+      },
+      {
+        "name": "Harbor.Logging",
+        "path": "src/Harbor.Logging/Harbor.Logging.csproj",
+        "files": 7
+      },
+      {
+        "name": "Harbor.Plugins.Abstractions",
+        "path": "src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj",
+        "files": 16
+      },
+      {
+        "name": "Harbor.Plugins.Compilation",
+        "path": "src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj",
+        "files": 10
+      },
+      {
+        "name": "Harbor.Plugins.Host",
+        "path": "src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj",
+        "files": 10
+      },
+      {
+        "name": "Harbor.Plugins.Hosting",
+        "path": "src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj",
+        "files": 11
+      },
+      {
+        "name": "Harbor.Plugins.Instantiation",
+        "path": "src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj",
+        "files": 9
+      },
+      {
+        "name": "Harbor.Plugins.Registration",
+        "path": "src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj",
+        "files": 10
+      },
+      {
+        "name": "Harbor.Plugins.Storage",
+        "path": "src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj",
+        "files": 13
+      },
+      {
+        "name": "Harbor.Registries",
+        "path": "src/Harbor.Registries/Harbor.Registries.csproj",
+        "files": 23
+      },
+      {
+        "name": "Harbor.Terminal.Abstractions",
+        "path": "src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj",
+        "files": 33
+      }
+    ]
+  },
+  "test_types": {
+    "unit": {
+      "count": "majority of 2271 tests",
+      "frameworks": [
+        "TUnit",
+        "NUnit (architecture)"
+      ],
+      "notes": "TUnit is the dominant framework; NUnit used only in Architecture.Tests via NetArchTest.Rules"
+    },
+    "integration": {
+      "count": "significant subset",
+      "projects": [
+        "Harbor.Ipc.Tests",
+        "Harbor.Storage.Tests",
+        "Harbor.Plugins.Runtime.Tests",
+        "Harbor.Application.Tests",
+        "Harbor.Core.Tests"
+      ],
+      "notes": "In-process IPC, SQLite, and plugin hosting tests"
+    },
+    "e2e": {
+      "count": "~600 tests across E2E projects",
+      "projects": [
+        "Harbor.E2E.App.Avalonia",
+        "Harbor.E2E.App.Blazor",
+        "Harbor.E2E.Cli",
+        "Harbor.E2E.Framework",
+        "Harbor.E2E.Tui.RazorConsole",
+        "Harbor.E2E.Tui.SpectreTui",
+        "Harbor.E2E.Tui.Termina",
+        "Harbor.E2E.Tui.TerminalGui",
+        "Harbor.Tui.E2E.Tests",
+        "Harbor.Tui.ConsoleEx.PtyTests"
+      ],
+      "notes": "Headless Avalonia, PTY-driven TUI renderer tests, CLI process tests"
+    },
+    "screenshot_diff": {
+      "count": "~50 tests",
+      "projects": [
+        "Harbor.Tui.ConsoleEx.Tests",
+        "Harbor.Tui.ConsoleEx.PtyTests"
+      ],
+      "golden_files": 22,
+      "baseline_hashes": "tests/fixtures/celldiff/screenshot-baselines.txt",
+      "notes": "Uses Verify-style golden file comparisons with SHA256 baseline manifest"
+    },
+    "architecture": {
+      "count": 46,
+      "project": "Harbor.Architecture.Tests",
+      "framework": "NetArchTest.Rules + NUnit",
+      "notes": "Layer dependency and architectural constraint validation"
+    },
+    "benchmark": {
+      "count": "~20 benchmarks",
+      "project": "Harbor.Benchmarks",
+      "framework": "BenchmarkDotNet",
+      "notes": "Performance regression suite"
+    }
+  },
+  "flaky_and_disabled_tests": {
+    "skipped_tests": [
+      {
+        "file": "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs",
+        "line": 120,
+        "reason": "Sandbox DNS wildcards NXDOMAIN: .invalid resolved to captive portal; fail-closed branch cannot be exercised in CI",
+        "impact": "medium",
+        "recommendation": "Replace DNS-based sandbox with mock DNS resolver or network intercept"
+      },
+      {
+        "file": "tests/Harbor.E2E.App.Avalonia/ComponentTests/SettingsTests.cs",
+        "line": 146,
+        "reason": "Order-dependent under full-suite scheduling: orphaned dispatcher continuations mutate Application.Current state",
+        "impact": "high",
+        "recommendation": "Requires process-per-class isolation for deterministic revert"
+      },
+      {
+        "file": "contrib/tests/Harbor.E2E.Tui.Termina/TerminaE2ETests.cs",
+        "line": 312,
+        "reason": "Termina renderer does not implement Alt+digit panel toggling (no panel registry)",
+        "impact": "low",
+        "recommendation": "Implement panel registry in Termina or remove test when feature gap is accepted"
+      }
+    ],
+    "known_flaky_areas": [
+      {
+        "file": "tests/Harbor.Ipc.Tests/EventStreamingTests.cs",
+        "issue": "Named-pipe event streaming is timing-flaky on Linux under TUnit",
+        "impact": "medium"
+      },
+      {
+        "file": "tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreTests.cs",
+        "issue": "Flaky by design due to fabricated-UtcNow defect",
+        "impact": "low"
+      },
+      {
+        "file": "tests/Harbor.E2E.App.Avalonia/HeadlessAvaloniaDriver.cs",
+        "issue": "Flaky 'Expected Hello but found test prompt' failures",
+        "impact": "medium"
+      }
+    ],
+    "total_skipped": 3,
+    "total_flaky_comments": 3
+  },
+  "failing_tests": {
+    "Harbor.App.Avalonia.Tests": {
+      "failures": 1,
+      "details": [
+        "ChatView_Inflates: Static resource 'Avalonia.Controls.ListBoxItem' not found"
+      ]
+    },
+    "Harbor.E2E.Tui.RazorConsole": {
+      "failures": 12,
+      "details": "Assertion failures on UI state: AgentRunning_ShowsRunningBanner, Alt1_TogglesPanel, F12_TogglesLogsPanel, Compaction_ShowsCompactionStatus, SlashHelp_IsDispatched, ToolCall_RendersToolCard, Streaming_ShowsResponse, Screenshot_CapturesCoreStates, Start_ShowsWelcomeBanner, AltUp_NavigatesInputHistory, and more"
+    },
+    "Harbor.E2E.Tui.Termina": {
+      "failures": 2,
+      "details": [
+        "Alt1_TogglesPanel: Expected true but found False",
+        "Screenshot_CapturesCoreStates: Expected false but found True"
+      ]
+    },
+    "Harbor.E2E.Tui.TerminalGui": {
+      "failures": 15,
+      "details": "System.IO.IOException: Broken pipe across AgentRunning_ShowsRunningBanner, CtrlTab_CyclesPanelFocus, Alt1_TogglesPanel, F12_TogglesLogsPanel, ScrollUp_ScrollsHistory, and more"
+    }
+  },
+  "coverage_gaps": {
+    "missing_coverage_configuration": true,
+    "details": "No coverlet, Coverlet.MSBuild, or coverage collection configuration found in any .csproj, Directory.Build.props, or build scripts",
+    "coverage_thresholds": "None defined",
+    "ci_coverage_gates": "None found",
+    "source_projects_without_tests": 16,
+    "critical_paths_missing_coverage": [
+      {
+        "path": "Providers (Anthropic, Ollama, OpenAI, OpenAiCompatible, Shared)",
+        "note": "Harbor.Providers.Tests exists but contains only 48 unit tests for config/error classification; no provider-specific integration tests against real APIs or mocks"
+      },
+      {
+        "path": "Agents (agent/ directory)",
+        "note": "agent/ directory contains only skills (JSON), no C# source; agent logic tested indirectly through Application.Tests and Core.Tests"
+      },
+      {
+        "path": "CLI (Harbor.App.Cli)",
+        "note": "34 source files, 11 unit test files, 2 E2E test files; limited coverage of command parsing and REPL scenarios"
+      },
+      {
+        "path": "Storage (Harbor.Storage.Sqlite, Harbor.Storage.Memory)",
+        "note": "Harbor.Storage.Tests covers Memory and Sqlite but only 35 tests total for 14 source files"
+      },
+      {
+        "path": "TUI Renderers (Harbor.Tui.Ansi, Harbor.Tui.Plain, Harbor.Tui.Notifications)",
+        "note": "Tui.Tests has 113 tests but notifications renderer has no dedicated tests"
+      },
+      {
+        "path": "Harbor.Terminal.Abstractions (33 source files, 0 test files)",
+        "note": "Core terminal abstractions completely untested"
+      },
+      {
+        "path": "Harbor.Plugins.* (Compilation, Host, Hosting, Instantiation, Registration, Storage)",
+        "note": "6 plugin projects with 0 dedicated test projects; only Harbor.Plugins.Runtime.Tests exists"
+      },
+      {
+        "path": "Harbor.Desktop.* (Abstractions, Animations, Shared)",
+        "note": "125 source files across 3 projects with 0 test coverage"
+      }
+    ]
+  },
+  "test_infrastructure": {
+    "golden_files": {
+      "present": true,
+      "count": 22,
+      "locations": [
+        "tests/fixtures/celldiff/*.golden.txt",
+        "tests/fixtures/consoleex-pty/*.golden.txt"
+      ],
+      "baseline_hashes": "tests/fixtures/celldiff/screenshot-baselines.txt (5 SHA256 hashes)",
+      "update_mechanism": "HARBOR_UPDATE_GOLDENS=1 environment variable"
+    },
+    "test_framework": {
+      "primary": "TUnit",
+      "secondary": "NUnit (architecture tests only)",
+      "mocking": "Moq (1 file only - contrib/tests/Harbor.Tui.Contrib.Tests/TeaBridgeTests.cs)",
+      "snapshot": "Verify (10 files, primarily in TUI console tests)"
+    },
+    "parallelization": {
+      "dotnet_test": "MaxCpuCount=4 in build script",
+      "test_isolation": "[NotInParallel(\"pty\")] on PTY scenario classes",
+      "process_isolation": "Limited - most tests run in same process; Avalonia SettingsTests skipped due to process-state mutation"
+    },
+    "ci_cd": {
+      "github_actions": "Not found",
+      "azure_pipelines": "Not found",
+      "build_system": "NUKE (build.sh / build.ps1)",
+      "test_target": "dotnet test --no-build --no-restore -p:MaxCpuCount=4",
+      "coverage_gate": "Not configured",
+      "artifacts": "TestResults/*.tunit-report.json generated locally"
+    },
+    "reports": {
+      "format": "TUnit JSON",
+      "location": "TestResults/*.tunit-report.json",
+      "schema": "tunit-report schema with summary and groups"
+    }
+  },
+  "recommendations": [
+    {
+      "priority": "critical",
+      "area": "E2E Stability",
+      "finding": "TerminalGui has 15 broken-pipe failures; RazorConsole has 12 assertion failures; these indicate real renderer/platform gaps or test infrastructure issues",
+      "action": "Fix or gate TerminalGui E2E; investigate RazorConsole state synchronization"
+    },
+    {
+      "priority": "high",
+      "area": "Coverage Gaps",
+      "finding": "16 source projects (including 98-file Desktop.Abstractions and 33-file Terminal.Abstractions) have zero test coverage",
+      "action": "Create test projects for Harbor.Terminal.Abstractions, Harbor.Plugins.*, Harbor.Desktop.*, and Harbor.Logging"
+    },
+    {
+      "priority": "high",
+      "area": "Coverage Measurement",
+      "finding": "No code coverage tooling configured; no CI gates enforce coverage thresholds",
+      "action": "Add Coverlet/MSBuild coverage collection; set minimum thresholds (e.g., 80% line, 70% branch) in CI"
+    },
+    {
+      "priority": "medium",
+      "area": "Flaky Tests",
+      "finding": "3 tests permanently skipped; IPC event streaming and Avalonia driver have known flakiness",
+      "action": "Replace DNS-based skip with mock DNS; add process-per-class isolation for Avalonia; fix IPC timing"
+    },
+    {
+      "priority": "medium",
+      "area": "Mocking Strategy",
+      "finding": "Only 1 file uses Moq; most tests rely on fakes/stubs manually implemented",
+      "action": "Evaluate adopting a consistent mocking library across test projects or document the fake-pattern rationale"
+    },
+    {
+      "priority": "medium",
+      "area": "Provider Tests",
+      "finding": "Harbor.Providers.Tests covers only config/error classification; no LLM provider integration tests",
+      "action": "Add provider contract tests using mock HTTP servers (e.g., WireMock.Net) to validate streaming, retry, and auth flows"
+    },
+    {
+      "priority": "low",
+      "area": "CI Visibility",
+      "finding": "No GitHub Actions or Azure Pipelines workflows found in repository",
+      "action": "Add CI pipeline that runs tests on PR, publishes coverage report, and fails on broken E2E suites"
+    }
+  ]
+}

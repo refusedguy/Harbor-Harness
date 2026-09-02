@@ -30,6 +30,9 @@ namespace Harbor.Ui.Framework.ViewModels;
 /// </remarks>
 public sealed record ChatLineViewModel(ChatRole Role, string Text)
 {
+    /// <summary>Timeline discriminator (Ф-A1b): chat rows are not tool cards.</summary>
+    public bool IsToolCard => false;
+
     /// <summary>
     ///     Optional timestamp for this line (when the message was received
     ///     from the agent / typed by the user). Null for lines without a

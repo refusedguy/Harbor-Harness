@@ -6,7 +6,8 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Core.Sessions;
+using Harbor.Application.Sessions;
+using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Core.Tests;
 /// <summary>
@@ -67,6 +68,17 @@ public class CompactionServiceTests
         StopReason.Stop,
         new Usage(0, 0),
         "test-model");
+
+    private static AssistantMessage Summary(string text, string? firstKeptId) => new(
+        Guid.NewGuid().ToString("N"),
+        "session-1",
+        DateTimeOffset.UtcNow,
+        new[] { new TextPart(text) },
+        StopReason.Stop,
+        new Usage(0, 0),
+        "test-model",
+        IsSummary: true,
+        SummaryFirstKeptId: firstKeptId);
 
     private static ToolResultMessage ToolResult(string toolName, string output) => new(
         Guid.NewGuid().ToString("N"),
@@ -239,6 +251,119 @@ public class CompactionServiceTests
 
         var summaryPart = ((AssistantMessage)result.Value.SummaryMessage).Parts.OfType<TextPart>().Single();
         await Assert.That(summaryPart.Text).IsEqualTo("my custom summary");
+    }
+
+    [Test]
+    public async Task Materialize_NoSummary_ReturnsInputUnchanged()
+    {
+        var messages = new AgentMessage[] { User("hi"), Assistant("ho") };
+
+        var view = CompactionService.MaterializeCompactedView(messages);
+
+        await Assert.That(ReferenceEquals(view, messages)).IsTrue();
+    }
+
+    [Test]
+    public async Task Materialize_AnchorResolved_SummaryFirstThenTailFromAnchor()
+    {
+        // Mirrors the post-append layout: [head…, tail…, summary] — the tail
+        // sits BEFORE the appended summary, and the view reorders it behind.
+        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var u2 = Assistant("cccccccccccccccccccccccccccccccccccc");
+        var summary = Summary("folded head", u1.Id);
+        var raw = new AgentMessage[] { u0, u1, u2, summary };
+
+        var view = CompactionService.MaterializeCompactedView(raw);
+
+        await Assert.That(view.Count).IsEqualTo(3);
+        await Assert.That(view[0].Id).IsEqualTo(summary.Id);
+        await Assert.That(view[1].Id).IsEqualTo(u1.Id);
+        await Assert.That(view[2].Id).IsEqualTo(u2.Id);
+    }
+
+    [Test]
+    public async Task Materialize_NullAnchor_KeepsOnlySummaryAndLaterMessages()
+    {
+        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = Summary("folded everything", null);
+        var after = Assistant("appended after compaction");
+        var raw = new AgentMessage[] { u0, u1, summary, after };
+
+        var view = CompactionService.MaterializeCompactedView(raw);
+
+        await Assert.That(view.Count).IsEqualTo(2);
+        await Assert.That(view[0].Id).IsEqualTo(summary.Id);
+        await Assert.That(view[1].Id).IsEqualTo(after.Id);
+    }
+
+    [Test]
+    public async Task Materialize_UnresolvedAnchor_ReturnsFullHistory()
+    {
+        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = Summary("dangling anchor", "does-not-exist");
+        var raw = new AgentMessage[] { u0, u1, summary };
+
+        var view = CompactionService.MaterializeCompactedView(raw);
+
+        await Assert.That(view.Count).IsEqualTo(raw.Length);
+        await Assert.That(ReferenceEquals(view, raw)).IsTrue();
+    }
+
+    [Test]
+    public async Task Materialize_MessagesAppendedAfterSummary_ArePreservedInOrder()
+    {
+        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = Summary("folded", u1.Id);
+        var a2 = Assistant("turn answer");
+        var tr3 = ToolResult("read", "file contents here");
+        var raw = new AgentMessage[] { u0, u1, summary, a2, tr3 };
+
+        var view = CompactionService.MaterializeCompactedView(raw);
+
+        await Assert.That(view.Count).IsEqualTo(4);
+        await Assert.That(view[0].Id).IsEqualTo(summary.Id);
+        await Assert.That(view[1].Id).IsEqualTo(u1.Id);
+        await Assert.That(view[2].Id).IsEqualTo(a2.Id);
+        await Assert.That(view[3].Id).IsEqualTo(tr3.Id);
+    }
+
+    [Test]
+    public async Task Materialize_TruncatedSummarizedHistory_SurvivesStoreSaveReload()
+    {
+        var store = new MemorySessionStore();
+        var created = await store.CreateAsync("/tmp", "code", "test", "test-model");
+        await Assert.That(created.IsSuccess).IsTrue();
+        string sessionId = created.Value.Id;
+
+        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var u2 = Assistant("cccccccccccccccccccccccccccccccccccc");
+        var summary = Summary("folded head", u1.Id);
+        // Raw layout is append-only: pruned head first, then kept tail,
+        // then the summary the loop appends on top.
+        var raw = new List<AgentMessage> { u0, u1, u2, summary };
+        var beforeView = CompactionService.MaterializeCompactedView(raw);
+
+        foreach (var message in raw)
+        {
+            var appended = await store.AppendMessageAsync(sessionId, message);
+            await Assert.That(appended.IsSuccess).IsTrue();
+        }
+
+        var reloaded = await store.GetMessagesAsync(sessionId);
+        await Assert.That(reloaded.IsSuccess).IsTrue();
+        var afterView = CompactionService.MaterializeCompactedView(reloaded.Value);
+
+        await Assert.That(afterView.Count).IsEqualTo(beforeView.Count);
+        await Assert.That(afterView.Count).IsEqualTo(3);
+        for (int i = 0; i < beforeView.Count; i++)
+        {
+            await Assert.That(afterView[i].Id).IsEqualTo(beforeView[i].Id);
+        }
     }
 
     private static AssistantMessage AssistantWithToolCall(string id, string toolName)
