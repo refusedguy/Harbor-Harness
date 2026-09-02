@@ -38,12 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload architecture-gate log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: arch-gate-log
           path: tests/Harbor.Architecture.Tests/obj/Release/net10.0/harbor-arch-gate.log
@@ -126,12 +126,12 @@ jobs:
               Harbor.App.Cli.Tests
               Harbor.LoadTests
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -198,12 +198,12 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -246,12 +246,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -275,7 +275,7 @@ jobs:
         run: ./publish/linux-x64/Harbor.App.Cli --version
 
       - name: Upload CLI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: harbor-cli-linux-x64
           path: publish/linux-x64/
