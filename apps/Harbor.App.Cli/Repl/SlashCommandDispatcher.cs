@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -88,7 +89,7 @@ internal sealed class SlashCommandDispatcher
             switch (cmd)
             {
                 case "help":
-                    writer("Commands: /setup /auth /model /agent /config /providers /sessions /fork /plugins /tui /renderer /storage /exit");
+                    writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /fork /plugins /tui /renderer /storage /exit");
                     break;
                 case "setup":
                     await sp.GetRequiredService<OnboardingWizard>().RunAsync(reader, writer);
@@ -106,6 +107,13 @@ internal sealed class SlashCommandDispatcher
                     break;
                 case "config":
                     await new ConfigCommand(configStore, writer).ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
+                    break;
+                case "permissions":
+                    await new PermissionsCommand(
+                        sp.GetRequiredService<IPermissionService>(),
+                        sp.GetRequiredService<IAgentRegistry>(),
+                        configStore, writer, agent, session)
+                        .ExecuteAsync(args, MakeCtx(session, agent, providers, sp, writer, reader));
                     break;
                 case "providers": await ListProviders(sp); break;
                 case "sessions": await ListSessions(sp); break;

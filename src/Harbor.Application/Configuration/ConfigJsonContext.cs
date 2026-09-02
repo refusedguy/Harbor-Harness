@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Permissions;
 
 namespace Harbor.Application.Configuration;
 
@@ -15,7 +16,9 @@ namespace Harbor.Application.Configuration;
 [JsonSerializable(typeof(ProviderConfigEntry))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(Dictionary<string, ProviderConfigEntry>))]
+[JsonSerializable(typeof(Dictionary<string, List<PermissionRule>>))]
 [JsonSerializable(typeof(List<string>))]
+[JsonSerializable(typeof(PermissionRule))]
 internal sealed partial class ConfigJsonContext : JsonSerializerContext
 {
 }

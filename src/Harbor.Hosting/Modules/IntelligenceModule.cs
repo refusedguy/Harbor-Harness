@@ -22,7 +22,8 @@ internal static class IntelligenceModule
         services.AddSingleton<IPermissionService>(sp => new PermissionService(
             sp.GetRequiredService<Harbor.Abstractions.Agents.IAgentRegistry>(),
             sp.GetRequiredService<ILogger<PermissionService>>(),
-            workspaceRoot: Directory.GetCurrentDirectory()));
+            workspaceRoot: Directory.GetCurrentDirectory(),
+            configStore: sp.GetService<IConfigStore>()));
         return services;
     }
 }

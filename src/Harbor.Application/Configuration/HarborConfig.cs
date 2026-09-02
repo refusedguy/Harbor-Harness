@@ -46,6 +46,9 @@ public sealed class HarborConfig
     /// <summary>Run limits (max steps per agent run).</summary>
     public RunLimitsConfig Run { get; set; } = RunLimitsConfig.Default;
 
+    /// <summary>Persisted per-agent permission overrides (user decisions from Ask prompts).</summary>
+    public Dictionary<string, List<PermissionRule>> Permissions { get; set; } = new();
+
     /// <summary>API keys per provider.</summary>
     public Dictionary<string, string> ApiKeys { get; set; } = new();
 
@@ -200,7 +203,8 @@ public sealed class HarborConfig
         MaxSteps = Run.MaxSteps,
         CostLimit = Cost.Limit,
         Compaction = Compaction,
-        SecondaryModel = SecondaryModel
+        SecondaryModel = SecondaryModel,
+        Permissions = Permissions.Count == 0 ? null : Permissions
     };
 
     /// <summary>
@@ -274,6 +278,7 @@ public sealed class RawConfigDto
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
     [JsonPropertyName("secondaryModel")] public string? SecondaryModel { get; set; }
+    [JsonPropertyName("permissions")] public Dictionary<string, List<PermissionRule>>? Permissions { get; set; }
 }
 
 /// <summary>
@@ -324,6 +329,7 @@ public static class ConfigNormalizer
                 ApplyPresentation(config, raw);
                 ApplyTooling(config, raw);
                 ApplyLimits(config, raw);
+                ApplyPermissions(config, raw);
                 return config;
             });
     }
@@ -419,5 +425,11 @@ public static class ConfigNormalizer
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;
         if (raw.Providers is not null) config.Providers = raw.Providers;
+    }
+
+    private static void ApplyPermissions(HarborConfig config, RawConfigDto raw)
+    {
+        if (raw.Permissions is null) return;
+        config.Permissions = raw.Permissions;
     }
 }
