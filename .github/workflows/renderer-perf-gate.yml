@@ -38,7 +38,7 @@ jobs:
       # Flip to 1 (on a self-hosted perf runner) to enforce the 5% rule:
       # HARBOR_PERF_BASELINE_STRICT: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
