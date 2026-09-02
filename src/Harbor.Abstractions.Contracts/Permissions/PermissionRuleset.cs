@@ -454,4 +454,11 @@ public interface IPermissionService
     /// <param name="agentName">The agent name to look up.</param>
     /// <returns>The agent's ruleset.</returns>
     public PermissionRuleset GetRuleset(string agentName);
+
+    /// <summary>
+    ///     Persist the current in-memory permission decisions to the config store.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success, or failure with an error message.</returns>
+    public Task<Result> SaveAsync(CancellationToken ct = default);
 }

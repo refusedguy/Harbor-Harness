@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Config.Tests;
@@ -357,5 +358,48 @@ public class JsonConfigStoreTests
         string path = JsonConfigStore.GetDefaultPath();
         await Assert.That(path).Contains(".harbor");
         await Assert.That(Path.GetFileName(path)).IsEqualTo("config.json");
+    }
+
+    [Test]
+    public async Task SaveAsync_LoadAsync_PermissionsRoundtrip()
+    {
+        string path = NewTempConfigPath();
+        try
+        {
+            var store = new JsonConfigStore(path, NullLogger<JsonConfigStore>.Instance);
+            var config = new HarborConfig
+            {
+                Provider = "kilocode",
+                Model = "kilocode/tencent/hy3:free",
+            };
+            config.Permissions["code"] = new List<PermissionRule>
+            {
+                new("bash", "*", PermissionAction.Allow),
+                new("write", "src/*", PermissionAction.Allow)
+            };
+            config.Permissions["plan"] = new List<PermissionRule>
+            {
+                new("bash", "cat *", PermissionAction.Allow)
+            };
+
+            var saveResult = await store.SaveAsync(config);
+            await Assert.That(saveResult.IsSuccess).IsTrue();
+
+            var loaded = await store.LoadAsync();
+            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded.Value.Permissions.ContainsKey("code")).IsTrue();
+            await Assert.That(loaded.Value.Permissions["code"].Count).IsEqualTo(2);
+            await Assert.That(loaded.Value.Permissions["code"][0].Permission).IsEqualTo("bash");
+            await Assert.That(loaded.Value.Permissions["code"][0].Pattern).IsEqualTo("*");
+            await Assert.That(loaded.Value.Permissions["code"][0].Action).IsEqualTo(PermissionAction.Allow);
+            await Assert.That(loaded.Value.Permissions["plan"][0].Permission).IsEqualTo("bash");
+            await Assert.That(loaded.Value.Permissions["plan"][0].Pattern).IsEqualTo("cat *");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+            string? dir = Path.GetDirectoryName(path);
+            if (dir is not null && Directory.Exists(dir)) Directory.Delete(dir, true);
+        }
     }
 }

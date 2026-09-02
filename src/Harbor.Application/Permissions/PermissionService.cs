@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Linq;
+using Harbor.Application.Configuration;
 using Harbor.Application.Resources;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Application.Permissions;
@@ -11,6 +13,7 @@ public sealed class PermissionService : IPermissionService
     private readonly ILogger<PermissionService> _logger;
     private readonly Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? _userAsker;
     private readonly string? _workspaceRoot;
+    private readonly IConfigStore? _configStore;
 
     /// <summary>
     ///     Persisted user decisions (A2): agent name → rule key ("toolName:argPath") → the
@@ -32,16 +35,26 @@ public sealed class PermissionService : IPermissionService
     ///     outside the workspace is downgraded to <see cref="PermissionAction.Ask" />.
     ///     When <see langword="null" />, relative paths resolve against the process working directory.
     /// </param>
+    /// <param name="configStore">Optional config store for persisting permission decisions across sessions.</param>
     public PermissionService(
         IAgentRegistry agents,
         ILogger<PermissionService> logger,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? userAsker = null,
-        string? workspaceRoot = null)
+        string? workspaceRoot = null,
+        IConfigStore? configStore = null)
     {
         _agents = agents;
         _logger = logger;
         _userAsker = userAsker;
         _workspaceRoot = workspaceRoot;
+        _configStore = configStore;
+
+        if (_configStore is not null)
+        {
+#pragma warning disable RS0030
+            LoadPersistedAsync().GetAwaiter().GetResult();
+#pragma warning restore RS0030
+        }
     }
 
     /// <inheritdoc />
@@ -178,6 +191,68 @@ public sealed class PermissionService : IPermissionService
         }
 
         return ruleset.Merge(new PermissionRuleset(persistedRules));
+    }
+
+    private async Task LoadPersistedAsync()
+    {
+        if (_configStore is null) return;
+
+        var loadResult = await _configStore.LoadAsync().ConfigureAwait(false);
+        if (loadResult.IsFailure)
+        {
+            _logger.LogWarning("Failed to load persisted permissions: {Error}", loadResult.Error);
+            return;
+        }
+
+        var config = loadResult.Value;
+        if (config.Permissions is null || config.Permissions.Count == 0) return;
+
+        foreach (var (agentKey, rules) in config.Permissions)
+        {
+            var byRule = new ConcurrentDictionary<string, PermissionRule>();
+            foreach (var rule in rules)
+            {
+                string ruleKey = $"{rule.Permission}:{rule.Pattern}";
+                byRule[ruleKey] = rule;
+            }
+            _persisted[agentKey] = byRule;
+        }
+
+        _logger.LogInformation("Loaded {Count} persisted permission rule(s) for {AgentCount} agent(s)",
+            config.Permissions.Values.Sum(list => list.Count), config.Permissions.Count);
+    }
+
+    /// <summary>
+    ///     Persist the current in-memory permission decisions to the config store.
+    ///     Call this after the user changes permissions via the UI or slash commands.
+    /// </summary>
+    public async Task<Result> SaveAsync(CancellationToken ct = default)
+    {
+        if (_configStore is null)
+            return Result.Failure("No config store configured — permissions cannot be persisted.");
+
+        var permissions = new Dictionary<string, List<PermissionRule>>();
+        foreach (var (agentKey, byRule) in _persisted)
+        {
+            if (byRule.IsEmpty) continue;
+            var rules = new List<PermissionRule>();
+            foreach (var kvp in byRule)
+            {
+                rules.Add(kvp.Value);
+            }
+            permissions[agentKey] = rules;
+        }
+
+        var updateResult = await _configStore.UpdateAsync(c =>
+        {
+            c.Permissions = permissions;
+            return c;
+        }, ct).ConfigureAwait(false);
+        if (updateResult.IsFailure)
+        {
+            _logger.LogWarning("Failed to save persisted permissions: {Error}", updateResult.Error);
+        }
+        return updateResult;
     }
 
     /// <summary>Raw argument extraction (legacy, un-normalized). Kept for compatibility.</summary>

@@ -75,8 +75,6 @@ internal sealed class ReplRunner
 
         _logger.LogInformation("Interactive REPL starting — renderer={RendererType}", renderer.GetType().Name);
         await renderer.InitializeAsync().ConfigureAwait(false);
-        _logger.LogDebug("Renderer initialized, subscribing to event bus");
-        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         var configResult = await configStore.LoadAsync().ConfigureAwait(false);
         var config = configResult.IsSuccess ? configResult.Value : HarborConfig.Default;
@@ -140,9 +138,6 @@ internal sealed class ReplRunner
                     raw, sp, renderer, agent, agentRegistry, configStore, authStore, providers, sessionResult.Value).ConfigureAwait(false);
                 if (outcome.ShouldQuit)
                 {
-                    // Record the requested exit code; the renderer owns its
-                    // input loop and ends the session through its own quit
-                    // mechanism. The recorded code wins over the renderer's.
                     slashExitCode = outcome.ExitCode;
                 }
             });
@@ -155,6 +150,9 @@ internal sealed class ReplRunner
             _logger.LogInformation("Interactive loop ended with exit code {ExitCode}", exitCode);
             return exitCode;
         }
+
+        _logger.LogDebug("Renderer initialized, subscribing to event bus");
+        eventBus.Subscribe(async (evt, c) => await renderer.RenderAsync(evt, c).ConfigureAwait(false));
 
         _logger.LogInformation("Non-interactive renderer — entering line REPL");
         int lineExitCode = await RunLineReplAsync(renderer, agent, sp, configStore, authStore, providers, agentRegistry, sessionResult.Value).ConfigureAwait(false);
