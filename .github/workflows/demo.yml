@@ -94,7 +94,7 @@ jobs:
 
       - name: Commit regenerated GIFs (push to dev/master only)
         if: github.event_name == 'push'
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(demo): regenerate README GIFs [skip ci]"
           file_pattern: "assets/demo/*-compressed.gif"
