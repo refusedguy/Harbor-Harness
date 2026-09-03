@@ -1,6 +1,6 @@
 # Avalonia Accessibility Audit — Harbor Desktop
 
-Date: 2026-09-03
+Date: 2026-09-04
 Scope: `apps/Harbor.App.Avalonia/` + shared `Harbor.Ui.Framework.Rendering/Widgets/`
 Standard: WCAG 2.1 AA
 
@@ -8,7 +8,7 @@ Standard: WCAG 2.1 AA
 
 | Area | Status | Notes |
 |------|--------|-------|
-| AutomationProperties.Name | Partial | 8 controls have explicit names; ~70 interactive controls lack `Name` |
+| AutomationProperties.Name | Partial | 7 controls have explicit names; ~80 interactive controls lack `Name` |
 | AutomationProperties.HelpText | Missing | No `HelpText` found on any complex widget |
 | AutomationProperties.AutomationId | Partial | 20+ overlays/panels have IDs; most interactive controls lack them |
 | Keyboard navigation | Partial | ListBoxItem containers set `IsTabStop="False"`; no explicit `TabIndex` on focusable controls |
@@ -17,23 +17,192 @@ Standard: WCAG 2.1 AA
 | Screen reader announcements | Missing | Status changes, toasts, streaming state changes have no live-region announcements |
 | Semantic roles | Partial | Most controls use default Avalonia roles; no custom `AutomationProperties.ControlType` overrides |
 
-## Controls With Existing Accessibility Properties
+## Per-View Audit
 
-The following controls already have accessibility properties set:
-
-| Control | File | Property | Value |
+### `MainWindow.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
 |---|---|---|---|
-| `HeroInputBox` | `ChatView.axaml` | `AutomationProperties.Name` | `"Chat input"` |
-| `InputBox` (docked) | `ChatView.axaml` | `AutomationProperties.Name` | `"Message input"` |
-| Send button | `ChatView.axaml` | `AutomationProperties.Name` | `"Send message"` |
-| Stop button | `ChatView.axaml` | `AutomationProperties.Name` | `"Stop generation"` |
-| Chat/Code/Sessions tabs | `MainWindow.axaml` | `AutomationProperties.Name` | `"Chat tab"`, `"Code tab"`, `"Sessions tab"` |
-| `SegmentedControl` | `SegmentedControl.axaml` | `AutomationProperties.AutomationId` | `"SegmentedControl"` |
-| Overlay panels | `MainWindow.axaml` | `AutomationProperties.AutomationId` | `Overlay_CommandPalette`, `Overlay_SettingsPanel`, etc. |
-| Activity rail buttons | `ActivityRailView.axaml` | `AutomationProperties.AutomationId` | `Rail_ToggleButton`, `Rail_BoardButton`, etc. |
-| Sessions flyout controls | `SessionsFlyoutView.axaml` | `AutomationProperties.AutomationId` | `SessionsFlyout_NewSessionButton`, `SessionsFlyout_SearchBox`, `SessionsFlyout_List` |
-| Toast container | `ToastNotificationsView.axaml` | `AutomationProperties.AutomationId` | `ToastNotifications` |
-| Status bar model picker | `StatusBarView.axaml` | `AutomationProperties.AutomationId` | `StatusBar_ModelPickerButton` |
+| Chat tab RadioButton | `"Chat tab"` | — | ✓ |
+| Code tab RadioButton | `"Code tab"` | — | ✓ |
+| Sessions tab RadioButton | `"Sessions tab"` | — | ✓ |
+| Overlay_CommandPalette | AutomationId only | — | Needs `Name` |
+| Overlay_SettingsPanel | AutomationId only | — | Needs `Name` |
+| Overlay_ProviderBrowser | AutomationId only | — | Needs `Name` |
+| Overlay_DiffView | AutomationId only | — | Needs `Name` |
+| Overlay_TokenUsage | AutomationId only | — | Needs `Name` |
+| Overlay_FocusSession | AutomationId only | — | Needs `Name` |
+| Overlay_SessionsFlyout | AutomationId only | — | Needs `Name` |
+
+### `ChatView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| HeroInputBox (empty state) | `"Chat input"` | — | ✓ |
+| InputBox (docked) | `"Message input"` | — | ✓ |
+| Send button | `"Send message"` | — | ✓ |
+| Stop button | `"Stop generation"` | — | ✓ |
+| TimelineList ListBox | — | — | Needs `Name="Chat history"` |
+| PullIndicator | — | — | Decorative, no action needed |
+
+### `SettingsView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Close button (✕) | — | — | Needs `Name="Close settings"` |
+| Theme ComboBox | — | — | Needs `Name="Theme"` |
+| Storage backend ComboBox | — | — | Needs `Name="Storage backend"` |
+| Log level ComboBox | — | — | Needs `Name="Log level"` |
+| Default provider TextBox | — | — | Needs `Name="Default provider"` |
+| Default model TextBox | — | — | Needs `Name="Default model"` |
+| Font family TextBox | — | — | Needs `Name="Font family"` |
+| Ollama host TextBox | — | — | Needs `Name="Ollama host"` |
+| Per-provider API key TextBox | — | — | Needs `Name="API key for {provider}"` |
+| Save button | — | — | Needs `Name="Save settings"` |
+| Cancel button | — | — | Needs `Name="Cancel"` |
+| Re-run setup wizard button | — | — | Needs `Name="Re-run onboarding"` |
+| Provider model picker | — | — | Needs `Name="Browse models"` |
+
+### `OnboardingWindow.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Provider CheckBox items | — | — | Needs `Name="Select {provider} provider"` |
+| API key TextBox | — | — | Needs `Name="API key"` |
+| Test connection button | — | — | Needs `Name="Test connection"` |
+| Model ComboBox | — | — | Needs `Name="Default model"` |
+| Model TextBox (fallback) | — | — | Needs `Name="Model ID"` |
+| Dark theme RadioButton | — | — | Needs `Name="Dark theme"` |
+| Light theme RadioButton | — | — | Needs `Name="Light theme"` |
+| System theme RadioButton | — | — | Needs `Name="System theme"` |
+| Back button | — | — | Needs `Name="Back"` |
+| Next/Finish button | — | — | Needs `Name="Next"` / `"Finish"` |
+| Skip button | — | — | Needs `Name="Skip onboarding"` |
+
+### `CommandPaletteView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| QueryBox TextBox | — | — | Needs `Name="Command search"` |
+| Results ListBox | — | — | Needs `Name="Command results"` |
+| Backdrop | — | — | Decorative |
+
+### `CodeEditorView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Tab close buttons (×) | — | — | Needs `Name="Close {filename} tab"` |
+| Open button | — | — | Needs `Name="Open file"` |
+| Save button | — | — | Needs `Name="Save file"` |
+| Editor (AvaloniaEdit) | — | — | Needs `Name="Code editor"` |
+| Inline edit TextBox | — | — | Needs `Name="Describe the change"` |
+| Accept button | — | — | Needs `Name="Accept inline edit"` |
+| Reject button | — | — | Needs `Name="Reject inline edit"` |
+
+### `DiffView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Left TextBox | — | — | Needs `Name="Before text"` |
+| Right TextBox | — | — | Needs `Name="After text"` |
+| Compute button | — | — | Needs `Name="Compute diff"` |
+| Close button | — | — | Needs `Name="Close diff viewer"` |
+
+### `ComposerView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| InputBox TextBox | — | — | Needs `Name="Composer input"` |
+| Send button | — | — | Needs `Name="Send message"` |
+| Stop button | — | — | Needs `Name="Stop generation"` |
+
+### `TokenUsageView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Clear button | — | — | Needs `Name="Clear token usage"` |
+| Close button | — | — | Needs `Name="Close token usage"` |
+
+### `ProviderBrowserView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Close button | — | — | Needs `Name="Close provider browser"` |
+| Providers ListBox | — | — | Needs `Name="Provider list"` |
+| Models ItemsControl | — | — | Needs `Name="Model list"` |
+
+### `ActivityRailView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Rail_ToggleButton | AutomationId only | — | Needs `Name="Toggle sidebar"` |
+| Rail_BoardButton | AutomationId only | — | Needs `Name="Sessions"` |
+| Rail_SearchButton | AutomationId only | — | Needs `Name="Search"` |
+| Rail_DiffButton | AutomationId only | — | Needs `Name="Diff drawer"` |
+| Rail_ThemeButton | AutomationId only | — | Needs `Name="Toggle theme"` |
+| Rail_SettingsButton | AutomationId only | — | Needs `Name="Settings"` |
+| Refresh button | — | — | Needs `Name="Refresh file tree"` |
+| FileTreeView TreeView | — | — | Needs `Name="File tree"` |
+
+### `SessionsFlyoutView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| NewSessionButton | AutomationId only | — | Needs `Name="New session"` |
+| SearchBox TextBox | AutomationId only | — | Needs `Name="Search sessions"` |
+| Sessions ListBox | AutomationId only | — | Needs `Name="Session list"` |
+
+### `StatusBarView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| ModelPickerButton | AutomationId only | — | Needs `Name="Select model"` |
+
+### `SessionCardView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Kebab menu button | — | — | Needs `Name="Session actions"` |
+
+### `RightDrawerView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Close button (✕) | — | — | Needs `Name="Close panel"` |
+
+### `TitleBarView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| CommandPaletteTrigger | AutomationId only | — | Needs `Name="Command palette"` |
+| ThemeButton | AutomationId only | — | Needs `Name="Toggle theme"` |
+| SettingsButton | AutomationId only | — | Needs `Name="Settings"` |
+
+### `FocusSessionView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Exit Focus Mode button | — | — | Needs `Name="Exit focus mode"` |
+
+### `ToastNotificationsView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| ToastNotifications container | AutomationId only | — | Needs `Name="Toast notifications"` + `LiveSetting="Assertive"` |
+
+### `TerminalPaneControl.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| OutputBox TextBox | — | — | Needs `Name="Terminal output"` |
+| InputBox TextBox | — | — | Needs `Name="Terminal input"` |
+
+### `FloatingTerminalPaneWindow.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| Single button | — | — | Needs `Name="Single pane"` |
+| SplitHorizontal button | — | — | Needs `Name="Split horizontal"` |
+| SplitVertical button | — | — | Needs `Name="Split vertical"` |
+| OpenPane button | — | — | Needs `Name="Open pane"` |
+| CloseLastPane button | — | — | Needs `Name="Close pane"` |
+
+### `BoardView.axaml`
+| Control | AutomationProperties.Name | AutomationProperties.HelpText | Notes |
+|---|---|---|---|
+| ItemsControl (cards) | — | — | Needs `Name="Session board"` |
+
+### Reusable Components (no interactive controls, purely presentational)
+| Component | File | Notes |
+|---|---|---|
+| `ChatBubble` | `Components/ChatBubble.axaml` | Purely presentational — no interactive controls |
+| `EmptyState` | `Components/EmptyState.axaml` | CTA slot is populated by parent view; component itself has no interactive controls |
+| `StatusBadge` | `Components/StatusBadge.axaml` | Purely presentational |
+| `StatusDot` | `Components/StatusDot.axaml` | Purely presentational |
+| `Kbd` | `Components/Kbd.axaml` | Purely presentational |
+| `SessionRow` | `Components/SessionRow.axaml` | Purely presentational row for session list |
+| `HdsStyles/*` | `Components/HdsStyles/*.axaml` | Pure XAML styles — no interactive controls |
+| `TitleBarStyles.axaml` | `Chrome/TitleBarStyles.axaml` | Pure XAML styles — no interactive controls |
 
 ## Critical Gaps
 
@@ -43,7 +212,8 @@ The following controls already have accessibility properties set:
 
 | View | Control | Recommended Name |
 |---|---|---|
-| `MainWindow.axaml` | Tab RadioButtons | Already have names — no action needed |
+| `MainWindow.axaml` | Overlay panels | `"Command palette"`, `"Settings"`, `"Provider browser"`, `"Diff viewer"`, `"Token usage"`, `"Focus mode"`, `"Sessions"` |
+| `ChatView.axaml` | TimelineList | `"Chat history"` |
 | `SettingsView.axaml` | Theme ComboBox | `"Theme"` |
 | `SettingsView.axaml` | Storage backend ComboBox | `"Storage backend"` |
 | `SettingsView.axaml` | Log level ComboBox | `"Log level"` |
@@ -51,7 +221,7 @@ The following controls already have accessibility properties set:
 | `SettingsView.axaml` | Default model TextBox | `"Default model"` |
 | `SettingsView.axaml` | Font family TextBox | `"Font family"` |
 | `SettingsView.axaml` | Ollama host TextBox | `"Ollama host"` |
-| `SettingsView.axaml` | API key TextBox (per-provider) | `"API key for {provider}"` |
+| `SettingsView.axaml` | Per-provider API key TextBox | `"API key for {provider}"` |
 | `SettingsView.axaml` | Close button | `"Close settings"` |
 | `SettingsView.axaml` | Save button | `"Save settings"` |
 | `SettingsView.axaml` | Cancel button | `"Cancel"` |
@@ -66,9 +236,10 @@ The following controls already have accessibility properties set:
 | `OnboardingWindow.axaml` | Skip button | `"Skip onboarding"` |
 | `CommandPaletteView.axaml` | Search TextBox (`QueryBox`) | `"Command search"` |
 | `CommandPaletteView.axaml` | Results ListBox | `"Command results"` |
-| `CodeEditorView.axaml` | Editor TextBox (AvaloniaEdit) | `"Code editor"` |
+| `CodeEditorView.axaml` | Tab close buttons | `"Close {filename}"` |
 | `CodeEditorView.axaml` | Open button | `"Open file"` |
 | `CodeEditorView.axaml` | Save button | `"Save file"` |
+| `CodeEditorView.axaml` | Editor TextBox (AvaloniaEdit) | `"Code editor"` |
 | `CodeEditorView.axaml` | Inline edit TextBox | `"Describe the change"` |
 | `CodeEditorView.axaml` | Accept button | `"Accept inline edit"` |
 | `CodeEditorView.axaml` | Reject button | `"Reject inline edit"` |
@@ -85,27 +256,32 @@ The following controls already have accessibility properties set:
 | `ProviderBrowserView.axaml` | Providers ListBox | `"Provider list"` |
 | `ProviderBrowserView.axaml` | Models ItemsControl | `"Model list"` |
 | `ActivityRailView.axaml` | Toggle button | `"Toggle sidebar"` |
-| `ActivityRailView.axaml` | Board/Sessions button | `"Sessions"` |
+| `ActivityRailView.axaml` | Board button | `"Sessions"` |
 | `ActivityRailView.axaml` | Search button | `"Search"` |
 | `ActivityRailView.axaml` | Diff button | `"Diff drawer"` |
 | `ActivityRailView.axaml` | Theme button | `"Toggle theme"` |
 | `ActivityRailView.axaml` | Settings button | `"Settings"` |
 | `ActivityRailView.axaml` | Refresh button | `"Refresh file tree"` |
+| `ActivityRailView.axaml` | FileTreeView | `"File tree"` |
 | `SessionsFlyoutView.axaml` | New session button | `"New session"` |
 | `SessionsFlyoutView.axaml` | Search TextBox | `"Search sessions"` |
 | `SessionsFlyoutView.axaml` | Session ListBox | `"Session list"` |
 | `StatusBarView.axaml` | Model picker button | `"Select model"` |
 | `SessionCardView.axaml` | Kebab menu button | `"Session actions"` |
-| `ProviderModelPicker.axaml` | Search TextBox | `"Search models or providers"` |
-| `ProviderModelPicker.axaml` | Provider Expander headers | `"{provider} models, auth: {status}"` |
-| `ProviderModelPicker.axaml` | Model selection buttons | `"Select {model}"` |
-| `ToolCallCardView.axaml` | Expander toggle | `"Tool call details for {tool}"` |
-| `HdsDiffCompact.axaml` | Click-to-expand border | `"Diff preview, click to expand"` |
-| `CodeBlock.axaml` | Copy button | `"Copy code"` |
-| `TypewriterStreamingText.axaml` | Streaming text region | `"Streaming response"` |
-| `Sparkline.axaml` | Chart canvas | `"Token usage chart"` |
-| `MarkdownRenderer.axaml` | Markdown region | `"Message content"` |
+| `RightDrawerView.axaml` | Close button | `"Close panel"` |
+| `TitleBarView.axaml` | Command palette trigger | `"Command palette"` |
+| `TitleBarView.axaml` | Theme button | `"Toggle theme"` |
+| `TitleBarView.axaml` | Settings button | `"Settings"` |
 | `FocusSessionView.axaml` | Exit Focus Mode button | `"Exit focus mode"` |
+| `ToastNotificationsView.axaml` | Toast container | `"Toast notifications"` |
+| `TerminalPaneControl.axaml` | OutputBox | `"Terminal output"` |
+| `TerminalPaneControl.axaml` | InputBox | `"Terminal input"` |
+| `FloatingTerminalPaneWindow.axaml` | Single button | `"Single pane"` |
+| `FloatingTerminalPaneWindow.axaml` | SplitHorizontal button | `"Split horizontal"` |
+| `FloatingTerminalPaneWindow.axaml` | SplitVertical button | `"Split vertical"` |
+| `FloatingTerminalPaneWindow.axaml` | OpenPane button | `"Open pane"` |
+| `FloatingTerminalPaneWindow.axaml` | CloseLastPane button | `"Close pane"` |
+| `BoardView.axaml` | Session cards ItemsControl | `"Session board"` |
 
 ### 2. Missing `AutomationProperties.HelpText` on complex controls
 
@@ -124,6 +300,8 @@ The following controls already have accessibility properties set:
 | `CommandPaletteView` | `"Command palette. Type to search commands, use arrow keys to navigate results, Enter to execute."` |
 | `CodeEditorView` | `"Code editor. Open a file with Ctrl+O, save with Ctrl+S. Use Tab to switch panels."` |
 | `TerminalPaneControl` | `"Terminal pane. Type commands in the input field. Output is read-only."` |
+| `SettingsView` | `"Settings panel. Change theme, provider, model, and storage options."` |
+| `DiffView` | `"Diff viewer. Enter before and after text, then click Compute to see the diff."` |
 
 ### 3. Keyboard navigation gaps
 
@@ -134,6 +312,7 @@ The following controls already have accessibility properties set:
 - Modal overlays (CommandPalette, Settings, DiffView, ProviderBrowser, FocusSession, TokenUsage) lack explicit focus trapping — `FocusManager` should move focus INTO the modal on open and back to the trigger on close
 - `Expander` toggle in `ToolCallCardView` has no explicit keyboard affordance beyond default (Space/Enter toggles, but no visible focus indicator in the header)
 - `SessionCardView` kebab menu button has no explicit `AutomationProperties.Name` — screen reader announces only "Button"
+- `TitleBarView` command palette trigger has `AutomationProperties.AutomationId` but no `AutomationProperties.Name`
 
 ### 4. Live regions / dynamic announcements
 
@@ -180,7 +359,7 @@ The following controls already have accessibility properties set:
 
 ## Recommendations
 
-1. **P0:** Add `AutomationProperties.Name` to all 70+ interactive controls listed in §1
+1. **P0:** Add `AutomationProperties.Name` to all ~80 interactive controls listed in §1
 2. **P0:** Fix HarborDark theme `TextTertiaryColor` / `TextMutedColor` contrast to ≥ 4.5:1
 3. **P1:** Add `AutomationProperties.HelpText` to complex widgets listed in §2
 4. **P1:** Implement focus trapping for all modal overlays (CommandPalette, Settings, DiffView, ProviderBrowser, FocusSession, TokenUsage)
