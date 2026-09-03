@@ -22,7 +22,11 @@
 11. [CodeBlock](#codeblock)
 12. [MarkdownRenderer](#markdownrenderer)
 13. [ProviderModelPicker](#providermodelpicker)
-14. [Platform-agnostic helpers](#platform-agnostic-helpers)
+14. [HdsDiffCompact](#hdsdiffcompact)
+15. [StatusSegmentBar](#statussegmentbar)
+16. [HDS style primitives](#hds-style-primitives)
+17. [Cell-renderer widgets (platform-agnostic)](#cell-renderer-widgets-platform-agnostic)
+18. [Platform-agnostic helpers](#platform-agnostic-helpers)
 
 ---
 
@@ -148,6 +152,10 @@
 
 **Binds to:** `ItemsSource` (list of options), `SelectedItem` (two-way).
 
+**Accessibility notes:**
+- Has `AutomationProperties.AutomationId="SegmentedControl"`.
+- ListBox items are non-tab-stop (`IsTabStop="False"`) to avoid trapping keyboard focus.
+
 ---
 
 ## EmptyState
@@ -157,7 +165,18 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Components/EmptyState.axaml(.cs)`
 
-**Props:** `Icon` (`string`), `Title` (`string`), `Description` (`string`), `Command` (`ICommand?`), `CtaText` (`string?`).
+**Props:** `Icon` (`string`), `Title` (`string`), `Subtitle` (`string`), `Cta` (`object?`), `Suggestions` (`IEnumerable<EmptyStateSuggestion>?`).
+
+**Usage (Avalonia):**
+```xml
+<comp:EmptyState Title="What are we building today?"
+                 Subtitle="Harbor runs local-first agents..."
+                 Icon="{StaticResource IcMessage}">
+    <comp:EmptyState.Cta>
+        <TextBox x:Name="HeroInputBox" ... />
+    </comp:EmptyState.Cta>
+</comp:EmptyState>
+```
 
 ---
 
@@ -172,6 +191,11 @@
 - `ToolName`, `IconText`, `StatusPill`, `DurationText`
 - `StatusBrushKey` (resource key string — resolved by `BrushKeyConverter`)
 - `IsExpanded`, `ArgsPreview`, `ResultPreview`
+- `DiffPreview`, `IsDiffTool` (controls inline `HdsDiffCompact` visibility)
+
+**Accessibility notes:**
+- Expander header uses static text `"details"`; consider binding to a localized string.
+- No `AutomationProperties.Name` on the Expander toggle.
 
 ---
 
@@ -179,7 +203,7 @@
 
 **Purpose:** Compact inline chart (no axes) for token-usage history in the status bar.
 
-**Avalonia only**:
+**Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/Sparkline.axaml(.cs)`
 
 **Props:** `Values` (`IEnumerable<double>?`), `StrokeBrush` (`IBrush?`).
@@ -190,7 +214,7 @@
 
 **Purpose:** Animated streaming text with a blinking cursor — used for the live streaming buffer.
 
-**Avalonia only**:
+**Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/TypewriterStreamingText.axaml(.cs)`
 
 **Props:** `Text` (`string`), `IsStreaming` (`bool`).
@@ -201,10 +225,13 @@
 
 **Purpose:** Syntax-highlighted code block (used by `MarkdownRenderer` for fenced code).
 
-**Avalonia only**:
+**Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/CodeBlock.axaml(.cs)`
 
 **Props:** `Code` (`string`), `Language` (`string`).
+
+**Accessibility notes:**
+- Copy button has no `AutomationProperties.Name`.
 
 ---
 
@@ -212,7 +239,7 @@
 
 **Purpose:** Renders a markdown string into native Avalonia controls.
 
-**Avalonia only**:
+**Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/MarkdownRenderer.axaml(.cs)` (decomposed R31)
 
 **Internal structure (R31 decomposition):**
@@ -232,10 +259,386 @@
 
 **Purpose:** Searchable picker for provider + model selection with auth-status indicators.
 
-**Avalonia only**:
+**Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/ProviderModelPicker.axaml(.cs)`
 
 **Binds to:** `Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel`.
+
+**Accessibility notes:**
+- Search `TextBox` lacks `AutomationProperties.Name`.
+- Provider/model `ListBox` items lack `AutomationProperties.Name`.
+
+---
+
+## HdsDiffCompact
+
+**Purpose:** Collapsed diff preview (max N lines) with click-to-expand semantics. Used inside `ToolCallCardView` to show tool args/result diffs without overwhelming the card.
+
+**Avalonia only:**
+`apps/Harbor.App.Avalonia/Views/Controls/HdsDiffCompact.axaml(.cs)`
+
+**Props:**
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `DiffText` | `string` | `""` | Raw unified diff text |
+| `MaxLines` | `int` | `6` | Maximum lines to show before truncating |
+
+**Events:**
+| Event | Description |
+|---|---|
+| `ExpandRequested` | Raised when the user clicks the compact view to expand the full diff |
+
+**Usage (Avalonia):**
+```xml
+<ctrl:HdsDiffCompact DiffText="{Binding DiffText}"
+                     MaxLines="6"
+                     ExpandRequested="OnDiffExpandRequested"/>
+```
+
+---
+
+## StatusSegmentBar
+
+**Purpose:** Width-aware status bar segment packer + renderer for the footer bar. Packs
+`StatusSeg` items into a fixed-width row, dropping flexible segments right-to-left
+when the row overflows, then character-cutting the widest survivor.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/StatusSegmentBar.cs`
+
+**Types:**
+
+| Type | Kind | Description |
+|---|---|---|
+| `StatusAccent` | `enum` | Color accent: `Neutral`, `Dim`, `Accent`, `Success`, `Warning`, `Error` |
+| `StatusSeg` | `record struct` | One typed segment: `Text`, `Accent`, `FixedPriority` |
+| `StatusBarMode` | `enum` | Footer machine mode: `Idle`, `Running`, `AwaitingApproval`, `Compacting` |
+| `SegWidth` | `internal static class` | Wide-rune-aware text width via `UnicodeWidth.Width` |
+| `StatusBarLayout` | `static class` | Truncation algorithm: `Fit(Span<StatusSeg>, int width)` returns survivor count |
+
+**Usage (cell renderer):**
+```csharp
+Span<StatusSeg> workspace = stackalloc StatusSeg[8];
+int n = statusViewModel.BuildSegments(workspace);
+StatusBarLayout.Fit(workspace, terminalWidth);
+StatusBarWidget.Paint(buffer, rect, workspace[..n]);
+```
+
+---
+
+## HDS style primitives
+
+**Purpose:** Theme-aware Avalonia style primitives used across the desktop shell.
+These are pure XAML styles (no code-behind) applied via CSS-like `Classes` on
+standard Avalonia controls. All colors resolve through `DynamicResource` tokens
+defined in `Themes/Hds/`.
+
+**Files:**
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsCard.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsButton.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsChip.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsPill.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsFlyout.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/HdsTextBox.axaml`
+- `apps/Harbor.App.Avalonia/Views/Components/HdsStyles/Tooltip.axaml`
+
+### HdsCard
+
+**Classes:** `hds-card`, `hds-card.hoverable`, `hds-card-elevated`
+
+| Class | Effect |
+|---|---|
+| `hds-card` | `BgPanelElevated` fill, `RadiusLg`, `ShadowSm`, no border |
+| `hds-card.hoverable` | `ShadowMd` on `:pointerover` |
+| `hds-card-elevated` | `BgApp` fill, `ShadowLg` |
+
+**Usage:**
+```xml
+<Border Classes="hds-card">
+    <!-- card content -->
+</Border>
+```
+
+### HdsButton
+
+**Classes:** `hds-primary`, `hds-secondary`, `hds-ghost`, `hds-danger`, `hds-icon-28`, `hds-icon-36`
+
+| Class | Effect |
+|---|---|
+| `hds-primary` | Accent fill, `TextOnAccent` foreground, `RadiusMd` |
+| `hds-secondary` | Transparent + `BorderSubtle` border, hover = `BgHover` |
+| `hds-ghost` | Transparent, `AccentPrimary` foreground |
+| `hds-danger` | `StateError` fill, `TextOnAccent` foreground |
+| `hds-icon-28` / `hds-icon-36` | Fixed 28px / 36px circular icon button |
+
+**Focus indicator:** `:focus-visible` applies `AccentPrimaryBrush` 2px border (WCAG 2.4.7).
+
+**Usage:**
+```xml
+<Button Classes="hds-primary" Content="Save"/>
+<Button Classes="hds-icon-28" Content="✕"/>
+```
+
+### HdsChip
+
+**Classes:** `hds-chip`, `hds-chip.selected`
+
+| Class | Effect |
+|---|---|
+| `hds-chip` | Transparent + `BorderSubtle`, `RadiusSm`, `TextTertiary` |
+| `hds-chip:hover` | `BgHover` fill, `TextPrimary` |
+| `hds-chip.selected` | `AccentPrimary` fill, `TextOnAccent`, semi-bold |
+
+**Usage:**
+```xml
+<Button Classes="hds-chip" Content="Filter"/>
+<Button Classes="hds-chip selected" Content="Active"/>
+```
+
+### HdsPill
+
+**Classes:** `hds-pill`
+
+| State | Effect |
+|---|---|
+| Default | Transparent + `AccentPrimary` border, `RadiusFull` |
+| `:hover` | `BgHover` fill |
+| `:pressed` | Opacity 0.9 |
+| `:disabled` | Opacity 0.5, `TextTertiary` + `BorderSubtle` |
+
+**Usage:**
+```xml
+<Button Classes="hds-pill" Content="Tag"/>
+```
+
+### HdsFlyout
+
+**Targets:** `MenuFlyoutPresenter`, `MenuItem`, `Separator`
+
+| Selector | Effect |
+|---|---|
+| `MenuFlyoutPresenter` | `BgPanelElevated`, `BorderSubtle`, `Radius12`, width 200 |
+| `MenuItem` | 32px min height, `Hand` cursor, `BgHover` on `:pointerover` |
+| `Separator` | `BorderSubtle` 1px height |
+
+**Usage:**
+```xml
+<MenuFlyout>
+    <MenuItem Header="Open" InputGesture="Ctrl+O"/>
+    <Separator/>
+    <MenuItem Header="Exit"/>
+</MenuFlyout>
+```
+
+### HdsTextBox
+
+**Classes:** `hds-textbox`, `hds-flush`, `hds-search`
+
+| Class | Effect |
+|---|---|
+| `hds-textbox` | `BgInput` fill + `BorderSubtle`, `Radius` from token, focus = `AccentPrimary` border |
+| `hds-flush` | Transparent, hairline bottom border only, focus = 2px accent bottom |
+| `hds-search` | Adds `PaddingInputSearch` (left icon + right cancel) |
+
+**Usage:**
+```xml
+<TextBox Classes="hds-textbox" Watermark="Search..."/>
+<TextBox Classes="hds-flush" Watermark="Filter"/>
+```
+
+### Tooltip
+
+**Target:** `ToolTip`
+
+| Property | Value |
+|---|---|
+| `Background` | `BgPanelElevatedBrush` |
+| `Foreground` | `TextPrimaryBrush` |
+| `CornerRadius` | `RadiusSm` |
+| `Padding` | `PaddingTooltip` |
+| `Opacity` transition | `EaseFast` (150 ms fade-in) |
+
+**Usage:**
+```xml
+<TextBlock Text="Hover me">
+    <ToolTipService.ToolTip>
+        <ToolTip Content="Helpful hint"/>
+    </ToolTipService.ToolTip>
+</TextBlock>
+```
+
+---
+
+## Cell-renderer widgets (platform-agnostic)
+
+These types live in `src/Harbor.Ui.Framework.Rendering/Widgets/` and power the
+cell-based terminal renderer (SpectreTUI / ConsoleEx). They have no Avalonia
+XAML surface; the catalog lists them for completeness because they are reusable
+render primitives shared across all TUI renderers.
+
+### IChatBlock
+
+**Purpose:** One typed cell of the chat timeline. Implemented by `UserBlock`,
+`SystemBlock`, `DiffBlock`, `ApprovalGateView`, and streaming blocks.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`
+
+**Contract:**
+| Member | Signature | Description |
+|---|---|---|
+| `Kind` | `string` | Stable kind tag ("user", "assistant", "tool-call", "system", "diff", "approval", ...) |
+| `IsStreamContinuation` | `bool` | True while the block is the live streaming tail |
+| `BudgetBytes` | `int` | Rough resident size for timeline eviction |
+| `Measure` | `BlockMeasure Measure(int width)` | Height in rows for `width` columns |
+| `CheapEstimate` | `int CheapEstimate(int width)` | O(length) off-screen layout guess |
+| `Paint` | `void Paint(in BlockPaintContext ctx)` | Paints into the clip rect |
+| `RawText` | `string RawText()` | Copy-friendly plain text |
+
+### BlockMeasure / BlockPaintContext
+
+**Purpose:** Height report and paint input for a chat block.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`
+
+```csharp
+public readonly record struct BlockMeasure(int MinLines, int MaxLines, bool IsExact)
+{
+    public static BlockMeasure Exact(int lines) => new(lines, lines, true);
+    public static BlockMeasure Estimate(int min, int max) => new(min, max, false);
+    public int BestGuess => Math.Max(1, IsExact ? MinLines : (MinLines + MaxLines) / 2);
+}
+
+public readonly struct BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick)
+{
+    public ScreenBuffer Buffer { get; }
+    public Rect Rect { get; }
+    public long Tick { get; }
+}
+```
+
+### UserBlock / SystemBlock
+
+**Purpose:** User prompt block (`› ` prefix + bold body) and dim italic system
+notice (session events, compaction, errors).
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/BasicBlocks.cs`
+
+```csharp
+public sealed class UserBlock : IChatBlock { public UserBlock(string text); ... }
+public sealed class SystemBlock : IChatBlock { public SystemBlock(string text); ... }
+```
+
+### ApprovalGateView
+
+**Purpose:** Interactive permission card in the chat timeline. Shows which tool
+wants approval, what it targets, and the key bindings. Implements
+`IFocusTarget` so the host `FocusRouter` can traverse it via Tab.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/ApprovalGateView.cs`
+
+**Props / State:**
+| Member | Type | Description |
+|---|---|---|
+| `ToolName` | `string` | Tool requesting approval |
+| `IsPending` | `bool` | True until a decision is recorded |
+| `Decision` | `ApprovalChoice` | `None` / `Approve` / `Deny` / `AlwaysAllow` |
+| `PulseBirthTick` | `long` | Frame tick for warn-glow pulse (-1 when inactive) |
+
+**Events:**
+| Event | Description |
+|---|---|
+| `DecisionRecorded` | Raised exactly once when a decision is recorded |
+
+**Key bindings:** `y`/`Enter` approve, `n`/`Escape` deny, `a` always-allow.
+
+### DiffBlock / UnifiedDiffParser
+
+**Purpose:** Strict unified-diff reader + chat block renderer. Right-aligned
+gutter numbers + per-kind color + word-level emphasis for paired changes.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/DiffBlock.cs`
+
+```csharp
+public enum DiffLineKind : byte { Context, Add, Delete, HunkHeader, FileHeader }
+public readonly record struct DiffLine(DiffLineKind Kind, int OldNo, int NewNo, string Text);
+public static class UnifiedDiffParser { public static IReadOnlyList<DiffLine> Parse(string diffText); }
+```
+
+### WordDiff
+
+**Purpose:** Whitespace-token intraline diff between a removed and an added row
+(git `--word-diff` equivalent). Projects each side independently around matched
+anchors.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/WordDiff.cs`
+
+```csharp
+public enum WordSegKind : byte { Equal, Deleted, Added }
+public readonly record struct WordSeg(WordSegKind Kind, string Text);
+public sealed record WordDiffSides(IReadOnlyList<WordSeg> Removed, IReadOnlyList<WordSeg> Inserted);
+public static class WordDiff { public static WordDiffSides Segment(string oldLine, string newLine); }
+```
+
+### StatusViewModel / StatusBarWidget
+
+**Purpose:** Typed status payload for the footer bar. `BuildSegments` packs a
+reusable workspace span; `StatusBarWidget.Paint` blits fitted segments with
+accent colors.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs`
+
+```csharp
+public sealed class StatusViewModel
+{
+    public string Model { get; set; }
+    public string? Cost { get; set; }
+    public string? Tokens { get; set; }
+    public string? Retry { get; set; }
+    public StatusBarMode Mode { get; set; }
+    public AgentPhase Phase { get; set; }
+    public int BuildSegments(Span<StatusSeg> workspace);
+}
+
+public static class StatusBarWidget
+{
+    public static void Paint(ScreenBuffer buffer, Rect rect, ReadOnlySpan<StatusSeg> segs);
+}
+```
+
+### PanelFx
+
+**Purpose:** HDS v1 motion primitives for the cell renderer: entrance fades/slides,
+approval warn-glow pulse, status-accent crossfades. Pure functions of monotonic
+frame ticks — no timers, no allocations.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/PanelFx.cs`
+
+```csharp
+public static class PanelFx
+{
+    public const int FadeMs = 150;
+    public const int SlideMs = 300;
+    public static readonly int FadeFrames = 9;
+    public static readonly int SlideFrames = 18;
+    public static double EaseOut(double t);
+    public static double Progress(long startTick, long nowTick, int durationFrames);
+    public static double WarnPulse(long birthTick, long nowTick);
+    public static CellStyle WarnTone(long birthTick, long nowTick);
+    public static CellStyle WithAlpha(CellStyle style, double alpha);
+    public static void BlendRegion(ScreenBuffer buffer, Rect region, double alpha);
+}
+```
+
+### MascotPhases (AgentPhase / MascotReaction)
+
+**Purpose:** Fine-grained agent phase and one-shot event reaction enums for the
+mascot renderer.
+
+**File:** `src/Harbor.Ui.Framework.Rendering/Widgets/MascotPhases.cs`
+
+```csharp
+public enum AgentPhase : byte { Auto, Thinking, ToolCall, Errored, Succeeded }
+public enum MascotReaction : byte { None, ErrorBlink, SuccessBounce, ApprovalWiggle }
+```
 
 ---
 
