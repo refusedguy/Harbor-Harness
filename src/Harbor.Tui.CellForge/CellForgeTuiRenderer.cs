@@ -119,6 +119,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         {
             svm.Status = state.Status;
             svm.Model = state.Model;
+            svm.Provider = state.Provider;
+            svm.Agent = state.AgentName;
             svm.TokensIn = (int)Math.Min(state.Cost.TokensIn, int.MaxValue);
             svm.TokensOut = (int)Math.Min(state.Cost.TokensOut, int.MaxValue);
             svm.Cost = state.Cost.CostUsd;
@@ -128,6 +130,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         {
             chvm.IsStreaming = state.IsStreaming;
             chvm.StreamingText = state.Active.TextBuffer;
+            chvm.ThinkingText = state.Active.ThinkBuffer;
+            chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
         }
     }
 

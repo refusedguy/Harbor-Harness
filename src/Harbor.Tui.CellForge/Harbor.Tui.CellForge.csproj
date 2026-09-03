@@ -6,14 +6,25 @@
     <PackageId>Harbor.Tui.CellForge</PackageId>
     <Description>Harbor TUI — next-generation terminal input layer: kitty keyboard protocol, SGR mouse, bracketed paste with anti-injection, raw stdin byte state-machine parser. BCL-only, AOT-compatible.</Description>
     <PackageTags>harbor;tui;terminal;input;kitty-keyboard;sgr-mouse;bracketed-paste</PackageTags>
-    <!-- ConsoleEx must stay trim/AOT-clean: analyzers enforce zero IL2xxx warnings at build time. -->
+    <!-- CellForge must stay trim/AOT-clean: analyzers enforce zero IL2xxx warnings at build time. -->
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
-    <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- CF-A-001: прямые референсы вместо транзитивных. Projection/Terminal.Abstractions
+         используются в коде (CellForgeTuiRenderer.cs:4-7; Widgets/JsonThemeLoader.cs:2).
+         Services / ViewModels / Sessions / Ui.Framework.Abstractions — поверхность
+         панельной интеграции (TOP-1 #27, эпики B-K), разрешены строкой Harbor.Tui.CellForge
+         в tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs.
+         Harbor.Desktop.Abstractions удалён: в коде CellForge не используется (только csproj). -->
+    <ProjectReference Include="..\Harbor.Ui.Framework.Projection\Harbor.Ui.Framework.Projection.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
+    <ProjectReference Include="..\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.DesignSystem\Harbor.DesignSystem.csproj"/>
     <ProjectReference Include="..\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
     <ProjectReference Include="..\Harbor.CodeGen\Harbor.CodeGen.csproj">
