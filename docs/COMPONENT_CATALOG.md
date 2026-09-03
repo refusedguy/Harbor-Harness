@@ -356,11 +356,12 @@
 
 ---
 
-## StatusSegmentBar
+## StatusBarLayout
 
-**Purpose:** Width-aware status bar segment packer + renderer for the footer bar. Packs
-`StatusSeg` items into a fixed-width row, dropping flexible segments right-to-left
-when the row overflows, then character-cutting the widest survivor.
+**Purpose:** Width-aware status bar segment packer. Packs `StatusSeg` items into a
+fixed-width row, dropping flexible segments right-to-left when the row overflows,
+then character-cutting the widest survivor. This is a pure layout algorithm —
+it does not render; rendering is handled by `StatusBarWidget` in `StatusViewModel.cs`.
 
 **File:** `src/Harbor.Ui.Framework.Rendering/Widgets/StatusSegmentBar.cs`
 
@@ -379,7 +380,7 @@ when the row overflows, then character-cutting the widest survivor.
 Span<StatusSeg> workspace = stackalloc StatusSeg[8];
 int n = statusViewModel.BuildSegments(workspace);
 StatusBarLayout.Fit(workspace, terminalWidth);
-StatusBarWidget.Paint(buffer, rect, workspace[..n]);
+// Rendering is done by StatusBarWidget.Paint in StatusViewModel.cs
 ```
 
 ---
