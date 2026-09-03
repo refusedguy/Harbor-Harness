@@ -18,6 +18,7 @@
     <PackageReference Include="Avalonia.Headless"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
+    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
   </ItemGroup>
 
 </Project>

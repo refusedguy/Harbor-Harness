@@ -128,7 +128,19 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Components/StatusDot.axaml(.cs)`
 
-**Props:** `ColorKey` (`string`), `Size` (`double`).
+**Props:**
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `State` | `SessionDotState` | `Idle` | Semantic state (`Idle`, `Running`, `Thinking`, `Queued`, `Done`, `Error`) — drives brush + pulse animation via pseudo-classes |
+| `Size` | `double` | `8` | Diameter in pixels (clamped ≥ 4) |
+
+**Pseudo-classes (set automatically by `State`):**
+`:idle`, `:running`, `:thinking`, `:queued`, `:done`, `:error`
+
+**Usage (Avalonia):**
+```xml
+<comp:StatusDot State="{Binding Status.State}" Size="8" />
+```
 
 ---
 
@@ -139,7 +151,13 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Components/Kbd.axaml(.cs)`
 
-**Props:** `Text` (`string`) — the key label (e.g. `"⏎"`, `"Ctrl+O"`).
+**Props:** `Keys` (`string`) — the key label (e.g. `"⏎"`, `"Ctrl+O"`).
+
+**Usage (Avalonia):**
+```xml
+<comp:Kbd Keys="Enter" />
+<comp:Kbd Keys="Ctrl+O" />
+```
 
 ---
 
@@ -192,10 +210,22 @@
 - `StatusBrushKey` (resource key string — resolved by `BrushKeyConverter`)
 - `IsExpanded`, `ArgsPreview`, `ResultPreview`
 - `DiffPreview`, `IsDiffTool` (controls inline `HdsDiffCompact` visibility)
+- `DiffFull` (raw unified diff — opened in `DiffView` overlay when `ExpandRequested` fires)
+- `Id` (stable correlation id for coalescing start/end events)
+
+**Computed properties:**
+- `StatusPill` — `"running"` / `"ok"` / `"err"` / `"?"` based on `Status`
+- `DurationText` — `"340ms"` / `"1.5s"` / `""` based on `Duration`
+- `StatusBrushKey` — `"MochaYellow"` / `"MochaGreen"` / `"MochaRed"` / `"MochaOverlay2"`
+
+**Events:**
+| Event | Description |
+|---|---|
+| `ExpandRequested` | Raised by inner `HdsDiffCompact` when the user clicks to expand the full diff |
 
 **Accessibility notes:**
-- Expander header uses static text `"details"`; consider binding to a localized string.
-- No `AutomationProperties.Name` on the Expander toggle.
+- Expander header uses static text `"details"`; consider binding to a localized string (see G2 in `docs/ACCESSIBILITY.md`).
+- No `AutomationProperties.Name` on the Expander toggle (see G2).
 
 ---
 
