@@ -206,7 +206,23 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/Sparkline.axaml(.cs)`
 
-**Props:** `Values` (`IEnumerable<double>?`), `StrokeBrush` (`IBrush?`).
+**Props:**
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `Values` | `IEnumerable<double>?` | `null` | Data points to render (minimum 2 required) |
+| `StrokeBrush` | `IBrush?` | `null` | Line color; when a `SolidColorBrush`, a trailing gradient is auto-built |
+
+**Behavior:**
+- Kinetic animation: when values change, the line smoothly interpolates from the previous state to the new state over ~250ms using a `DispatcherTimer` at ~60fps.
+- Endpoint dot pulses gently to reinforce the "live" feel.
+- Auto-scales to the visible min/max range.
+
+**Usage (Avalonia):**
+```xml
+<ctrl:Sparkline Values="{Binding TokenHistory}"
+                Width="60" Height="16"
+                StrokeBrush="{DynamicResource StateWarningBrush}"/>
+```
 
 ---
 
@@ -217,7 +233,23 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/TypewriterStreamingText.axaml(.cs)`
 
-**Props:** `Text` (`string`), `IsStreaming` (`bool`).
+**Props:**
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `Text` | `string` | `""` | The streaming buffer text |
+| `IsStreaming` | `bool` | `false` | True while a message is actively streaming; drives cursor visibility |
+
+**Behavior:**
+- Cursor blinks at ~1.9 Hz (530 ms on/off) while `IsStreaming` is true.
+- Cursor is hidden when idle.
+- Timer is started on `Loaded` and stopped on `Unloaded` — no leaks when the chat view is unloaded.
+- When `AnimationPreferences.AllowAnimation` is false (headless test), the cursor stays solid rather than blinking.
+
+**Usage (Avalonia):**
+```xml
+<ctrl:TypewriterStreamingText Text="{Binding StreamingBuffer}"
+                              IsStreaming="{Binding IsStreaming}" />
+```
 
 ---
 
@@ -228,10 +260,25 @@
 **Avalonia only:**
 `apps/Harbor.App.Avalonia/Views/Controls/CodeBlock.axaml(.cs)`
 
-**Props:** `Code` (`string`), `Language` (`string`).
+**Props:**
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `Code` | `string` | `""` | Raw code text to render |
+| `Language` | `string` | `""` | Language identifier (e.g. `"csharp"`, `"js"`, `"python"`, `"go"`, `"rust"`, `"sql"`) |
+
+**Behavior:**
+- Lightweight tokenizer (keywords, strings, comments, numbers) covering C#/JS/Python/Go/Rust/SQL.
+- Rebuilds `TextBlock.Inlines` synchronously on every `Code` or `Language` change — safe for streaming.
+- Copy button in the header copies the raw code to the clipboard.
 
 **Accessibility notes:**
 - Copy button has no `AutomationProperties.Name`.
+
+**Usage (Avalonia):**
+```xml
+<ctrl:CodeBlock Code="{Binding CodeText}"
+                Language="{Binding Language}" />
+```
 
 ---
 
@@ -264,9 +311,21 @@
 
 **Binds to:** `Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel`.
 
+**Behavior:**
+- Auto-loads providers + models on first visibility (idempotent `LoadCommand`).
+- Search box filters by provider name OR model id/name.
+- Each provider row is expandable, showing auth status + model list.
+- Model selection dispatches `SelectModelCommand` with the selected model as parameter.
+
 **Accessibility notes:**
 - Search `TextBox` lacks `AutomationProperties.Name`.
 - Provider/model `ListBox` items lack `AutomationProperties.Name`.
+
+**Usage (Avalonia):**
+```xml
+<ctrl:ProviderModelPicker DataContext="{Binding Picker}"
+                          Height="380" />
+```
 
 ---
 
