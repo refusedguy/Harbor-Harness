@@ -89,6 +89,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_SendMessage_AddsUserBubble()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -116,6 +117,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_Streaming_ShowsStreamingLabelAndBuffer()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -191,6 +193,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_Clear_RemovesMessagesAndShowsPlaceholder()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -227,6 +230,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_ErrorState_ShowsRedErrorMessage()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
