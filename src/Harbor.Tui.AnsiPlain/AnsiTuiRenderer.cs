@@ -21,7 +21,7 @@ using Microsoft.Extensions.Logging;
 ///         image bytes.
 ///     </para>
 /// </remarks>
-[Harbor.CodeGen.TuiRenderer("ansi")]
+[Harbor.Abstractions.Contracts.TuiRenderer(Backend = "ansi")]
 public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
 {
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger)

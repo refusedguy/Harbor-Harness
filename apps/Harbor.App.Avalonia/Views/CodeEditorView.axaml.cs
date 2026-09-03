@@ -129,9 +129,9 @@ public partial class CodeEditorView : UserControl
         var selection = Editor.TextArea.Selection;
         if (selection.IsEmpty) return;
 
-        var selectedText = selection.GetText();
-        int start = selection.StartOffset;
-        int end = selection.EndOffset;
+        var selectedText = Editor.SelectedText;
+        int start = Editor.SelectionStart;
+        int end = start + selectedText.Length;
 
         if (string.IsNullOrEmpty(selectedText) || start == end) return;
 
@@ -140,7 +140,7 @@ public partial class CodeEditorView : UserControl
 
         Vm.OpenInlineEdit(selectedText, start, end, caretTop);
 
-        _ = Dispatcher.UIThread.InvokeAsync(() =>
+        _ = global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
         {
             if (InlineEditOverlay is null || Vm is null) return;
 

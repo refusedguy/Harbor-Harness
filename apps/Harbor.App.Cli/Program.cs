@@ -124,6 +124,7 @@ public static class Program
             new DaemonCommand(Console.Out, Console.Error),
             new StatusCommand(Console.Out, Console.Error),
             new PluginsCommand(Console.Out, Console.Error),
+            new SkillsCommand(Console.Out, Console.Error),
             new DemoCommand(Console.Out, Console.Error),
         };
         if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)

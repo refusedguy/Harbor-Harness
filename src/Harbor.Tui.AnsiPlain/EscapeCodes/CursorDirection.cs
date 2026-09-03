@@ -1,4 +1,4 @@
-using Harbor.CodeGen;
+using Harbor.Abstractions.Contracts;
 
 namespace Harbor.Tui.AnsiPlain.EscapeCodes;
 

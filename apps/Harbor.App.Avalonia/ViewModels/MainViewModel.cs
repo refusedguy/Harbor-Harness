@@ -566,8 +566,9 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
                 });
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to load directory {Path}", path);
         }
     }
 

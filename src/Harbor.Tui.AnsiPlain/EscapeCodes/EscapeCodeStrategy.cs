@@ -58,35 +58,20 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     public bool SupportsColor => true;
 
-    public static readonly string ResetSeq = EscapeCodes.Reset.ToString();
-    public const int DEBUG_MARKER_ESCAPE_CODES_VISIBLE = 1;
-    public const string Bold = "\x1b[1m";
-    public const string Dim = "\x1b[2m";
-    public const string Italic = "\x1b[3m";
-    public const string Underline = "\x1b[4m";
-    public const string Strike = "\x1b[9m";
+    public string Reset => StyleFlagEscapeCodes.Reset;
 
-    public const string Red = "\x1b[31m";
-    public const string Green = "\x1b[32m";
-    public const string Yellow = "\x1b[33m";
-    public const string Blue = "\x1b[34m";
-    public const string Magenta = "\x1b[35m";
-    public const string Cyan = "\x1b[36m";
+    public string Foreground(TuiColor color) => Color8BitEscapeCodes.ForegroundRgb(color.R, color.G, color.B);
 
-    public string Reset => ResetSeq;
+    public string Background(TuiColor color) => Color8BitEscapeCodes.BackgroundRgb(color.R, color.G, color.B);
 
-    public string Foreground(TuiColor color) => EscapeCodes.ForegroundRgb(color.R, color.G, color.B);
+    public string Style(TuiStyle style) => StyleFlagEscapeCodes.Style(MapStyle(style));
 
-    public string Background(TuiColor color) => EscapeCodes.BackgroundRgb(color.R, color.G, color.B);
-
-    public string Style(TuiStyle style) => EscapeCodes.Style(MapStyle(style));
-
-    public string HideCursor => EscapeCodes.HideCursor.ToString();
-    public string ShowCursor => EscapeCodes.ShowCursor.ToString();
-    public string ClearLine => EscapeCodes.ClearLine.ToString();
-    public string ClearScreen => EscapeCodes.ClearScreen.ToString();
-    public string EnterAlternateScreen => EscapeCodes.EnterAlternateScreen.ToString();
-    public string ExitAlternateScreen => EscapeCodes.ExitAlternateScreen.ToString();
+    public string HideCursor => Color8BitEscapeCodes.HideCursor;
+    public string ShowCursor => Color8BitEscapeCodes.ShowCursor;
+    public string ClearLine => Color8BitEscapeCodes.ClearLine;
+    public string ClearScreen => Color8BitEscapeCodes.ClearScreen;
+    public string EnterAlternateScreen => Color8BitEscapeCodes.EnterAlternateScreen;
+    public string ExitAlternateScreen => Color8BitEscapeCodes.ExitAlternateScreen;
 
     private static StyleFlag MapStyle(TuiStyle style)
     {

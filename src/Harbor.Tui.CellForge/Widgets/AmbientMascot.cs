@@ -107,12 +107,12 @@ public static class AmbientMascot
     /// <summary>Minimum panel width — the 8-cell art plus one pad column.</summary>
     public const int PanelMinWidth = 9;
 
-    private static readonly string[] EarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
-    private static readonly string[] EarsFlat = [" \\___/  ", " \\___/  ", " \\___/  ", " \\___/  "];
-    private static readonly string[] PawsLoaf = [" (____) ", " (____) ", " (____) ", " (____) "];
-    private static readonly string[] PawsKnead = [" d  b   ", "  d  b  ", " d  b   ", "  d  b  "];
-    private static readonly string[] PawsReach = [" \\    / ", " (____) ", " \\    / ", " (____) "];
-    private static readonly string[] PawsWag = ["   /|   ", "  \\|    ", "   /|   ", "  \\|    "];
+    internal static readonly string[] EarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
+    internal static readonly string[] EarsFlat = [" \\___/  ", " \\___/  ", " \\___/  ", " \\___/  "];
+    internal static readonly string[] PawsLoaf = [" (____) ", " (____) ", " (____) ", " (____) "];
+    internal static readonly string[] PawsKnead = [" d  b   ", "  d  b  ", " d  b   ", "  d  b  "];
+    internal static readonly string[] PawsReach = [" \\    / ", " (____) ", " \\    / ", " (____) "];
+    internal static readonly string[] PawsWag = ["   /|   ", "  \\|    ", "   /|   ", "  \\|    "];
 
     /// <summary>Ear row for the mood — flat when the cat sulks.</summary>
     public static string[] PanelEars(MascotMood mood) => mood == MascotMood.Error ? EarsFlat : EarsUp;

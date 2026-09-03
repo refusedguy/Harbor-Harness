@@ -1,6 +1,6 @@
 {
   "sprint": "avalonia",
-  "state": "queued",
+  "state": "running",
   "retries": 0,
   "base": "master",
   "base_sha": "1d86c61",
@@ -28,8 +28,8 @@
     }
   ],
   "name": "avalonia",
-  "head": "babde7e11e7f39d7ca1fe1fba8a39c05a1cf77d7",
-  "last_activity": "2026-09-02T16:00:02+0500",
+  "head": "d1e25f2",
+  "last_activity": "2026-09-03T21:35:48+0500",
   "started_at": "2026-09-02T15:04:15+0500",
   "failures": 1
 }

@@ -121,7 +121,8 @@ public sealed record PermissionRuleset
         new("lsp", "*", PermissionAction.Allow),
         new("patch", "src/*", PermissionAction.Allow),
         new("patch", "*", PermissionAction.Ask),
-        new("task", "*", PermissionAction.Allow)
+        new("task", "*", PermissionAction.Allow),
+        new("skill", "*", PermissionAction.Allow)
     });
 
     /// <summary>

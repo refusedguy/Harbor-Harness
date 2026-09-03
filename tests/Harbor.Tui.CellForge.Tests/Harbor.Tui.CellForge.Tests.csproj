@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

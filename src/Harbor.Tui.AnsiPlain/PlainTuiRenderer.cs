@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 ///     Thin subclass of <see cref="AnsiPlainTuiRenderer"/> selecting
 ///     <see cref="NullEscapeStrategy"/>; all render logic lives in the base.
 /// </summary>
-[Harbor.CodeGen.TuiRenderer("plain")]
+[Harbor.Abstractions.Contracts.TuiRenderer(Backend = "plain")]
 public sealed partial class PlainTuiRenderer : AnsiPlainTuiRenderer
 {
     public PlainTuiRenderer(TextWriter? writer = null)

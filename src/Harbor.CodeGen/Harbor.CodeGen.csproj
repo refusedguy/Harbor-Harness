@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
+    <IsRoslynComponentPackage>true</IsRoslynComponentPackage>
     <RoslynComponent>Harbor.CodeGen</RoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
@@ -10,5 +11,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);RS1041;S1944</NoWarn>
+  </PropertyGroup>
 
 </Project>

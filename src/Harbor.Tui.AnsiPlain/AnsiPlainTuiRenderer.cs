@@ -259,7 +259,7 @@ internal sealed class AnsiPlainRenderContext : ITuiRenderContext
         _writer.Write(codes.Length == 0 ? text : $"\x1b[{codes}m{text}{Strategy.Reset}");
     }
 
-    public void SetCursorPosition(int row, int col) => _writer.Write(EscapeCodes.Position(row, col));
+    public void SetCursorPosition(int row, int col) => _writer.Write(global::Harbor.Tui.AnsiPlain.EscapeCodes.CursorDirectionEscapeCodes.Position(row, col));
 
     public void ClearLine() => _writer.Write(Strategy.ClearLine);
 

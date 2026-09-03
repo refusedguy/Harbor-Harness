@@ -56,10 +56,15 @@
                             <PathIcon Data="{StaticResource IcRefresh}" Width="14" Height="14"/>
                         </Button>
                     </Grid>
-                    <TreeView ItemsSource="{Binding FileTree}" Virtualize="True" Name="FileTreeView"
+                    <TreeView ItemsSource="{Binding FileTree}" Name="FileTreeView"
                               SelectionChanged="FileTreeView_SelectionChanged">
+                        <TreeView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel/>
+                            </ItemsPanelTemplate>
+                        </TreeView.ItemsPanel>
                         <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate DataType="{x:Type vm:FileTreeNode}" ItemsSource="Children">
+                            <TreeDataTemplate ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <PathIcon Width="16" Height="16">
                                         <PathIcon.Data>
@@ -70,7 +75,7 @@
                                                FontSize="{DynamicResource FontSizeSmall}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
-                            </HierarchicalDataTemplate>
+                            </TreeDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </DockPanel>

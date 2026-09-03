@@ -10,6 +10,7 @@
     <ProjectReference Include="../../src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj"/>
     <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj"/>
     <PackageReference Include="Microsoft.Extensions.Logging"/>
+    <PackageReference Include="Moq"/>
   </ItemGroup>
 
 </Project>

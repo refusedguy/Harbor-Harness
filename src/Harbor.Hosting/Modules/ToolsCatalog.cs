@@ -88,6 +88,7 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
+        tb.AddTool(lf => new SkillTool(lf.CreateLogger<SkillTool>()));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner));
