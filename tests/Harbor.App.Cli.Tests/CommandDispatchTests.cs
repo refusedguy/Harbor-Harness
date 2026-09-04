@@ -24,7 +24,7 @@ public class CommandDispatchTests
     public async Task SlashCommandDispatcher_TryHandleAsync_PropagatesSuccessExitCode()
     {
         var fake = new FakeCommand("test", exitCode: 0);
-        var result = await SlashCommandDispatcher.TryHandleAsync(
+        var result = await SlashCommandDispatcherStatic.TryHandleAsync(
             "test", Array.Empty<string>(), new ICommand[] { fake });
         await Assert.That(result).IsEqualTo(0);
     }
@@ -35,7 +35,7 @@ public class CommandDispatchTests
         // The dispatcher used to swallow the command result and always report 0;
         // it must now thread the command's own exit code through.
         var fake = new FakeCommand("test", exitCode: 42);
-        var result = await SlashCommandDispatcher.TryHandleAsync(
+        var result = await SlashCommandDispatcherStatic.TryHandleAsync(
             "test", Array.Empty<string>(), new ICommand[] { fake });
         await Assert.That(result).IsEqualTo(42);
     }
@@ -44,7 +44,7 @@ public class CommandDispatchTests
     public async Task SlashCommandDispatcher_TryHandleAsync_PropagatesOneForFailures()
     {
         var failing = new FakeCommand("failing", exitCode: 1);
-        var result = await SlashCommandDispatcher.TryHandleAsync(
+        var result = await SlashCommandDispatcherStatic.TryHandleAsync(
             "failing", Array.Empty<string>(), new ICommand[] { failing });
         await Assert.That(result).IsEqualTo(1);
     }
@@ -52,7 +52,7 @@ public class CommandDispatchTests
     [Test]
     public async Task SlashCommandDispatcher_TryHandleAsync_ReturnsNull_WhenNoMatch()
     {
-        var result = await SlashCommandDispatcher.TryHandleAsync(
+        var result = await SlashCommandDispatcherStatic.TryHandleAsync(
             "nonexistent", Array.Empty<string>(), Array.Empty<ICommand>());
         await Assert.That(result).IsNull();
     }

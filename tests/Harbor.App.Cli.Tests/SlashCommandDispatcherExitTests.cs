@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.Terminal.Abstractions;
@@ -28,7 +29,9 @@ public class SlashCommandDispatcherExitTests
 
     private static async Task<SlashCommandOutcome> DispatchAsync(string input)
     {
-        using var sp = new ServiceCollection().BuildServiceProvider();
+        using var sp = new ServiceCollection()
+            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
+            .BuildServiceProvider();
         var dispatcher = CreateDispatcher();
         return await dispatcher.HandleAsync(
             input,
