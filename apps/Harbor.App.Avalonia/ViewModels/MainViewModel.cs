@@ -566,9 +566,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
                 });
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Failed to load directory {Path}", path);
+            // Best-effort file-tree scan: unreadable files/directories are skipped.
+            Logger.LogDebug(ex, "Skipping unreadable file-tree entry under: {Path}", path);
         }
     }
 
