@@ -2,6 +2,7 @@ using Avalonia.Media;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Controls;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
 using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 using Microsoft.Extensions.Logging.Abstractions;

@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
+using VmToolCall = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -89,6 +90,32 @@ public sealed class ToolCallBlock : IChatBlock
     public ToolCallStatus Status => _status;
 
     public ToolResultBody? Body => _body;
+
+    /// <summary>
+    /// Framework-level <see cref="VmToolCall"/> snapshot for this block.
+    /// Bridges the pure-paint widget into the shared
+    /// <c>Harbor.Ui.Framework.ViewModels</c> vocabulary so renderers can
+    /// bind against the same status / duration / diff surface used by
+    /// Avalonia / WPF / Blazor.
+    /// </summary>
+    public VmToolCall ViewModel => new()
+    {
+        Id = Info.Id,
+        ToolName = Info.ToolName,
+        ArgsPreview = Info.ArgsSummary,
+        Status = _status switch
+        {
+            ToolCallStatus.Ok => VmToolCallStatus.Success,
+            ToolCallStatus.Error => VmToolCallStatus.Error,
+            _ => VmToolCallStatus.Running,
+        },
+        ResultPreview = _body is null ? string.Empty : _body.Output,
+        Duration = _body?.Duration ?? TimeSpan.Zero,
+        IsDiffTool = Info.DiffFull is not null,
+        DiffFilePath = Info.FilePath,
+        DiffPreview = Info.DiffPreview,
+        DiffFull = Info.DiffFull,
+    };
 
     /// <summary>
     /// Status in the shared <c>Harbor.Ui.Framework.ViewModels</c> vocabulary —
@@ -343,6 +370,8 @@ public sealed class ToolCallBlock : IChatBlock
 
         return sb.ToString();
     }
+
+    public bool HasDiffText => _body?.DiffText is not null;
 }
 
 /// <summary>

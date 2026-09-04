@@ -5,6 +5,7 @@ using Harbor.Tui.RazorConsole.Handlers;
 using Harbor.Tui.RazorConsole.Views;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.RazorConsole;
 /// <summary>

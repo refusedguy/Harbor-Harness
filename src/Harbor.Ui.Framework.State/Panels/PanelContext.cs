@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Ui.Framework.Panels;
 /// <summary>
 ///     Immutable per-frame context handed to <see cref="IPanelProvider.Build" /> and

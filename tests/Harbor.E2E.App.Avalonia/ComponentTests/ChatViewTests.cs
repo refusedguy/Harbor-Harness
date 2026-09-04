@@ -4,12 +4,13 @@ using Harbor.Abstractions.Events;
 using Harbor.App.Avalonia.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
 
-using ChatRole = Harbor.Ui.Framework.State.ChatRole;
+using ChatRole = Harbor.Abstractions.Models.ChatRole;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 

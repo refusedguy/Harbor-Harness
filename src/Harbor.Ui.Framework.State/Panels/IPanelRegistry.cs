@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.Panels;
 /// <summary>

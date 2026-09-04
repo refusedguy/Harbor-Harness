@@ -3,6 +3,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
 
 namespace Harbor.Tui.CellForge.Widgets;

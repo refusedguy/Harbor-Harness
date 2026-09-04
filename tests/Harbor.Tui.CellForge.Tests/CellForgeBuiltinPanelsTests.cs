@@ -3,6 +3,7 @@ using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge.Tests;

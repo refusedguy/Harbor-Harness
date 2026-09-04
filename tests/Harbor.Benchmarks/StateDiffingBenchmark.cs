@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using System.Collections.Immutable;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 namespace Harbor.Benchmarks;
 
 /// <summary>

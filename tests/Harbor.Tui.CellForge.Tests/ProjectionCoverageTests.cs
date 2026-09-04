@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tui.CellForge.Tests;

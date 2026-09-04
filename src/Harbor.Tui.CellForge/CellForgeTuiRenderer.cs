@@ -14,6 +14,7 @@ using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge;
@@ -38,11 +39,21 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// <summary>Input placeholder while the agent is running a prompt.</summary>
     internal const string BusyPlaceholder = "Agent is running… (Esc to stop)";
 
+    /// <summary>
+    /// CF-D-002: host-provided <see cref="ChatScreen"/> so
+    /// <see cref="ProjectStateIntoWidgets"/> can feed projected state into
+    /// <see cref="Widgets.StatusPanel.ProjectedState"/>. Null (default) means
+    /// the renderer is running in a context without a layout tree
+    /// (e.g. event-driven non-interactive path) — projected state is skipped.
+    /// </summary>
+    public ChatScreen? Screen { get; set; }
+
     private readonly UiStore _store;
     private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
     private readonly InputViewModel _inputVm;
     private readonly ComposerController _composer = new();
+    private readonly QuickSwitchSlots _quickSwitchSlots = new();
     private bool _syncingInput;
 
     /// <summary>
@@ -90,10 +101,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     }
 
     /// <summary>
-    /// CF-E-002: registers the 7 cell-native builtin panels. Slot order mirrors
+    /// CF-E-002: registers the 8 cell-native builtin panels. Slot order mirrors
     /// <c>SpectreTuiRenderer.RunInteractiveAsync</c> (Alt+1..9 follow registration
     /// order): help, todo-list, diff-preview, file-tree, token-breakdown,
-    /// diagnostics, logs.
+    /// diagnostics, logs, session-sidebar.
     /// </summary>
     private static void RegisterBuiltinPanels(CellForgePanelRegistry panels)
     {
@@ -104,6 +115,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         panels.Register(new CellForgeTokenBreakdownPanel()); // Alt+5
         panels.Register(new CellForgeDiagnosticsPanel()); // Alt+6
         panels.Register(new CellForgeLogsPanel()); // Alt+7
+        panels.Register(new CellForgeSessionSidebarPanel()); // Alt+8
     }
 
     /// <summary>
@@ -214,8 +226,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         SessionsSnapshot = state.Sessions;
         ActiveSessionIdSnapshot = state.ActiveSessionId;
         SessionsLoading = state.IsLoading;
-        // TODO(CF-B-008): project Sessions/ActiveSessionId/IsLoading into
-        // SideBarView + QuickSwitchSlots instead of these snapshot fields.
+        _quickSwitchSlots.SyncFromStore(state);
+
+        if (Screen is { } screen)
+        {
+            screen.Status.ProjectedState = state;
+            if (screen.Sidebar is SideBarPanel sidebar)
+            {
+                sidebar.State = SideBarView.ProjectFromStore(state);
+            }
+        }
     }
 
     /// <summary>

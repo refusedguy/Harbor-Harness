@@ -1,5 +1,6 @@
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 

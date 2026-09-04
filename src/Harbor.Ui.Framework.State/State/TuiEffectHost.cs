@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Ui.Framework.State;
 /// <summary>

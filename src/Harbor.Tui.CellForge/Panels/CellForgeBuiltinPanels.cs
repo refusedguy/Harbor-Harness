@@ -3,6 +3,7 @@ using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge.Panels;
@@ -750,6 +751,67 @@ public sealed class CellForgeFileTreePanel : IPanelProvider
     }
 
     private sealed record Entry(string Name, string FullPath, bool IsDirectory, bool IsHidden);
+}
+
+// ── session-sidebar (Left/32, Alt+8) ─────────────────────────────────────
+
+/// <summary>
+///     Cell-native session sidebar panel: lists all known sessions from
+///     <see cref="UiState.Sessions"/> with the active session highlighted.
+///     Non-interactive (read-only view).
+/// </summary>
+public sealed class CellForgeSessionSidebarPanel : IPanelProvider
+{
+    /// <inheritdoc />
+    public string Id => "session-sidebar";
+
+    /// <inheritdoc />
+    public string Title => "Sessions";
+
+    /// <inheritdoc />
+    public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Left;
+
+    /// <inheritdoc />
+    public int DefaultSize => 32;
+
+    /// <inheritdoc />
+    public object? Build(PanelContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        var rows = new List<string>(ctx.State.Sessions.Length + 4);
+        rows.Add("Sessions");
+        rows.Add(CellPanelText.Separator);
+        if (ctx.State.Sessions.Length == 0)
+        {
+            rows.Add("(no sessions)");
+            rows.Add("Start a new session to see it here.");
+        }
+        else
+        {
+            int maxVisible = Math.Max(2, ctx.Height - 4);
+            int end = Math.Min(ctx.State.Sessions.Length, maxVisible);
+            for (int i = 0; i < end; i++)
+            {
+                var session = ctx.State.Sessions[i];
+                bool isActive = session.SessionId == ctx.State.ActiveSessionId;
+                string marker = isActive ? "▸" : " ";
+                string line = $"{marker} {CellPanelText.Truncate(session.Title, Math.Max(1, ctx.Width - 3))}";
+                rows.Add(line);
+            }
+
+            if (ctx.State.Sessions.Length > maxVisible)
+            {
+                rows.Add($"  ↓ {ctx.State.Sessions.Length - maxVisible} more below");
+            }
+        }
+
+        rows.Add(CellPanelText.Separator);
+        rows.Add(ctx.State.IsLoading ? "loading…" : $"{ctx.State.Sessions.Length} session(s)");
+        return CellPanelText.Clip(rows, ctx.Width, ctx.Height);
+    }
+
+    /// <inheritdoc />
+    public bool OnKey(UiKey key, PanelContext ctx) => false;
 }
 
 // ── shared row helpers ─────────────────────────────────────────────────────

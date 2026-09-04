@@ -1,6 +1,7 @@
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Tests;
 

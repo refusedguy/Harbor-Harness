@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -15,6 +16,7 @@ public sealed class StreamBlock
     private readonly Queue<QueuedLine> _queue = new();
     private ChunkedBuffer _pending = ChunkedBuffer.Empty;
     private string _synced = string.Empty;
+    private string _thinkBuffer = string.Empty;
     private long _nowMs;
     private int _scanFrom;
 
@@ -25,6 +27,9 @@ public sealed class StreamBlock
 
     /// <summary>Text materialized so far (revealed lines + partial tail).</summary>
     public string SyncedText => _synced;
+
+    /// <summary>Thinking text accumulated so far (not yet revealed).</summary>
+    public string ThinkBuffer => _thinkBuffer;
 
     /// <summary>Char cursor just past everything revealed (the partial-tail start).</summary>
     public int RevealedChars { get; private set; }
@@ -53,6 +58,16 @@ public sealed class StreamBlock
         {
             MaterializePending();
         }
+    }
+
+    public void AppendThinking(string delta)
+    {
+        if (IsFinalized || string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        _thinkBuffer += delta;
     }
 
     /// <summary>Flushes everything still pending; no more deltas accepted.</summary>

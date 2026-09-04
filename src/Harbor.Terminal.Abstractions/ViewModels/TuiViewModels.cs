@@ -312,6 +312,12 @@ public sealed partial class DiffPreviewViewModel : ObservableObject, ITuiViewMod
         if (CurrentIndex < 0) CurrentIndex = 0;
     }
 
+    public void AddDiff(string diffContent)
+    {
+        _diffs.Add(new DiffEntry("diff", diffContent, DateTimeOffset.UtcNow));
+        if (CurrentIndex < 0) CurrentIndex = 0;
+    }
+
     /// <summary>
     ///     Move to the next diff. Bound to the <c>NextDiff</c> command.
     /// </summary>

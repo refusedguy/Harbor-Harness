@@ -1,6 +1,7 @@
 using System.Linq;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Desktop.Abstractions.ViewModels;
 

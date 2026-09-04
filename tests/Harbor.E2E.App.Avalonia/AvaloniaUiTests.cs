@@ -12,6 +12,7 @@ using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using ToolCallVm = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;

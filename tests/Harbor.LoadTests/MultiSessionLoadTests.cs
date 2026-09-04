@@ -4,6 +4,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using TUnit.Assertions;
 
 namespace Harbor.LoadTests;
