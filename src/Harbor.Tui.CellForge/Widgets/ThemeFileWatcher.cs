@@ -55,7 +55,10 @@ public sealed class ThemeFileWatcher : IDisposable
             if (result.IsSuccess)
             {
                 LastApplied = result.Value;
-                TerminalColorPalette.Apply(result.Value);
+                if (_onApplied is null)
+                {
+                    TerminalColorPalette.Apply(result.Value);
+                }
                 _onApplied?.Invoke(result.Value);
             }
             else

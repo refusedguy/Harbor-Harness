@@ -4,20 +4,15 @@ using Harbor.Ui.Framework.Rendering.Widgets;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
-/// <summary>
-/// Panel-mode mascot (sprint mascot-brand T2): a 3-row cat — ears / face /
-/// paws — painted beside the composer via <c>LayoutTree.Split</c>. The face
-/// row is the footer <see cref="AmbientMascot.Frame" />, so the moods stay in
-/// lockstep across modes; mood derivation, event-mood latching and the
-/// accent-ramp crossfade come from the shared <see cref="MascotDirector" />.
-/// Zero allocations: static row banks, span writes, tick-driven like
-/// <see cref="StatusPanel" />.
-/// </summary>
 public sealed class MascotPanel : Panel
 {
     public const string DefaultId = "chat.mascot";
 
     private readonly MascotDirector _director = new();
+    private readonly SpringFx _entranceSpring = new(0.0);
+    private readonly PostFxPipeline _postFx = new();
+    private readonly GlowEffect _glow = new();
+    private bool _entranceArmed;
 
     public MascotPanel(string id, StatusViewModel status, int minWidth = AmbientMascot.PanelMinWidth, int minHeight = AmbientMascot.PanelRows, int priority = 4)
         : base(id, new Size(minWidth, minHeight), priority)
@@ -27,18 +22,30 @@ public sealed class MascotPanel : Panel
 
     public StatusViewModel Vm { get; }
 
-    /// <summary>Frame tick source — incremented once per paint by the pipeline.</summary>
     public long Tick { get; private set; }
 
     public override void Paint(ScreenBuffer buffer)
     {
         Tick++;
+
+        if (!_entranceArmed)
+        {
+            _entranceArmed = true;
+            _entranceSpring.SnapTo(0.0);
+            _entranceSpring.Retarget(1.0);
+        }
+
         if (Rect.Width <= 0 || Rect.Height <= 0)
         {
             return;
         }
 
-        // Panel mode: the panel owns the one-shot event signal.
+        double entrance = _entranceSpring.Step();
+        if (entrance < 1.0)
+        {
+            PanelFx.BlendRegion(buffer, Rect, Math.Clamp(entrance, 0.0, 1.0));
+        }
+
         MascotReaction signal = Vm.ConsumeMascotSignal();
         if (signal != MascotReaction.None)
         {
@@ -70,10 +77,53 @@ public sealed class MascotPanel : Panel
             buffer.SetText(Rect.X, Rect.Y + 2, paws, style);
         }
 
-        // Reaction overlay wins over the mood crossfade while it owns the cat.
         if (!_director.BlendReaction(buffer, Rect, Tick))
         {
             _ = _director.BlendMoodCrossfade(buffer, Rect, Tick);
+        }
+
+        if (entrance >= 1.0)
+        {
+            ApplyPostFx(buffer);
+        }
+    }
+
+    private void ApplyPostFx(ScreenBuffer buffer)
+    {
+        _postFx.Clear();
+        if (_director.TryReactionFrame(Tick, out MascotReaction active, out _))
+        {
+            var accent = active switch
+            {
+                MascotReaction.ErrorBlink => ChatPalette.Error,
+                MascotReaction.SuccessBounce => ChatPalette.Success,
+                _ => ChatPalette.Warning,
+            };
+            _glow.Update(new GlowRegion(Rect, accent, GlowEffect.PeakStrength));
+            _postFx.Set(0, _glow);
+        }
+
+        if (_postFx.Count == 0)
+        {
+            return;
+        }
+
+        for (int y = Rect.Y; y < Rect.Bottom; y++)
+        {
+            for (int x = Rect.X; x < Rect.Right; x++)
+            {
+                var cell = buffer.Get(x, y);
+                if (cell.Width == Cell.WSkip)
+                {
+                    continue;
+                }
+
+                var transformed = _postFx.Transform(x, y, in cell);
+                if (transformed.Fg != cell.Fg || transformed.Bg != cell.Bg)
+                {
+                    buffer.SetStyleAt(x, y, transformed.Style);
+                }
+            }
         }
     }
 }

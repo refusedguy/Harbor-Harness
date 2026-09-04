@@ -91,10 +91,14 @@ public static class AmbientMascot
 
     /// <summary>Frame for the given monotonic tick and mood. Deterministic.</summary>
     public static string Frame(long monotonicTick, MascotMood mood = MascotMood.Idle) =>
-        FramesOf(mood)[FrameIndex(monotonicTick, mood)];
+        IsEnabled ? FramesOf(mood)[FrameIndex(monotonicTick, mood)] : OffFrame;
 
     /// <summary>Display width of the frame (all frames are single-width runes).</summary>
     public static int Width(string frame) => frame.Length;
+
+    public static bool IsEnabled => MascotModeEnv.Value != MascotMode.Off;
+
+    public static string OffFrame => new(' ', 8);
 
     // ── Panel-mode rows (mascot-brand T2) ──────────────────────────────────
     // The panel cat is 3 rows: ears / face / paws. The face row IS the footer

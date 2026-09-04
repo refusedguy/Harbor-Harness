@@ -1,36 +1,11 @@
+using CSharpFunctionalExtensions;
 using Harbor.DesignSystem;
-using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.Services;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
-/// <summary>
-/// Loads custom HDS themes from JSON (Claude-Code pattern) — thin CellForge
-/// adapter over the canonical <see cref="ThemeJson" /> codec in
-/// Harbor.DesignSystem, the single source of truth for the marketplace
-/// format. Every color slot is optional — omitted slots merge over the
-/// currently active theme, so an override file can tweak two accents without
-/// redefining the catalog. Hex colors accept <c>#RGB</c> and <c>#RRGGBB</c>.
-/// </summary>
-public static class JsonThemeLoader
+public sealed class JsonThemeLoader : IThemeService
 {
-    /// <summary>
-    /// Harbor Terminal default (CF-E-016): the HDS v1 terminal token catalog
-    /// pinned 1-to-1 from
-    /// <c>apps/Harbor.App.Avalonia/Themes/Hds/HarborDesignTokens.axaml</c>
-    /// ("HarborDesignTokens" dictionary). Mapping (axaml key → slot):
-    /// AccentColor #39BAE6 → Accent; SuccessColor #7FD962 → Success;
-    /// WarningColor #FFB454 → Warning; ErrorColor #FF6B6B → Error;
-    /// MochaMauve #D2A6FF → Tool; MochaPeach #F29668 → System;
-    /// ChatUserBrush #39BAE6 → User; AppBackgroundBrush #0A0E14 → Background;
-    /// PanelBackgroundBrush #0D1117 → Panel; CardBackgroundBrush #131820 →
-    /// Surface; CardElevatedBackgroundBrush #1A1F2B → Surface2;
-    /// BorderBrush #1F2430 → Border; TextMutedBrush #5C6773 → Muted;
-    /// TextBrush #B3B9C5 → Text. Derived tones (AccentHover #66C8EC,
-    /// AccentPressed #2394C2, Subtext #8D97A3, …) are intentionally NOT pinned —
-    /// the axaml marks them "(derived)" and the 14-slot catalog has no slots
-    /// for them. Chat roles and CostLow/Mid/High live below as aliases of
-    /// these slots (same axaml brush values, no invented hex).
-    /// </summary>
     public static HarborTheme Default { get; } = new HarborTheme(
         "harbor-terminal",
         Accent: new RgbColor(0x39, 0xBA, 0xE6),
@@ -48,77 +23,107 @@ public static class JsonThemeLoader
         Muted: new RgbColor(0x5C, 0x67, 0x73),
         Text: new RgbColor(0xB3, 0xB9, 0xC5));
 
-    /// <summary>Chat user role — axaml <c>ChatUserBrush #39BAE6</c> (= Accent).</summary>
     public static RgbColor ChatUser => Default.Accent;
-
-    /// <summary>Chat assistant role — axaml <c>ChatAssistantBrush #B3B9C5</c> (= Text).</summary>
     public static RgbColor ChatAssistant => Default.Text;
-
-    /// <summary>Chat thinking role — axaml <c>ChatThinkingBrush #5C6773</c> (= Muted).</summary>
     public static RgbColor ChatThinking => Default.Muted;
-
-    /// <summary>Chat tool-call role — axaml <c>ChatToolBrush #D2A6FF</c> (= Tool).</summary>
     public static RgbColor ChatTool => Default.Tool;
-
-    /// <summary>Chat tool-result role — axaml <c>ChatToolResultBrush #7FD962</c> (= Success).</summary>
     public static RgbColor ChatToolResult => Default.Success;
-
-    /// <summary>Chat system role — axaml <c>ChatSystemBrush #F29668</c> (= System).</summary>
     public static RgbColor ChatSystem => Default.System;
-
-    /// <summary>Chat error role — axaml <c>ChatErrorBrush #FF6B6B</c> (= Error).</summary>
     public static RgbColor ChatError => Default.Error;
-
-    /// <summary>Cost low — axaml <c>CostLowBrush/CostLowColor #7FD962</c> (= Success).</summary>
     public static RgbColor CostLow => Default.Success;
-
-    /// <summary>Cost mid — axaml <c>CostMidBrush/CostMidColor #FFB454</c> (= Warning).</summary>
     public static RgbColor CostMid => Default.Warning;
-
-    /// <summary>Cost high — axaml <c>CostHighBrush/CostHighColor #FF6B6B</c> (= Error).</summary>
     public static RgbColor CostHigh => Default.Error;
 
-    /// <summary>Loads and parses a theme file; failure carries the reason.</summary>
-    public static CSharpFunctionalExtensions.Result<HarborTheme> LoadFile(string path)
+    public string Current => TerminalColorPalette.Current.Name;
+    public bool IsDark => TerminalColorPalette.Current.IsDark;
+
+    public void Apply(string theme) => throw new NotImplementedException();
+    public void ApplyDark() => throw new NotImplementedException();
+    public void ApplyLight() => throw new NotImplementedException();
+    public void Toggle() => throw new NotImplementedException();
+    public void ApplyHds(string theme) => throw new NotImplementedException();
+    public void SetThemeVariant(bool isDark) => throw new NotImplementedException();
+
+    public event EventHandler<string>? ThemeJsonApplied;
+
+    public Result<string> LoadJson(string path)
     {
         try
         {
             if (!File.Exists(path))
             {
-                return CSharpFunctionalExtensions.Result.Failure<HarborTheme>($"theme file not found: {path}");
+                return Result.Failure<string>($"theme file not found: {path}");
+            }
+
+            return Result.Success(File.ReadAllText(path));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<string>($"theme load failed: {ex.Message}");
+        }
+    }
+
+    public Result ApplyJson(string json)
+    {
+        var result = Parse(json);
+        if (result.IsSuccess)
+        {
+            TerminalColorPalette.Apply(result.Value);
+            ThemeJsonApplied?.Invoke(this, json);
+        }
+
+        return result.IsSuccess ? Result.Success() : Result.Failure(result.Error);
+    }
+
+    public static Result<HarborTheme> LoadFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return Result.Failure<HarborTheme>($"theme file not found: {path}");
             }
 
             return Parse(File.ReadAllText(path));
         }
         catch (Exception ex)
         {
-            return CSharpFunctionalExtensions.Result.Failure<HarborTheme>($"theme load failed: {ex.Message}");
+            return Result.Failure<HarborTheme>($"theme load failed: {ex.Message}");
         }
     }
 
-    /// <summary>Parses theme JSON, merging over the active theme for omitted slots.</summary>
-    public static CSharpFunctionalExtensions.Result<HarborTheme> Parse(string json)
+    public static Result<HarborTheme> Parse(string json)
     {
         var result = ThemeJson.Parse(json, TerminalColorPalette.Current);
         return result.IsSuccess
-            ? CSharpFunctionalExtensions.Result.Success(result.Theme)
-            : CSharpFunctionalExtensions.Result.Failure<HarborTheme>(result.Error);
+            ? Result.Success(result.Theme)
+            : Result.Failure<HarborTheme>(result.Error);
     }
 
-    /// <summary>
-    /// Parses theme JSON, merging omitted slots over <paramref name="fallback" />
-    /// (typically <see cref="Default" />) instead of the active theme, so an
-    /// override file resolves deterministically regardless of global theme
-    /// state. Never touches <see cref="TerminalColorPalette" />.
-    /// </summary>
-    public static CSharpFunctionalExtensions.Result<HarborTheme> Parse(string json, HarborTheme fallback)
+    public static Result<HarborTheme> Parse(string json, HarborTheme fallback)
     {
         ArgumentNullException.ThrowIfNull(fallback);
         var result = ThemeJson.Parse(json, fallback);
         return result.IsSuccess
-            ? CSharpFunctionalExtensions.Result.Success(result.Theme)
-            : CSharpFunctionalExtensions.Result.Failure<HarborTheme>(result.Error);
+            ? Result.Success(result.Theme)
+            : Result.Failure<HarborTheme>(result.Error);
     }
 
     internal static bool TryParseHex(string hex, out RgbColor color) => ThemeJson.TryParseHex(hex, out color);
+
+    public IDisposable Watch(string path)
+    {
+        var watcher = new ThemeFileWatcher(path, ApplyResult, OnError);
+        return watcher;
+
+        void ApplyResult(HarborTheme theme)
+        {
+            TerminalColorPalette.Apply(theme);
+            ThemeJsonApplied?.Invoke(this, string.Empty);
+        }
+
+        void OnError(string error)
+        {
+        }
+    }
 }

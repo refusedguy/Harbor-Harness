@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.Navigation;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -389,15 +390,15 @@ public static class CommandPaletteCatalog
 
     private static readonly BuiltinDef[] BuiltinDefs =
     [
-        new("Open Session", "Open an existing chat session", "FolderIcon", "open-session"),
+        new("Open Session", "Open an existing chat session", "FolderIcon", OverlayIds.SessionsFlyout),
         new("New Session", "Start a fresh chat session", "PlusIcon", "new-session"),
         new("Branch Session", "Branch the current session at the selected message", "BranchIcon", "branch-session"),
         new("Toggle Theme", "Switch between dark and light", "ThemeIcon", "toggle-theme"),
         new("Open Code Editor", "Open the built-in code editor", "CodeIcon", "open-code-editor"),
-        new("Open Diff View", "Open the diff viewer", "DiffIcon", "open-diff-view"),
-        new("Open Token Usage", "Show per-session token usage and cost", "ChartIcon", "open-token-usage"),
-        new("Open Settings", "Configure providers, theme, fonts", "SettingsIcon", "open-settings"),
-        new("Open Provider Browser", "Browse and configure LLM providers", "ProviderIcon", "open-provider-browser"),
+        new("Open Diff View", "Open the diff viewer", "DiffIcon", OverlayIds.Diff),
+        new("Open Token Usage", "Show per-session token usage and cost", "ChartIcon", OverlayIds.TokenUsage),
+        new("Open Settings", "Configure providers, theme, fonts", "SettingsIcon", OverlayIds.Settings),
+        new("Open Provider Browser", "Browse and configure LLM providers", "ProviderIcon", OverlayIds.ProviderBrowser),
         new("Quit", "Exit Harbor", "QuitIcon", "quit"),
     ];
 
