@@ -1,5 +1,6 @@
 namespace Harbor.Tui.AnsiPlain;
 
+using Harbor.Abstractions.Contracts;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +22,7 @@ using Microsoft.Extensions.Logging;
 ///         image bytes.
 ///     </para>
 /// </remarks>
-[Harbor.Abstractions.Contracts.TuiRenderer(Backend = "ansi")]
+[TuiRenderer(Backend = "ansi")]
 public partial class AnsiTuiRenderer : AnsiPlainTuiRenderer
 {
     public AnsiTuiRenderer(ILogger<AnsiTuiRenderer> logger)

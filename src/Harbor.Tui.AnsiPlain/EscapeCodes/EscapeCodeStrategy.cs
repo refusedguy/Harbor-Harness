@@ -1,6 +1,7 @@
 namespace Harbor.Tui.AnsiPlain.EscapeCodes;
 
 using Harbor.Terminal.Abstractions.Renderers;
+using Terminal = Harbor.Terminal.Abstractions;
 
 /// <summary>
 ///     Escape-code strategy for the unified <c>AnsiPlain</c> renderer
@@ -44,12 +45,19 @@ public interface IEscapeCodeStrategy
     string ClearScreen { get; }
     string EnterAlternateScreen { get; }
     string ExitAlternateScreen { get; }
+
+    /// <summary>
+    ///     CUP cursor positioning (<c>ESC[row;colH</c>, 1-based) or empty when
+    ///     the sink cannot move the cursor.
+    /// </summary>
+    string CursorPosition(int row, int col);
 }
 
 /// <summary>
-///     ANSI SGR escape-code strategy. Foreground/background are emitted as
-///     truecolor (24-bit) sequences — the same encoding the former
-///     <c>Harbor.Tui.Ansi</c> renderer used inline.
+///     ANSI SGR escape-code strategy. Style/reset constants come from the
+///     generated <c>StyleFlagEscapeCodes</c> (Terminal.Abstractions); truecolor
+///     and DEC private-mode sequences stay hand-written here by design — they
+///     are not enum-based (see CODEGEN_BOILERPLATE.md §2 Constraints).
 /// </summary>
 public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 {
@@ -58,20 +66,63 @@ public sealed class AnsiEscapeStrategy : IEscapeCodeStrategy
 
     public bool SupportsColor => true;
 
-    public string Reset => StyleFlagEscapeCodes.Reset;
+    public string Reset => Terminal.StyleFlagEscapeCodes.Reset;
 
-    public string Foreground(TuiColor color) => Color8BitEscapeCodes.ForegroundRgb(color.R, color.G, color.B);
+    public string Foreground(TuiColor color) => Truecolor("38", color);
 
-    public string Background(TuiColor color) => Color8BitEscapeCodes.BackgroundRgb(color.R, color.G, color.B);
+    public string Background(TuiColor color) => Truecolor("48", color);
 
-    public string Style(TuiStyle style) => StyleFlagEscapeCodes.Style(MapStyle(style));
+    public string Style(TuiStyle style) => SgrParams(style);
 
-    public string HideCursor => Color8BitEscapeCodes.HideCursor;
-    public string ShowCursor => Color8BitEscapeCodes.ShowCursor;
-    public string ClearLine => Color8BitEscapeCodes.ClearLine;
-    public string ClearScreen => Color8BitEscapeCodes.ClearScreen;
-    public string EnterAlternateScreen => Color8BitEscapeCodes.EnterAlternateScreen;
-    public string ExitAlternateScreen => Color8BitEscapeCodes.ExitAlternateScreen;
+    public string HideCursor => HideCursorSeq;
+    public string ShowCursor => ShowCursorSeq;
+    public string ClearLine => ClearLineSeq;
+    public string ClearScreen => ClearScreenSeq;
+    public string EnterAlternateScreen => EnterAlternateScreenSeq;
+    public string ExitAlternateScreen => ExitAlternateScreenSeq;
+
+    public string CursorPosition(int row, int col) =>
+        $"\x1b[{Math.Max(1, row)};{Math.Max(1, col)}H";
+
+    private static string Truecolor(string ground, TuiColor color) =>
+        $"\x1b[{ground};2;{color.R};{color.G};{color.B}m";
+
+    /// <summary>
+    ///     SGR parameter list (e.g. <c>"1;4"</c>), or empty for
+    ///     <see cref="TuiStyle.None" />. Order and codes mirror the former
+    ///     generated <c>FormatStyle</c> so golden frames stay stable.
+    /// </summary>
+    private static string SgrParams(TuiStyle style)
+    {
+        StyleFlag flags = MapStyle(style);
+        if (flags == StyleFlag.None)
+            return string.Empty;
+
+        StringBuilder sb = new(11);
+        AppendParam(ref sb, flags, StyleFlag.Bold, '1');
+        AppendParam(ref sb, flags, StyleFlag.Dim, '2');
+        AppendParam(ref sb, flags, StyleFlag.Italic, '3');
+        AppendParam(ref sb, flags, StyleFlag.Underline, '4');
+        AppendParam(ref sb, flags, StyleFlag.Strike, '9');
+        AppendParam(ref sb, flags, StyleFlag.Reverse, '7');
+        return sb.ToString();
+    }
+
+    private static void AppendParam(ref StringBuilder sb, StyleFlag flags, StyleFlag flag, char code)
+    {
+        if (!flags.HasFlag(flag))
+            return;
+        if (sb.Length > 0)
+            sb.Append(';');
+        sb.Append(code);
+    }
+
+    private const string HideCursorSeq = "\x1b[?25l";
+    private const string ShowCursorSeq = "\x1b[?25h";
+    private const string ClearLineSeq = "\x1b[2K\r";
+    private const string ClearScreenSeq = "\x1b[2J\x1b[H";
+    private const string EnterAlternateScreenSeq = "\x1b[?1049h";
+    private const string ExitAlternateScreenSeq = "\x1b[?1049l";
 
     private static StyleFlag MapStyle(TuiStyle style)
     {
@@ -108,4 +159,5 @@ public sealed class NullEscapeStrategy : IEscapeCodeStrategy
     public string ClearScreen => string.Empty;
     public string EnterAlternateScreen => string.Empty;
     public string ExitAlternateScreen => string.Empty;
+    public string CursorPosition(int row, int col) => string.Empty;
 }

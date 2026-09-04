@@ -166,14 +166,19 @@ public sealed class MoodFrameAttribute : Attribute
 // src/Harbor.Tui.CellForge/Widgets/AmbientMascot.cs
 public enum MascotMood
 {
-    [MoodFrame("IdleFrames", PanelEars = "EarsUp", PanelPaws = "PawsLoaf")]
+    [MoodFrame("AmbientMascot.IdleFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsLoaf")]
     Idle = 0,
 
-    [MoodFrame("WorkingFrames", PanelEars = "EarsUp", PanelPaws = "PawsKnead")]
+    [MoodFrame("AmbientMascot.WorkingFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsKnead")]
     Working = 1,
     ...
 }
 ```
+
+> Bank names are emitted verbatim into the generated dispatch class, so they
+> must resolve from that class's scope: qualify cross-class banks
+> (`AmbientMascot.IdleFrames`). Same-namespace members need no namespace
+> prefix, only the host-class prefix when the bank lives on another class.
 
 ### Generated output
 
