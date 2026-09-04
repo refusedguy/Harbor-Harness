@@ -164,11 +164,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] `harbor skill install/list` CLI commands
 
 **LSP Integration**
-- [ ] LSP client via `OmniSharp.Extensions.LanguageServer.Client`
-- [ ] 10+ builtin language servers (TypeScript, Python, Go, Rust, C#)
-- [ ] Auto-spawn on file open
-- [ ] `diagnostics`, `references`, `definition` tools
-- [ ] LSP-aware `read`/`edit` (inject diagnostics)
+- [x] LSP client (own stdio JSON-RPC implementation, no NuGet — `LspManager`/`LspClient`/`LspServerSession` in `src/Harbor.Lsp/`, AOT-safe source-gen wire format)
+- [x] 11 builtin language servers (TypeScript, Python, Go, Rust, C#, C/C++ via clangd, Java via jdtls, HTML/CSS/JSON via vscode-*-language-server, Lua)
+- [x] Auto-spawn on file open (`LspManager` lazy sessions + `read` tool opens files, `edit` pushes changes)
+- [x] `diagnostics`, `references`, `definition` tools (`lsp` tool, registered when `ILspService` present; graceful degradation with explanatory results when a binary is missing)
+- [x] LSP-aware `read`/`edit` (reads auto-open supported files; edits notify + append a diagnostics summary line)
 
 ### v0.8.0 — Session Management Polish
 
