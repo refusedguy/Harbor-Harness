@@ -13,8 +13,21 @@ public enum ToolCallStatus : byte
     Error = 2,
 }
 
-/// <summary>Identity of the call: stable id + display name + truncated args.</summary>
-public readonly record struct ToolCallInfo(string Id, string ToolName, string ArgsSummary);
+/// <summary>
+/// Identity of the call: stable id + display name + truncated args.
+/// CF-E-011: optional diff-preview surface filled from
+/// <see cref="Rendering.DiffPreview"/> — <c>FilePath</c> extracted from the
+/// args payload, <c>DiffPreview</c> the 6-line inline preview, <c>DiffFull</c>
+/// the full (≤80-line) diff backing the expand path. All optional so existing
+/// call sites stay source-compatible.
+/// </summary>
+public readonly record struct ToolCallInfo(
+    string Id,
+    string ToolName,
+    string ArgsSummary,
+    string? FilePath = null,
+    string? DiffPreview = null,
+    string? DiffFull = null);
 
 /// <summary>
 /// Final outcome of a tool execution. <see cref="DiffText"/> carries a unified
@@ -131,10 +144,14 @@ public sealed class ToolCallBlock : IChatBlock
         int lines = 1;
         if (_body is not null)
         {
-            lines += BodyLineCount();
+            // Mirror Paint: a present DiffText replaces the output body.
             if (_body.DiffText is not null)
             {
                 lines += DiffLineCount();
+            }
+            else
+            {
+                lines += BodyLineCount();
             }
         }
 
@@ -146,10 +163,13 @@ public sealed class ToolCallBlock : IChatBlock
         int lines = 1;
         if (_body is not null)
         {
-            lines += BodyLineCount();
             if (_body.DiffText is not null)
             {
                 lines += DiffLineCount();
+            }
+            else
+            {
+                lines += BodyLineCount();
             }
         }
 
@@ -329,9 +349,19 @@ public sealed class ToolCallBlock : IChatBlock
 /// Minimal unified-diff blitter used by tool-card bodies before the dedicated
 /// <c>DiffBlock</c> lands (W2.3): sign + colored line, no gutter numbers, no
 /// syntax overlay. Pure functions over the diff text.
+/// CF-E-011: inline preview budget mirrors <c>HdsDiffCompact.MaxLines</c>
+/// (Avalonia) — at most <see cref="DiffPreview.MaxPreviewLines"/> content rows,
+/// then a single <c>"… diff truncated"</c> overflow row, so an unbounded
+/// foreign <c>DiffText</c> can no longer blow the card's line budget
+/// (<see cref="DiffPreview.DiffTruncatedSentinel"/> is the single source of
+/// truth for the marker text).
 /// </summary>
 internal static class DiffRenderer
 {
+    internal const int MaxPreviewLines = DiffPreview.MaxPreviewLines;
+
+    internal const string TruncatedMarker = DiffPreview.DiffTruncatedSentinel;
+
     public static int CountLines(string diffText)
     {
         int count = 0;
@@ -343,14 +373,15 @@ internal static class DiffRenderer
             rest = nl < 0 ? default : rest[(nl + 1)..];
         }
 
-        return count;
+        return count > MaxPreviewLines ? MaxPreviewLines + 1 : count;
     }
 
     public static void RenderPlain(string diffText, ScreenBuffer buffer, int x, int y, int maxRows)
     {
         var rest = diffText.AsSpan();
         int row = 0;
-        while (!rest.IsEmpty && row < maxRows)
+        int shown = 0;
+        while (!rest.IsEmpty && row < maxRows && shown < MaxPreviewLines)
         {
             int nl = rest.IndexOf('\n');
             var line = nl < 0 ? rest : rest[..nl];
@@ -373,6 +404,14 @@ internal static class DiffRenderer
 
             buffer.SetText(x, y + row, line, style);
             row++;
+            shown++;
+        }
+
+        // Overflow marker when the preview budget (not the viewport) cut
+        // content — the same trailing row HdsDiffCompact appends past MaxLines.
+        if (!rest.IsEmpty && row < maxRows)
+        {
+            buffer.SetText(x, y + row, TruncatedMarker, ChatPalette.Dim);
         }
     }
 }

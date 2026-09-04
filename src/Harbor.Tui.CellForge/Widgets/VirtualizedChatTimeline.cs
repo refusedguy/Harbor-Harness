@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -210,6 +211,113 @@ public sealed class VirtualizedChatTimeline
     {
         FollowTail = true;
         SnapScroll(TotalHeightAfter(viewportHeight));
+    }
+
+    // ── Store-driven scroll (CF-B-006 + CF-C-002/C-003) ────────────────────
+    // UiState (Harbor.Ui.Framework.State) is the single source of truth for scroll
+    // position: ScrollOffset (0 = pinned to the live tail, grows toward the top),
+    // ViewportLines (visible history rows) and TotalLines (wrapped transcript rows).
+    // These helpers only *build* UiMsg values for the host to dispatch via
+    // UiStore.Dispatch and *read* UiState snapshots — dispatch stays with the host,
+    // so the widget keeps no second scroll authority and the reducer stays pure.
+    // Tail-follow is derived, never stored twice: ScrollOffset == 0 means pinned.
+    // NOTE: CellForgeViewport has no Refresh/PrepareLayout methods (only
+    // RefreshFromConsole/Resize/SetViewportLines/Apply) — layout runs through
+    // TimelineLayoutCache.PrepareLayout via PrepareFrame below; the viewport
+    // object itself is only read by the host, never mutated here.
+
+    /// <summary>PageUp key → store page-up scroll (reducer clamps via SetScroll).</summary>
+    public static UiMsg PageUpMsg() => new UiMsg.KeyInput(ChatAction.ScrollUpPage, new UiKey(UiKeyCode.PageUp));
+
+    /// <summary>PageDown key → store page-down scroll (reducer clamps via SetScroll).</summary>
+    public static UiMsg PageDownMsg() => new UiMsg.KeyInput(ChatAction.ScrollDownPage, new UiKey(UiKeyCode.PageDown));
+
+    /// <summary>Up-arrow key → store single-line scroll up.</summary>
+    public static UiMsg LineUpMsg() => new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
+
+    /// <summary>Down-arrow key → store single-line scroll down.</summary>
+    public static UiMsg LineDownMsg() => new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
+
+    /// <summary>Home key → store jump to the oldest row (offset = max).</summary>
+    public static UiMsg ScrollTopMsg() => new UiMsg.KeyInput(ChatAction.ScrollTop, new UiKey(UiKeyCode.Home));
+
+    /// <summary>End key → store pin to the live tail (offset = 0).</summary>
+    public static UiMsg ScrollBottomMsg() => new UiMsg.KeyInput(ChatAction.ScrollBottom, new UiKey(UiKeyCode.End));
+
+    /// <summary>Pin to the live tail (offset = 0); the reducer also sets WasRunning.</summary>
+    public static UiMsg ResetToTailMsg() => new UiMsg.ScrollResetToTail();
+
+    /// <summary>
+    /// Maps a mouse-wheel tick to the store scroll message. Positive
+    /// <paramref name="delta"/> = wheel up (the <c>IPointerTarget</c> contract) →
+    /// <c>ScrollUpLine</c>; negative → <c>ScrollDownLine</c>; zero → a
+    /// <c>ChatAction.None</c> no-op. Line (not page) granularity: the reducer
+    /// treats both identically (both clamp via <c>SetScroll</c>), and a full page
+    /// per wheel tick is too coarse — hosts that want page steps dispatch
+    /// <see cref="PageUpMsg"/> / <see cref="PageDownMsg"/> (possibly several line
+    /// messages per tick for acceleration).
+    /// </summary>
+    public static UiMsg WheelMsg(int delta) =>
+        delta > 0 ? LineUpMsg() : delta < 0 ? LineDownMsg() : new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+
+    /// <summary>
+    /// Mirrors a store snapshot into <see cref="ScrollY"/> / <see cref="FollowTail"/>
+    /// and runs layout. Viewport height precedence: explicit
+    /// <paramref name="viewportH"/> when positive, else
+    /// <c>state.ViewportLines</c>. <c>state.TotalLines</c> is informational only —
+    /// the authoritative total is the cache's <see cref="TotalHeight"/>, reported
+    /// back to the store via <see cref="MeasureMsgs"/> (geometry flows
+    /// timeline → store, never the reverse). Store offset maps to timeline space
+    /// as <c>ScrollY = max - offset</c> (same convention as
+    /// <c>CellForgeViewport.FirstVisibleRow</c>); a zero offset re-pins the tail.
+    /// Post-layout the view is re-clamped to the freshly measured range without
+    /// re-pinning, so a growing streaming tail cannot yank an unpinned view.
+    /// </summary>
+    public LayoutOutcome ApplyStoreState(UiState state, int width, int viewportH)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        int viewH = viewportH > 0 ? viewportH : Math.Max(0, state.ViewportLines);
+        FollowTail = state.ScrollOffset <= 0;
+        if (!FollowTail)
+        {
+            // Pre-layout snap on the (possibly stale) range keeps the measure
+            // window near the target; the authoritative snap below re-asserts
+            // the store offset against the freshly settled total.
+            SnapScroll(_cache.ClampScrollY(ScrollY, viewH));
+        }
+
+        var outcome = PrepareFrame(width, viewH);
+        if (!FollowTail)
+        {
+            // Fresh max: TotalHeight settles only inside PrepareLayout
+            // (post-Append _virtual[_count] is stale until patched), so the
+            // store-driven position is mapped here. A FullRebuild anchor
+            // restore is intentionally overridden: the store is the source
+            // of truth; clamping (never re-pinning) keeps a growing
+            // streaming tail from yanking an unpinned view.
+            long max = _cache.MaxScrollFor(viewH);
+            SnapScroll(Math.Clamp(max - (long)state.ScrollOffset, 0, max));
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Builds the geometry messages the host dispatches after layout so the store
+    /// tracks the measured viewport (resize path, CF-C-003): <c>Viewport</c> with
+    /// the visible height, <c>HistoryMeasured</c> with the settled total
+    /// (clamped to <c>int.MaxValue</c> — <c>UiState</c> totals are <c>int</c>),
+    /// then <c>ScrollClamp</c> with the measured maximum. Order matters: the
+    /// reducer's <c>Viewport</c>/<c>HistoryMeasured</c> arms do not clamp, so the
+    /// host must always dispatch the trailing <c>ScrollClamp</c> (a shrunken
+    /// viewport otherwise leaves a stale out-of-range offset).
+    /// </summary>
+    public UiMsg[] MeasureMsgs(int viewportH)
+    {
+        int viewH = Math.Max(0, viewportH);
+        int total = (int)Math.Min(TotalHeight, int.MaxValue);
+        int max = (int)Math.Min(_cache.MaxScrollFor(viewH), int.MaxValue);
+        return new UiMsg[] { new UiMsg.Viewport(viewH), new UiMsg.HistoryMeasured(total), new UiMsg.ScrollClamp(max) };
     }
 
     private long TotalHeightAfter(int viewportH) => Math.Max(0, TotalHeight - viewportH);

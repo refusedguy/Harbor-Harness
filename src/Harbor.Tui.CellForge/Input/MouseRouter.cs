@@ -1,4 +1,5 @@
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Input;
 
@@ -86,8 +87,69 @@ public sealed class MouseRouter
         return null;
     }
 
+    // ── Store-driven wheel scroll (CF-B-006 + CF-C-002) ────────────────────
+    // Wheel ticks become UiMsg.KeyInput line-scrolls for UiStore.Dispatch; the
+    // existing Press/Release/Wheel routing above is untouched (targets keep
+    // working). Positive delta = wheel up per the IPointerTarget contract.
+
+    /// <summary>
+    /// Maps a wheel tick to the store scroll message: positive
+    /// <paramref name="delta"/> (wheel up) → <c>ScrollUpLine</c>, negative →
+    /// <c>ScrollDownLine</c>, zero → a <c>ChatAction.None</c> no-op the reducer
+    /// drops. Same mapping as <c>VirtualizedChatTimeline.WheelMsg</c>, kept local
+    /// so Input never depends on Widgets. The host dispatches the result
+    /// (once per tick, or in a loop for acceleration).
+    /// </summary>
+    public static UiMsg WheelToMessage(int delta)
+    {
+        if (delta > 0)
+        {
+            return new UiMsg.KeyInput(ChatAction.ScrollUpLine, new UiKey(UiKeyCode.Up));
+        }
+
+        if (delta < 0)
+        {
+            return new UiMsg.KeyInput(ChatAction.ScrollDownLine, new UiKey(UiKeyCode.Down));
+        }
+
+        return new UiMsg.KeyInput(ChatAction.None, UiKey.Unknown);
+    }
+
     private void Clamp(ref int col, ref int row) =>
         (col, row) = (
             Math.Clamp(col, 0, Math.Max(0, _screenCols - 1)),
             Math.Clamp(row, 0, Math.Max(0, _screenRows - 1)));
+}
+
+/// <summary>
+/// Wheel-only pointer target that forwards ticks to a store-dispatch callback
+/// (CF-C-002): bind it to the timeline rect and wheel events flow into the store
+/// as <c>KeyInput</c> line-scrolls via <see cref="MouseRouter.WheelToMessage"/>.
+/// Press/release are intentional no-ops (selection lives elsewhere). AOT-clean:
+/// no reflection, no allocations beyond the message itself.
+/// </summary>
+public sealed class TimelineWheelTarget : IPointerTarget
+{
+    private readonly Action<UiMsg> _dispatch;
+
+    /// <summary>Create a wheel-forwarding target bound to a timeline rect.</summary>
+    /// <param name="id">Target id for hit-test diagnostics; falls back to "timeline-wheel".</param>
+    /// <param name="dispatch">Store dispatch, e.g. <c>msg => { _ = store.Dispatch(msg); }</c>.</param>
+    public TimelineWheelTarget(string id, Action<UiMsg> dispatch)
+    {
+        Id = string.IsNullOrWhiteSpace(id) ? "timeline-wheel" : id;
+        _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
+    }
+
+    public string Id { get; }
+
+    public void OnPress(int col, int row)
+    {
+    }
+
+    public void OnRelease(int col, int row)
+    {
+    }
+
+    public void OnWheel(int col, int row, int delta) => _dispatch(MouseRouter.WheelToMessage(delta));
 }
