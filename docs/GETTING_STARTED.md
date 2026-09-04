@@ -396,10 +396,12 @@ Full set (`HarborToolSetKind.Full14`, the CLI default — see
 | `ripgrep` | Fast content search via `rg` binary (gitignore-aware) |
 | `tree` | ASCII directory tree (gitignore-aware) |
 | `mcp` | Bridge to registered MCP servers |
+| `read_mcp_resource` | Read an MCP server resource by URI |
+| `mcp_prompt` | Render an MCP server prompt by name |
 | `skill` | Load a SKILL.md skill body by name |
 
 The Avalonia desktop host registers the smaller `Standard10` set (without
-`task`, `webfetch`, `ripgrep`, `mcp`).
+`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`).
 
 ## Agents (modes)
 

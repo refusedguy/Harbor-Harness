@@ -148,11 +148,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] Stdio transport (`McpServerStartInfo.cs`, `ProcessTree.cs`)
 - [x] MCP tools → `ITool` adapter (`McpToolAdapter.cs`, surfaced via tool `mcp`; instructions aggregation — `McpRegistryInstructionsTests.cs`)
 - [x] Config: loading `~/.harbor/mcp.json` (industry schema) — `McpServersConfigLoader.cs` + `McpServersConfig.cs`
-- [ ] HTTP, SSE transports
-- [ ] MCP resources as `read_mcp_resource` tools
-- [ ] MCP prompts as slash-commands
-- [ ] OAuth for MCP servers
-- [ ] Lazy connect, reconnect on failure
+- [x] HTTP, SSE transports (`McpHttpTransport`, `McpSseTransport`, `McpSseParser`, `IMcpRemoteTransport`; lazy connect, retry/backoff, `HARBOR_MCP_OAUTH_TOKEN` Bearer hook)
+- [x] MCP resources as `read_mcp_resource` tools (`McpResourceTool`: `resources/read` with text/blob handling)
+- [x] MCP prompts as tools (`McpPromptTool`: `prompts/get` rendered to text; native slash-command surfacing deferred — the tool output flows into the agent loop the same way)
+- [ ] OAuth for MCP servers (full authorization-code flow; Bearer-via-env placeholder present)
+- [x] Lazy connect, reconnect on failure (per-entry cached transports, stdio respawn on exit)
 
 ### v0.7.0 — Skills & LSP
 

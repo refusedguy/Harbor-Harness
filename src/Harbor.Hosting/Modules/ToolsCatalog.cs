@@ -109,6 +109,8 @@ internal static class ToolsCatalog
         if (full)
         {
             tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));
+            tb.AddTool(lf => new McpResourceTool(mcpRegistry, lf.CreateLogger<McpResourceTool>()));
+            tb.AddTool(lf => new McpPromptTool(mcpRegistry, lf.CreateLogger<McpPromptTool>()));
         }
 
         registry.Freeze();

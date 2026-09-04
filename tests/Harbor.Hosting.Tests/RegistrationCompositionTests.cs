@@ -61,9 +61,10 @@ public class RegistrationCompositionTests
 
         var names = ToolNames(sp);
         // 14 classic tools + lsp (registered for both presets since the LSP
-        // integration landed — 2ddd6ee) + skill (SKILL.md loader).
-        await Assert.That(names.Count).IsEqualTo(16);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp", "skill" })
+        // integration landed — 2ddd6ee) + skill (SKILL.md loader)
+        // + read_mcp_resource/mcp_prompt (MCP resource/prompt surface).
+        await Assert.That(names.Count).IsEqualTo(18);
+        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp", "skill", "read_mcp_resource", "mcp_prompt" })
         {
             await Assert.That(names).Contains(full);
         }
@@ -141,7 +142,7 @@ public class RegistrationCompositionTests
 
         // The published snapshot already includes everything registered during
         // composition → Freeze ran after registration and before publication.
-        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(16);
+        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(18);
     }
 
     // ── Storage presets ──────────────────────────────────────────────────

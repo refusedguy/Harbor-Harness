@@ -63,8 +63,8 @@ src/Harbor.Ui.Framework*/             — TEA-style UI state/reducers/projection
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients + shared-source compat layer
-src/Harbor.Tools.Builtin/             — 14 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp)
+src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage

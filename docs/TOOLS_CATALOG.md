@@ -43,14 +43,14 @@
 
 ## 1. Inventory
 
-Harbor ships **16 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **18 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> registers all 16 tools (14 classic + `lsp` + `skill`); `Standard10` omits the four heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`). The CLI defaults to `Full14`; the Avalonia desktop app uses
+> registers all 18 tools (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt`); `Standard10` omits the six heavier ones (`task`, `webfetch`,
+> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`). The CLI defaults to `Full14`; the Avalonia desktop app uses
 > `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 
 | # | Tool | Mode | Permission | Purpose |
@@ -70,6 +70,9 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 13 | `tree` | Parallel | Allow | ASCII directory tree (gitignore-aware) |
 | 14 | `mcp` | Sequential | Ask | Bridge to a registered MCP server |
 | 15 | `skill` | Parallel | Allow | Load a SKILL.md skill body by name |
+| 16 | `read_mcp_resource` | Parallel | Ask | Read an MCP server resource by URI |
+| 17 | `mcp_prompt` | Parallel | Ask | Render an MCP server prompt by name |
+| 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -840,6 +843,87 @@ files under the two skills roots.
 
 ---
 
+### `read_mcp_resource`
+
+**Description.** Reads an MCP resource (`resources/read`) from a registered server and
+returns its text contents. URIs come from `resources/list` (via the generic `mcp`
+tool). Binary (base64 blob) entries are rejected with a hint to request a text view.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "server": { "type": "string", "description": "Registered MCP server name" },
+    "uri":    { "type": "string", "description": "Resource URI from resources/list (e.g. 'file:///docs/api.md')" }
+  },
+  "required": ["server", "uri"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Read a doc exposed by a filesystem server
+{"server": "docs", "uri": "file:///docs/api.md"}
+
+// 2. Read a schema exposed by a database server
+{"server": "db", "uri": "schema://public/users"}
+```
+
+**Permissions.** Ask (default). Same sandbox reasoning as `mcp` — server data is
+third-party content.
+
+**Mode.** `Parallel` (read-only).
+
+**Tips.**
+- Discover URIs first: `mcp {"server": "db", "method": "resources/list"}`.
+- For binary resources, ask the server for a text view instead.
+
+---
+
+### `mcp_prompt`
+
+**Description.** Renders an MCP prompt (`prompts/get`) from a registered server into
+plain text the agent can follow. Prompt names come from `prompts/list` (via the
+generic `mcp` tool); template variables go through `arguments`. Non-text message
+parts (images, embedded resources) are skipped with a note.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "server":    { "type": "string", "description": "Registered MCP server name" },
+    "name":      { "type": "string", "description": "Prompt name from prompts/list" },
+    "arguments": { "type": "object", "description": "Template variables (optional)" }
+  },
+  "required": ["server", "name"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Render a review checklist prompt
+{"server": "dev", "name": "code-review"}
+
+// 2. Render with template variables
+{"server": "dev", "name": "commit", "arguments": {"style": "conventional"}}
+```
+
+**Permissions.** Ask (default). Same sandbox reasoning as `mcp`.
+
+**Mode.** `Parallel` (read-only).
+
+**Tips.**
+- Discover prompts first: `mcp {"server": "dev", "method": "prompts/list"}`.
+- Check a prompt's required `arguments` in the list output before rendering.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1412,6 +1496,13 @@ Then call a specific tool:
     "args":{"name":"read_file","arguments":{"path":"/tmp/notes.txt"}}
   }
 }
+```
+
+For reads, prefer the fixed-schema wrappers over hand-crafted params:
+
+```jsonc
+{"tool":"read_mcp_resource","args":{"server":"filesystem","uri":"file:///docs/api.md"}}
+{"tool":"mcp_prompt","args":{"server":"dev","name":"code-review"}}
 ```
 
 
