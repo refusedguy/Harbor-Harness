@@ -8,6 +8,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
@@ -44,6 +45,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     private readonly ComposerController _composer = new();
     private bool _syncingInput;
 
+    /// <summary>
+    /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
+    /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
+    /// Registration order is significant — Alt+1..9 hotkey slots follow it.
+    /// All visibility / focus / size state lives in <see cref="UiState"/> (seeded
+    /// via <see cref="CellForgePanelRegistry.EnsureSeeded"/> in
+    /// <see cref="InitializeAsync"/>); the registry itself is registration-only.
+    /// </summary>
+    public CellForgePanelRegistry Panels { get; }
+
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
         StatusBarViewModel? statusVm = null,
@@ -52,6 +63,8 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         : base(logger)
     {
         _store = new UiStore();
+        Panels = new CellForgePanelRegistry();
+        RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
         _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
         _inputVm = ResolveInputVm(inputVm);
@@ -68,10 +81,29 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         : base(logger)
     {
         _store = new UiStore();
+        Panels = new CellForgePanelRegistry();
+        RegisterBuiltinPanels(Panels);
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
         _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
         _inputVm = ResolveInputVm(inputVm);
         Context = new CellForgeRenderContext(backend);
+    }
+
+    /// <summary>
+    /// CF-E-002: registers the 7 cell-native builtin panels. Slot order mirrors
+    /// <c>SpectreTuiRenderer.RunInteractiveAsync</c> (Alt+1..9 follow registration
+    /// order): help, todo-list, diff-preview, file-tree, token-breakdown,
+    /// diagnostics, logs.
+    /// </summary>
+    private static void RegisterBuiltinPanels(CellForgePanelRegistry panels)
+    {
+        panels.Register(new CellForgeHelpPanel()); // Alt+1
+        panels.Register(new CellForgeTodoListPanel()); // Alt+2
+        panels.Register(new CellForgeDiffPreviewPanel()); // Alt+3
+        panels.Register(new CellForgeFileTreePanel()); // Alt+4
+        panels.Register(new CellForgeTokenBreakdownPanel()); // Alt+5
+        panels.Register(new CellForgeDiagnosticsPanel()); // Alt+6
+        panels.Register(new CellForgeLogsPanel()); // Alt+7
     }
 
     /// <summary>
@@ -99,6 +131,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         try
         {
             _store.Changed += OnStoreChanged;
+            // CF-E-002: seed registered panel ids + Hidden states + DefaultSizes
+            // into UiState so the reducer becomes the single source of truth.
+            // Already-known states/sizes survive re-seeding (plugin reload path).
+            _ = Panels.EnsureSeeded(_store);
             Context.HideCursor();
             return base.InitializeAsync(ct);
         }
@@ -139,6 +175,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
     internal PromptBuffer PromptBuffer => _composer.Buffer;
+
+    /// <summary>TEA store owning the <see cref="UiState"/> snapshot (test seam for panel-seeding assertions).</summary>
+    internal UiStore Store => _store;
 
     /// <summary>Last projected session list (test seam; SideBarView/QuickSwitchSlots wiring is CF-B-008).</summary>
     internal ImmutableArray<SessionInfo> SessionsSnapshot { get; private set; } = ImmutableArray<SessionInfo>.Empty;
