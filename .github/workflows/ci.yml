@@ -11,11 +11,14 @@
 #              suites (TUI headless + IPC included).
 #   publish  — self-contained single-file Harbor.App.Cli (linux-x64) upload.
 #
-# NOTE on `dotnet test`: this repo opts into MTP-only mode via global.json
-# (test.runner = Microsoft.Testing.Platform). VSTest-era arguments
-# (--logger, --filter, ...) abort the session with exit code 5 and
-# "Zero tests ran". TUnit test selection uses --treenode-filter; per-test
-# console output comes from --output Detailed.
+# NOTE on running tests: do NOT use `dotnet test` in this repo. The
+# `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
+# (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
+# for every tests/*.Tests project) while the same assemblies run green via
+# direct host execution. So every job below runs test projects as plain
+# executables: `dotnet run --project tests/<Name> -- <mtp-args>`.
+# MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
+# --treenode-filter (TUnit selection), --output Detailed (per-test console).
 name: ci
 
 on:
@@ -173,9 +176,9 @@ jobs:
           echo "|---|---|---|" >> "$summary"
           rc=0
           for p in ${{ matrix.projects }}; do
-            echo "::group::dotnet test $p"
+            echo "::group::dotnet run $p"
             start=$(date +%s)
-            if dotnet test "tests/$p" -c Release $guard; then
+            if dotnet run --project "tests/$p" -c Release -- $guard; then
               status="pass"
             else
               status="FAIL"
@@ -230,8 +233,8 @@ jobs:
           )
           $failed = @()
           foreach ($p in $projects) {
-            Write-Host "::group::dotnet test $p"
-            dotnet test "tests/$p" -c Release
+            Write-Host "::group::dotnet run $p"
+            dotnet run --project "tests/$p" -c Release -- --minimum-expected-tests 1
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
           }

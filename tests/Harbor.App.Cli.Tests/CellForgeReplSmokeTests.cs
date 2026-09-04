@@ -240,12 +240,13 @@ internal static class Golden
 
     public static string Verify(string name, string actualContent)
     {
+        string normalizedActual = Normalize(actualContent);
         string path = Path.Combine(FixtureDir.Value, name + ".golden.txt");
         if (Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1")
         {
             Directory.CreateDirectory(FixtureDir.Value);
-            File.WriteAllText(path, actualContent);
-            return actualContent;
+            File.WriteAllText(path, normalizedActual);
+            return normalizedActual;
         }
 
         if (!File.Exists(path))
@@ -254,8 +255,15 @@ internal static class Golden
                 $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
         }
 
-        return File.ReadAllText(path);
+        return Normalize(File.ReadAllText(path));
     }
+
+    /// <summary>
+    ///     Normalizes environment-dependent line endings so goldens are stable
+    ///     across Windows (CRLF checkout) / Linux (LF checkout) test hosts.
+    /// </summary>
+    public static string Normalize(string s) =>
+        s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
     private static string ResolveFixtureDir()
     {

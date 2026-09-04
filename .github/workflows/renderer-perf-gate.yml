@@ -57,12 +57,12 @@ jobs:
       - name: Build
         run: dotnet build tests/Harbor.Tui.PerfTests -c Release
 
-      # MTP-only dotnet test (opted in via global.json): VSTest-era arguments
-      # such as --logger abort the session with "Zero tests ran", exit 5.
-      # Per-test output (including the [perf] metric lines) comes from
+      # Tests run as plain executables, not via `dotnet test` (its MTP bridge
+      # discovers zero tests in this repo — see ci.yml header). Per-test
+      # output (including the [perf] metric lines) comes from
       # --output Detailed instead.
       - name: Run renderer performance gate
-        run: dotnet test tests/Harbor.Tui.PerfTests -c Release --no-build --output Detailed
+        run: dotnet run --project tests/Harbor.Tui.PerfTests -c Release --no-build -- --output Detailed
 
       - name: Enforce relative 5% regression rule (strict mode only)
         if: env.HARBOR_PERF_BASELINE_STRICT == '1'
