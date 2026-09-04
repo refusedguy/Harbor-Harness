@@ -42,6 +42,16 @@
       "change": "The temp acceptance harness for the two-consecutive-bash-gates criterion was removed before commit 4c7c84f; replaced with three permanent tests: TwoConsecutiveBashGates_ResolveInArrivalOrder_NoZombies (arrival-order routing, no zombie IsPending, id distinctness), RequestApprovalGate_TwoGates_RoutedInArrivalOrder_OnTick (off-thread queue drains both gates in one tick, oldest-first), and Id_IsUniquePerInstance_ForSameToolGates.",
       "tests": "Harbor.Tui.ConsoleEx.Tests 664/664 pass (661 + 3 new)."
     }
+    {
+      "sha": "859b2d0",
+      "task": "Follow-up — BlendRegion wide-cell artifact (missed by 876862b)",
+      "files": [
+        "src/Harbor.Ui.Framework.Rendering/Widgets/PanelFx.cs",
+        "tests/Harbor.Tui.CellForge.Tests/PanelFxTests.cs"
+      ],
+      "change": "876862b fixed SetStyleAt to route WSkip writes to their lead, but PanelFx.BlendRegion still iterated over every cell including WSkip tails. On a tail iteration the loop read the tail's blank/default style (WideTail has Fg=0), faded it, and routed SetStyleAt back to the lead — overwriting the wide glyph with a double-faded blank. BlendRegion now skips WSkip cells; SetStyleAt continues to handle the lead+tail cluster. Added regression test BlendRegion_WideChar_PreservesStyleAcrossLeadAndTail.",
+      "tests": "Harbor.Tui.CellForge.Tests 821/821 pass (820 + 1 new)."
+    }
   ],
   "verification": {
     "independent_recheck": "All three commits re-verified post-hoc: full Harbor.slnx Release build 0 errors / 180 warnings (pre-existing, none in the five touched files); Harbor.Tui.ConsoleEx.Tests 661/661, Harbor.Tui.ConsoleEx.PtyTests 39/39 (×2 after one transient flake), Harbor.App.Cli.Tests 78/78.",
@@ -51,12 +61,13 @@
     "panelfx_flake": "Harbor.Tui.ConsoleEx.Tests first full run: PanelFxTests.WithAlpha_ZeroAlpha_FadesTowardPanelSurface failed with expected rgb(13,18,25) vs received rgb(13,17,23) — the two Panel colors of different built-in themes. Root cause is a pre-existing test-isolation race, not a sprint regression: WithAlpha captures ChatPalette.Panel (a process-global volatile Catalog, ChatPalette.cs:66) at arrange time while the assert re-reads it, and theme tests (ThemeSwitchTests / JsonThemeLoaderTests / ThemeFileWatcherTests) apply TerminalColorPalette.Apply in parallel. Untouched by all sprint commits; not reproducible in isolation nor on suite re-run. A theme-pinning fixture for palette-dependent tests would eliminate it — out of hotfix scope."
   },
   "notes": [
-    "Hard rule '1-2 files per commit' held: 2/2/1 files; three atomic commits (task 2's named files both fit in one).",
+    "Hard rule '1-2 files per commit' held: 2/2/1/2 files; four atomic commits total (three from the original 2026-08-28 sprint + one follow-up for the BlendRegion WSkip skip missed by 876862b).",
     "Harbor.DesignSystem untouched; no public API changes; no TODO(principles) markers added.",
     "Eviction Array.Copy inside TimelineLayoutCache.EvictFirst remains O(n) per single eviction; low-water batching amortizes it in practice (rare pass, memmove-speed). A bulk prefix-remove EvictFirst(count) in the cache would make it strictly O(1) amortized per append — deferred as future work to keep this commit within the file budget.",
     "Full Harbor.slnx build after all commits: 0 errors, 180 warnings (all pre-existing, none from touched files).",
     "Whole-solution dotnet test not run per AGENTS.md MTP warning; verification was per focused project.",
     "Second verification pass (2026-08-28) confirms all three fixes still hold and adds the PanelFx flake finding above — sprint remains complete, no code changes needed.",
+    "Post-sprint follow-up (2026-09-04): PanelFx.BlendRegion WSkip skip added after discovering the original SetStyleAt fix (876862b) left BlendRegion still double-fading wide glyphs via tail reads. Verified with new regression test; Harbor.Tui.CellForge.Tests 821/821 pass.",
     "Sprint-chain heartbeat in .kilo-docs/sprints/ui-v2-hotfix/status.json is tool-managed and left uncommitted — not a deliverable."
   ]
 }
