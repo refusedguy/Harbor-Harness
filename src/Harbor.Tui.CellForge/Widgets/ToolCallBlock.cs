@@ -1,5 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
+using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
+using VmToolCallStatus = Harbor.Ui.Framework.ViewModels.ToolCallStatus;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -34,12 +36,17 @@ public sealed class ToolResultBody
     public TimeSpan Duration { get; }
     public string? DiffText { get; }
 
-    public static string FormatDuration(TimeSpan d) => d.TotalMilliseconds switch
-    {
-        < 1 => "<1ms",
-        < 1000 => $"{(int)d.TotalMilliseconds}ms",
-        _ => $"{d.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}s",
-    };
+    /// <summary>
+    /// Back-compat shim over <see cref="FrameworkStatusMappers.DurationToText"/>.
+    /// Kept (not deleted, CF-E-012) because
+    /// <c>ChatBlockTests.FormatDuration_HumanBuckets</c> pins the legacy
+    /// <c>"&lt;1ms"</c> bucket for sub-millisecond durations, while
+    /// <c>DurationToText</c> returns <see cref="string.Empty"/> there
+    /// (instantaneous calls hide the duration column). Internal paint paths
+    /// call <c>DurationToText</c> directly.
+    /// </summary>
+    public static string FormatDuration(TimeSpan d) =>
+        FrameworkStatusMappers.DurationToText(d) is { Length: > 0 } text ? text : "<1ms";
 }
 
 /// <summary>
@@ -69,6 +76,33 @@ public sealed class ToolCallBlock : IChatBlock
     public ToolCallStatus Status => _status;
 
     public ToolResultBody? Body => _body;
+
+    /// <summary>
+    /// Status in the shared <c>Harbor.Ui.Framework.ViewModels</c> vocabulary —
+    /// the single bridge that lets the framework-free <c>StatusMappers</c>
+    /// converters operate on this block. Local <c>Ok</c> maps to
+    /// <c>Success</c> (naming only; same meaning).
+    /// </summary>
+    private VmToolCallStatus ViewModelStatus => _status switch
+    {
+        ToolCallStatus.Ok => VmToolCallStatus.Success,
+        ToolCallStatus.Error => VmToolCallStatus.Error,
+        _ => VmToolCallStatus.Running,
+    };
+
+    /// <summary>
+    /// Short status pill label via <c>StatusMappers.ToolCallStatusToPill</c>
+    /// (<c>"running"</c> / <c>"ok"</c> / <c>"err"</c>).
+    /// </summary>
+    public string StatusPill => FrameworkStatusMappers.ToolCallStatusToPill(ViewModelStatus);
+
+    /// <summary>
+    /// Resource key for the status brush via
+    /// <c>StatusMappers.ToolCallStatusToBrushKey</c> (e.g. <c>"MochaGreen"</c>).
+    /// Consumed by projector-level style mapping (CF-D-005); cell paint keeps
+    /// using <c>ChatPalette</c> styles (the single cell source of truth).
+    /// </summary>
+    public string StatusBrushKey => FrameworkStatusMappers.ToolCallStatusToBrushKey(ViewModelStatus);
 
     /// <summary>Collapsed-body line budget (continuation marker when exceeded).</summary>
     public int MaxBodyLines { get; set; }
@@ -178,9 +212,25 @@ public sealed class ToolCallBlock : IChatBlock
 
         if (_body is not null)
         {
-            var tail = $" ({ToolResultBody.FormatDuration(_body.Duration)})";
-            buffer.SetText(cursor, y, tail, ChatPalette.Dim);
-            cursor += tail.Length;
+            // CF-E-012: duration straight from StatusMappers.DurationToText.
+            // It returns string.Empty for sub-millisecond (instantaneous) calls,
+            // so the column hides instead of rendering " ()".
+            var durationText = FrameworkStatusMappers.DurationToText(_body.Duration);
+            if (durationText.Length > 0)
+            {
+                var tail = $" ({durationText})";
+                buffer.SetText(cursor, y, tail, ChatPalette.Dim);
+                cursor += tail.Length;
+            }
+
+            // Status pill (CF-E-012): painted only once completed, so the Running
+            // header stays byte-identical (pinned by StreamingTests +
+            // screenshot baselines). StatusPill still reports "running" pre-flight.
+            // No ChatPalette.ToolPill: ChatPalette lives in Harbor.DesignSystem
+            // (out of scope) — the pill reuses the status glyph style instead.
+            var pill = $" [{StatusPill}]";
+            buffer.SetText(cursor, y, pill, glyphStyle);
+            cursor += pill.Length;
         }
 
         if (!string.IsNullOrEmpty(Info.ArgsSummary))

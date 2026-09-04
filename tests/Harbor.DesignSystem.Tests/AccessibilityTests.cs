@@ -10,6 +10,7 @@ namespace Harbor.DesignSystem.Tests;
 /// <see cref="Accessibility.ContrastRatio"/> against the real tokens, so a
 /// palette edit that silently breaks readability fails CI.
 /// </summary>
+[NotInParallel("terminal-color-palette")]
 public class AccessibilityTests
 {
     private static readonly RgbColor[] DarkSurfaces =

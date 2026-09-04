@@ -1,6 +1,6 @@
-using System.Text.Json;
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Panels;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;
@@ -24,9 +24,6 @@ namespace Harbor.Tui.SpectreTui.Panels.Builtin;
 /// </remarks>
 public sealed class DiffPreviewPanel : IPanelProvider
 {
-    private static readonly HashSet<string> TrackedTools =
-        new(StringComparer.Ordinal) { "edit", "write", "read", "patch" };
-
     /// <inheritdoc />
     public string Id => "diff-preview";
 
@@ -42,7 +39,7 @@ public sealed class DiffPreviewPanel : IPanelProvider
     /// <inheritdoc />
     public object? Build(PanelContext ctx)
     {
-        var changes = ExtractRecentChanges(ctx.State, 8);
+        var changes = PanelExtractors.ExtractRecentChanges(ctx.State, 8);
 
         var p = new Paragraph().Alignment(Justify.Left);
         p.Lines.Add(TextLine.FromMarkup("[bold cyan]Diff Preview[/] " +
@@ -85,84 +82,6 @@ public sealed class DiffPreviewPanel : IPanelProvider
 
     /// <inheritdoc />
     public bool OnKey(UiKey key, PanelContext ctx) => false;
-
-    private static List<FileChange> ExtractRecentChanges(UiState state, int max)
-    {
-        var result = new List<FileChange>(max);
-        var lines = state.Lines;
-
-        // Walk forward; collect (Tool, ToolResult) pairs by call id. The reducer does not
-        // store the call id in the rendered text, so we pair by adjacency: a Tool line
-        // followed by a ToolResult line is the same call.
-        for (int i = 0; i < lines.Length && result.Count < max; i++)
-        {
-            var line = lines[i];
-            if (line.Role != ChatRole.Tool)
-                continue;
-
-            string text = line.Text ?? string.Empty;
-            // FormatToolStart emits "→ <toolname>  <args json>" or "→ <toolname>".
-            if (text.Length < 2 || text[0] != '→')
-                continue;
-
-            int spaceIdx = text.IndexOf(' ', 2);
-            string toolName = spaceIdx < 0 ? text[2..] : text[2..spaceIdx];
-            if (!TrackedTools.Contains(toolName))
-                continue;
-
-            string argsJson = spaceIdx < 0 ? "{}" : text[(spaceIdx + 1)..].TrimStart();
-            string filePath = ExtractFilePath(argsJson);
-
-            // Find the next ToolResult line — that's this call's result.
-            string? resultText = null;
-            bool isError = false;
-            for (int j = i + 1; j < lines.Length; j++)
-            {
-                if (lines[j].Role == ChatRole.ToolResult)
-                {
-                    string rt = lines[j].Text ?? string.Empty;
-                    if (rt.Length > 0 && rt[0] == '✗') isError = true;
-                    if (rt.Length >= 2 && (rt[0] == '✓' || rt[0] == '✗') && rt[1] == ' ')
-                        rt = rt[2..];
-                    resultText = rt;
-                    break;
-                }
-                if (lines[j].Role == ChatRole.Tool)
-                    break; // next call started, no result captured
-            }
-
-            result.Add(new FileChange(toolName, filePath, resultText ?? string.Empty, isError));
-        }
-
-        // Most-recent-first order.
-        result.Reverse();
-        return result;
-    }
-
-    private static string ExtractFilePath(string argsJson)
-    {
-        if (string.IsNullOrWhiteSpace(argsJson))
-            return "<unknown>";
-
-        try
-        {
-            using var doc = JsonDocument.Parse(argsJson);
-            foreach (var prop in doc.RootElement.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String &&
-                    (prop.Name.Contains("file", StringComparison.OrdinalIgnoreCase)
-                     || prop.Name.Contains("path", StringComparison.OrdinalIgnoreCase)))
-                {
-                    return prop.Value.GetString() ?? "<unknown>";
-                }
-            }
-        }
-        catch (JsonException)
-        {
-            // fall through
-        }
-        return "<unknown>";
-    }
 
     private static string ShortenPath(string path, int max)
     {
@@ -213,10 +132,4 @@ public sealed class DiffPreviewPanel : IPanelProvider
             _ => $"[grey]{e}[/]"
         };
     }
-
-    private sealed record FileChange(
-        string ToolName,
-        string FilePath,
-        string DiffBody,
-        bool IsError);
 }

@@ -1,5 +1,8 @@
+using System.Collections.Immutable;
+using System.ComponentModel;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
@@ -28,19 +31,30 @@ namespace Harbor.Tui.CellForge;
 [Harbor.Abstractions.Contracts.TuiRenderer(Backend = "cellforge")]
 public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 {
+    /// <summary>Input placeholder while the agent is idle and waiting for a prompt.</summary>
+    internal const string IdlePlaceholder = "Type your message...";
+
+    /// <summary>Input placeholder while the agent is running a prompt.</summary>
+    internal const string BusyPlaceholder = "Agent is running… (Esc to stop)";
+
     private readonly UiStore _store;
     private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
+    private readonly InputViewModel _inputVm;
+    private readonly ComposerController _composer = new();
+    private bool _syncingInput;
 
     public CellForgeTuiRenderer(
         ILogger<CellForgeTuiRenderer> logger,
         StatusBarViewModel? statusVm = null,
-        ChatHistoryViewModel? chatVm = null)
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null)
         : base(logger)
     {
         _store = new UiStore();
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
         _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
+        _inputVm = ResolveInputVm(inputVm);
         Context = new CellForgeRenderContext();
     }
 
@@ -49,26 +63,36 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         ILogger<CellForgeTuiRenderer> logger,
         ITerminalBackend backend,
         StatusBarViewModel? statusVm = null,
-        ChatHistoryViewModel? chatVm = null)
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null)
         : base(logger)
     {
         _store = new UiStore();
         _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
         _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
+        _inputVm = ResolveInputVm(inputVm);
         Context = new CellForgeRenderContext(backend);
+    }
+
+    /// <summary>
+    ///     Resolves the input view model (explicit instance or the registry default),
+    ///     keeps field/registry/bound-view coherent, and wires the two-way binding
+    ///     with the composer buffer.
+    /// </summary>
+    private InputViewModel ResolveInputVm(InputViewModel? inputVm)
+    {
+        var resolved = inputVm ?? ViewModels.Get<InputViewModel>("input")!;
+        ViewModels.Register(resolved);
+        resolved.PropertyChanged += OnInputVmChanged;
+        return resolved;
     }
 
     public override ITuiRenderContext Context { get; }
 
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
-    {
-        if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input)
-        {
-            return false;
-        }
-
-        return base.ShouldRenderPlacement(placement, @event);
-    }
+    // CF-F-001: intentionally no ShouldRenderPlacement override — the base filter
+    // already paints the ChatHistory/Input placements, and both builtin views write
+    // only through ITuiRenderContext (CellForgeRenderContext/AnsiWriter), so no
+    // CellForge fallback painter is needed.
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -113,7 +137,19 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         }
     }
 
-    private void ProjectStateIntoWidgets(UiState state)
+    /// <summary>Composer buffer mirrored from <see cref="UiState.Input"/> (test seam).</summary>
+    internal PromptBuffer PromptBuffer => _composer.Buffer;
+
+    /// <summary>Last projected session list (test seam; SideBarView/QuickSwitchSlots wiring is CF-B-008).</summary>
+    internal ImmutableArray<SessionInfo> SessionsSnapshot { get; private set; } = ImmutableArray<SessionInfo>.Empty;
+
+    /// <summary>Last projected active session id (test seam, see <see cref="SessionsSnapshot"/>).</summary>
+    internal SessionId? ActiveSessionIdSnapshot { get; private set; }
+
+    /// <summary>Last projected session-list loading flag (test seam, see <see cref="SessionsSnapshot"/>).</summary>
+    internal bool SessionsLoading { get; private set; }
+
+    internal void ProjectStateIntoWidgets(UiState state)
     {
         if (_statusVm is StatusBarViewModel svm)
         {
@@ -133,10 +169,81 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
             chvm.ThinkingText = state.Active.ThinkBuffer;
             chvm.IsThinking = state.Active.ThinkBuffer.Length != 0;
         }
+
+        SyncInputFromState(state);
+
+        SessionsSnapshot = state.Sessions;
+        ActiveSessionIdSnapshot = state.ActiveSessionId;
+        SessionsLoading = state.IsLoading;
+        // TODO(CF-B-008): project Sessions/ActiveSessionId/IsLoading into
+        // SideBarView + QuickSwitchSlots instead of these snapshot fields.
+    }
+
+    /// <summary>
+    ///     Store → VM + composer-buffer sync: draft text and idle/busy placeholder
+    ///     flow from <see cref="UiState"/> (the source of truth). The
+    ///     <c>_syncingInput</c> flag suppresses the <see cref="OnInputVmChanged"/>
+    ///     echo while VM properties are being applied.
+    ///     NOTE(CF-B-005): <c>InputModel.History/HistoryIndex</c> are intentionally
+    ///     not mirrored here — history recall stays in
+    ///     <c>PromptHistory/ComposerController</c> until CF-B-005.
+    /// </summary>
+    private void SyncInputFromState(UiState state)
+    {
+        _syncingInput = true;
+        try
+        {
+            string text = state.Input.Text ?? string.Empty;
+            if (_inputVm.Text != text)
+            {
+                _inputVm.Text = text;
+                _inputVm.CursorPosition = text.Length;
+            }
+
+            _inputVm.Placeholder = state.IsAgentRunning ? BusyPlaceholder : IdlePlaceholder;
+
+            if (_composer.Buffer.SnapshotText() != text)
+            {
+                _composer.Buffer.Clear();
+                if (text.Length != 0)
+                    _ = _composer.Buffer.InsertText(text);
+            }
+
+            _ = _composer.Buffer.MoveTo(Math.Clamp(_inputVm.CursorPosition, 0, _composer.Buffer.Length));
+        }
+        finally
+        {
+            _syncingInput = false;
+        }
+    }
+
+    /// <summary>
+    ///     VM → composer-buffer sync: user edits applied to the
+    ///     <see cref="InputViewModel"/> (text or caret) are mirrored into the
+    ///     composer buffer so the interactive prompt paints the same draft.
+    /// </summary>
+    private void OnInputVmChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_syncingInput)
+            return;
+
+        if (e.PropertyName is not (nameof(InputViewModel.Text) or nameof(InputViewModel.CursorPosition)))
+            return;
+
+        string text = _inputVm.Text ?? string.Empty;
+        if (_composer.Buffer.SnapshotText() != text)
+        {
+            _composer.Buffer.Clear();
+            if (text.Length != 0)
+                _ = _composer.Buffer.InsertText(text);
+        }
+
+        _ = _composer.Buffer.MoveTo(Math.Clamp(_inputVm.CursorPosition, 0, _composer.Buffer.Length));
     }
 
     public override void Dispose()
     {
+        _inputVm.PropertyChanged -= OnInputVmChanged;
         _store.Changed -= OnStoreChanged;
         Context.ShowCursor();
         base.Dispose();
