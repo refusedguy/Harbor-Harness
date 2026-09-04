@@ -49,6 +49,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     public ChatScreen? Screen { get; set; }
 
     private readonly UiStore _store;
+    private readonly CellForgePanelRegistry _panels = new();
     private readonly StatusBarViewModel _statusVm;
     private readonly ChatHistoryViewModel _chatVm;
     private readonly InputViewModel _inputVm;
@@ -133,6 +134,12 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     public override ITuiRenderContext Context { get; }
 
+    /// <summary>Panel providers owned by this renderer (CF-E-002 wiring).</summary>
+    public CellForgePanelRegistry Panels => _panels;
+
+    /// <summary>TEA store backing this renderer (CF-E-002 wiring).</summary>
+    public UiStore Store => _store;
+
     // CF-F-001: intentionally no ShouldRenderPlacement override — the base filter
     // already paints the ChatHistory/Input placements, and both builtin views write
     // only through ITuiRenderContext (CellForgeRenderContext/AnsiWriter), so no
@@ -154,6 +161,23 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         {
             return Task.FromResult(Result.Failure(ex.Message));
         }
+    }
+
+    /// <summary>
+    ///     Register the cell-native builtins in Spectre Alt+1..9 slot order
+    ///     (CF-E-002). Idempotent: re-registration replaces by id, and
+    ///     <see cref="CellForgePanelRegistry.EnsureSeeded"/> preserves
+    ///     already-known panel state.
+    /// </summary>
+    private void RegisterBuiltinPanels()
+    {
+        _panels.Register(new CellForgeHelpPanel());
+        _panels.Register(new CellForgeTodoListPanel());
+        _panels.Register(new CellForgeDiffPreviewPanel());
+        _panels.Register(new CellForgeFileTreePanel());
+        _panels.Register(new CellForgeTokenBreakdownPanel());
+        _panels.Register(new CellForgeDiagnosticsPanel());
+        _panels.Register(new CellForgeLogsPanel());
     }
 
     private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)

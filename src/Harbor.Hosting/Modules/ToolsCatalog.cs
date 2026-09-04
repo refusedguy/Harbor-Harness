@@ -67,7 +67,19 @@ internal static class ToolsCatalog
         mcpConfigPaths.Add(Path.Combine(projectRoot, ".harbor", "mcp.json"));
 
         foreach (var entry in mcpLoader.Load(mcpConfigPaths.ToArray()))
-            mcpRegistry.Register(entry.Name, entry.StartInfo);
+        {
+            if (entry.Remote is not null)
+            {
+                var remote = entry.Remote;
+                var registered = mcpRegistry.Register(entry.Name, remote.Url, remote.Transport, remote.Headers, remote.OAuth);
+                if (registered.IsFailure)
+                    ctx.Logger.LogWarning("Skipping MCP server '{Name}': {Error}", entry.Name, registered.Error);
+            }
+            else if (entry.StartInfo is not null)
+            {
+                mcpRegistry.Register(entry.Name, entry.StartInfo);
+            }
+        }
         return mcpRegistry;
     }
 

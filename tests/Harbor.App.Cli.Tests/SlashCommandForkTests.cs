@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.Abstractions.Tools;
 using Harbor.App.Cli.Repl;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -99,6 +100,7 @@ public class SlashCommandForkTests
     {
         using var sp = new ServiceCollection()
             .AddSingleton<ISessionStore>(store)
+            .AddSingleton<IToolRegistry>(new FakeToolRegistry())
             .BuildServiceProvider();
         var dispatcher = new SlashCommandDispatcher(
             NullLoggerFactory.Instance.CreateLogger<SlashCommandDispatcher>());

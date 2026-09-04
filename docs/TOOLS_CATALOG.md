@@ -1387,6 +1387,32 @@ Then call a specific tool:
   until the user persists a decision.
 - The `args` field is forwarded verbatim to the server. Validate at the server side.
 
+### OAuth for remote servers
+
+Remote (`url`) entries accept an `auth` block with OAuth2 settings:
+
+```jsonc
+{"mcpServers": {"cloud": {
+  "url": "https://mcp.example.com/mcp",
+  "transport": "http",
+  "auth": {
+    "clientId": "harbor-cli",          // omit for dynamic registration (RFC7591)
+    "scopes": ["mcp:read"],
+    "authorizationEndpoint": "https://example.com/oauth/authorize", // else RFC8414 discovery
+    "tokenEndpoint": "https://example.com/oauth/token",
+    "redirectPort": 0                  // 0 = any free loopback port
+  }
+}}}
+```
+
+Flow: `harbor mcp login <server>` opens the browser (PKCE S256, loopback
+redirect), exchanges the code and caches tokens under the harbor home
+(`mcp-oauth/`); `harbor mcp logout <server>` drops them. Transports attach the
+cached token as `Bearer`, refreshing silently via refresh_token; without a
+usable token they fail with a login hint. `HARBOR_MCP_OAUTH_TOKEN` remains as
+a static-token fallback when no `auth` block is configured. Unknown `auth`
+fields are ignored (forward-compatible).
+
 ---
 
 ## 10. Testing tools

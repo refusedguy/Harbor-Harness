@@ -151,7 +151,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] HTTP, SSE transports
 - [ ] MCP resources as `read_mcp_resource` tools
 - [ ] MCP prompts as slash-commands
-- [ ] OAuth for MCP servers
+- [x] OAuth for MCP servers (`McpOAuthConfig` auth block, PKCE browser flow with loopback redirect, refresh, file cache, `harbor mcp login/logout`, `HARBOR_MCP_OAUTH_TOKEN` static fallback)
 - [ ] Lazy connect, reconnect on failure
 
 ### v0.7.0 — Skills & LSP

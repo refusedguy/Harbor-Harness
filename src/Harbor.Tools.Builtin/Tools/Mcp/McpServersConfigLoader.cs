@@ -3,9 +3,21 @@ using System.Text.Json;
 namespace Harbor.Tools.Mcp;
 
 /// <summary>
-///     One enabled server resolved from config: its name and how to spawn it.
+///     One enabled server resolved from config: either how to spawn it
+///     (<see cref="StartInfo" />) or where to reach it
+///     (<see cref="Remote" />) — never both, never neither.
 /// </summary>
-public sealed record McpServerEntry(string Name, McpServerStartInfo StartInfo);
+public sealed record McpServerEntry(string Name, McpServerStartInfo? StartInfo, McpRemoteConfig? Remote);
+
+/// <summary>
+///     Remote MCP server coordinates from an mcp.json entry
+///     (<c>url</c> + Harbor extensions <c>transport</c>/<c>headers</c>/<c>auth</c>).
+/// </summary>
+public sealed record McpRemoteConfig(
+    string Url,
+    string Transport,
+    IReadOnlyDictionary<string, string>? Headers,
+    McpOAuthConfig? OAuth);
 
 /// <summary>
 ///     Loads MCP server definitions from standard <c>mcp.json</c> files (industry schema),
@@ -79,6 +91,23 @@ public sealed class McpServersConfigLoader
         {
             if (cfg is null) continue;
             if (cfg.Disabled == true) continue;
+
+            if (!string.IsNullOrWhiteSpace(cfg.Url))
+            {
+                var headers = cfg.Headers is null
+                    ? null
+                    : cfg.Headers.ToDictionary(kv => kv.Key, kv => Expand(kv.Value), StringComparer.Ordinal);
+                entries.Add(new McpServerEntry(
+                    name,
+                    null,
+                    new McpRemoteConfig(
+                        Expand(cfg.Url),
+                        string.IsNullOrWhiteSpace(cfg.Transport) ? "http" : cfg.Transport,
+                        headers,
+                        cfg.OAuth)));
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(cfg.Command)) continue;
 
             var args = cfg.Args is null
@@ -95,7 +124,7 @@ public sealed class McpServersConfigLoader
                 Args = args,
                 WorkingDirectory = string.IsNullOrWhiteSpace(cfg.Cwd) ? null : Expand(cfg.Cwd),
                 Environment = env
-            }));
+            }, null));
         }
 
         return entries;
@@ -140,6 +169,18 @@ public sealed class McpServersConfigLoader
             }
             if (server.Value.TryGetProperty("disabled", out var dis) && dis.ValueKind == JsonValueKind.True)
                 cfg.Disabled = true;
+            if (server.Value.TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String)
+                cfg.Url = url.GetString();
+            if (server.Value.TryGetProperty("transport", out var transport) && transport.ValueKind == JsonValueKind.String)
+                cfg.Transport = transport.GetString();
+            if (server.Value.TryGetProperty("headers", out var headersEl) && headersEl.ValueKind == JsonValueKind.Object)
+            {
+                cfg.Headers = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var h in headersEl.EnumerateObject())
+                    if (h.Value.ValueKind == JsonValueKind.String)
+                        cfg.Headers[h.Name] = h.Value.GetString()!;
+            }
+            cfg.OAuth = McpOAuthConfig.Parse(server.Value);
 
             map[server.Name] = cfg;
         }
