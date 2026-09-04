@@ -120,6 +120,51 @@ public class WorkspaceContextSourceTests : IDisposable
         await Assert.That(skills[0].Name).IsEqualTo("real");
     }
 
+    [Test]
+    public async Task LoadSkills_SkillDirectory_DiscoveredWithFrontMatterName()
+    {
+        string skillDir = Path.Combine(_dir, ".harbor", "skills", "review");
+        Directory.CreateDirectory(skillDir);
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
+            "---\nname: review\ndescription: Reviews pull requests\n---\n# Review\nDo the review.\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].Name).IsEqualTo("review");
+        await Assert.That(skills[0].Description).IsEqualTo("Reviews pull requests");
+        await Assert.That(skills[0].FilePath.Replace('\\', '/')).Contains(".harbor/skills/review/SKILL.md");
+    }
+
+    [Test]
+    public async Task LoadSkills_SkillDirectory_FallsBackToDirectoryName()
+    {
+        string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
+        Directory.CreateDirectory(skillDir);
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"), "# Deploy\nRun it.\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].Name).IsEqualTo("deploy");
+        await Assert.That(skills[0].Description).IsEqualTo("Deploy");
+    }
+
+    [Test]
+    public async Task LoadSkills_FlatFileWinsOverSkillDirectory_SameRoot()
+    {
+        string projectSkills = Path.Combine(_dir, ".harbor", "skills");
+        string skillDir = Path.Combine(projectSkills, "deploy");
+        Directory.CreateDirectory(skillDir);
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"), "# Dir deploy\n");
+        await File.WriteAllTextAsync(Path.Combine(projectSkills, "deploy.md"), "# Flat deploy\n");
+
+        var skills = WorkspaceContextSource.LoadSkills(_dir);
+
+        await Assert.That(skills.Count).IsEqualTo(1);
+        await Assert.That(skills[0].FilePath.Replace('\\', '/')).Contains("deploy.md");
+    }
+
     // ---- ROP-D Z3: MCP instruction aggregation formatting ------------------
 
     [Test]

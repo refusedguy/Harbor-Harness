@@ -157,11 +157,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### v0.7.0 — Skills & LSP
 
 **Skills**
-- [ ] `SKILL.md` format with YAML frontmatter
-- [ ] Discovery from `~/.harbor/skills/` and `.harbor/skills/`
-- [ ] `skill` tool to load skill content
+- [x] `SKILL.md` format with YAML frontmatter (`name:`/`description:`, `<name>/SKILL.md` preferred, flat `<name>.md` legacy)
+- [x] Discovery from `~/.harbor/skills/` and `.harbor/skills/` (`WorkspaceContextSource`, project shadows global)
+- [x] `skill` tool to load skill content (`SkillTool`: name-only lookup, scope filter, 12k cap, path-confinement)
 - [x] `<available_skills>` XML in system prompt
-- [ ] `harbor skill install/list` CLI commands
+- [x] `harbor skill install/list` CLI commands (`SkillsCommand`: list/install/uninstall, project+global scopes)
 
 **LSP Integration**
 - [ ] LSP client via `OmniSharp.Extensions.LanguageServer.Client`

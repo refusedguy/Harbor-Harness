@@ -43,13 +43,13 @@
 
 ## 1. Inventory
 
-Harbor ships **14 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **16 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> registers all 14 tools; `Standard10` omits the four heavier ones (`task`, `webfetch`,
+> registers all 16 tools (14 classic + `lsp` + `skill`); `Standard10` omits the four heavier ones (`task`, `webfetch`,
 > `ripgrep`, `mcp`). The CLI defaults to `Full14`; the Avalonia desktop app uses
 > `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 
@@ -69,6 +69,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 12 | `ripgrep` | Parallel | Allow | Fast content search via `rg` binary (gitignore-aware) |
 | 13 | `tree` | Parallel | Allow | ASCII directory tree (gitignore-aware) |
 | 14 | `mcp` | Sequential | Ask | Bridge to a registered MCP server |
+| 15 | `skill` | Parallel | Allow | Load a SKILL.md skill body by name |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -790,6 +791,55 @@ treat each one as a tiny RPC sandbox.
 
 ---
 
+### `skill`
+
+**Description.** Loads a `SKILL.md` skill body by name. Skills are discovered from the
+project-local `.harbor/skills/` directory (wins on collisions) and the global
+`~/.harbor/skills/` directory — the same roots the system prompt's
+`<available_skills>` block is built from (`WorkspaceContextSource`). Each skill is a
+`<name>/SKILL.md` directory or a legacy flat `<name>.md` file, with optional YAML
+front-matter (`name:`, `description:`). The tool accepts a NAME only, never a path,
+so a crafted name cannot escape the skills roots. Bodies over 12 000 chars are
+truncated with a pointer to the file.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "name":  { "type": "string", "description": "Skill name as listed in <available_skills> (e.g. 'code-review')" },
+    "scope": { "type": "string", "description": "Where to look: 'project', 'global', or 'any' (default)" }
+  },
+  "required": ["name"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Load a skill before doing the task it describes
+{"name": "code-review"}
+
+// 2. Prefer the project-local variant explicitly
+{"name": "deploy", "scope": "project"}
+
+// 3. Fall back to a globally installed skill
+{"name": "commit", "scope": "global"}
+```
+
+**Permissions.** Allow (default). Read-only by construction — the tool only reads
+files under the two skills roots.
+
+**Mode.** `Parallel`.
+
+**Tips.**
+- Manage skills from the shell: `harbor skill list` / `harbor skill install <SKILL.md|dir> [--project]` / `harbor skill uninstall <name>`.
+- Project skills shadow same-named global skills — same precedence as the prompt block.
+- Don't paste the loaded body back into chat; follow its steps instead.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1151,7 +1201,7 @@ small whitelist of read-only commands (`ls`, `cat`, `grep`, `rg`, `find`, `git s
 asks. This is correct: an agent that runs `curl evil.com | sh` without asking is a security
 incident waiting to happen.
 
-### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook` are always Allow
+### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook`/`skill` are always Allow
 
 These tools have no side effects and cannot leak data outside the local machine. They're
 the agent's eyes — blocking them just slows things down without improving safety.
@@ -1364,6 +1414,7 @@ Then call a specific tool:
 }
 ```
 
+
 ### Implementation notes
 
 - `McpRegistry` is registered as the `IMcpRegistry` singleton by
@@ -1455,17 +1506,17 @@ public class WebFetchToolTests
 ### Running tests
 
 ```bash
-# Just the builtin tool tests (known-good pattern: per-project, Release, no rebuild)
-dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build
+# Just the builtin tool tests (known-good pattern: per-project executable, Release, no rebuild)
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1
 
-# One test class — TUnit uses --treenode-filter, not --filter
-dotnet test tests/Harbor.Tools.Builtin.Tests \
+# One test class — TUnit uses --treenode-filter, not --filter (forwarded after --)
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
   --treenode-filter "/*/*/WebFetchToolTests/*"
 ```
 
-> **Known limitation:** running the whole `Harbor.slnx` test suite in one command (`dotnet test`)
-> breaks under the MTP host (test-platform parallelism). Run per-project `dotnet test tests/<X>`
-> instead.
+> **Known limitation:** `dotnet test` discovers zero tests in this repo (broken
+> MTP bridge). Run test projects as plain executables, one at a time
+> (`dotnet run --project tests/<X> -c Release --no-build`).
 
 ---
 

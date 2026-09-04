@@ -101,6 +101,7 @@ internal static class ToolsCatalog
             tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));
         }
         tb.AddTool(lf => new TreeTool(lf.CreateLogger<TreeTool>()));
+        tb.AddTool(lf => new SkillTool(lf.CreateLogger<SkillTool>()));
         if (lspService is not null)
         {
             tb.AddTool(new LspTool(lspService, ctx.LoggerFactory.CreateLogger<LspTool>()));

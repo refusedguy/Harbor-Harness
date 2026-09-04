@@ -61,9 +61,9 @@ public class RegistrationCompositionTests
 
         var names = ToolNames(sp);
         // 14 classic tools + lsp (registered for both presets since the LSP
-        // integration landed — 2ddd6ee).
-        await Assert.That(names.Count).IsEqualTo(15);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp" })
+        // integration landed — 2ddd6ee) + skill (SKILL.md loader).
+        await Assert.That(names.Count).IsEqualTo(16);
+        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp", "skill" })
         {
             await Assert.That(names).Contains(full);
         }
@@ -83,9 +83,9 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        // 10 classic tools + lsp.
-        await Assert.That(names.Count).IsEqualTo(11);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp" })
+        // 10 classic tools + lsp + skill.
+        await Assert.That(names.Count).IsEqualTo(12);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill" })
         {
             await Assert.That(names).Contains(safe);
         }
@@ -141,7 +141,7 @@ public class RegistrationCompositionTests
 
         // The published snapshot already includes everything registered during
         // composition → Freeze ran after registration and before publication.
-        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(15);
+        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(16);
     }
 
     // ── Storage presets ──────────────────────────────────────────────────
