@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Ui.Framework.Rendering;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -117,6 +118,7 @@ public sealed class DialogOverlay
 
     public void Tick()
     {
+        // Reserved for future spinner/animation integration.
     }
 
     public bool HandleKey(ConsoleKeyInfo key)
@@ -228,10 +230,9 @@ public sealed class DialogOverlay
 
         if (_kind == DialogKind.Prompt)
         {
-            buffer.SetText(textX, textY, "› ", ChatPalette.Accent);
+            buffer.SetText(textX, textY, "› ", new CellStyle(ChatPalette.Accent));
             string input = _input.Length > innerW - 2 ? _input[(^Math.Max(1, innerW - 2))..] : _input;
-            buffer.SetText(textX + 2, textY, input, ChatPalette.Accent);
-            textY += 1;
+            buffer.SetText(textX + 2, textY, input, new CellStyle(ChatPalette.Accent));
         }
 
         DrawButtons(buffer, textX, box.Bottom - ButtonRowHeight - 1, innerW);
@@ -240,7 +241,7 @@ public sealed class DialogOverlay
     private void DrawTitle(ScreenBuffer buffer, int x, int y, int innerW)
     {
         string title = _title.Length > innerW ? _title[..Math.Max(0, innerW - 1)] + "…" : _title;
-        buffer.SetText(x, y, title, ChatPalette.Accent);
+        buffer.SetText(x, y, title, new CellStyle(ChatPalette.Accent));
     }
 
     private void DrawBox(ScreenBuffer buffer, Rect rect)
@@ -288,7 +289,7 @@ public sealed class DialogOverlay
         for (int i = 0; i < span; i++)
         {
             var button = _buttons[i];
-            var style = i == _focusedButton ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold) : ChatPalette.Muted;
+            var style = i == _focusedButton ? new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold) : new CellStyle(ChatPalette.Muted);
             buffer.SetText(cursor, y, "[", style);
             buffer.SetText(cursor + 1, y, button.Label, style);
             buffer.SetText(cursor + 1 + button.Label.Length, y, "]", style);

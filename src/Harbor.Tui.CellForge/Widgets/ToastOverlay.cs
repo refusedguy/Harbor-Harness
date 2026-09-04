@@ -1,4 +1,6 @@
+using System.Text;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.Services;
 
 namespace Harbor.Tui.CellForge.Widgets;
 

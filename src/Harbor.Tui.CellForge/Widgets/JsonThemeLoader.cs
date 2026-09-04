@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Harbor.DesignSystem;
+using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Services;
 
 namespace Harbor.Tui.CellForge.Widgets;
@@ -35,7 +36,7 @@ public sealed class JsonThemeLoader : IThemeService
     public static RgbColor CostHigh => Default.Error;
 
     public string Current => TerminalColorPalette.Current.Name;
-    public bool IsDark => TerminalColorPalette.Current.IsDark;
+    public bool IsDark => TerminalBackgroundProbe.RelativeLuminance(Default.Background) < TerminalBackgroundProbe.LightLuminanceThreshold;
 
     public void Apply(string theme) => throw new NotImplementedException();
     public void ApplyDark() => throw new NotImplementedException();
@@ -124,6 +125,7 @@ public sealed class JsonThemeLoader : IThemeService
 
         void OnError(string error)
         {
+            // Theme file watcher errors are non-fatal; live-reload resumes on next write.
         }
     }
 }
