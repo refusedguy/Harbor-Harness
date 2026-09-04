@@ -13,6 +13,7 @@ public sealed class AssistantMarkdownBlock : IChatBlock
 {
     private readonly string _source;
     private List<MdLine> _lines = [];
+    private Dictionary<int, List<CodeSpan>>? _code;
     private int _width = -1;
 
     public AssistantMarkdownBlock(string source) => _source = source ?? string.Empty;
@@ -38,7 +39,14 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         int rows = ctx.Rect.Height;
         for (int i = 0; i < _lines.Count && i < rows; i++)
         {
-            PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[i]);
+            if (_code is not null && _code.TryGetValue(i, out var codeSpans))
+            {
+                PaintCodeSpans(buffer, ctx.Rect.X, ctx.Rect.Y + i, codeSpans);
+            }
+            else
+            {
+                PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[i]);
+            }
         }
     }
 
@@ -51,6 +59,17 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         {
             var span = line.Spans[s];
             buffer.SetText(cursor, y, span.Text, StyleFor(span.Style));
+            cursor += UnicodeWidth.Width(span.Text);
+        }
+    }
+
+    internal static void PaintCodeSpans(ScreenBuffer buffer, int x, int y, List<CodeSpan> spans)
+    {
+        int cursor = x;
+        for (int s = 0; s < spans.Count; s++)
+        {
+            var span = spans[s];
+            buffer.SetText(cursor, y, span.Text, span.Style);
             cursor += UnicodeWidth.Width(span.Text);
         }
     }
@@ -74,6 +93,7 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         {
             _width = width;
             _lines = StreamingMarkdownRenderer.RenderRange(_source, 0, _source.Length, Math.Max(1, width));
+            _code = CodeTokenizer.HighlightFenceBodies(_lines);
         }
     }
 }
