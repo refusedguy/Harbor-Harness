@@ -120,6 +120,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Stash build outputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries
+          path: |
+            apps/**/bin/Release/
+            src/**/bin/Release/
+            tests/**/bin/Release/
+          retention-days: 1
+          if-no-files-found: error
+
   test:
     needs: [changes, build]
     if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
@@ -187,6 +198,11 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
+      - name: Download build outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: solution-binaries
+
       # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
       # integration tests self-skip and the platform shard silently runs
       # three fewer real tests.
@@ -197,22 +213,6 @@ jobs:
             sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
           fi
           rg --version | head -1
-
-      # CellForge.PtyTests spawn the real CLI binary through a PTY. The
-      # suite has no ProjectReference on the app (runtime independence),
-      # so `dotnet test tests/...` alone never produces its DLL — build it
-      # explicitly before the ui shard runs.
-      - name: Build Harbor.App.Cli (ui shard — required by CellForge.PtyTests)
-        if: matrix.shard == 'ui'
-        run: dotnet build apps/Harbor.App.Cli -c Release -p:ContinuousIntegrationBuild=true
-
-      - name: Build shard projects
-        timeout-minutes: 5
-        run: |
-          for p in ${{ matrix.projects }}; do
-            echo "Building tests/$p"
-            dotnet build "tests/$p" -c Release -p:ContinuousIntegrationBuild=true
-          done
 
       - name: Run shard ${{ matrix.shard }}
         timeout-minutes: 15
@@ -278,6 +278,11 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
+      - name: Download build outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: solution-binaries
+
       - name: Test critical suites on ${{ matrix.os }}
         timeout-minutes: 15
         shell: pwsh
@@ -296,7 +301,7 @@ jobs:
           $failed = @()
           foreach ($p in $projects) {
             Write-Host "::group::dotnet run $p"
-            dotnet run --project "tests/$p" -c Release -- --minimum-expected-tests 1
+            dotnet run --project "tests/$p" -c Release --no-build -- --minimum-expected-tests 1
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
           }
