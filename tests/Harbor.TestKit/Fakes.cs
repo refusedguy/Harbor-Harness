@@ -166,7 +166,7 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         lock (_lock) { _messages.Add(message); }
-        return Task.CompletedTask;
+        return Task.FromResult(Result.Success());
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
@@ -180,7 +180,7 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
         => Task.FromResult(Result.Success());
 
-    public Task<Result> UpdateAsync(Session s, CancellationToken ct = default)
+    public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
         => Task.FromResult(Result.Success());
 
     public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)

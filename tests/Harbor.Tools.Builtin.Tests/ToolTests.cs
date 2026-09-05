@@ -27,7 +27,7 @@ public class ReadToolTests
     {
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         var args = JsonDocument.Parse("""{"path": "/nonexistent/file.txt"}""").RootElement;
-        var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
         var result = await tool.ExecuteAsync(args, ctx);
 
@@ -47,7 +47,7 @@ public class ReadToolTests
         {
             var tool = new ReadTool(NullLogger<ReadTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -76,7 +76,7 @@ public class WriteToolTests
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var escapedPath = tempFile.Replace("\\", "\\\\");
             var args = JsonDocument.Parse($"{{\"path\": \"{escapedPath}\", \"content\": \"{content}\"}}").RootElement;
-            var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -115,7 +115,7 @@ public class EditToolTests
             var escapedPath = tempFile.Replace("\\", "\\\\");
             var replaceAllJson = replaceAll ? ", \"replaceAll\": true" : "";
             var args = JsonDocument.Parse($"{{\"path\": \"{escapedPath}\", \"oldString\": \"{oldString}\", \"newString\": \"{newString}\" {replaceAllJson}}}").RootElement;
-            var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -146,7 +146,7 @@ public class GlobToolTests
         {
             var tool = new GlobTool(NullLogger<GlobTool>.Instance);
             var args = JsonDocument.Parse($"{{\"pattern\": \"*.cs\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -180,7 +180,7 @@ public class GrepToolTests
             var tool = new GrepTool(NullLogger<GrepTool>.Instance);
             var escapedPath = tempDir.Replace("\\", "\\\\");
             var args = JsonDocument.Parse($"{{\"pattern\": \"{pattern}\", \"path\": \"{escapedPath}\"}}").RootElement;
-            var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -204,7 +204,7 @@ public class BashToolTests
     {
         var tool = new BashTool(NullLogger<BashTool>.Instance);
         var args = JsonDocument.Parse($"{{\"command\": \"{command}\"}}").RootElement;
-        var ctx = TestAgents.CreateContext();
+            var ctx = TestAgents.CreateToolContext();
 
         var result = await tool.ExecuteAsync(args, ctx);
 

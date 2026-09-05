@@ -69,6 +69,24 @@ public static class TestLoops
             NullLogger<AgentLoop>.Instance);
     }
 
+    public static AgentLoop Create(ScriptedLlmClient client, FakeToolRegistry tools)
+    {
+        var agent = TestAgents.AllowAll();
+        var agents = new FakeAgentRegistry(agent);
+        return new AgentLoop(
+            new FakeProviderRegistry(client),
+            tools,
+            agents,
+            new StubSystemPromptBuilder(),
+            new FakeCompactionService(),
+            new FakeTokenTracker(),
+            new RetryPolicy(),
+            new FakeEventBus(),
+            new PermissionService(agents, NullLogger<PermissionService>.Instance),
+            new MessageConverter(),
+            NullLogger<AgentLoop>.Instance);
+    }
+
     public static AgentLoop CreateWithDefaults(AgentDefinition? agent = null)
     {
         agent ??= TestAgents.AllowAll();

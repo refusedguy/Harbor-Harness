@@ -9,6 +9,8 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
+using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
