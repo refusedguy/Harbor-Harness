@@ -29,8 +29,8 @@ public class SkillLoopTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        catch (IOException) { /* temp dir cleanup is best-effort */ }
+        catch (UnauthorizedAccessException) { /* temp dir cleanup is best-effort */ }
     }
 
     [Test]

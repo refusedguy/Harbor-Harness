@@ -105,7 +105,7 @@ public class LspServerSessionIntegrationTests
 
             await Assert.That(changed).IsEqualTo(filePath);
             IReadOnlyList<LspDiagnostic> diagnostics = session.GetDiagnostics(filePath);
-            await Assert.That(diagnostics).HasCount().EqualTo(1);
+            await Assert.That(diagnostics.Count()).IsEqualTo(1);
             await Assert.That(diagnostics[0].Severity).IsEqualTo(LspSeverity.Error);
             await Assert.That(diagnostics[0].Message).IsEqualTo("fake error");
 
@@ -125,6 +125,7 @@ public class LspServerSessionIntegrationTests
             }
             catch (IOException)
             {
+                // best-effort cleanup of a temp workspace
             }
         }
     }

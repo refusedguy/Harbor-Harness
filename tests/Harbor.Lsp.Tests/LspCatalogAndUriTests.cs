@@ -7,7 +7,7 @@ public class LspServerCatalogTests
     [Test]
     public async Task BuiltinCatalog_HasFiveServers()
     {
-        await Assert.That(LspServerDefinition.Builtin).HasCount().EqualTo(5);
+        await Assert.That(LspServerDefinition.Builtin.Count()).IsEqualTo(5);
         await Assert.That(LspServerDefinition.Builtin.Select(d => d.Id))
             .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp"]);
     }
