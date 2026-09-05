@@ -121,25 +121,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Stash build outputs
-        uses: actions/upload-artifact@v7
-        with:
-          name: solution-binaries
-          path: |
-            apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll
-            apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli
-            src/**/bin/Release/net10.0/*.dll
-            src/**/bin/Release/net10.0/*.json
-            tests/**/bin/Release/net10.0/*.dll
-            tests/**/bin/Release/net10.0/*.json
-            **/obj/project.assets.json
-            **/obj/project.nuget.cache
-            !**/*.pdb
-            !**/*.xml
-            !apps/Harbor.App.Avalonia/**
-          retention-days: 1
-          if-no-files-found: error
-
   test:
     needs: [changes, build]
     if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
@@ -208,11 +189,6 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v7
-        with:
-          name: solution-binaries
-
       # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
       # integration tests self-skip and the platform shard silently runs
       # three fewer real tests.
@@ -223,6 +199,13 @@ jobs:
             sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
           fi
           rg --version | head -1
+
+      - name: Build shard ${{ matrix.shard }}
+        run: |
+          for p in ${{ matrix.projects }}; do
+            echo "Building tests/$p"
+            dotnet build "tests/$p" -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false --no-restore
+          done
 
       - name: Run shard ${{ matrix.shard }}
         timeout-minutes: 15
@@ -243,11 +226,7 @@ jobs:
             echo "::group::dotnet exec $p"
             start=$(date +%s)
             dll="tests/$p/bin/Release/net10.0/$p.dll"
-            if [ ! -f "$dll" ]; then
-              echo "Missing $dll — did build artifact download fail?"
-              status="FAIL"
-              rc=1
-            elif dotnet exec "$dll" $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
+            if dotnet exec "$dll" $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -392,10 +371,8 @@ jobs:
           dotnet-version: "10.0.x"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
-      - name: Download build outputs
-        uses: actions/download-artifact@v7
-        with:
-          name: solution-binaries
+      - name: Build perf tests
+        run: dotnet build tests/Harbor.Tui.PerfTests -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false --no-restore
       - name: Run renderer performance gate
         run: |
           sudo systemctl stop snapd.service snapd.socket || true
