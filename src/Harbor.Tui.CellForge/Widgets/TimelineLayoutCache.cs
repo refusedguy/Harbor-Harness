@@ -281,13 +281,6 @@ public sealed class TimelineLayoutCache
 
     public long BlockTop(int index) => _virtual[index];
 
-    /// <summary>Maximum scroll-top for the viewport: the overflow when content
-    /// is taller than the view, else 0 (nothing to scroll).</summary>
-    public long MaxScrollFor(int viewportH) => Math.Max(0, TotalHeight - viewportH);
-
-    /// <summary>Clamp a scroll-top into the valid range for the viewport.</summary>
-    public long ClampScrollY(long y, int viewportH) => Math.Clamp(y, 0, MaxScrollFor(viewportH));
-
     public int EffectiveHeight(int index)
     {
         ref readonly var s = ref _slots[index];

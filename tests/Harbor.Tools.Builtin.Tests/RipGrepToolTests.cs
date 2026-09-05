@@ -201,6 +201,7 @@ public class RipGrepToolTests
 /// <summary>
 ///     Skip the test when <c>rg</c> is NOT on PATH. Used by the "WhenRgInstalled" tests.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 {
     public SkipWhenRgMissingAttribute() : base(RipGrepToolTests.RgMissingReason) { }
@@ -213,6 +214,7 @@ internal sealed class SkipWhenRgMissingAttribute : SkipAttribute
 /// <summary>
 ///     Skip the test when <c>rg</c> IS on PATH. Used by the "MissingRg" test.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenRgPresentAttribute : SkipAttribute
 {
     public SkipWhenRgPresentAttribute() : base(RipGrepToolTests.RgPresentReason) { }

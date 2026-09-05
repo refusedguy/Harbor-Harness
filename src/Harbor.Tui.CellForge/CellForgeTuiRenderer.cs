@@ -4,9 +4,13 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
+using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tui.CellForge;
@@ -81,9 +85,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     }
 
     public override ITuiRenderContext Context { get; }
-
-    /// <summary>Panel providers owned by this renderer (CF-E-002 wiring).</summary>
-    public CellForgePanelRegistry Panels => _panels;
 
     /// <summary>TEA store backing this renderer (CF-E-002 wiring).</summary>
     public UiStore Store => _store;
