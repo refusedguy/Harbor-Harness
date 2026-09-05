@@ -130,10 +130,12 @@ jobs:
             apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli
             src/**/bin/Release/net10.0/*.dll
             src/**/bin/Release/net10.0/*.json
-            src/**/bin/Release/net10.0/runtimes/**
             tests/**/bin/Release/net10.0/*.dll
             tests/**/bin/Release/net10.0/*.json
-            tests/**/bin/Release/net10.0/runtimes/**
+            tests/**/bin/Release/net10.0/runtimes/linux-x64/native/e_sqlite3.so
+            tests/**/bin/Release/net10.0/runtimes/linux-x64/native/libSkiaSharp.so
+            src/**/bin/Release/net10.0/runtimes/linux-x64/native/e_sqlite3.so
+            src/**/bin/Release/net10.0/runtimes/linux-x64/native/libSkiaSharp.so
             **/obj/project.assets.json
             **/obj/project.nuget.cache
             !**/*.pdb
@@ -339,7 +341,7 @@ jobs:
   # Task: artifact publishing — self-contained single-file CLI.
   publish:
     needs: [changes, build]
-    if: needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && needs.changes.outputs.dotnet == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
