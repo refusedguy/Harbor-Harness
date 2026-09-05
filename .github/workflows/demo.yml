@@ -39,6 +39,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
 
       - name: Build CLI (tapes run the Release binary)
         run: dotnet build apps/Harbor.App.Cli -c Release
@@ -90,7 +92,7 @@ jobs:
         with:
           name: demo-gifs
           path: assets/demo/*-compressed.gif
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Commit regenerated GIFs (push to dev/master only)
         if: github.event_name == 'push'

@@ -140,6 +140,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      checks: write
     strategy:
       fail-fast: false
       matrix:
@@ -259,6 +260,15 @@ jobs:
           path: "TestResults/**/*.trx"
           reporter: dotnet-trx
           fail-on-error: false
+
+      - name: Upload TRX test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.shard }}
+          path: "TestResults/**/*.trx"
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Task: matrix builds. Portable suites only — the bash tool, PTY and
   # SpectreTUI suites are Linux-bound; the heavy Avalonia E2E stays on ubuntu.
@@ -383,6 +393,36 @@ jobs:
         run: |
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet exec tests/Harbor.Tui.PerfTests/bin/Release/net10.0/Harbor.Tui.PerfTests.dll -- --output Detailed
+      - name: Enforce relative 5% regression rule (strict mode only)
+        if: env.HARBOR_PERF_BASELINE_STRICT == '1'
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          baseline = {}
+          for line in open("tests/Harbor.Tui.PerfTests/baseline.csv"):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              b, _, eps, p99, mem = line.split(";")
+              baseline[b] = (float(eps), float(p99), float(mem))
+          failed = False
+          for line in open(os.environ["HARBOR_PERF_REPORT"]):
+              line = line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              b, _, eps, p99, mem = line.split(";")
+              eps, p99, mem = float(eps), float(p99), float(mem)
+              b0 = baseline.get(b)
+              if not b0:
+                  print(f"{b}: no baseline entry — add one to baseline.csv"); failed = True; continue
+              if eps < b0[0] * 0.95:
+                  print(f"{b}: throughput regression {eps:F0} < 95% of {b0[0]:F0}"); failed = True
+              if p99 > b0[1] * 1.05:
+                  print(f"{b}: p99 regression {p99:F3} > 105% of {b0[1]:F3}"); failed = True
+              if mem > b0[2] * 1.05:
+                  print(f"{b}: allocation regression {mem:F4} > 105% of {b0[2]:F4}"); failed = True
+          sys.exit(1 if failed else 0)
+          PY
       - name: Upload perf report
         if: always()
         uses: actions/upload-artifact@v7
