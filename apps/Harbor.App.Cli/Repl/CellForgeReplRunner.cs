@@ -437,24 +437,26 @@ internal sealed class CellForgeReplRunner(
         // token/cost formatting) instead of the legacy BuildSegments path.
         string statusText = _status.Mode.ToString().ToLowerInvariant();
         screen.Status.ProjectedRetry = _status.Retry;
-        long tokensIn = _status.TokensIn > 0 ? _status.TokensIn : 0;
-        long tokensOut = _status.TokensOut > 0 ? _status.TokensOut : 0;
+        long tokensIn = 0;
+        long tokensOut = 0;
         decimal costUsd = 0m;
         if (_tokens?.GetStats() is { } stats)
         {
-            tokensIn = Math.Max(tokensIn, stats.TotalInputTokens);
-            tokensOut = Math.Max(tokensOut, stats.TotalOutputTokens);
-            costUsd = stats.TotalCostUsd;
+            tokensIn = stats.TotalInputTokens;
+            tokensOut = stats.TotalOutputTokens;
         }
-        screen.Status.ProjectedState = new UiState(
-            Status: statusText,
-            Model: _status.Model,
-            Provider: sessionModel.ProviderId,
-            AgentName: sessionModel.Agent,
-            Cost: new CostSnapshot(TokensIn: tokensIn, TokensOut: tokensOut, CostUsd: costUsd),
-            ScrollOffset: 0,
-            ViewportLines: rows,
-            TotalLines: Math.Max(rows, screen.Timeline.Timeline.Count));
+
+        screen.Status.ProjectedState = new UiState
+        {
+            Status = statusText,
+            Model = _status.Model,
+            Provider = sessionModel.ProviderId,
+            AgentName = sessionModel.Agent,
+            Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
+            ScrollOffset = 0,
+            ViewportLines = rows,
+            TotalLines = Math.Max(rows, screen.Timeline.Timeline.Count)
+        };
 
         // Spring resize (P1.6): while a layout spring is in flight the rects
         // move every frame — self-wake keeps frames flowing until it settles.
