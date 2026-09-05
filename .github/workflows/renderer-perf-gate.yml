@@ -55,8 +55,8 @@ jobs:
           dotnet-version: "10.0.x"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
-      - name: Build solution (Release, deterministic)
-        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
+      - name: Build perf tests
+        run: dotnet build tests/Harbor.Tui.PerfTests -c Release -p:ContinuousIntegrationBuild=true
 
   perf-gate:
     needs: build
