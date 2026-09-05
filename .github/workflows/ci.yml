@@ -125,11 +125,14 @@ jobs:
         with:
           name: solution-binaries
           path: |
-            apps/**/bin/Release/
+            apps/Harbor.App.Cli/bin/Release/
             src/**/bin/Release/
             tests/**/bin/Release/
             **/obj/project.assets.json
             **/obj/project.nuget.cache
+            !**/*.pdb
+            !**/*.xml
+            !apps/Harbor.App.Avalonia/**
           retention-days: 1
           if-no-files-found: error
 
