@@ -3,6 +3,7 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Application.Permissions;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;

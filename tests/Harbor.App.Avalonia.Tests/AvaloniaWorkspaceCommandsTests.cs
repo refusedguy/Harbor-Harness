@@ -185,8 +185,6 @@ public class AvaloniaWorkspaceCommandsTests
 
         commands.NewSession();
 
-        await Task.Delay(50);
-
         await Assert.That(sessionManager.NewSessionCalled).IsTrue();
     }
 
@@ -207,8 +205,6 @@ public class AvaloniaWorkspaceCommandsTests
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, SessionMetadata.Empty);
 
         commands.BranchSession();
-
-        await Task.Delay(50);
 
         await Assert.That(sessionManager.BranchCalled).IsTrue();
     }

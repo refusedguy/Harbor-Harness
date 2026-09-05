@@ -6,6 +6,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -68,7 +70,7 @@ public class ToolDispatcherFailClosedTests
         return (loop, client, tool);
     }
 
-    private static Fakes.TestSessionContext NewSession() => new(
+    private static TestSessionContext NewSession() => new(
         Session.Create("/tmp/harbor-fail-closed-tests", "code", "test", "test-model"));
 
     [Test]
