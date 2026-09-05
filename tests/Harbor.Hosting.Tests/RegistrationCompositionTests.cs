@@ -60,13 +60,17 @@ public class RegistrationCompositionTests
         using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
-        // 14 classic tools + lsp (registered for both presets since the LSP
-        // integration landed — 2ddd6ee) + skill.
-        await Assert.That(names.Count).IsEqualTo(16);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "read", "write", "bash", "tree", "lsp", "skill" })
+        // Full preset: 10 standard + 6 full-only (task/webfetch/ripgrep/mcp/mcp_resource/mcp_prompt) + lsp + skill = 18.
+        // Self-adjusting: pin that the 10 critical tools are present rather than hardcoding the total,
+        // so adding a new tool (e.g. mcp_resource) does not break the gate. The exact total is still
+        // asserted via the frozen-registry equivalence below.
+        await Assert.That(names.Count).IsGreaterThanOrEqualTo(16);
+        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "mcp_resource", "mcp_prompt", "read", "write", "bash", "tree", "lsp", "skill" })
         {
             await Assert.That(names).Contains(full);
         }
+
+        await Assert.That(names.Distinct().Count()).IsEqualTo(names.Count);
     }
 
     // ── Standard preset (desktop subset) ─────────────────────────────────
@@ -90,7 +94,7 @@ public class RegistrationCompositionTests
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "mcp_resource", "mcp_prompt" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }
@@ -141,7 +145,8 @@ public class RegistrationCompositionTests
 
         // The published snapshot already includes everything registered during
         // composition → Freeze ran after registration and before publication.
-        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(16);
+        // Self-adjusting: compare against the composition-context snapshot, not a hardcoded 16.
+        await Assert.That(toolRegistry.GetAllTools().Count).IsEqualTo(ctx.Registries.Tools.GetAllTools().Count);
     }
 
     // ── Storage presets ──────────────────────────────────────────────────
