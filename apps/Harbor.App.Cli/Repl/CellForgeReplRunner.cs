@@ -1163,7 +1163,13 @@ internal sealed class CellForgeReplRunner(
             var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
-                bridge.AppendSystemLine("! " + result.Error);
+                // Abort path surfaces as Result failure "The operation was canceled"
+                // rather than OCE — normalize to the same user-facing line.
+                if (result.Error.Contains("canceled", StringComparison.OrdinalIgnoreCase)
+                    || result.Error.Contains("cancelled", StringComparison.OrdinalIgnoreCase))
+                    bridge.AppendSystemLine("ход прерван");
+                else
+                    bridge.AppendSystemLine("! " + result.Error);
             }
         }
         catch (OperationCanceledException)
