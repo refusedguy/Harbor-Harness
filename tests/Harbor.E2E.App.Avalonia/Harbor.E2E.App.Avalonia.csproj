@@ -57,7 +57,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
     <!-- Avalonia.Headless — in-process off-screen Avalonia renderer. Lets us
          build the real App + MainWindow + full layout/render pipeline on the
          test thread, then capture the rendered pixels as a Bitmap → PNG. -->
