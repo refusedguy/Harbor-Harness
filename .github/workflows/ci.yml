@@ -240,7 +240,7 @@ jobs:
               echo "Missing $dll — did build artifact download fail?"
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" -- $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
+            elif dotnet exec "$dll" $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -317,7 +317,7 @@ jobs:
           foreach ($p in $projects) {
             Write-Host "::group::dotnet exec $p"
             $dll = "tests/$p/bin/Release/net10.0/$p.dll"
-            dotnet exec $dll -- --minimum-expected-tests 1
+            dotnet exec $dll --minimum-expected-tests 1
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
           }
@@ -392,7 +392,7 @@ jobs:
       - name: Run renderer performance gate
         run: |
           sudo systemctl stop snapd.service snapd.socket || true
-          taskset -c 1 dotnet exec tests/Harbor.Tui.PerfTests/bin/Release/net10.0/Harbor.Tui.PerfTests.dll -- --output Detailed
+          taskset -c 1 dotnet exec tests/Harbor.Tui.PerfTests/bin/Release/net10.0/Harbor.Tui.PerfTests.dll --output Detailed
       - name: Enforce relative 5% regression rule (strict mode only)
         if: env.HARBOR_PERF_BASELINE_STRICT == '1'
         run: |
