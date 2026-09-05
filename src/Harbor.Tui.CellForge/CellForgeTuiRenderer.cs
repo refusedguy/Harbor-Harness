@@ -204,10 +204,14 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     {
         if (_statusVm is StatusBarViewModel svm)
         {
-            svm.Status = state.Status;
-            svm.Model = state.Model;
-            svm.Provider = state.Provider;
-            svm.Agent = state.AgentName;
+            if (!string.IsNullOrEmpty(state.Status))
+                svm.Status = state.Status;
+            if (!string.IsNullOrEmpty(state.Model))
+                svm.Model = state.Model;
+            if (!string.IsNullOrEmpty(state.Provider))
+                svm.Provider = state.Provider;
+            if (!string.IsNullOrEmpty(state.AgentName))
+                svm.Agent = state.AgentName;
             svm.TokensIn = (int)Math.Min(state.Cost.TokensIn, int.MaxValue);
             svm.TokensOut = (int)Math.Min(state.Cost.TokensOut, int.MaxValue);
             svm.Cost = state.Cost.CostUsd;

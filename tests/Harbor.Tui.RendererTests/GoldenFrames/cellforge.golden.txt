@@ -1,7 +1,7 @@
-[?25l[0m[2K[38;2;0;255;255m/ | agent: code | $0.0000 | 0↑ 0↓ | running[0m
-[38;2;0;255;255m[assistant] [0mHello, world!
-
-[38;2;0;0;255m→ read[0m[2m {"path":"README.md","limit":10}[0m
-[38;2;0;255;255m[assistant] [0mDone.
-[0m[2K[38;2;128;128;128m/ | agent: code | $0.0000 | 0↑ 0↓ | idle[0m
+[?25l[0m[2K[38;2;0;255;255m/ | agent:  | $0.0000 | 0↑ 0↓ | running[0m
+[0m[2K[38;2;0;255;0m> [0m[2mAgent is running… (Esc to stop)[0m
+[38;2;128;128;128m[result] [0m✓ [0001] # Harbor
+[38;2;128;128;128m[result] [0m✓ [0001] # Harbor
+[0m[2K[38;2;128;128;128m/ | agent:  | $0.0000 | 0↑ 0↓ | idle[0m
+[0m[2K[38;2;0;255;0m> [0m[2mType your message...[0m
 [?25h
