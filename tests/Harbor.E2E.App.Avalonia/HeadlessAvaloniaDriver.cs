@@ -604,6 +604,28 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     }
 
     /// <summary>
+    ///     Poll the main window until <paramref name="text" /> disappears from
+    ///     the visible visual tree or the timeout elapses. Returns true if the
+    ///     text was absent at the deadline. Use for "wait for auto-dismiss"
+    ///     scenarios where you need the visual tree to actually clear, not
+    ///     just an arbitrary <c>Task.Delay</c>.
+    /// </summary>
+    public async Task<bool> WaitForTextAbsentAsync(string text, TimeSpan? timeout = null)
+    {
+        var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            string current = GetAllVisibleText();
+            if (!current.Contains(text, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            await Task.Delay(50).ConfigureAwait(false);
+        }
+        return !GetAllVisibleText().Contains(text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     ///     Poll a SEPARATE window's visual tree (not MainWindow) until
     ///     <paramref name="text" /> appears. Needed for tests that open their
     ///     own window (onboarding wizard) — <see cref="WaitForTextAsync" />

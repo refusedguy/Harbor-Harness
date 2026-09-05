@@ -15,6 +15,7 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     process spawn + real PTYs are serialized by design.
 /// </summary>
 [NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
 public abstract class CellForgePtyScenarioBase
 {
     private const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";

@@ -35,7 +35,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsCommandPaletteOpen = true);
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasPalette = await Driver.WaitForTextAsync("Command palette", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -65,7 +64,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
             Vm.IsCommandPaletteOpen = true;
             Vm.CommandPalette.Query = "session";
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasNewSession = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -95,13 +93,11 @@ public sealed class CommandPaletteTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsCommandPaletteOpen = true);
-        await Task.Delay(300).ConfigureAwait(false);
 
         var idxBefore = UI(() => Vm.CommandPalette.SelectedIndex);
         await Assert.That(idxBefore).IsEqualTo(0);
 
         UI(() => Vm.CommandPalette.MoveDown());
-        await Task.Delay(150).ConfigureAwait(false);
 
         var idxAfter = UI(() => Vm.CommandPalette.SelectedIndex);
         await Assert.That(idxAfter).IsEqualTo(1);
@@ -129,10 +125,8 @@ public sealed class CommandPaletteTests : ComponentTestBase
             // SelectedIndex=1 highlights it.
             Vm.CommandPalette.SelectedIndex = 1;
         });
-        await Task.Delay(200).ConfigureAwait(false);
 
         UI(() => Vm.CommandPalette.InvokeSelected());
-        await Task.Delay(300).ConfigureAwait(false);
 
         var activeView = UI(() => Vm.ActiveView);
         await Assert.That(activeView).IsEqualTo("code");
@@ -155,11 +149,9 @@ public sealed class CommandPaletteTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsCommandPaletteOpen = true);
-        await Task.Delay(200).ConfigureAwait(false);
 
         // Now close it.
         UI(() => Vm.IsCommandPaletteOpen = false);
-        await Task.Delay(200).ConfigureAwait(false);
 
         var stillOpen = UI(() => Vm.IsCommandPaletteOpen);
         await Assert.That(stillOpen).IsFalse();
@@ -183,7 +175,6 @@ public sealed class CommandPaletteTests : ComponentTestBase
             Vm.IsCommandPaletteOpen = true;
             Vm.CommandPalette.Query = "zzzznomatch";
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         var count = UI(() => Vm.CommandPalette.Results.Count);
         await Assert.That(count).IsEqualTo(0);

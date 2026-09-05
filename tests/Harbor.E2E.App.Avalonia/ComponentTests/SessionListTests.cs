@@ -67,7 +67,6 @@ public sealed class SessionListTests : ComponentTestBase
             Vm.IsSidebarVisible = true;
             Vm.Sessions.Sessions.Clear();
         });
-        await Task.Delay(200).ConfigureAwait(false);
 
         var sidebarVisible = UI(() => Vm.IsSidebarVisible);
         await Assert.That(sidebarVisible).IsTrue();
@@ -128,7 +127,6 @@ public sealed class SessionListTests : ComponentTestBase
                 DateTimeOffset.UtcNow, 2, "/home/z/myproject"));
             Vm.Sessions.ActiveSession = sessions[1];
         });
-        await Task.Delay(250).ConfigureAwait(false);
 
         var activeId = UI(() => Vm.Sessions.ActiveSession?.Id);
         await Assert.That(activeId).IsEqualTo("s2");
@@ -189,7 +187,6 @@ public sealed class SessionListTests : ComponentTestBase
                 "s1", "Existing session", "code", "qwen2.5-coder:7b", "ollama",
                 DateTimeOffset.UtcNow, 5, "/home/z/myproject"));
         });
-        await Task.Delay(150).ConfigureAwait(false);
 
         UI(() =>
         {
@@ -198,7 +195,6 @@ public sealed class SessionListTests : ComponentTestBase
                 DateTimeOffset.UtcNow, 0, "/home/z/myproject"));
             Vm.Sessions.ActiveSession = Vm.Sessions.Sessions[1];
         });
-        await Task.Delay(250).ConfigureAwait(false);
 
         var hasNew = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);

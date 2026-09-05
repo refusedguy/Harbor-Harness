@@ -39,7 +39,6 @@ public sealed class SettingsTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = true);
-        await Task.Delay(400).ConfigureAwait(false);
 
         var hasTheme = await Driver.WaitForTextAsync("Theme", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -74,7 +73,6 @@ public sealed class SettingsTests : ComponentTestBase
             Vm.IsSettingsOpen = true;
             Vm.Settings.ThemeSettings.Theme = "light";
         });
-        await Task.Delay(400).ConfigureAwait(false);
 
         var theme = UI(() => Vm.Settings.ThemeSettings.Theme);
         await Assert.That(theme).IsEqualTo("light");
@@ -111,7 +109,6 @@ public sealed class SettingsTests : ComponentTestBase
         Dispatcher.UIThread
             .InvokeAsync(() => settingsVm!.Settings.SaveCommand.ExecuteAsync(null))
             .GetAwaiter().GetResult();
-        await Task.Delay(700).ConfigureAwait(false);
 
         // A11: read through the STORE-REPORTED directory — the test's own
         // TempHome assumption may diverge from where the host actually writes.
@@ -157,10 +154,8 @@ public sealed class SettingsTests : ComponentTestBase
             Vm.IsSettingsOpen = true;
             Vm.Settings.ThemeSettings.Theme = "light";
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         UI(() => Vm.Settings.CancelCommand.Execute(null));
-        await Task.Delay(200).ConfigureAwait(false);
 
         var themeAfter = UI(() => Vm.Settings.ThemeSettings.Theme);
         await Assert.That(themeAfter).IsEqualTo(themeBefore);
@@ -182,7 +177,6 @@ public sealed class SettingsTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.IsSettingsOpen = true);
-        await Task.Delay(400).ConfigureAwait(false);
 
         // ScrollViewer may hide the provider config section; verify it exists
         // by looking for the "Provider Configuration" label.

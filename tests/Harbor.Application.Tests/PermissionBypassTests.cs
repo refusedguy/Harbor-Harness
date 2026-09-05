@@ -30,10 +30,14 @@ public class PermissionBypassTests
     }
 
     [Test]
-    public async Task CheckAsync_BashAllowRuleWithChainedDestructiveTail_IsNotAllow()
+    [Arguments("cat setup.sh; rm -rf ~", "chained destructive tail")]
+    [Arguments("git diff | sh", "piped shell execution")]
+    [Arguments("cat `whoami`.log", "backtick substitution")]
+    [Arguments("cat README.md\nrm -rf ~/notes", "multiline command")]
+    public async Task CheckAsync_BashAllowRule_BypassAttempts_AreNotAllow(string command, string _)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "cat setup.sh; rm -rf ~" });
+        var args = Args(new { command });
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -42,46 +46,12 @@ public class PermissionBypassTests
     }
 
     [Test]
-    public async Task CheckAsync_BashAllowRuleWithPipedShellExecution_IsNotAllow()
+    [Arguments("cat README.md", "benign cat command")]
+    [Arguments("git diff HEAD~1", "benign git diff command")]
+    public async Task CheckAsync_BashBenignCommands_StillAllowed(string command, string _)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "git diff | sh" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_BashAllowRuleWithBacktickSubstitution_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "cat `whoami`.log" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_BashMultilineCommandUnderAllowRule_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "cat README.md\nrm -rf ~/notes" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_BenignCatCommand_StillAllowed()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "cat README.md" });
+        var args = Args(new { command });
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -90,19 +60,57 @@ public class PermissionBypassTests
     }
 
     [Test]
-    public async Task CheckAsync_BenignGitDiffCommand_StillAllowed()
+    [Arguments("write", "src/../../../etc/passwd", "traversal escaping src")]
+    [Arguments("write", "/etc/harbor-redteam-probe.txt", "absolute path outside workspace")]
+    [Arguments("edit", "src/../../secrets.env", "traversal escaping src")]
+    [Arguments("patch", "src/../../../etc/cron.d/evil", "traversal arg path")]
+    [Arguments("tree", "../../etc", "traversal arg path")]
+    [Arguments("notebook", "../../etc/evil.ipynb", "traversal arg path")]
+    [Arguments("mcp", "../../etc", "traversal arg path")]
+    public async Task CheckAsync_FileTool_UnsafePaths_AreNotAllowed(string tool, string path, string _)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { command = "git diff HEAD~1" });
+        var args = Args(new { path });
 
-        var result = await svc.CheckAsync("code", "bash", args);
+        var result = await svc.CheckAsync("code", tool, args);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
+    }
+
+    [Test]
+    [Arguments("write", "src/feature/new.ts", "normal src path")]
+    public async Task CheckAsync_WriteNormalSrcPath_StillAllowed(string tool, string path, string _)
+    {
+        var svc = CreateService(PermissionRuleset.Default);
+        var args = Args(new { path });
+
+        var result = await svc.CheckAsync("code", tool, args);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
     [Test]
-    public async Task CheckAsync_RmRfSlashWithSwappedFlags_IsDeniedWithoutPrompt()
+    [Arguments("ripgrep", "secret", "../../etc", "traversal arg path")]
+    public async Task CheckAsync_Ripgrep_UnsafePath_IsNotAllowed(string tool, string pattern, string path, string _)
+    {
+        var svc = CreateService(PermissionRuleset.Default);
+        var args = Args(new { pattern, path });
+
+        var result = await svc.CheckAsync("code", tool, args);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
+    }
+
+    [Test]
+    [Arguments("rm -fr /", "RmRfSlashWithSwappedFlags")]
+    [Arguments("cd / && rm -rf .", "CompoundRmRfDotPath")]
+    [Arguments("/usr/bin/sudo ls", "SudoViaAbsolutePath")]
+    [Arguments("sudo ls", "DirectSudoCommand")]
+    [Arguments("rm -rf /", "DirectRmRfRootCommand")]
+    public async Task CheckAsync_DestructiveBash_IsDeniedWithoutPrompt(string command, string _)
     {
         int prompts = 0;
         Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
@@ -112,200 +120,12 @@ public class PermissionBypassTests
         }
 
         var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new { command = "rm -fr /" });
+        var args = Args(new { command });
 
         var result = await svc.CheckAsync("code", "bash", args);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
         await Assert.That(prompts).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task CheckAsync_CompoundRmRfDotPath_IsDeniedWithoutPrompt()
-    {
-        int prompts = 0;
-        Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
-        {
-            prompts++;
-            return Task.FromResult(new PermissionResponse(PermissionAction.Deny, false));
-        }
-
-        var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new { command = "cd / && rm -rf ." });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
-        await Assert.That(prompts).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task CheckAsync_SudoViaAbsolutePath_IsDeniedWithoutPrompt()
-    {
-        int prompts = 0;
-        Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
-        {
-            prompts++;
-            return Task.FromResult(new PermissionResponse(PermissionAction.Deny, false));
-        }
-
-        var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new { command = "/usr/bin/sudo ls" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
-        await Assert.That(prompts).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task CheckAsync_DirectSudoCommand_IsDeniedWithoutPrompt()
-    {
-        int prompts = 0;
-        Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
-        {
-            prompts++;
-            return Task.FromResult(new PermissionResponse(PermissionAction.Deny, false));
-        }
-
-        var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new { command = "sudo ls" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
-        await Assert.That(prompts).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task CheckAsync_DirectRmRfRootCommand_IsDeniedWithoutPrompt()
-    {
-        int prompts = 0;
-        Task<PermissionResponse> CountingAsker(PermissionRequest req, CancellationToken ct)
-        {
-            prompts++;
-            return Task.FromResult(new PermissionResponse(PermissionAction.Deny, false));
-        }
-
-        var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new { command = "rm -rf /" });
-
-        var result = await svc.CheckAsync("code", "bash", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
-        await Assert.That(prompts).IsEqualTo(0);
-    }
-
-    [Test]
-    public async Task CheckAsync_WriteTraversalPathEscapingSrc_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "src/../../../etc/passwd", content = "pwned" });
-
-        var result = await svc.CheckAsync("code", "write", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_WriteAbsolutePathOutsideWorkspace_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "/etc/harbor-redteam-probe.txt", content = "pwned" });
-
-        var result = await svc.CheckAsync("code", "write", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_WriteNormalSrcPath_StillAllowed()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "src/feature/new.ts", content = "ok" });
-
-        var result = await svc.CheckAsync("code", "write", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_EditTraversalPathEscapingSrc_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "src/../../secrets.env", oldString = "a", newString = "b" });
-
-        var result = await svc.CheckAsync("code", "edit", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_PatchTraversalArgPath_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "src/../../../etc/cron.d/evil" });
-
-        var result = await svc.CheckAsync("code", "patch", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_TreeTraversalArgPath_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "../../etc" });
-
-        var result = await svc.CheckAsync("code", "tree", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_RipgrepTraversalArgPath_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { pattern = "secret", path = "../../etc" });
-
-        var result = await svc.CheckAsync("code", "ripgrep", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_NotebookTraversalArgPath_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "../../etc/evil.ipynb" });
-
-        var result = await svc.CheckAsync("code", "notebook", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task CheckAsync_McpTraversalArgPath_IsNotAllow()
-    {
-        var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new { path = "../../etc" });
-
-        var result = await svc.CheckAsync("code", "mcp", args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.Action).IsNotEqualTo(PermissionAction.Allow);
     }
 }

@@ -10,11 +10,13 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <ProjectReference Include="../../src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="CSharpFunctionalExtensions" />
+    <PackageReference Include="TUnit.Mocks" />
   </ItemGroup>
 
 </Project>

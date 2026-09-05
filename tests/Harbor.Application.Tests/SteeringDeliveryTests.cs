@@ -236,7 +236,7 @@ public class SteeringDeliveryTests
     public async Task DefaultAgent_PromptWhileRunning_SteersInsteadOfBusyFailure()
     {
         var session = Session.Create("/tmp/harbor-steering-agent-tests", "code", "test", "test-model");
-        var store = new FakeSessionStore(session);
+        var store = new Harbor.Application.Tests.Fakes.FakeSessionStore(session);
 
         // A loop that BLOCKS until released — keeps the gate held so the
         // second prompt hits the busy path.
