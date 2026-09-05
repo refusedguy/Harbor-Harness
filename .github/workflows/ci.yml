@@ -128,6 +128,8 @@ jobs:
             apps/**/bin/Release/
             src/**/bin/Release/
             tests/**/bin/Release/
+            **/obj/project.assets.json
+            **/obj/project.nuget.cache
           retention-days: 1
           if-no-files-found: error
 
@@ -230,9 +232,14 @@ jobs:
           echo "|---|---|---|" >> "$summary"
           rc=0
           for p in ${{ matrix.projects }}; do
-            echo "::group::dotnet run $p"
+            echo "::group::dotnet exec $p"
             start=$(date +%s)
-            if dotnet run --project "tests/$p" -c Release --no-build -- $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
+            dll="tests/$p/bin/Release/net10.0/$p.dll"
+            if [ ! -f "$dll" ]; then
+              echo "Missing $dll — did build artifact download fail?"
+              status="FAIL"
+              rc=1
+            elif dotnet exec "$dll" -- $guard --report-trx --report-trx-filename "$trx_dir/$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -278,10 +285,8 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Download build outputs
-        uses: actions/download-artifact@v7
-        with:
-          name: solution-binaries
+      - name: Build for ${{ matrix.os }} (local, no Linux artifact)
+        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
 
       - name: Test critical suites on ${{ matrix.os }}
         timeout-minutes: 15
@@ -300,8 +305,9 @@ jobs:
           )
           $failed = @()
           foreach ($p in $projects) {
-            Write-Host "::group::dotnet run $p"
-            dotnet run --project "tests/$p" -c Release --no-build -- --minimum-expected-tests 1
+            Write-Host "::group::dotnet exec $p"
+            $dll = "tests/$p/bin/Release/net10.0/$p.dll"
+            dotnet exec $dll -- --minimum-expected-tests 1
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
           }
