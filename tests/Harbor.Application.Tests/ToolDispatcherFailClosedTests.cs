@@ -1,4 +1,8 @@
 using System.Text.Json;
+using Harbor.TestKit;
+using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
+using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
+using CountingTool = Harbor.TestKit.CountingTool;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -6,7 +10,6 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Tests.Fakes;
-using Harbor.TestKit;
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;

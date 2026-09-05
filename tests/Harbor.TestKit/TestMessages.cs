@@ -1,6 +1,8 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using System.IO;
 
 namespace Harbor.TestKit;
 
@@ -29,6 +31,29 @@ public static class TestMessages
         sessionId,
         DateTimeOffset.UtcNow,
         [new ToolResultEntry(callId, toolName, output, false)]);
+
+    public static string RenderText(LlmRequest request)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (LlmMessage message in request.Messages)
+        {
+            if (message is LlmUserMessage user)
+            {
+                foreach (LlmContentBlock block in user.Content)
+                {
+                    if (block is LlmTextBlock text)
+                    {
+                        sb.Append(text.Text);
+                    }
+                }
+            }
+            else if (message is LlmToolResultMessage toolResult)
+            {
+                sb.Append(toolResult.Output);
+            }
+        }
+        return sb.ToString();
+    }
 }
 
 /// <summary>In-memory <see cref="ISessionContext" /> with steering helpers.</summary>
@@ -58,4 +83,12 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
             SteeringQueue.Writer.TryWrite(message);
         }
     }
+
+    public static TestSessionContext Create(params AgentMessage[] seed) => new(
+        Session.Create(Path.GetTempPath(), "code", "test", "test-model"),
+        seed);
+
+    public static TestSessionContext Create(string tempDir, params AgentMessage[] seed) => new(
+        Session.Create(tempDir, "code", "test", "test-model"),
+        seed);
 }

@@ -1,10 +1,15 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.TestKit;
+using FakeToolRegistry = Harbor.TestKit.FakeToolRegistry;
+using FakeEventBus = Harbor.TestKit.FakeEventBus;
+using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
+using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -16,38 +21,6 @@ namespace Harbor.Application.Tests;
 
 public class AgentLoopLifecycleTests
 {
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Red-team lifecycle harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
-    private static AgentLoop CreateLoop(
-        ScriptedLlmClient client,
-        FakeToolRegistry tools,
-        ITokenTracker tracker,
-        ICompactionService compaction,
-        FakeEventBus bus,
-        AgentDefinition? agent = null)
-    {
-        agent ??= AllowAllAgent();
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            tools,
-            agents,
-            new StubSystemPromptBuilder(),
-            compaction,
-            tracker,
-            new RetryPolicy(),
-            bus,
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
-    }
-
     private static TestSessionContext NewSession(params AgentMessage[] seedMessages) => new(
         Session.Create("/tmp/harbor-agentloop-lifecycle-tests", "code", "test", "test-model"),
         seedMessages);
@@ -82,13 +55,13 @@ public class AgentLoopLifecycleTests
     {
         var client = new ScriptedLlmClient(
             [[new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
-        var loop = CreateLoop(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var result = await loop.RunAsync(session, AllowAllAgent(), cts.Token);
+        var result = await loop.RunAsync(session, TestAgents.AllowAll(), cts.Token);
 
         await Assert.That(result.IsFailure).IsTrue();
     }
@@ -96,7 +69,7 @@ public class AgentLoopLifecycleTests
     [Test]
     public async Task RunAsync_StopReasonStopWithPendingToolCalls_ExecutesPendingToolCalls()
     {
-        var counter = new CountingTool();
+        var counter = new TestKit.CountingTool();
         var client = new ScriptedLlmClient(
         [
             new LlmEvent[]
@@ -111,10 +84,10 @@ public class AgentLoopLifecycleTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
-        var result = await loop.RunAsync(session, AllowAllAgent());
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(counter.Executions).IsEqualTo(1);
@@ -124,7 +97,7 @@ public class AgentLoopLifecycleTests
     [Test]
     public async Task RunAsync_MalformedToolCallArgs_ReturnsErrorResultWithoutExecutingTool()
     {
-        var counter = new CountingTool();
+        var counter = new TestKit.CountingTool();
         var client = new ScriptedLlmClient(
         [
             new LlmEvent[]
@@ -139,10 +112,10 @@ public class AgentLoopLifecycleTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
 
-        var result = await loop.RunAsync(session, AllowAllAgent());
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(counter.Executions).IsEqualTo(0);
@@ -160,14 +133,14 @@ public class AgentLoopLifecycleTests
         var client = new ScriptedLlmClient(
             [[new TextDeltaEvent("t", "ok"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
         var compaction = new FakeCompactionService();
-        var loop = CreateLoop(
+        var loop = TestLoops.Create(
             client,
             new FakeToolRegistry(),
             new FakeTokenTracker(shouldCompact: true),
             compaction,
             new FakeEventBus());
 
-        var result = await loop.RunAsync(context, AllowAllAgent());
+        var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(compaction.Calls).IsEqualTo(1);
@@ -178,7 +151,7 @@ public class AgentLoopLifecycleTests
     [Test]
     public async Task RunAsync_SteeringMessagesQueued_AllDrainedAtTurnBoundary()
     {
-        var counter = new CountingTool();
+        var counter = new TestKit.CountingTool();
         var client = new ScriptedLlmClient(
         [
             new LlmEvent[]
@@ -193,7 +166,7 @@ public class AgentLoopLifecycleTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var loop = CreateLoop(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
+        var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
         session.EnqueueSteering([.. Enumerable.Range(0, 5).Select(i => (AgentMessage)new UserMessage(
             Guid.NewGuid().ToString("N"),
@@ -203,7 +176,7 @@ public class AgentLoopLifecycleTests
             "user",
             "test-model"))]);
 
-        var result = await loop.RunAsync(session, AllowAllAgent());
+        var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
         await Assert.That(result.IsSuccess).IsTrue();
         var steeredContents = session.Messages.OfType<UserMessage>().Select(m => m.Content).ToList();
@@ -223,7 +196,7 @@ public class DefaultAgentConcurrencyTests
         var store = new Harbor.Application.Tests.Fakes.FakeSessionStore(session);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         store.GateNextAppend(gate);
-        var fakeLoop = new FakeAgentLoop();
+        var fakeLoop = new Harbor.Application.Tests.Fakes.FakeAgentLoop();
         var agentDefinition = new AgentDefinition(
             AgentName.Create("code"),
             "Code",

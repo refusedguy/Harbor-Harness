@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 namespace Harbor.Application.Tests;
 
 /// <summary>

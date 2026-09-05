@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tools;
 using TUnit.Assertions;
 

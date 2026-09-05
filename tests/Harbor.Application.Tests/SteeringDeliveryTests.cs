@@ -9,6 +9,11 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
+using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
+using FakeEventBus = Harbor.TestKit.FakeEventBus;
+using FakeToolRegistry = Harbor.TestKit.FakeToolRegistry;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
@@ -37,7 +42,7 @@ public class SteeringDeliveryTests
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
 
     /// <summary>Tool whose execution enqueues steering messages — simulates a steer arriving while the run is busy.</summary>
-    private sealed class SteeringTool(Fakes.TestSessionContext session, params string[] steeredTexts) : ITool
+    private sealed class SteeringTool(TestSessionContext session, params string[] steeredTexts) : ITool
     {
         public ToolName Name => ToolName.Create("steerer");
 
@@ -107,7 +112,7 @@ public class SteeringDeliveryTests
     [Test]
     public async Task RunAsync_SteerArrivesDuringToolExecution_ReachesNextRequestInCurrentRun()
     {
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-steering-tests", "code", "test", "test-model"));
         var client = new ScriptedLlmClient(
         [
@@ -153,7 +158,7 @@ public class SteeringDeliveryTests
     [Test]
     public async Task RunAsync_TwoSteersDuringExecution_PreserveFifoOrder()
     {
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-steering-tests", "code", "test", "test-model"));
         var client = new ScriptedLlmClient(
         [
@@ -199,7 +204,7 @@ public class SteeringDeliveryTests
     public async Task RunAsync_CancelledFromWithinTool_ReturnsFailureWithoutHang()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-steering-tests", "code", "test", "test-model"));
         var client = new ScriptedLlmClient(
         [

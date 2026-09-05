@@ -1,6 +1,8 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
+using Harbor.Abstractions.Tools;
 
 namespace Harbor.TestKit;
 
@@ -33,4 +35,15 @@ public static class TestAgents
             provider,
             ruleset);
     }
+
+    public static ToolContext CreateToolContext() => new(
+        "test-session",
+        "test-message",
+        "test-call",
+        "code",
+        CancellationToken.None,
+        Array.Empty<AgentMessage>(),
+        (_, _) => Task.CompletedTask,
+        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
+        null!);
 }

@@ -2,6 +2,9 @@ using System.Text.Json;
 using System.Threading.Channels;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Tools;
+using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
+using Harbor.Abstractions.Sessions;
 
 namespace Harbor.Application.Tests.Fakes;
 
@@ -83,4 +86,3 @@ public sealed class FakeCompactionService : ICompactionService
     }
 }
 
-}
