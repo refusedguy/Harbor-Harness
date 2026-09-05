@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стратегия рендереров — 27.08.2026</title>
+<style>
+  :root {
+    --bg: #0a0e14; --panel: #0d1117; --border: #1f2430;
+    --text: #b3b9c5; --dim: #5c6773; --accent: #39bae6;
+    --ok: #7fd962; --warn: #ffb454; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 13px; line-height: 1.6; padding: 16px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 8px; color: var(--accent); }
+  h2 { font-size: 16px; margin: 16px 0 8px; color: var(--accent); }
+  h3 { font-size: 14px; margin: 12px 0 6px; color: var(--text); }
+  .sub { color: var(--dim); font-size: 12px; margin-bottom: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 12px; margin: 8px 0;
+  }
+  .title {
+    color: var(--dim); font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td {
+    text-align: left; padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--dim); font-weight: normal; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  .warn { color: var(--warn); }
+  .accent { color: var(--accent); }
+  code {
+    background: #131820; border: 1px solid var(--border);
+    border-radius: 3px; padding: 2px 6px; font-size: 11px;
+    color: #d2a6ff;
+  }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  .finding {
+    background: rgba(255,107,107,0.05);
+    border-left: 2px solid var(--err);
+    padding: 8px; margin: 6px 0;
+  }
+  .sprint-box {
+    background: rgba(57,186,230,0.05);
+    border-left: 2px solid var(--accent);
+    padding: 8px; margin: 6px 0;
+  }
+  .keep {
+    background: rgba(127,217,98,0.05);
+    border-left: 2px solid var(--ok);
+    padding: 8px; margin: 6px 0;
+  }
+  .add {
+    background: rgba(255,180,84,0.05);
+    border-left: 2px solid var(--warn);
+    padding: 8px; margin: 6px 0;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Стратегия рендереров — Что мы реально делаем</h1>
+    <div class="sub">27.08.2026 · После аудита 4 сабагентов + ручного ревью кода</div>
+  </div>
+
+  <div class="card">
+    <div class="title">Суть за 1 минуту</div>
+    <div class="sprint-box">
+      <strong>Проблема:</strong> каждая платформа заново реализует один и тот же чат-UI.<br>
+      <strong>Решение:</strong> выносим общую бизнес-логику, а рендереры оставляем плагинами.
+    </div>
+    <div class="keep">
+      <strong>Наш ConsoleEx остается.</strong> Это наш высокопроизводительный backend с cell-diff, zero-alloc, sixel/kitty. Переименуем в <code>CellDiff</code>, чтобы было понятно что это.
+    </div>
+    <div class="add">
+      <strong>Добавляем nickprotop/ConsoleEx</strong> как ВТОРОЙ backend. Он дает готовые абстракции cell-diff/buffer/input без изобретения велосипедов.
+    </div>
+    <div class="sprint-box">
+      <strong>Итог:</strong> shared business logic + несколько рендереров = "поляна творчества", где можно быстро кидать новые TUI без переписывания чат-логики.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Текущее состояние (проверено)</div>
+    <table>
+      <tr><th>Платформа</th><th>Рендерер</th><th>Статус</th><th>Reuses shared?</th></tr>
+      <tr><td>ConsoleEx</td><td>Кастомный 11.5к LOC</td><td><span class="ok">High-perf</span></td><td><span class="err">НЕТ — изолирован</span></td></tr>
+      <tr><td>Ansi</td><td>BaseTuiRenderer</td><td><span class="ok">Работает</span></td><td><span class="warn">Частично</span></td></tr>
+      <tr><td>Plain</td><td>BaseTuiRenderer</td><td><span class="ok">Работает</span></td><td><span class="warn">Частично</span></td></tr>
+      <tr><td>Avalonia</td><td>Нативный desktop</td><td><span class="ok">Работает</span></td><td><span class="err">НЕТ</span></td></tr>
+      <tr><td>Blazor</td><td>Демо-шелл</td><td><span class="err">Сломан</span></td><td><span class="err">НЕТ</span></td></tr>
+      <tr><td>SpectreTui</td><td>BaseTuiRenderer</td><td><span class="ok">Работает</span></td><td><span class="warn">Частично</span></td></tr>
+      <tr><td>TerminalGui</td><td>BaseTuiRenderer</td><td><span class="err">Сломан</span></td><td><span class="warn">Частично</span></td></tr>
+      <tr><td>Termina</td><td>BaseTuiRenderer</td><td><span class="err">Сломан</span></td><td><span class="warn">Частично</span></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="title">Что мы НЕ делаем</div>
+    <ul>
+      <li>НЕ переписываем ConsoleEx оптимизации — оставляем PanelFx, Graphics, DiffEngine, ScreenBuffer, SpringFx как есть</li>
+      <li>НЕ сливаем все рендереры в один — каждый остается отдельным backend</li>
+      <li>НЕ делаем nickprotop/ConsoleEx ЕДИНСТВЕННЫМ рендерером — это ДОБАВЛЕНИЕ</li>
+      <li>НЕ трогаем UiStore/reducers — там бизнес-логика уже правильная</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="title">План спринта: "Renderer Unification"</div>
+    <h3>Фаза 1 — Shared Business Logic (низкий риск)</h3>
+    <ul>
+      <li>Вынести ChatScreenLayout → Harbor.Ui.Framework.Rendering</li>
+      <li>Вынести DiffBlock + UnifiedDiffParser → shared</li>
+      <li>Вынести ApprovalGateView → shared</li>
+      <li>Вынести StatusViewModel → shared</li>
+      <li>Вынести StreamingMarkdownRenderer → shared</li>
+    </ul>
+
+    <h3>Фаза 2 — Переименование + Адаптер (низкий риск)</h3>
+    <ul>
+      <li>Переименовать Harbor.Tui.ConsoleEx → Harbor.Tui.CellDiff</li>
+      <li>Обернуть CellDiff как ITuiRenderer через адаптер</li>
+      <li>Все оптимизации остаются на месте</li>
+    </ul>
+
+    <h3>Фаза 3 — Добавить nickprotop/ConsoleEx (средний риск)</h3>
+    <ul>
+      <li>Добавить как Harbor.Tui.NickConsoleEx backend</li>
+      <li>Использовать их cell-diff/buffer/input абстракции</li>
+      <li>Подключить к shared business logic из фазы 1</li>
+    </ul>
+
+    <h3>Фаза 4 — Унифицировать остальных (средний риск)</h3>
+    <ul>
+      <li>Слить Ansi/Plain в AnsiPlainRenderer с escape-code strategy</li>
+      <li>Avalonia/Blazor adopt shared widgets</li>
+      <li>Visual regression tests для всех платформ</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="title">Итоговая архитектура</div>
+    <div class="sprint-box">
+<pre>
+Shared Business Logic (Harbor.Ui.Framework.Rendering)
+    ↓
+    ├── CellDiff (наш оптимизированный backend, бывший ConsoleEx)
+    ├── NickConsoleEx (обертка над nickprotop/ConsoleEx)
+    ├── AnsiPlainRenderer (слияние Ansi+Plain)
+    ├── AvaloniaRenderer
+    └── BlazorRenderer
+</pre>
+    </div>
+    <div class="keep">
+      <strong>Наш CellDiff остается высокопроизводительным ядром.</strong> NickConsoleEx — это ВТОРОЙ backend для быстрого прототипирования. Оба используют одну и ту же чат/diff/approval/status логику.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="title">Почему это круто</div>
+    <ul>
+      <li><span class="ok">Без переписываний:</span> оставляем наши оптимизации, только оборачиваем</li>
+      <li><span class="ok">Быстрые победы:</span> nickprotop дает готовые абстракции для новых терминалов</li>
+      <li><span class="ok">Творческая свобода:</span> новый рендерер = новый класс имплементирующий shared интерфейс</li>
+      <li><span class="ok">Тестируемость:</span> shared логика тестируется один раз, все бэкенды пользуются</li>
+      <li><span class="ok">Конкурентное преимущество:</span> наш CellDiff быстрее nickprotop, но можно фоллбэком их для совместимости</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="title">Следующий шаг</div>
+    <p>Добавить это как спринт <strong>"Renderer Unification"</strong> после ui-v2. Kilo будет реализовывать пошагово.</p>
+  </div>
+</div>
+</body>
+</html>

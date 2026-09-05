@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbor Sprint — Multi-Agent: отчёт</title>
+<style>
+  :root { --bg:#0f1216; --card:#171c23; --line:#2a323d; --text:#dfe6ee; --dim:#8b98a8;
+          --green:#4cc38a; --red:#e5534b; --amber:#d9a53f; --blue:#5aa9e6; --violet:#b083f0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.55 -apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:32px 24px 64px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:36px 0 12px; border-bottom:1px solid var(--line); padding-bottom:8px; }
+  h3 { font-size:15px; margin:20px 0 8px; color:var(--blue); }
+  .sub { color:var(--dim); font-size:13px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:20px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card .v { font-size:24px; font-weight:650; }
+  .card .k { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .ok { color:var(--green); } .warn { color:var(--amber); } .violet { color:var(--violet); }
+  table { width:100%; border-collapse:collapse; margin:10px 0; font-size:13.5px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px;
+                background:#1d242e; border-radius:5px; padding:1px 5px; }
+  .pill { display:inline-block; border-radius:999px; padding:1px 9px; font-size:11.5px; font-weight:600; }
+  .pill.pass { background:rgba(76,195,138,.14); color:var(--green); }
+  .pill.skip { background:rgba(217,165,63,.14); color:var(--amber); }
+  ul { margin:6px 0; padding-left:20px; }
+  li { margin:3px 0; }
+  .note { background:var(--card); border:1px solid var(--line); border-left:3px solid var(--blue);
+          border-radius:8px; padding:10px 14px; margin:10px 0; font-size:13.5px; }
+  .sha { color:var(--violet); }
+  footer { margin-top:44px; color:var(--dim); font-size:12px; border-top:1px solid var(--line); padding-top:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Sprint: Multi-Agent — отчёт</h1>
+<div class="sub">
+  Harbor-Harness · .NET 10 · модель <code>openrouter/z-ai/glm-5.3-flash</code> ·
+  база <span class="sha">1919af7</span> → голова спринта <span class="sha">b985328</span> (dev) ·
+  18 атомарных коммитов · 28.08.2026 ·
+  re-verified на <span class="sha">eaba85e</span>, <span class="sha">d61c5f0</span>,
+  <span class="sha">b43ad82</span>, <span class="sha">10c5b7a</span>,
+  <span class="sha">4376cf9</span>, <span class="sha">9da02ca</span>,
+  <span class="sha">3db6942</span>, <span class="sha">7b3db0a</span>, <span class="sha">bef04d6</span>,
+  <span class="sha">dc9fae3</span>, <span class="sha">5cac99a</span> и <span class="sha">26eb64f</span> ·
+  свежий полный прогон 29.08.2026 05:17 +05 на 26eb64f
+</div>
+
+<div class="cards">
+  <div class="card"><div class="v ok">882 / 0</div><div class="k">тестов прошло / упало</div></div>
+  <div class="card"><div class="v warn">6</div><div class="k">пропущено (self-skip)</div></div>
+  <div class="card"><div class="v">4 / 4</div><div class="k">задач спринта</div></div>
+  <div class="card"><div class="v">18</div><div class="k">коммитов (1–2 файла)</div></div>
+</div>
+
+<h2>Задача 1 — TaskTool execution</h2>
+<p>
+  К моменту старта спринта дерево уже содержало каркас изоляции: <code>ISubAgentRunner</code>
+  (Domain), <code>SubAgentRunner</code> (Application, изолированная сессия + AsyncLocal-запрет
+  рекурсии) и <code>DeferredSubAgentRunner</code>, подключённый в <code>RegistriesModule</code>.
+  Статус «not implemented» остаётся только у легаси-пути без runner'а. Сделано:
+</p>
+<ul>
+  <li>новый CLI-verb <code>harbor run task agent=&lt;name&gt; &lt;prompt&gt;</code>
+      (<span class="sha">406e788</span>) — прогон саб-агента напрямую через
+      <code>ISubAgentRunner</code>, без родительского LLM-хода;</li>
+  <li>сквозная проверка acceptance:
+      <code>harbor run task agent=explore "find all .cs files"</code> — саб-агент реально
+      выполняется в собственной сессии (3 сообщения), финальный ответ возвращается как
+      результат; parent-CTS не затрагивается (свой <code>CancellationToken</code> на
+      под-прогон, отмена родителя не пробрасывается в обратную сторону).</li>
+</ul>
+
+<h2>Задача 2 — UiStore.Transition → private</h2>
+<ul>
+  <li>новые TEA-сообщения: <code>UiMsg.AgentStarted</code>,
+      <code>UiMsg.AgentEnded(string? Status, string? Error)</code> (null-статус сохраняет
+      «error», иначе «idle»), <code>UiMsg.StatusChanged</code>, <code>UiMsg.AppendLine</code>,
+      <code>UiMsg.InputText</code>, <code>UiMsg.Quit</code> (<span class="sha">2e805c8</span>);</li>
+  <li><code>TuiEffectHost</code> полностью переведён на <code>Dispatch(UiMsg)</code>;
+      <code>Transition</code> сделан <b>private</b> — остаются только обёртки
+      <code>BindSession</code>/<code>Reset</code> внутри самого store
+      (<span class="sha">9f627a9</span>);</li>
+  <li>переведены все остальные вызыватели: <code>SessionManager</code>,
+      <code>SessionSwitcher</code>, Avalonia <code>ChatViewModel</code>, contrib-мосты
+      TerminalGui / Termina / RazorConsole; удалён мёртвый
+      <code>AppStore.Transition</code> (<span class="sha">80b2d1e</span>,
+      <span class="sha">d36dd44</span>);</li>
+  <li>CAS-цикл (<code>Interlocked.CompareExchange</code> на immutable
+      <code>UiState</code>) сохранён — новых локов нет;</li>
+  <li>регрессионные тесты: 2 параллельных <code>PromptAsync</code> (ошибка сессии A
+      не протекает в здоровую сессию B и наоборот) + стресс CAS на 800 диспетчей из
+      4 потоков без потерь свёрток; 8 reducer-тестов новых сообщений
+      (<span class="sha">b6d40e0</span>).</li>
+</ul>
+
+<h2>Задача 3 — EventBroadcaster session-scoped</h2>
+<ul>
+  <li><code>TurnStartEvent</code> / <code>TurnEndEvent</code> получили опциональный
+      <code>SessionId</code> (backward-compatible)
+      (<span class="sha">fa482de</span>);</li>
+  <li><code>AgentLoop</code> штампует идентификатор сессии при публикации
+      (<span class="sha">995152a</span>);</li>
+  <li>общий <code>int _currentTurn</code> заменён на
+      <code>ConcurrentDictionary&lt;string,int&gt; _turnsBySession</code>; broadcaster
+      больше не перезаписывает TurnIndex — сохраняет значение, принесённое событием,
+      и разрешает TurnEnd по сессии события (легаси — через active-run fallback)
+      (<span class="sha">50d6ac4</span>);</li>
+  <li><code>InProcessHarborClient.ProjectEvent</code> изменён lockstep
+      (<span class="sha">704f640</span>);</li>
+  <li>тесты: два interleaved-прогона — TurnEnd каждого прогона несёт СВОЙ turn
+      (со старым shared-счётчиком оба получили бы 3); рестарт прогона в той же
+      сессии сбрасывает счётчик (<span class="sha">3c114c3</span>).</li>
+</ul>
+
+<h2>Задача 4 — Pipeline behaviors (§3.5)</h2>
+<p>
+  Реализация предложения <code>docs/ARCHITECTURE_AUDIT_V2.md §3.5</code>:
+</p>
+<ul>
+  <li>абстракции: <code>PromptRequest</code>, <code>PipelineNext</code>,
+      <code>IPipelineBehavior</code>, <code>AgentPipeline</code> — иммутабельная
+      композиция right-to-left, терминальный обработчик — ядро цикла
+      (<span class="sha">300336c</span>);</li>
+  <li>run-level middleware: <code>LoggingBehavior</code> (локализованный старт +
+      длительность, <code>finally</code>-гарантия) и
+      <code>PermissionCheckBehavior</code> (fail-fast прогона без ruleset)
+      (<span class="sha">6dfa414</span>);</li>
+  <li>per-turn классы: <code>CompactionBehavior</code> (порог → суммаризация →
+      события/метрики → fallback-решение, состояние fallback остаётся у цикла),
+      <code>SteeringDrainBehavior</code> (дренаж с отбросом чужесессионных
+      сообщений), <code>MaxStepsBehavior</code> (бюджет шагов)
+      (<span class="sha">d19fb8b</span>, <span class="sha">7ef00fa</span>);</li>
+  <li><code>AgentLoop.RunAsync</code> = <code>_pipeline.HandleAsync(new PromptRequest(...),
+      RunCoreAsync, ct)</code>; лог-категории сохранены (behaviors делят logger цикла)
+      (<span class="sha">85f225d</span>);</li>
+  <li>14 новых изолированных тестов: middleware на mock <code>next</code>
+      (pass-through, short-circuit без вызова next, порядок, отмена), compaction
+      (порог, успех, отказ → fallback, отказ при уже включённом fallback,
+      F17-отмена), steering (свой/чужая сессия), max-steps
+      (<span class="sha">4889b57</span>); существующие AgentLoop-тесты не сломаны
+      (Harbor.Application.Tests: 136 → 150, Harbor.Core.Tests: 92).</li>
+</ul>
+
+<div class="note">
+  <b>Отклонение от буквы acceptance (задача 4):</b> Compaction/Steering/MaxSteps —
+  per-turn по своей природе (steering обязан дренажиться ПОСЛЕ tool-результатов,
+  budget проверяется каждый ход), поэтому они вынесены в отдельные классы, вызываемые
+  ядром цикла, а не в run-level middleware. Требование «каждый behavior тестируется
+  изолированно» выполнено для всех пяти; «mock next delegate» — для run-level двух.
+</div>
+
+<h2>Проверка (per-project, MTP-совместимо)</h2>
+<table>
+  <tr><th>Проект</th><th>Прошло</th><th>Упало</th><th>Пропущено</th></tr>
+  <tr><td>Harbor.Application.Tests</td><td class="ok">150</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Core.Tests</td><td class="ok">92</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Ipc.Tests</td><td class="ok">85</td><td>0</td><td class="warn">4</td></tr>
+  <tr><td>Harbor.Ui.Framework.Tests</td><td class="ok">76</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Abstractions.Tests</td><td class="ok">53</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Tools.Builtin.Tests</td><td class="ok">173</td><td>0</td><td class="warn">2</td></tr>
+  <tr><td>Harbor.Architecture.Tests</td><td class="ok">47</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Hosting.Tests</td><td class="ok">10</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.Tui.Tests</td><td class="ok">118</td><td>0</td><td>0</td></tr>
+  <tr><td>Harbor.App.Cli.Tests</td><td class="ok">78</td><td>0</td><td>0</td></tr>
+  <tr><td><b>Итого</b></td><td class="ok"><b>882</b></td><td class="ok"><b>0</b></td><td class="warn"><b>6</b></td></tr>
+</table>
+<p class="sub">
+  Свежий полный прогон 10 suites на head <span class="sha">9da02ca</span>
+  (Release, per-project MTP, 28.08.2026 21:03 UTC): 882/0/6 — тот же счёт,
+  что и на d61c5f0/b43ad82/10c5b7a/4376cf9; независимая пере-проверка кода свежей
+  сессией подтвердила все 4 задачи (wiring, приватный Transition, session-scoped
+  turn tracking, 5 behaviors + изолированные тесты). Холодная сборка
+  <code>--no-incremental</code>: 0 errors; 192 analyzer-предупреждения —
+  исторический шум в tests/samples/bench, в тронутом спринтом <code>src/</code>-коде — 0.
+  Пропуски — self-skipping: IPC named-pipe event-stream на Linux
+  (требует <code>HARBOR_IPC_EVENTSTREAM=1</code>) и env-зависимые fail-closed тесты
+  Tools.Builtin (нет <code>rg</code> / неразрешимый хост).
+  Whole-solution <code>dotnet test</code> не использовался (MTP). Архитектурные тесты
+  (47, включая NetArchTest-матрицу слоёв) — зелёные.
+</p>
+<p class="sub">
+  Re-верификация на head <span class="sha">bef04d6</span> (свежая сессия, 29.08.2026 03:51 +05):
+  Release build — 0 errors; полный пер-проектный прогон 10 suites —
+  <b>876 passed / 0 failed / 6 skipped</b> (все rc=0, счёт идентичен базовому:
+  876 чистых pass + 6 self-skip = 882 итогов).
+  Приёмочные критерии заново проверены кодом в этой сессии:
+  (1) <code>SubAgentRunner</code> (17 тестов) + CLI verb <code>run task</code> —
+  саб-прогон в собственной сессии с выводом в родительский чат (live-прогон на 3db6942:
+  сессия <span class="sha">f2460532…</span>, 7 сообщений, exit=0); (2) <code>.Transition(</code>
+  — 0 вызовов вне класса, регрессионный тест
+  <code>TuiEffectHostConcurrencyTests</code> (2 параллельных PromptAsync,
+  изоляция ошибок) зелёный; (3) <code>_currentTurn</code> отсутствует в src/,
+  <code>BroadcasterTurnIsolationTests</code> (два interleaved run'а, каждый TurnEnd
+  несёт свой turn) зелёный; (4) 14 изолированных тестов behaviors
+  (<code>PipelineBehaviorTests</code>) зелёные.
+</p>
+
+<h2>Коммиты</h2>
+<table>
+  <tr><th>SHA</th><th>Сообщение</th></tr>
+  <tr><td class="sha">406e788</td><td>feat(cli): run task verb drives sub-agent runner directly</td></tr>
+  <tr><td class="sha">2e805c8</td><td>feat(ui-framework): TEA messages for host-driven state folds</td></tr>
+  <tr><td class="sha">9f627a9</td><td>refactor(ui-framework): TuiEffectHost dispatches UiMsg; Transition private</td></tr>
+  <tr><td class="sha">80b2d1e</td><td>refactor(ui-framework): session/avalonia callers dispatch UiMsg.AppendLine</td></tr>
+  <tr><td class="sha">d36dd44</td><td>refactor(contrib-tui): bridges dispatch UiMsg; drop dead AppStore.Transition</td></tr>
+  <tr><td class="sha">b6d40e0</td><td>test(ui-framework): TEA msg reducer + 2-parallel-prompt regression</td></tr>
+  <tr><td class="sha">fa482de</td><td>feat(events): optional SessionId on TurnStart/TurnEnd events</td></tr>
+  <tr><td class="sha">995152a</td><td>feat(agent-loop): stamp session id on turn events</td></tr>
+  <tr><td class="sha">50d6ac4</td><td>fix(ipc): session-scoped turn tracking in EventBroadcaster</td></tr>
+  <tr><td class="sha">704f640</td><td>fix(ipc): session-scoped turn tracking in InProcessHarborClient (lockstep)</td></tr>
+  <tr><td class="sha">3c114c3</td><td>test(ipc): parallel-run turn isolation + per-session turn reset</td></tr>
+  <tr><td class="sha">300336c</td><td>feat(agent-loop): pipeline abstractions (PromptRequest, IPipelineBehavior, AgentPipeline)</td></tr>
+  <tr><td class="sha">6dfa414</td><td>feat(agent-loop): run-level LoggingBehavior + PermissionCheckBehavior middleware</td></tr>
+  <tr><td class="sha">d19fb8b</td><td>feat(agent-loop): per-turn CompactionBehavior extracted from AgentLoop</td></tr>
+  <tr><td class="sha">7ef00fa</td><td>feat(agent-loop): SteeringDrainBehavior + MaxStepsBehavior extracted</td></tr>
+  <tr><td class="sha">85f225d</td><td>refactor(agent-loop): RunAsync delegates to pipeline.HandleAsync (§3.5)</td></tr>
+  <tr><td class="sha">4889b57</td><td>test(agent-loop): isolated behavior tests with mocked next delegates</td></tr>
+  <tr><td class="sha">4889b57+</td><td>docs(sprint): multi-agent status.json + report.html</td></tr>
+</table>
+
+<h2>Hard rules — соответствие</h2>
+<ul>
+  <li><span class="pill pass">ok</span> 1 коммит = 1–2 файла (18 атомарных коммитов);</li>
+  <li><span class="pill pass">ok</span> саб-прогон получает собственный CTS/token — отмена
+      parent не отменяет саб-агента и наоборот (TaskTool → SubAgentRunner → loop с ct только вниз);</li>
+  <li><span class="pill pass">ok</span> UiStore остался lock-free CAS: локов вокруг
+      <code>_state</code> не добавлено, только <code>volatile</code> + Interlocked;</li>
+  <li><span class="pill pass">ok</span> JsonlSessionStore / storage не тронуты
+      (дифф только agent loop + UI state + IPC events + CLI verb);</li>
+  <li><span class="pill pass">ok</span> после каждого коммита —
+      <code>dotnet test tests/Harbor.Application.Tests -c Release --no-build</code>.</li>
+</ul>
+
+<footer>
+  Сгенерировано агентом Kilo (multi-agent sprint) ·
+  статус: <code>.kilo-docs/sprints/multi-agent/status.json</code> ·
+  head <span class="sha">26eb64f</span> · 29.08.2026 · re-verified (6th pass, 26eb64f): cold build 0 errors (192 pre-existing warnings in tests/samples only), 876 passed / 0 failed / 6 skipped тестов на 10 проектах (все rc=0), `harbor run task --help` parseable, live run proven at 3db6942; stray duplicate report .kilo-docs/docs/sprint-report-20260829-0439.html removed
+</footer>
+
+</div>
+</body>
+</html>

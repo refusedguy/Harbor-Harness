@@ -1,0 +1,419 @@
+{
+  "audit_metadata": {
+    "repository": "/mnt/projects/Harbor-Harness",
+    "framework": "Habitat-Thinking/ai-literacy-superpowers (Harness Engineering)",
+    "audit_date": "2026-08-27",
+    "auditor": "Hermes Agent (subagent)",
+    "scope": "Harbor .NET 10 AI coding harness"
+  },
+  "executive_summary": {
+    "overall_assessment": "PARTIALLY IMPLEMENTED — Strong engineering culture with deterministic architecture tests and banned-API enforcement, but missing the formal Harness framework structure: no HARNESS.md, no verification slots, no three loops, no entropy/GC mechanisms, and no CI workflows in-repo.",
+    "implemented": [
+      "AGENTS.md + CLAUDE.md as operational guides",
+      "Deterministic architecture layering tests (46 tests, NetArchTest + reflection)",
+      "BannedSymbols.txt enforced by RS0030 analyzer at build time",
+      "7 Roslyn analyzer packages wired solution-wide in Directory.Build.props",
+      "DI lifetime analyzers (DI001–DI027) with error-severity on captive deps",
+      "TreatWarningsAsErrors + Deterministic build flags",
+      "Comprehensive documentation ecosystem (~35 docs, ADRs, DECISIONS.md)",
+      "ROP (Result<T>) pattern enforced by BannedSymbols.txt GetResult() bans",
+      "Zero-unsafe blocks enforced at project level",
+      "Post-change check scripts for UI hygiene"
+    ],
+    "missing_critical": [
+      "HARNESS.md — the single source of truth for constraints",
+      "Verification slots — uniform interface for deterministic + agent checks",
+      "Three enforcement loops (inner/middle/outer) — no explicit mechanism",
+      "Scheduled entropy checks / garbage collection",
+      "Progressive hardening map (unverified → agent → deterministic)",
+      "GitHub Actions CI workflows (not present in-repo)",
+      "Supply-chain pinning (NU1603 suppressed, no exact-version policy)",
+      "MODEL_ROUTING.md for multi-agent model-tier guidance",
+      "REFLECTION_LOG.md for compound learning"
+    ]
+  },
+  "detailed_findings": [
+    {
+      "id": "CTX-001",
+      "category": "Context Engineering",
+      "title": "No HARNESS.md — constraints are scattered",
+      "status": "MISSING",
+      "description": "Harness Engineering requires a HARNESS.md as the central constraint document readable by both humans and agents. Harbor has AGENTS.md (operational) and CLAUDE.md (conventions), but no unified constraints file. Constraints exist across BannedSymbols.txt, ARCHITECTURE_LAYERS.md, ANALYZERS.md, and .editorconfig with no single authoritative index.",
+      "evidence": [
+        "No HARNESS.md found at repo root or anywhere in the tree",
+        "AGENTS.md (777 lines) focuses on operational guidance, not enforceable constraints",
+        "CLAUDE.md (1197 lines) encodes conventions but has no constraint registry or verification slot model",
+        "Constraints are split across 5+ files: BannedSymbols.txt, ARCHITECTURE_LAYERS.md, ANALYZERS.md, .editorconfig, DECISIONS.md"
+      ],
+      "recommendation": "Create HARNESS.md with sections: (1) constraint catalog with verification slots (deterministic/agent/manual), (2) promotion ladder for constraint maturity, (3) GC rules, (4) three-loop enforcement map. Link from AGENTS.md and CLAUDE.md."
+    },
+    {
+      "id": "CTX-002",
+      "category": "Context Engineering",
+      "title": "Documentation is comprehensive but not harness-shaped",
+      "status": "PARTIAL",
+      "description": "Harbor has ~35 docs, ADRs, and multiple markdown files providing excellent context. However, they are not structured as a living harness with agent-readable constraint blocks, hook-ready snippets, or verification slots.",
+      "evidence": [
+        "docs/ contains 60+ files including PATTERNS.md, ANTIPATTERNS.md, EXAMPLES.md, CODE_PRINCIPLES_AUDIT.md",
+        "DECISIONS.md has 8 ADRs with dates and consequences",
+        ".ai-factory/DESCRIPTION.md exists but is an AI-factory config, not a harness doc",
+        "No YAML frontmatter constraints, no verification slot markers, no hook-ready constraint blocks"
+      ],
+      "recommendation": "Add a docs/harness/ or .harness/ directory with constraint YAML/JSON that agents and CI can consume. Convert key conventions into machine-readable constraint blocks."
+    },
+    {
+      "id": "ARCH-001",
+      "category": "Architectural Constraints",
+      "title": "Deterministic architecture enforcement exists and is strong",
+      "status": "IMPLEMENTED",
+      "description": "Harbor has one of the strongest deterministic constraint systems examined: 46 architecture tests (21 reflection + 25 NetArchTest), BannedSymbols.txt enforced by RS0030, 7 analyzer packages, DI lifetime analyzers with error severity, and TreatWarningsAsErrors.",
+      "evidence": [
+        "tests/Harbor.Architecture.Tests/ — 46 tests covering 47/50 src directories",
+        "Directory.Build.props wires: Roslynator, SonarAnalyzer, NetAnalyzers, AsyncFixer, ReflectionAnalyzers, BannedApiAnalyzers, Meziantou.Analyzer, DI.Lifetime.Analyzers",
+        "BannedSymbols.txt (68 lines) with RS0030 enforcement and documented exemptions",
+        "TreatWarningsAsErrors=true at solution level",
+        "Deterministic=true in Directory.Build.props"
+      ],
+      "recommendation": "None — this is exemplary. Document this as the 'deterministic layer' in HARNESS.md and add CI workflow files to actually run these checks on PR."
+    },
+    {
+      "id": "ARCH-002",
+      "category": "Architectural Constraints",
+      "title": "No GitHub Actions CI workflows in-repo",
+      "status": "MISSING",
+      "description": "The repo has no .github/workflows/ directory. CI is described in docs/BUILD.md and docs/CI_UI_TESTS.md as YAML examples, but no actual workflow files exist. This means none of the deterministic checks run automatically on PR.",
+      "evidence": [
+        "find .github -type f returned empty",
+        "docs/BUILD.md contains a YAML example marked '# .github/workflows/build.yml' but it is not present",
+        "docs/CI_UI_TESTS.md contains CI step examples but no actual workflow",
+        "tools/post-change-check.sh exists but is manual/opt-in"
+      ],
+      "recommendation": "Create .github/workflows/build.yml with: (1) dotnet build with analyzers, (2) per-project test loop, (3) architecture tests, (4) UI hygiene gate, (5) banned-API check. This is the #1 gap blocking the 'living harness'."
+    },
+    {
+      "id": "ARCH-003",
+      "category": "Architectural Constraints",
+      "title": "Agent-enforced constraints dominate soft rules",
+      "status": "PARTIAL",
+      "description": "Many critical architectural rules are enforced only by code review and agent discipline (AGENTS.md/CLAUDE.md), not by deterministic tools. Examples: composition-root DI registration, interface segregation, value object placement, and cross-reference avoidance.",
+      "evidence": [
+        "CLAUDE.md §Soft rules explicitly states 'code-review-enforced — not mechanically checkable'",
+        "Concrete impl types must be new'd only in HostBuilder.cs — no analyzer enforces this",
+        "New interfaces must go in Harbor.Abstractions — convention only",
+        "Application projects must not cross-reference — no NetArchTest rule found for this"
+      ],
+      "recommendation": "Add Roslyn analyzers or extend NetArchTest rules to cover soft rules. For example: (1) forbid 'new' on concrete types outside HostBuilder/Modules, (2) forbid interfaces in Harbor.Core, (3) add cross-reference tests for Application layer projects."
+    },
+    {
+      "id": "GC-001",
+      "category": "Garbage Collection / Entropy",
+      "title": "No scheduled entropy checks or GC mechanisms",
+      "status": "MISSING",
+      "description": "Harness Engineering requires periodic entropy-fighting checks (dependency audit, constraint drift, dead docs, stale ADRs). Harbor has none of these automated or scheduled.",
+      "evidence": [
+        "No cron jobs, scheduled workflows, or entropy-check scripts found",
+        "No govulncheck, dotnet audit, or SBOM generation in build scripts",
+        "FEATURE_RESEARCH.md mentions 'supply-chain hardening' as a future need (no equivalent policy for NuGet)",
+        "No auto-fix safety rubric or entropy-fighting patterns documented"
+      ],
+      "recommendation": "Add: (1) Weekly GitHub Action running dependency audit (dotnet list package --vulnerable, govulncheck), (2) Monthly ADR staleness check, (3) docs/GC.md with entropy-fighting rules and auto-fix safety rubric."
+    },
+    {
+      "id": "GC-002",
+      "category": "Garbage Collection / Entropy",
+      "title": "Supply-chain pinning missing",
+      "status": "MISSING",
+      "description": "Harbor uses Central Package Management but suppresses NU1603 (Package version not found) and does not pin transitive dependencies. The Harness framework expects exact-version pinning with an allowlist for lifecycle scripts.",
+      "evidence": [
+        "Directory.Build.props: <NoWarn>$(NoWarn);NU1603</NoWarn>",
+        "CentralPackageTransitivePinningEnabled=true but no exact-pinning policy documented",
+        "FEATURE_RESEARCH.md explicitly notes: 'Harbor has no equivalent policy for NuGet'",
+        "No PackageAudit or SBOM tooling in build scripts"
+      ],
+      "recommendation": "Remove NU1603 suppression, enable transitive pinning strictly, add dotnet audit / govulncheck to CI, generate SBOM on release."
+    },
+    {
+      "id": "HARD-001",
+      "category": "Progressive Hardening",
+      "title": "No progressive hardening map",
+      "status": "MISSING",
+      "description": "The framework requires mapping each constraint to its verification state (unverified / agent-enforced / deterministic). Harbor has deterministic and agent-enforced constraints but no explicit map showing which is which or a promotion ladder.",
+      "evidence": [
+        "No file or section mapping constraints to enforcement tiers",
+        "ANALYZERS.md lists what is deterministic but does not catalog agent-only constraints",
+        "CLAUDE.md 'Soft rules' are implicitly agent-enforced but not labeled as such",
+        "No promotion ladder for upgrading agent rules to deterministic"
+      ],
+      "recommendation": "Add a Progressive Hardening table to HARNESS.md: columns for Constraint, Current State, Verification Slot, Promotion Path. Start with a constraint catalog extracted from existing docs."
+    },
+    {
+      "id": "LOOP-001",
+      "category": "Three Enforcement Loops",
+      "title": "Three loops not explicitly implemented",
+      "status": "MISSING",
+      "description": "Harness Engineering defines inner loop (edit-time hooks), middle loop (CI/agent review), and outer loop (scheduled entropy checks). Harbor has fragments of all three but no unified mechanism.",
+      "evidence": [
+        "Inner loop: tools/post-change-check.sh and code-inspect.sh exist but are manual scripts, not IDE hooks",
+        "Middle loop: CI is documented but not present; architecture tests exist but don't run on PR; no agent-based review agent found",
+        "Outer loop: No scheduled jobs, no entropy checks, no reflection log"
+      ],
+      "recommendation": "Document the three loops in HARNESS.md and implement: (1) inner loop via pre-tool hooks or a watcher, (2) middle loop via actual GitHub Actions CI, (3) outer loop via scheduled weekly GitHub Actions workflow for entropy checks."
+    },
+    {
+      "id": "LOOP-002",
+      "category": "Three Enforcement Loops",
+      "title": "No agent team / compound learning pipeline",
+      "status": "MISSING",
+      "description": "The framework expects an agent team (reviewer, implementer, QA, etc.) and a REFLECTION_LOG.md for compound learning. Harbor has no agent definitions or reflection mechanism.",
+      "evidence": [
+        "No agents/ directory or agent markdown files",
+        "No REFLECTION_LOG.md",
+        "No MODEL_ROUTING.md for model-tier guidance",
+        "No skills/ directory with project-local skills"
+      ],
+      "recommendation": "Add .harness/agents/ with minimal agent specs (reviewer, qa-check, architecture-enforcer) and create REFLECTION_LOG.md template. This is optional for 'harness-only' setup but required for full habitat."
+    },
+    {
+      "id": "VER-001",
+      "category": "Verification Slots",
+      "title": "No verification slot abstraction",
+      "status": "MISSING",
+      "description": "Harness Engineering's verification slot model provides a uniform interface for deterministic and agent-based checks. Harbor has deterministic checks (tests, analyzers) and agent checks (code review) but no unified slot mechanism.",
+      "evidence": [
+        "No verification slot YAML/JSON in repo",
+        "No constraint registry with checker metadata",
+        "Analyzers and tests are wired through MSBuild/TUnit directly, not through a harness-aware interface"
+      ],
+      "recommendation": "Create .harness/verification-slots/ with YAML entries: id, scope, type (deterministic|agent|manual), command, on-failure. Reference from HARNESS.md."
+    },
+    {
+      "id": "AGENT-001",
+      "category": "Agent Enforcement",
+      "title": "Strong agent documentation but no executable agent pipeline",
+      "status": "PARTIAL",
+      "description": "AGENTS.md and CLAUDE.md are thorough and actively used. However, they are passive documents — there is no agent-based enforcement pipeline (no harness-enforcer agent, no constraint-checking subagent, no CUPID review agent).",
+      "evidence": [
+        "AGENTS.md and CLAUDE.md are high quality but static",
+        "No agent markdown files in repo",
+        "No ai-literacy-superpowers plugin installed (no HARNESS.md hooks)",
+        "Code review is human-only; no automated agent review on PR"
+      ],
+      "recommendation": "Install the ai-literacy-superpowers plugin or create local agent specs. At minimum, add a harness-enforcer agent that reads HARNESS.md and runs deterministic + agent checks through a unified interface."
+    },
+    {
+      "id": "LANG-001",
+      "category": "Context Engineering / Tooling",
+      "title": "BannedSymbols.txt and analyzers are well-maintained",
+      "status": "IMPLEMENTED",
+      "description": "The banned-API system is production-grade: 68-line catalog, RS0030 analyzer, documented exemptions with reasons, and CI-ready build failure on violations.",
+      "evidence": [
+        "BannedSymbols.txt with Newtonsoft, sync-over-async, Thread.Sleep bans",
+        "Exemptions catalogued by class with #pragma reasons",
+        "RS0030 wired in Directory.Build.props as AdditionalFiles",
+        "Legacy exemptions are limited and justified"
+      ],
+      "recommendation": "None — keep current. Consider adding a CI gate that diffs BannedSymbols.txt additions to catch scope creep."
+    },
+    {
+      "id": "LANG-002",
+      "category": "Context Engineering / Tooling",
+      "title": "ROP enforcement via banned APIs is effective",
+      "status": "IMPLEMENTED",
+      "description": "The framework's Railway Oriented Programming requirement is enforced by banning .GetResult() and .GetAwaiter().GetResult() via BannedSymbols.txt, making sync-over-async a build failure in production code.",
+      "evidence": [
+        "BannedSymbols.txt bans TaskAwaiter.GetResult and ValueTaskAwaiter.GetResult (generic and non-generic)",
+        "ConfigurableTaskAwaitable variants also banned",
+        "Exemptions limited to composition-root and UI-thread-marshaling contexts"
+      ],
+      "recommendation": "None — this is a model example of turning a convention into a deterministic constraint."
+    },
+    {
+      "id": "BUILD-001",
+      "category": "Build & CI",
+      "title": "NUKE build system exists but CI is not configured",
+      "status": "PARTIAL",
+      "description": "The repo has a NUKE build system (build.sh, build/_build.csproj, .nuke/) and tooling scripts, but no actual CI pipeline runs these automatically on push/PR.",
+      "evidence": [
+        "build/build.sh boots NUKE and supports Compile, Test, etc.",
+        ".nuke/ contains build binaries and temp logs",
+        "tools/ has post-change-check.sh, code-inspect.sh, ui-hygiene.sh",
+        "No .github/workflows/ found"
+      ],
+      "recommendation": "Create .github/workflows/ci.yml that invokes NUKE or directly runs dotnet build/test per-project. Include architecture tests, UI tests, and banned-API validation."
+    },
+    {
+      "id": "DOC-001",
+      "category": "Documentation",
+      "title": "Decision archaeology is strong (8 ADRs)",
+      "status": "IMPLEMENTED",
+      "description": "DECISIONS.md contains 8 ADRs with status, context, decision, and consequences. This supports the framework's decision archaeology discipline.",
+      "evidence": [
+        "ADR-001 through ADR-008 in DECISIONS.md",
+        "Each ADR has status, date range, git log references, and consequences",
+        "docs/adr/ directory exists with 7 additional ADR markdown files",
+        "Cross-referenced from AGENTS.md and CLAUDE.md"
+      ],
+      "recommendation": "None — excellent. Ensure HARNESS.md cross-references ADRs and promotes decision archaeology into the constraint review process."
+    }
+  ],
+  "gap_analysis_matrix": {
+    "framework_component": [
+      {
+        "component": "HARNESS.md (constraint catalog)",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "No single constraint document exists"
+      },
+      {
+        "component": "Verification slots",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "Deterministic checks exist but not through uniform slots"
+      },
+      {
+        "component": "Three enforcement loops",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "Inner loop manual, middle loop absent (no CI), outer loop absent"
+      },
+      {
+        "component": "Architecture tests (deterministic)",
+        "required": true,
+        "implemented": true,
+        "maturity": "deterministic",
+        "notes": "46 tests, NetArchTest, reflection — exemplary"
+      },
+      {
+        "component": "Banned API analyzer (deterministic)",
+        "required": true,
+        "implemented": true,
+        "maturity": "deterministic",
+        "notes": "RS0030, BannedSymbols.txt, exemptions catalogued"
+      },
+      {
+        "component": "Roslyn analyzers (deterministic)",
+        "required": true,
+        "implemented": true,
+        "maturity": "deterministic",
+        "notes": "7 packages, solution-wide, TreatWarningsAsErrors"
+      },
+      {
+        "component": "DI lifetime analyzers (deterministic)",
+        "required": true,
+        "implemented": true,
+        "maturity": "deterministic",
+        "notes": "DI001–DI027, 6 rules at error severity"
+      },
+      {
+        "component": "CI workflow (middle loop)",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "Documented but no .github/workflows/ present"
+      },
+      {
+        "component": "Scheduled entropy checks (outer loop)",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "No cron, no weekly dependency audit, no GC rules"
+      },
+      {
+        "component": "Supply-chain pinning",
+        "required": true,
+        "implemented": false,
+        "maturity": "agent",
+        "notes": "NU1603 suppressed, no exact-pinning policy"
+      },
+      {
+        "component": "Context docs (AGENTS.md, CLAUDE.md)",
+        "required": true,
+        "implemented": true,
+        "maturity": "agent",
+        "notes": "High quality but not harness-structured"
+      },
+      {
+        "component": "Decision archaeology (ADRs)",
+        "required": true,
+        "implemented": true,
+        "maturity": "agent",
+        "notes": "8 ADRs, well-maintained"
+      },
+      {
+        "component": "Progressive hardening map",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "No explicit constraint-state mapping"
+      },
+      {
+        "component": "Agent team / compound learning",
+        "required": false,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "No agents/, REFLECTION_LOG.md, or MODEL_ROUTING.md"
+      },
+      {
+        "component": "Garbage collection / auto-fix rubric",
+        "required": true,
+        "implemented": false,
+        "maturity": "unverified",
+        "notes": "No GC rules, no auto-fix safety rubric"
+      }
+    ]
+  },
+  "recommendations_prioritized": [
+    {
+      "priority": 1,
+      "title": "Create HARNESS.md as the single source of truth",
+      "action": "Add HARNESS.md at repo root with: constraint catalog, verification slots, promotion ladder, GC rules, and three-loop map. Reference from AGENTS.md and CLAUDE.md.",
+      "effort": "medium",
+      "impact": "critical"
+    },
+    {
+      "priority": 2,
+      "title": "Add .github/workflows/ci.yml",
+      "action": "Create actual CI workflow that runs: dotnet build (analyzers on), per-project tests, architecture tests, UI hygiene, and dependency audit. This turns documented intent into reality.",
+      "effort": "low",
+      "impact": "critical"
+    },
+    {
+      "priority": 3,
+      "title": "Implement outer loop: scheduled entropy checks",
+      "action": "Add weekly GitHub Actions workflow for: (1) dotnet list package --vulnerable, (2) govulncheck, (3) ADR staleness check, (4) docs/GC.md entropy rules.",
+      "effort": "medium",
+      "impact": "high"
+    },
+    {
+      "priority": 4,
+      "title": "Create progressive hardening map",
+      "action": "Audit all existing constraints and map each to unverified/agent/deterministic in HARNESS.md. Identify top 5 agent-enforced rules that can be promoted to deterministic (e.g., composition-root new() restriction).",
+      "effort": "medium",
+      "impact": "high"
+    },
+    {
+      "priority": 5,
+      "title": "Enable supply-chain pinning",
+      "action": "Remove NU1603 suppression, enforce exact PackageReference versions, add SBOM generation on release, add dependency audit to CI.",
+      "effort": "low",
+      "impact": "medium"
+    },
+    {
+      "priority": 6,
+      "title": "Add verification slot abstraction",
+      "action": "Create .harness/verification-slots/ YAML files and a harness-status CLI command that reads them and reports constraint health.",
+      "effort": "medium",
+      "impact": "medium"
+    },
+    {
+      "priority": 7,
+      "title": "Install ai-literacy-superpowers plugin or create local agent specs",
+      "action": "Add .harness/agents/ with minimal harness-enforcer agent, or install the Habitat-Thinking plugin for Claude Code / Kilo Code.",
+      "effort": "low",
+      "impact": "medium"
+    }
+  ]
+}

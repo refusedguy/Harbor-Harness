@@ -133,3 +133,9 @@ assets/demo/frames/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# AI agents scratchpads & local session storage
+.claude/
+.devin/
+.ai-factory/
+tmp/
