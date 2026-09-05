@@ -58,13 +58,8 @@
                     </Grid>
                     <TreeView ItemsSource="{Binding FileTree}" Name="FileTreeView"
                               SelectionChanged="FileTreeView_SelectionChanged">
-                        <TreeView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel/>
-                            </ItemsPanelTemplate>
-                        </TreeView.ItemsPanel>
                         <TreeView.ItemTemplate>
-                            <TreeDataTemplate ItemsSource="{Binding Children}">
+                            <TreeDataTemplate DataType="{x:Type vm:FileTreeNode}" ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <PathIcon Width="16" Height="16">
                                         <PathIcon.Data>

@@ -157,11 +157,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### v0.7.0 — Skills & LSP
 
 **Skills**
-- [ ] `SKILL.md` format with YAML frontmatter
-- [ ] Discovery from `~/.harbor/skills/` and `.harbor/skills/`
-- [ ] `skill` tool to load skill content
-- [ ] `<available_skills>` XML in system prompt
-- [ ] `harbor skill install/list` CLI commands
+- [x] `SKILL.md` format with YAML frontmatter (`name:`/`description:`, `<name>/SKILL.md` preferred, flat `<name>.md` legacy)
+- [x] Discovery from `~/.harbor/skills/` and `.harbor/skills/` (`WorkspaceContextSource`, project shadows global)
+- [x] `skill` tool to load skill content (`SkillTool`: name-only lookup, scope filter, 12k cap, path-confinement)
+- [x] `<available_skills>` XML in system prompt
+- [x] `harbor skill install/list` CLI commands (`SkillsCommand`: list/install/uninstall, project+global scopes)
 
 **LSP Integration**
 - [x] LSP client (own stdio JSON-RPC implementation, no NuGet — `LspManager`/`LspClient`/`LspServerSession` in `src/Harbor.Lsp/`, AOT-safe source-gen wire format)
@@ -173,12 +173,12 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 ### v0.8.0 — Session Management Polish
 
 - [x] Session branching (`harbor sessions fork <message-id>`) — `SessionForkRunner` copies history inclusive of the cut point into a NEW session (lineage via `ParentSessionId`, `(fork)` title); source untouched
-- [ ] `/tree` slash-command for branch navigation
-- [ ] Branch summaries (LLM-generated on branch switch)
+- [x] `/tree` slash-command for branch navigation (`SessionTreeRunner`: REPL `/tree` + `harbor sessions tree`, forest by `ParentSessionId`, marks current, orphans/cycles handled)
+- [ ] Branch summaries (LLM-generated on branch switch) — DEFERRED: fork creates a NEW session with no explicit "switch" moment in code (the user just continues in the new id); generating an LLM summary at fork time would add latency+cost to a local op and `SessionForkService` is deliberately store-generic with no provider wiring. Revisit when explicit branch-switch UX lands; long histories are already covered by `CompactionService` anchored summaries
 - [x] Snapshot/revert (`harbor sessions revert <message-id>`)
 - [x] Session search (`harbor sessions search <query>`)
-- [ ] JSONL import/export
-- [ ] Session rename (ISessionStore metadata-update API)
+- [x] JSONL import/export (`harbor sessions export/import` via `ISessionPorter`)
+- [x] Session rename (`harbor sessions rename` via `ISessionStore.UpdateAsync`)
 
 ### v0.9.0 — Two-Process Architecture
 

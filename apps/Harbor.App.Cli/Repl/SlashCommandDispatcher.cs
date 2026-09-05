@@ -183,7 +183,7 @@ internal sealed class SlashCommandDispatcher
 
         Register("help", ["h"], null, (ctx, _) =>
         {
-            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /tree /summary /fork /plugins /tui /renderer /storage /exit");
+            ctx.Writer("Commands: /setup /auth /model /agent /config /permissions /providers /sessions /tree /fork /plugins /tui /renderer /storage /exit");
             return Task.FromResult(Result.Success());
         });
 
@@ -250,82 +250,41 @@ internal sealed class SlashCommandDispatcher
             return Result.Success();
         });
 
-        Register("tree", [], null, async (ctx, _) =>
+        Register("tree", [], null, static async (ctx, _) =>
         {
             var store = ctx.Services.GetRequiredService<ISessionStore>();
-            var result = await store.ListAsync().ConfigureAwait(false);
-            if (!result.IsSuccess)
+            var built = await SessionTreeRunner.BuildAsync(store, ctx.Session.Id).ConfigureAwait(false);
+            if (built.IsFailure)
             {
-                ctx.Writer($"Failed to list sessions: {result.Error}");
+                ctx.Writer($"Cannot list sessions: {built.Error}");
                 return Result.Success();
             }
 
-            var sessions = result.Value;
-            if (sessions.Count == 0)
-            {
+            if (built.Value.Count == 0)
                 ctx.Writer("No sessions.");
-                return Result.Success();
-            }
-
-            var byId = sessions.ToDictionary(s => s.Id, StringComparer.Ordinal);
-            var roots = new List<Session>();
-            var children = new Dictionary<string, List<Session>>(StringComparer.Ordinal);
-
-            foreach (var s in sessions)
-            {
-                if (string.IsNullOrEmpty(s.ParentSessionId) || !byId.ContainsKey(s.ParentSessionId))
-                {
-                    roots.Add(s);
-                }
-                else
-                {
-                    if (!children.TryGetValue(s.ParentSessionId, out var list))
-                    {
-                        list = new List<Session>();
-                        children[s.ParentSessionId] = list;
-                    }
-                    list.Add(s);
-                }
-            }
-
-            roots.Sort((a, b) => a.CreatedAt.CompareTo(b.CreatedAt));
-            foreach (var root in roots)
-            {
-                PrintTree(ctx.Writer, root, children, byId, prefix: "", isLast: true);
-            }
-
+            else
+                foreach (var line in built.Value)
+                    ctx.Writer(line);
             return Result.Success();
         });
 
-        Register("summary", ["sum"], null, async (ctx, args) =>
+        Register("fork", [], null, static async (ctx, args) =>
         {
-            var store = ctx.Services.GetRequiredService<ISessionStore>();
-            string targetId = args.Count > 0 ? args[0] : ctx.Session.Id;
-            var result = await store.GetAsync(targetId).ConfigureAwait(false);
-            if (!result.IsSuccess)
+            if (args.Count < 2)
             {
-                ctx.Writer($"Session not found: {targetId}");
+                ctx.Writer("Usage: /fork <session-id> <message-id>");
                 return Result.Success();
             }
 
-            var session = result.Value;
-            ctx.Writer($"Session: {session.Id}");
-            ctx.Writer($"Title: {session.Title}");
-            ctx.Writer($"Agent: {session.Agent} | Model: {session.ProviderId}/{session.Model}");
-            ctx.Writer($"Status: {session.Status}");
-            ctx.Writer($"Created: {session.CreatedAt:yyyy-MM-dd HH:mm} UTC");
-            ctx.Writer($"Updated: {session.UpdatedAt:yyyy-MM-dd HH:mm} UTC");
-            if (!string.IsNullOrEmpty(session.ParentSessionId))
-                ctx.Writer($"Parent: {session.ParentSessionId}");
-            if (!string.IsNullOrEmpty(session.GitBranch))
-                ctx.Writer($"Git branch: {session.GitBranch} (dirty: {session.GitIsDirty})");
-            return Result.Success();
-        });
+            var outcome = await new SessionForkRunner(ctx.Services.GetRequiredService<ISessionStore>())
+                .ForkAsync(args[0], args[1]).ConfigureAwait(false);
+            if (outcome.IsFailure)
+            {
+                ctx.Writer($"Fork failed: {outcome.Error}");
+                return Result.Success();
+            }
 
-        Register("fork", [], null, static async (ctx, _) =>
-        {
-            ctx.Writer("Usage: /fork <session-id> <message-id>");
-            await Task.CompletedTask;
+            ctx.Writer($"Forked → {outcome.Value.ForkId}: copied {outcome.Value.Copied} message(s).");
             return Result.Success();
         });
 
@@ -382,28 +341,6 @@ internal sealed class SlashCommandDispatcher
             writer($"  - {note}");
         writer("Hint: edited/removed plugins need a restart to fully rebind.");
         return Result.Success();
-    }
-
-    private static void PrintTree(
-        Action<string> writer,
-        Session session,
-        Dictionary<string, List<Session>> children,
-        Dictionary<string, Session> byId,
-        string prefix,
-        bool isLast)
-    {
-        string connector = isLast ? "└── " : "├── ";
-        writer($"{prefix}{connector}{session.Id} {session.Title} [{session.ProviderId}/{session.Model}]");
-
-        string childPrefix = prefix + (isLast ? "    " : "│   ");
-        if (children.TryGetValue(session.Id, out var childList))
-        {
-            childList.Sort((a, b) => a.CreatedAt.CompareTo(b.CreatedAt));
-            for (int i = 0; i < childList.Count; i++)
-            {
-                PrintTree(writer, childList[i], children, byId, childPrefix, i == childList.Count - 1);
-            }
-        }
     }
 
     /// <summary>Minimal ISlashCommand adapter for palette consumption.</summary>

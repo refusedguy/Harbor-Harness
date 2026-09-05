@@ -2,22 +2,31 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Harbor.Abstractions.Contracts;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Harbor.CodeGen;
 
+/// <summary>
+///     Incremental source generator for mood-frame dispatch tables.
+///     Scans for enums whose members carry <see cref="MoodFrameAttribute" />
+///     and emits a static dispatch class replacing the manual switch
+///     expression in the host class (e.g. <see cref="AmbientMascot.FramesOf"/>).
+/// </summary>
 [Generator]
 public sealed class MoodFrameGenerator : IIncrementalGenerator
 {
+    // Matched by metadata name (not by type reference) so this netstandard2.0
+    // Roslyn component needs no project reference. Must track the attribute in
+    // src/Harbor.Abstractions.Contracts/MoodFrameAttribute.cs.
+    private const string AttributeName = "MoodFrameAttribute";
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var allMoodMembers = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.EnumMemberDeclarationSyntax,
                 transform: static (ctx, _) => (IFieldSymbol)ctx.SemanticModel.GetDeclaredSymbol(ctx.Node)!)
-            .Where(static m => m.GetAttributes().Any(ad => ad.AttributeClass?.Name == nameof(MoodFrameAttribute)))
+            .Where(static m => m.GetAttributes().Any(ad => ad.AttributeClass?.Name == AttributeName))
             .Collect();
 
         context.RegisterSourceOutput(allMoodMembers, static (spc, members) =>
@@ -30,7 +39,7 @@ public sealed class MoodFrameGenerator : IIncrementalGenerator
                     var @namespace = enumSymbol.ContainingNamespace.ToDisplayString();
 
                     var attrData = m.GetAttributes()
-                        .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(MoodFrameAttribute));
+                        .FirstOrDefault(ad => ad.AttributeClass?.Name == AttributeName);
                     string frameBank = string.Empty;
                     string? panelEars = null;
                     string? panelPaws = null;
@@ -45,10 +54,10 @@ public sealed class MoodFrameGenerator : IIncrementalGenerator
                         {
                             switch (na.Key)
                             {
-                                case nameof(MoodFrameAttribute.PanelEars):
+                                case "PanelEars":
                                     panelEars = na.Value.Value?.ToString();
                                     break;
-                                case nameof(MoodFrameAttribute.PanelPaws):
+                                case "PanelPaws":
                                     panelPaws = na.Value.Value?.ToString();
                                     break;
                             }

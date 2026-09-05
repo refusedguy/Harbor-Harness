@@ -1,5 +1,6 @@
 namespace Harbor.Tui.AnsiPlain;
 
+using Harbor.Abstractions.Contracts;
 using Harbor.Tui.AnsiPlain.EscapeCodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 ///     Thin subclass of <see cref="AnsiPlainTuiRenderer"/> selecting
 ///     <see cref="NullEscapeStrategy"/>; all render logic lives in the base.
 /// </summary>
-[Harbor.Abstractions.Contracts.TuiRenderer(Backend = "plain")]
+[TuiRenderer(Backend = "plain")]
 public sealed partial class PlainTuiRenderer : AnsiPlainTuiRenderer
 {
     public PlainTuiRenderer(TextWriter? writer = null)

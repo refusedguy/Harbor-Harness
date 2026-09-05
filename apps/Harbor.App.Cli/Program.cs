@@ -589,6 +589,14 @@ public static class Program
         return 0;
     }
 
+    private static async Task<int> RunTreeSessionsAsync()
+    {
+        _logger.LogInformation("Showing session branch tree");
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        return await SessionTreeRunner.RunAsync(Console.Out, Console.Error, store).ConfigureAwait(false);
+    }
+
     /// <summary>
     ///     `harbor sessions` family: list (default), rename, export, import.
     ///     Rename persists a new title via ISessionStore.UpdateAsync; export/import
@@ -612,17 +620,20 @@ public static class Program
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
             case "revert":
                 return await RunRevertSessionAsync(args.Skip(1).ToArray());
+            case "tree":
+                return await RunTreeSessionsAsync();
             case "fork":
                 return await RunForkSessionAsync(args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search|revert|fork]
+                                        Usage: harbor sessions [list|rename|export|import|search|revert|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
+                                          sessions tree                   show fork/branch lineage as an indented tree
                                           sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
                                         """);
                 return 2;

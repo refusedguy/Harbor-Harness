@@ -79,7 +79,7 @@ public class SlashCommandForkTests
     public async Task HandleAsync_ForkWithBoundary_CopiesPrefixAndReportsNewId()
     {
         var store = new FakeStore();
-        var parent = (await store.CreateAsync("/tmp/harbor-fork-repl", "code", "test", "test-model")).Value;
+        var parent = (await store.CreateAsync("/harbor-fork-repl", "code", "test", "test-model")).Value;
         for (int i = 0; i < 3; i++)
         {
             await store.AppendMessageAsync(parent.Id,
@@ -109,7 +109,7 @@ public class SlashCommandForkTests
             writer: lines.Add,
             reader: _ => Task.FromResult(string.Empty),
             agent: null!, agentRegistry: null!, configStore: null!, authStore: null!,
-            providers: null!, session: Session.Create("/tmp/harbor-fork-tests", "code", "t", "m"));
+            providers: null!, session: Session.Create("/harbor-fork-tests", "code", "t", "m"));
         await Assert.That(outcome.ShouldQuit).IsFalse();
         return lines;
     }

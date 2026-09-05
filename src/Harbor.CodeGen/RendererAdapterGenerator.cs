@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Harbor.Abstractions.Contracts;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
@@ -18,6 +17,10 @@ namespace Harbor.CodeGen;
 [Generator]
 public sealed class RendererAdapterGenerator : IIncrementalGenerator
 {
+    // Matched by metadata name (not by type reference) so this netstandard2.0
+    // Roslyn component needs no project reference. Must track the attribute in
+    // src/Harbor.Abstractions.Contracts/TuiRendererAttribute.cs.
+    private const string AttributeName = "TuiRendererAttribute";
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var classSymbols = context.SyntaxProvider
@@ -30,7 +33,7 @@ public sealed class RendererAdapterGenerator : IIncrementalGenerator
                 var @namespace = classSymbol.ContainingNamespace.ToDisplayString();
 
                 var attrData = classSymbol.GetAttributes()
-                    .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(TuiRendererAttribute));
+                    .FirstOrDefault(ad => ad.AttributeClass?.Name == AttributeName);
                 string backend = string.Empty;
                 string? contextType = null;
                 string? argsFormatter = null;
@@ -41,13 +44,13 @@ public sealed class RendererAdapterGenerator : IIncrementalGenerator
                     {
                         switch (na.Key)
                         {
-                            case nameof(TuiRendererAttribute.Backend):
+                            case "Backend":
                                 backend = na.Value.Value?.ToString() ?? string.Empty;
                                 break;
-                            case nameof(TuiRendererAttribute.ContextType):
+                            case "ContextType":
                                 contextType = na.Value.Value?.ToString();
                                 break;
-                            case nameof(TuiRendererAttribute.ArgsFormatter):
+                            case "ArgsFormatter":
                                 argsFormatter = na.Value.Value?.ToString();
                                 break;
                         }

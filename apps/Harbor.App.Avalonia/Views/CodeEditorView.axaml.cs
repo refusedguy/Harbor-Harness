@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using Harbor.App.Avalonia.ViewModels;
@@ -129,9 +130,10 @@ public partial class CodeEditorView : UserControl
         var selection = Editor.TextArea.Selection;
         if (selection.IsEmpty) return;
 
-        var selectedText = Editor.SelectedText;
-        int start = Editor.SelectionStart;
-        int end = start + selectedText.Length;
+        var selectedText = selection.GetText();
+        var selectedSegment = selection.SurroundingSegment;
+        int start = selectedSegment.Offset;
+        int end = selectedSegment.EndOffset;
 
         if (string.IsNullOrEmpty(selectedText) || start == end) return;
 

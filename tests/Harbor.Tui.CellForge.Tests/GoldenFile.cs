@@ -25,17 +25,18 @@ internal static class Golden
     /// </summary>
     public static string Verify(string name, string actualContent, string? svgContent = null)
     {
+        string normalizedActual = Normalize(actualContent);
         string path = Path.Combine(_fixtureDir.Value, name + ".golden.txt");
         if (IsUpdateMode())
         {
             Directory.CreateDirectory(_fixtureDir.Value);
-            File.WriteAllText(path, actualContent);
+            File.WriteAllText(path, normalizedActual);
             if (svgContent is not null)
             {
                 File.WriteAllText(Path.Combine(_fixtureDir.Value, name + ".svg"), svgContent);
             }
 
-            return actualContent;
+            return normalizedActual;
         }
 
         if (!File.Exists(path))
@@ -44,8 +45,16 @@ internal static class Golden
                 $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
         }
 
-        return File.ReadAllText(path);
+        return Normalize(File.ReadAllText(path));
     }
+
+    /// <summary>
+    ///     Normalizes environment-dependent line endings so goldens are stable
+    ///     across Windows (CRLF checkout) / Linux (LF checkout) test hosts.
+    ///     Callers compare in-memory art (LF) against the normalized fixture.
+    /// </summary>
+    public static string Normalize(string s) =>
+        s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
     public static bool IsUpdateMode() =>
         Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1";

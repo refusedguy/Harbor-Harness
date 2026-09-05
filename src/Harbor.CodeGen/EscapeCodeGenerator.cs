@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Harbor.Abstractions.Contracts;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
@@ -11,20 +10,24 @@ namespace Harbor.CodeGen;
 [Generator]
 public sealed class EscapeCodeGenerator : IIncrementalGenerator
 {
+    // Matched by metadata name (not by type reference) so this netstandard2.0
+    // Roslyn component needs no project reference. Must track the attribute in
+    // src/Harbor.Abstractions.Contracts/TerminalEscapeAttribute.cs.
+    private const string AttributeName = "TerminalEscapeAttribute";
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var enumSymbols = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is Microsoft.CodeAnalysis.CSharp.Syntax.EnumDeclarationSyntax,
                 transform: static (ctx, _) => (INamedTypeSymbol)ctx.SemanticModel.GetDeclaredSymbol(ctx.Node)!)
-            .Where(static e => e.GetAttributes().Any(ad => ad.AttributeClass?.Name == nameof(TerminalEscapeAttribute)))
+            .Where(static e => e.GetAttributes().Any(ad => ad.AttributeClass?.Name == AttributeName))
             .Select(static (enumSymbol, _) =>
             {
                 var enumName = enumSymbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
                 var @namespace = enumSymbol.ContainingNamespace.ToDisplayString();
 
                 var attrData = enumSymbol.GetAttributes()
-                    .FirstOrDefault(ad => ad.AttributeClass?.Name == nameof(TerminalEscapeAttribute));
+                    .FirstOrDefault(ad => ad.AttributeClass?.Name == AttributeName);
                 string className = $"{enumName}EscapeCodes";
                 string? ns = null;
                 string resetMember = "Reset";
@@ -35,13 +38,13 @@ public sealed class EscapeCodeGenerator : IIncrementalGenerator
                     {
                         switch (na.Key)
                         {
-                            case nameof(TerminalEscapeAttribute.ClassName):
+                            case "ClassName":
                                 className = na.Value.Value?.ToString() ?? className;
                                 break;
-                            case nameof(TerminalEscapeAttribute.Namespace):
+                            case "Namespace":
                                 ns = na.Value.Value?.ToString();
                                 break;
-                            case nameof(TerminalEscapeAttribute.ResetMember):
+                            case "ResetMember":
                                 resetMember = na.Value.Value?.ToString() ?? resetMember;
                                 break;
                         }
@@ -126,67 +129,40 @@ public sealed class EscapeCodeGenerator : IIncrementalGenerator
         sb.AppendLine("    // Precomputed SGR parameter strings");
         foreach (var m in data.Members)
         {
-            if (m.Value == 0)
+            if (m.Name == "Reset")
             {
-                sb.AppendLine($"    public const string {data.ResetMember} = \"\\x1b[0m\";");
+                sb.AppendLine($"    public const string {m.Name} = \"\\x1b[0m\";");
             }
             else
             {
-                string code = StyleCode(m.Name);
-                sb.AppendLine($"    public const string {m.Name} = \"\\x1b[{code}m\";");
+                sb.AppendLine($"    public const string {m.Name} = \"\\x1b[{m.Value}m\";");
             }
         }
+
+        // The empty-flags sentinel is the zero-valued member when one exists
+        // (Reset, None, …) — some enums (bitmask StyleFlag) have no Reset.
+        // Falls back to the attribute's ResetMember, then to the first member.
+        string zeroName = data.Members.FirstOrDefault(m => m.Value == 0).Name
+            ?? data.Members.FirstOrDefault(m => m.Name == data.ResetMember).Name
+            ?? data.Members[0].Name;
 
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>Combine multiple <see cref=\"{data.EnumName}\" /> flags into one SGR sequence.</summary>");
         sb.AppendLine($"    public static string Combine({data.EnumName} flags)");
         sb.AppendLine("    {");
-        sb.AppendLine("        if (flags == 0) return " + data.ResetMember + ";");
+        sb.AppendLine("        if (flags == 0) return " + zeroName + ";");
         sb.AppendLine("        var codes = new System.Text.StringBuilder(16);");
         sb.AppendLine("        bool first = true;");
         sb.AppendLine("        foreach (" + data.EnumName + " f in System.Enum.GetValues(typeof(" + data.EnumName + ")))");
         sb.AppendLine("        {");
-        sb.AppendLine("            if ((int)f == 0) continue;");
+        sb.AppendLine("            if (f == " + data.EnumName + "." + zeroName + ") continue;");
         sb.AppendLine("            if ((flags & f) == 0) continue;");
         sb.AppendLine("            if (!first) codes.Append(';');");
-        sb.AppendLine("            codes.Append(StyleCode(f.ToString()));");
+        sb.AppendLine("            codes.Append((int)f);");
         sb.AppendLine("            first = false;");
         sb.AppendLine("        }");
-        sb.AppendLine("        return codes.Length == 0 ? " + data.ResetMember + " : $\"\\x1b[{codes}m\";");
+        sb.AppendLine("        return codes.Length == 0 ? " + zeroName + " : $\"\\x1b[{codes}m\";");
         sb.AppendLine("    }");
-
-        sb.AppendLine();
-        sb.AppendLine($"    /// <summary>SGR parameter list for <paramref name=\"style\" /> (e.g. <c>\"1;3\"</c>), or empty when the style is empty.</summary>");
-        sb.AppendLine($"    public static string Style({data.EnumName} style)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (style == 0) return string.Empty;");
-        sb.AppendLine("        var codes = new System.Text.StringBuilder(16);");
-        sb.AppendLine("        bool first = true;");
-        sb.AppendLine("        foreach (" + data.EnumName + " f in System.Enum.GetValues(typeof(" + data.EnumName + ")))");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if ((int)f == 0) continue;");
-        sb.AppendLine("            if ((style & f) == 0) continue;");
-        sb.AppendLine("            if (!first) codes.Append(';');");
-        sb.AppendLine("            codes.Append(StyleCode(f.ToString()));");
-        sb.AppendLine("            first = false;");
-        sb.AppendLine("        }");
-        sb.AppendLine("        return codes.ToString();");
-        sb.AppendLine("    }");
-
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Map a <see cref=\"" + data.EnumName + "\" /> member name to its ECMA-48 SGR parameter.</summary>");
-        sb.AppendLine("    private static string StyleCode(string memberName) => memberName switch");
-        sb.AppendLine("    {");
-        sb.AppendLine("        \"Bold\" => \"1\",");
-        sb.AppendLine("        \"Dim\" => \"2\",");
-        sb.AppendLine("        \"Italic\" => \"3\",");
-        sb.AppendLine("        \"Underline\" => \"4\",");
-        sb.AppendLine("        \"Blink\" => \"5\",");
-        sb.AppendLine("        \"Reverse\" => \"7\",");
-        sb.AppendLine("        \"Hidden\" => \"8\",");
-        sb.AppendLine("        \"Strike\" => \"9\",");
-        sb.AppendLine("        _ => \"0\"");
-        sb.AppendLine("    };");
     }
 
     private static void GenerateCursorCode(StringBuilder sb, (string EnumName, string Namespace, string ClassName, string ResetMember, (string Name, byte Value)[] Members, EscapeKind Kind) data)
@@ -209,21 +185,12 @@ public sealed class EscapeCodeGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         foreach (var m in data.Members.OrderBy(m => m.Value))
         {
-            byte finalByte = csiMap.GetValueOrDefault(m.Name, (byte)' ');
+            byte finalByte = csiMap.TryGetValue(m.Name, out byte found) ? found : (byte)' ';
             sb.AppendLine($"            {data.EnumName}.{m.Name} => '{(char)finalByte}',");
         }
         sb.AppendLine("            _ => ' '");
         sb.AppendLine("        };");
         sb.AppendLine("        return count == 1 ? $\"\\x1b[{final}\" : $\"\\x1b[{count}{final}\";");
-        sb.AppendLine("    }");
-
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>CUP <c>ESC[row;colH</c> (1-based) — move cursor to position.</summary>");
-        sb.AppendLine("    public static string Position(int row, int col)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (row < 1) row = 1;");
-        sb.AppendLine("        if (col < 1) col = 1;");
-        sb.AppendLine("        return $\"\\x1b[{row};{col}H\";");
         sb.AppendLine("    }");
     }
 
@@ -254,36 +221,6 @@ public sealed class EscapeCodeGenerator : IIncrementalGenerator
         sb.AppendLine("            _ => $\"\\x1b[48;5;{(int)color}m\"");
         sb.AppendLine("        };");
         sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>ESC [ 38;2;R;G;B m — 24-bit foreground.</summary>");
-        sb.AppendLine("    public static string ForegroundRgb(byte r, byte g, byte b)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        return $\"\\x1b[38;2;{r};{g};{b}m\";");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>ESC [ 48;2;R;G;B m — 24-bit background.</summary>");
-        sb.AppendLine("    public static string BackgroundRgb(byte r, byte g, byte b)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        return $\"\\x1b[48;2;{r};{g};{b}m\";");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>DEC private mode: hide cursor.</summary>");
-        sb.AppendLine("    public const string HideCursor = \"\\x1b[?25l\";");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>DEC private mode: show cursor.</summary>");
-        sb.AppendLine("    public const string ShowCursor = \"\\x1b[?25h\";");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Erase line + CR (in-place repaint idiom).</summary>");
-        sb.AppendLine("    public const string ClearLine = \"\\x1b[2K\\r\";");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Erase screen + home cursor.</summary>");
-        sb.AppendLine("    public const string ClearScreen = \"\\x1b[2J\\x1b[H\";");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Enter the alternate screen buffer.</summary>");
-        sb.AppendLine("    public const string EnterAlternateScreen = \"\\x1b[?1049h\";");
-        sb.AppendLine();
-        sb.AppendLine("    /// <summary>Exit the alternate screen buffer.</summary>");
-        sb.AppendLine("    public const string ExitAlternateScreen = \"\\x1b[?1049l\";");
     }
 
     private static void GenerateGenericCode(StringBuilder sb, (string EnumName, string Namespace, string ClassName, string ResetMember, (string Name, byte Value)[] Members, EscapeKind Kind) data)
@@ -293,17 +230,4 @@ public sealed class EscapeCodeGenerator : IIncrementalGenerator
             sb.AppendLine($"    public const string {m.Name} = \"\\x1b[{(m.Value == 0 ? 0 : m.Value)}m\";");
         }
     }
-
-    private static string StyleCode(string memberName) => memberName switch
-    {
-        "Bold" => "1",
-        "Dim" => "2",
-        "Italic" => "3",
-        "Underline" => "4",
-        "Blink" => "5",
-        "Reverse" => "7",
-        "Hidden" => "8",
-        "Strike" => "9",
-        _ => "0",
-    };
 }

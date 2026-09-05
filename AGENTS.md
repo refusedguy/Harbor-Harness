@@ -4,7 +4,7 @@
 >
 > **Quick state (branch dev):**
 > - Solutions are `.slnx` files: `Harbor.slnx` (main) and `Harbor.Samples.slnx`; no plain `.sln`.
-> - Tests must be run **per project** (`dotnet test tests/<Project> -c Release --no-build`); whole-solution test invocations currently break under the Microsoft.Testing.Platform (MTP) host — do not rely on them.
+> - Tests must be run **per project as plain executables** (`dotnet run --project tests/<Project> -c Release --no-build -- --minimum-expected-tests 1`); `dotnet test` discovers ZERO tests under the Microsoft.Testing.Platform (MTP) bridge in this repo (host exits 5 with a silent discovery error) and whole-solution invocations are doubly broken — do not use either.
 > - Known/flaky tests historically cited (verify against `docs/ROADMAP.md` before counting on current numbers): Avalonia-12 headless `MarkdownRenderer`/`CodeBlock`/`TypewriterStreamingText` ("Stack empty" in `SetInheritanceParent`), the IPC named-pipe event-stream class on Linux (self-skips unless `HARBOR_IPC_EVENTSTREAM=1`), and an occasional `ChatView_Inflates` ListBoxItem `StaticResource` flake.
 > - ConsoleEx (second in-process terminal renderer) MVP is complete and opt-in via `HARBOR_TUI=consoleex`; MCP tools ship out-of-process; plugin hosting is split across the `Harbor.Plugins.*` projects.
 >
@@ -29,7 +29,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
    Clean / Hexagonal / Onion layering rules. **Before adding any `<ProjectReference>` to
    a `.csproj`, check the allowed/forbidden matrix in §2.** The rules are mechanically
    enforced by `tests/Harbor.Architecture.Tests/` (46 tests: 21 reflection-based +
-   25 NetArchTest-based — see §5 of that doc) — run it (`dotnet test
+   25 NetArchTest-based — see §5 of that doc) — run it (`dotnet run --project
    tests/Harbor.Architecture.Tests/ -c Release --no-build`) after every
    project-reference change.
 3. Read [docs/CODE_PRINCIPLES_AUDIT.md](./docs/CODE_PRINCIPLES_AUDIT.md) for known
@@ -42,7 +42,7 @@ A modular .NET 10 AI coding harness. Modular = every concern behind an interface
 7. Read [docs/ROADMAP.md](./docs/ROADMAP.md) for current state + planned next steps.
 8. If touching the interactive shell (`contrib/tui/Harbor.Tui.SpectreTui`, compiled into the default CLI build) or any renderer — read [docs/SPECTRE_TUI_DEEP_DIVE.md](./docs/SPECTRE_TUI_DEEP_DIVE.md) for render-loop anatomy + recipes for opencode/kilocode/pi-agent features.
 9. Run `dotnet build` to make sure the project compiles.
-10. Run the affected test projects individually (`dotnet test tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. Whole-solution `dotnet test` is unreliable under the MTP host.
+10. Run the affected test projects individually (`dotnet run --project tests/<Project> -c Release --no-build`) — **including `tests/Harbor.Architecture.Tests/`** after every project-reference change. `dotnet test` discovers zero tests in this repo (broken MTP bridge) — never use it.
 
 ## Project structure quick reference
 
@@ -63,8 +63,8 @@ src/Harbor.Ui.Framework*/             — TEA-style UI state/reducers/projection
 src/Harbor.Desktop.{Abstractions,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients + shared-source compat layer
-src/Harbor.Tools.Builtin/             — 14 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
-                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp)
+src/Harbor.Tools.Builtin/             — 18 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+                                        ls/task/webfetch/patch/notebook/ripgrep/tree/mcp/skill/read_mcp_resource/mcp_prompt)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -343,7 +343,7 @@ public class YourTests
 }
 ```
 
-Run: `dotnet test tests/Harbor.YourNamespace.Tests -c Release --no-build` (run `dotnet build` first; whole-solution test runs are unreliable under the MTP host).
+Run: `dotnet run --project tests/Harbor.YourNamespace.Tests -c Release --no-build -- --minimum-expected-tests 1` (run `dotnet build` first; `dotnet test` discovers zero tests in this repo — never use it).
 
 ### Add a TUI view model
 
@@ -584,7 +584,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 8. **Don't suppress warnings with `#pragma warning disable`** — fix the code or add to `.editorconfig`.
 9. **Don't create C# design-token classes** (`*Tokens.cs`, `*Theme.cs`, `*Palette.cs`) in the UI layer. The source of truth is the XAML `ResourceDictionary`. Dual ownership causes sync drift, memory leaks on theme switch, and AOT breaks.
 10. **Don't break the build** — `dotnet build` must succeed with 0 warnings (treat as errors).
-11. **Don't break tests** — run affected test projects individually before commit (`dotnet test tests/<Project> -c Release --no-build`).
+11. **Don't break tests** — run affected test projects individually before commit (`dotnet run --project tests/<Project> -c Release --no-build`).
 
 ## Build & test commands
 
@@ -593,13 +593,15 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 dotnet build
 
 # Run a specific test project (recommended way to test).
-# TUnit uses --treenode-filter for filtering, NOT --filter.
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
-dotnet test tests/Harbor.Tui.Tests --treenode-filter "/*/*/DefaultUiProjectorTests/*"
+# Tests run as plain executables — `dotnet test` discovers ZERO tests in this
+# repo (broken MTP bridge: host exits 5 with a silent discovery error).
+# TUnit uses --treenode-filter for filtering (forwarded after --), NOT --filter.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
+dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-filter "/*/*/DefaultUiProjectorTests/*"
 
-# WARNING: do NOT run dotnet test across the whole Harbor.slnx — whole-solution
-# invocations currently break under the Microsoft.Testing.Platform (MTP) host.
-# Always target one test project directory at a time.
+# WARNING: do NOT use `dotnet test` at all here — neither per-project nor
+# across the whole Harbor.slnx. Always run test .csproj files via `dotnet run`
+# (or execute the built test DLL directly), one project at a time.
 
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
@@ -616,7 +618,7 @@ dotnet run --project apps/Harbor.App.Cli -- sessions
 
 1. Make the change.
 2. `dotnet build` — must succeed with 0 warnings.
-3. Run the affected test projects individually with `dotnet test tests/<Project> -c Release --no-build` — all tests in them must pass. Do not run solution-wide `dotnet test` (see MTP warning above).
+3. Run the affected test projects individually with `dotnet run --project tests/<Project> -c Release --no-build` — all tests in them must pass. Do not use `dotnet test` (see MTP warning above).
 4. If you added a new tool — add tests for it.
 5. If you changed an interface — update all implementations.
 6. Run the CLI manually to verify: `dotnet run --project apps/Harbor.App.Cli -- help`.
