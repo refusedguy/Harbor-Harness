@@ -166,3 +166,22 @@ Reverse the split: rename `Harbor.Domain.dll` to `Harbor.Abstractions.Contracts`
 - One project to edit for any contract change; consumers that need only DTOs can take just `Harbor.Abstractions.Contracts` without the full interface stack (useful for plugin compilation, which previously needed an explicit `typeof(Session).Assembly` reference).
 - Dependency direction is fixed by architecture tests: Contracts must not grow heavier deps; Abstractions may depend on Contracts, never the reverse.
 - Historical note in ROADMAP Decision Log updated accordingly; per-project docs reconciled during DOCS-ZERO (2026-08-27).
+
+---
+
+# ADR-009: ICommonConfigReader lives in Ui.Framework.Abstractions (circular-dependency resolution)
+
+## Status
+Accepted (implemented by 793c998 Ui.Framework split; recorded 2026-09-04)
+
+## Context
+Issue #20: SessionFactory (Ui.Framework) needs the persisted provider/model choice, but the full config store (JsonCommonConfigStore) lives in Harbor.Desktop.Abstractions, and Desktop.Abstractions -> Terminal.Abstractions -> Ui.Framework, so Ui.Framework could not reference it back. Options were: merge Desktop.Abstractions into Ui.Framework, split Terminal.Abstractions, or keep a narrow interface with a documented boundary.
+
+## Decision
+Keep the narrow interface, placed at the bottom of the layer stack: ICommonConfigReader lives in Harbor.Ui.Framework.Abstractions/Configuration (same assembly family as its consumer, zero new edges) and exposes only what SessionFactory needs (TryReadProviderModelAsync). Harbor.Desktop.Abstractions.JsonCommonConfigStore implements both its own ICommonConfigStore and the narrow reader; each platform registers the dual implementation in DI. Merging Desktop.Abstractions into Ui.Framework was rejected (wrong direction - desktop concepts would leak into the shared framework); splitting Terminal.Abstractions was rejected (large churn, no additional isolation).
+
+## Consequences
+- No circular reference; layering enforced by Harbor.Architecture.Tests (47/47 green).
+- Ui.Framework.Sessions resolves ICommonConfigReader optionally via GetService - hosts without config (tests, minimal) behave as before.
+- Full config surface stays on the Desktop.Abstractions type; the narrow reader must not grow beyond session-bootstrap needs.
+

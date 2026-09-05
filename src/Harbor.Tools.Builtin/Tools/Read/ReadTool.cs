@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Text;
+using Harbor.Abstractions.Lsp;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -233,6 +235,8 @@ public sealed class ReadTool : ITool
 
         _logger.LogDebug("Read complete: {Lines} lines, Truncated={Truncated}", taken, truncatedByLines || truncatedByChars);
 
+        await OpenInLanguageServerAsync(context, path, cancellationToken).ConfigureAwait(false);
+
         return ToolResult.Success(
             sb.ToString(),
             new
@@ -246,8 +250,30 @@ public sealed class ReadTool : ITool
             });
     }
 
-    private static bool IsBinaryFile(string path, long length)
+    /// <summary>
+    ///     Auto-spawn hook: open text files in the language server so later
+    ///     <c>lsp</c> queries (diagnostics/definition/references) see the
+    ///     content. Best-effort — LSP must never break a read.
+    /// </summary>
+    private async Task OpenInLanguageServerAsync(
+        ToolContext context, string path, CancellationToken cancellationToken)
     {
+        try
+        {
+            if (context.Services?.GetService<ILspService>() is not { } lsp)
+                return;
+            if (!lsp.SupportsFile(path))
+                return;
+            string text = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            await lsp.OpenFileAsync(path, text, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "LSP auto-open failed for {Path}", path);
+        }
+    }
+
+    private static bool IsBinaryFile(string path, long length)   {
         try
         {
             int toRead = (int)Math.Min(length, BinaryProbeBytes);

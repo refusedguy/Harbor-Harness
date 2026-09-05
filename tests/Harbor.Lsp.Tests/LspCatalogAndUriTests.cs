@@ -5,11 +5,12 @@ namespace Harbor.Lsp.Tests;
 public class LspServerCatalogTests
 {
     [Test]
-    public async Task BuiltinCatalog_HasFiveServers()
+    public async Task BuiltinCatalog_HasElevenServers()
     {
-        await Assert.That(LspServerDefinition.Builtin).HasCount().EqualTo(5);
+        await Assert.That(LspServerDefinition.Builtin).HasCount().EqualTo(11);
         await Assert.That(LspServerDefinition.Builtin.Select(d => d.Id))
-            .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp"]);
+            .IsEquivalentTo(["typescript", "python", "go", "rust", "csharp",
+                "clangd", "java", "html", "css", "json", "lua"]);
     }
 
     [Test]
@@ -24,6 +25,13 @@ public class LspServerCatalogTests
         await Assert.That(LspServerDefinition.Rust.Handles("/p/main.rs")).IsTrue();
         await Assert.That(LspServerDefinition.Go.Handles("/p/main.go")).IsTrue();
         await Assert.That(LspServerDefinition.Python.Handles("/p/main.py")).IsTrue();
+        await Assert.That(LspServerDefinition.Clangd.Handles("/p/main.cpp")).IsTrue();
+        await Assert.That(LspServerDefinition.Clangd.Handles("/p/x.h")).IsTrue();
+        await Assert.That(LspServerDefinition.Java.Handles("/p/Main.java")).IsTrue();
+        await Assert.That(LspServerDefinition.Html.Handles("/p/i.html")).IsTrue();
+        await Assert.That(LspServerDefinition.Css.Handles("/p/a.scss")).IsTrue();
+        await Assert.That(LspServerDefinition.Json.Handles("/p/tsconfig.json")).IsTrue();
+        await Assert.That(LspServerDefinition.Lua.Handles("/p/init.lua")).IsTrue();
     }
 
     [Test]

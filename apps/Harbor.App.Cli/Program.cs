@@ -139,6 +139,7 @@ public static class Program
             "providers" => await RunListProvidersAsync(),
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
             "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
+            "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
             "tui" => PrintTuiOptions(),
             "storage" => PrintStorageOptions(),
             "setup" => await RunSetupAsync(),
@@ -860,7 +861,7 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|tui|storage|logs|help|version] [--script <path>]
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
                                             Scripted demo with an in-process mock LLM — no API keys.

@@ -151,7 +151,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] HTTP, SSE transports
 - [ ] MCP resources as `read_mcp_resource` tools
 - [ ] MCP prompts as slash-commands
-- [ ] OAuth for MCP servers
+- [x] OAuth for MCP servers (`McpOAuthConfig` auth block, PKCE browser flow with loopback redirect, refresh, file cache, `harbor mcp login/logout`, `HARBOR_MCP_OAUTH_TOKEN` static fallback)
 - [ ] Lazy connect, reconnect on failure
 
 ### v0.7.0 — Skills & LSP
@@ -164,11 +164,11 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [ ] `harbor skill install/list` CLI commands
 
 **LSP Integration**
-- [ ] LSP client via `OmniSharp.Extensions.LanguageServer.Client`
-- [ ] 10+ builtin language servers (TypeScript, Python, Go, Rust, C#)
-- [ ] Auto-spawn on file open
-- [ ] `diagnostics`, `references`, `definition` tools
-- [ ] LSP-aware `read`/`edit` (inject diagnostics)
+- [x] LSP client (own stdio JSON-RPC implementation, no NuGet — `LspManager`/`LspClient`/`LspServerSession` in `src/Harbor.Lsp/`, AOT-safe source-gen wire format)
+- [x] 11 builtin language servers (TypeScript, Python, Go, Rust, C#, C/C++ via clangd, Java via jdtls, HTML/CSS/JSON via vscode-*-language-server, Lua)
+- [x] Auto-spawn on file open (`LspManager` lazy sessions + `read` tool opens files, `edit` pushes changes)
+- [x] `diagnostics`, `references`, `definition` tools (`lsp` tool, registered when `ILspService` present; graceful degradation with explanatory results when a binary is missing)
+- [x] LSP-aware `read`/`edit` (reads auto-open supported files; edits notify + append a diagnostics summary line)
 
 ### v0.8.0 — Session Management Polish
 
@@ -205,6 +205,8 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### God-objects still pending decomposition
 
+> **Update 2026-09-04:** all rows below are done or obsolete — `OpenAILlmClient` → `OpenAiRequestBuilder` + `OpenAiResponsesMapper` (chat parsing was already shared in `OpenAiWire`), `AnthropicLlmClient` → `AnthropicRequestBuilder` + `AnthropicEventMapper` (public ctors unchanged; Providers 48/48), `HarborConfig.cs` → `HarborConfig` + `RawConfigDto` + `ConfigNormalizer` files (sections already lived in `ConfigSections.cs`; Config 58/58). `HostBuilder` is ~130 lines of composition root via prior `AddHarbor` work — nothing left to split. `SessionManager.cs` no longer exists. `Storage.Jsonl` done in R31.
+
 | File | Lines | Concerns mixed | Plan |
 |---|---|---|---|
 | `Harbor.Providers.OpenAI/OpenAILlmClient.cs` | 656 | HTTP + SSE parsing + event mapping + models endpoint | Extract `OpenAiSseParser` + `OpenAiEventMapper` |
@@ -226,7 +228,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] ROP-D final verification (25.08): `Harbor.slnx -c Release` builds with 0 errors; full cycle over all 20 `tests/Harbor.*.Tests` projects — итог 1184 tests: 1176–1178 passed, 6 skipped, 1–2 failed = the two pre-existing Avalonia headless flakes `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered` (61ee126; flake count varies per run). Re-verified in a fresh ROP-D close-out session: same numbers, both failures confined to the known-flake pair. Enforcement matrix: 47/50 src dirs under arch rules; the other 3 documented out-of-scope (CodeGen build tool, Plugins.Host exe, Providers.Shared linked source) (commit b62de73).
 - [x] ROP-D tail-closure re-verification (25.08, after commit 9e954a5): Release build 0 errors (only pre-existing NU1903/NU1901 NuGet-audit advisories); full cycle over all 20 `tests/Harbor.*.Tests` projects — итог 1188 tests (+4 from ResultGuard→ResultErrors test port): 1180 passed, 6 skipped, 2 failed = the same known Avalonia flake pair only.
 - [x] God-object decomposition `Harbor.Application/Agents/AgentLoop.cs`: tool dispatch → `ToolDispatcher` + `IToolDispatcher` seam (parallel / sequential fan-out, permission gating, per-call timeout), transient-failure retry with capped exponential backoff + jitter → `Resilience/RetryPolicy`, usage aggregation + O(1) compaction checks → `TokenTracker`/`ITokenTracker`; streaming buffering lives in `StreamingCoalescer`. All behind DI (`CoreModule`); public `IAgentLoop.RunAsync` contract unchanged (AGENTLOOP-DECOMP, commit 31f8859).
-- [ ] Circular project reference workaround: `ICommonConfigReader` in Ui.Framework because Ui.Framework can't reference Desktop.Abstractions (Desktop.Abstractions → Terminal.Abstractions → Ui.Framework). Consider merging Desktop.Abstractions into Ui.Framework, or splitting Terminal.Abstractions.
+- [x] Circular project reference workaround: resolved by the Ui.Framework split (793c998) — `ICommonConfigReader` lives in the bottom `Harbor.Ui.Framework.Abstractions/Configuration` project (narrow session-bootstrap surface only); `JsonCommonConfigStore` implements both it and the full `ICommonConfigStore`. Merging Desktop.Abstractions into Ui.Framework was rejected (wrong direction); splitting Terminal.Abstractions was rejected (churn without isolation). Recorded in DECISIONS.md ADR-009; architecture tests green (47/47).
 - [ ] Pre-existing Avalonia 12 headless test failures: 3 tests (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text`) fail with "Stack empty" in `SetInheritanceParent`. Needs investigation — likely an Avalonia.Headless bug.
 - [ ] IPC tests: 8/35 failing — timing issues with named-pipe disposal on Linux.
 

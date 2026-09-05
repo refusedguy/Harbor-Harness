@@ -91,8 +91,8 @@ public class AccessibilityTests
 
         if (Math.Abs(Accessibility.ContrastRatio(white, black) - 21.0) > 1e-9 ||
             Math.Abs(Accessibility.ContrastRatio(black, black) - 1.0) > 1e-9 ||
-            Accessibility.RelativeLuminance(white) != 1.0 ||
-            Accessibility.RelativeLuminance(black) != 0.0)
+            Math.Abs(Accessibility.RelativeLuminance(white) - 1.0) > 1e-9 ||
+            Math.Abs(Accessibility.RelativeLuminance(black) - 0.0) > 1e-9)
         {
             throw new InvalidOperationException("WCAG math regression");
         }
