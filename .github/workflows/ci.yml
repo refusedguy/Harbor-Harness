@@ -355,3 +355,39 @@ jobs:
           name: harbor-cli-linux-x64
           path: publish/linux-x64/
           retention-days: 14
+
+  perf-gate:
+    needs: [changes, build]
+    if: (needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch') && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+      - name: Download build outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: solution-binaries
+      - name: Run renderer performance gate
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet exec tests/Harbor.Tui.PerfTests/bin/Release/net10.0/Harbor.Tui.PerfTests.dll -- --output Detailed
+      - name: Upload perf report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: renderer-perf-report
+          path: renderer-perf-report.txt
+          if-no-files-found: warn
+          retention-days: 7
