@@ -115,6 +115,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         panels.Register(new CellForgeTokenBreakdownPanel()); // Alt+5
         panels.Register(new CellForgeDiagnosticsPanel()); // Alt+6
         panels.Register(new CellForgeLogsPanel()); // Alt+7
+        panels.Register(new CellForgeSessionSidebarPanel()); // Alt+8
     }
 
     /// <summary>

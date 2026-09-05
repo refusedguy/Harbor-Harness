@@ -43,6 +43,7 @@ public class PanelWiringTests
         "token-breakdown",
         "diagnostics",
         "logs",
+        "session-sidebar",
     ];
 
     private static CellForgeTuiRenderer Create(RecordingBackend backend) =>
