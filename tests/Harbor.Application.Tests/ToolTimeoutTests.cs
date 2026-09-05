@@ -8,6 +8,8 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
@@ -96,7 +98,7 @@ public class ToolTimeoutTests
     {
         var agent = Agent(timeoutSeconds: 1);
         var (loop, client) = CreateLoop(agent);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-tool-timeout-tests", "code", "test", "test-model"));
 
         long started = Environment.TickCount64;
@@ -146,7 +148,7 @@ public class ToolTimeoutTests
             new PermissionService(agents, NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-tool-timeout-tests", "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, agent);

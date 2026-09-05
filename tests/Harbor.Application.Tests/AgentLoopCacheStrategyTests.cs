@@ -1,4 +1,6 @@
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -63,7 +65,7 @@ public class AgentLoopCacheStrategyTests
             }
         ]);
         var loop = CreateLoop(client);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, AllowAllAgent());

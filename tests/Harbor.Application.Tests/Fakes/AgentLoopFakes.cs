@@ -83,29 +83,4 @@ public sealed class FakeCompactionService : ICompactionService
     }
 }
 
-public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessage>? seedMessages = null) : ISessionContext
-{
-    private readonly List<AgentMessage> _messages = [.. seedMessages ?? []];
-
-    public Session Session { get; } = session;
-
-    public IReadOnlyList<AgentMessage> Messages => _messages;
-
-    public Channel<AgentMessage> SteeringQueue { get; } = Channel.CreateUnbounded<AgentMessage>();
-
-    public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
-    {
-        _messages.Add(message);
-        return Task.CompletedTask;
-    }
-
-    public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
-
-    public void EnqueueSteering(params AgentMessage[] messages)
-    {
-        foreach (AgentMessage message in messages)
-        {
-            SteeringQueue.Writer.TryWrite(message);
-        }
-    }
 }
