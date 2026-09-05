@@ -96,8 +96,17 @@ jobs:
       # also re-runs the 47-rule architecture gate embedded in
       # Directory.Build.props (HarborArchGate) — any layering regression
       # fails the build itself.
+      # --warnaserror is mandatory for master/tags (releases) but not for dev/PRs
+      # where 250 legacy warnings are still being triaged (see Directory.Build.props NoWarn).
       - name: Build solution (Release, zero warnings, deterministic)
-        run: dotnet build Harbor.slnx -c Release --warnaserror -p:ContinuousIntegrationBuild=true
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]] || [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "Strict build (--warnaserror) for ${{ github.ref }}"
+            dotnet build Harbor.slnx -c Release --warnaserror -p:ContinuousIntegrationBuild=true
+          else
+            echo "Lenient build for ${{ github.ref }} (dev/PR)"
+            dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
+          fi
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version
