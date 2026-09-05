@@ -139,3 +139,6 @@ assets/demo/frames/
 .devin/
 .ai-factory/
 tmp/
+
+# git worktrees (local clones, e.g. .worktrees/tunit-audit)
+.worktrees/
