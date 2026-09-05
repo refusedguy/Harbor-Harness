@@ -130,3 +130,6 @@ opencode.json
 /skills-lock.json
 temp/
 assets/demo/frames/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
