@@ -12,7 +12,19 @@ namespace Harbor.Tools.Mcp;
 internal sealed record McpRemoteEndpoint(
     string Url,
     string Transport,
-    IReadOnlyDictionary<string, string>? Headers);
+    IReadOnlyDictionary<string, string>? Headers,
+    McpOAuthConfig? OAuth = null);
+
+/// <summary>
+///     Public view of a registered remote MCP server (see
+///     <see cref="McpRegistry.GetRemoteRegistration" />).
+/// </summary>
+public sealed record McpRemoteRegistration(
+    string Name,
+    string Url,
+    string Transport,
+    IReadOnlyDictionary<string, string>? Headers,
+    McpOAuthConfig? OAuth);
 
 public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 {
@@ -64,7 +76,17 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     ///     legacy HTTP+SSE transport when <paramref name="transport" /> is <c>"sse"</c>).
     ///     Nothing is connected until the first call — transports connect lazily.
     /// </summary>
-    public Result Register(string name, string url, string transport = "http", IReadOnlyDictionary<string, string>? headers = null)
+    /// <param name="name">Stable server name.</param>
+    /// <param name="url">Absolute http(s) endpoint URL.</param>
+    /// <param name="transport">Transport kind: <c>"http"</c> or <c>"sse"</c>.</param>
+    /// <param name="headers">Extra headers (an explicit Authorization wins over OAuth).</param>
+    /// <param name="oauth">Optional OAuth2 settings (else the HARBOR_MCP_OAUTH_TOKEN env fallback applies).</param>
+    public Result Register(
+        string name,
+        string url,
+        string transport = "http",
+        IReadOnlyDictionary<string, string>? headers = null,
+        McpOAuthConfig? oauth = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             return Result.Failure("Server name cannot be empty.");
@@ -75,7 +97,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
             && !string.Equals(transport, "sse", StringComparison.OrdinalIgnoreCase))
             return Result.Failure($"MCP transport '{transport}' is not supported (expected 'http' or 'sse').");
 
-        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers));
+        return RegisterInternal(name, null, new McpRemoteEndpoint(url, transport.ToLowerInvariant(), headers, oauth));
     }
 
     private Result RegisterInternal(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
@@ -83,7 +105,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         if (_servers.ContainsKey(name))
             return Result.Failure($"MCP server '{name}' is already registered.");
 
-        _servers[name] = new ServerEntry(startInfo, remote);
+        _servers[name] = new ServerEntry(name, startInfo, remote);
         _logger?.LogInformation(
             "Registered MCP server: {Name} -> {Target}",
             name,
@@ -166,7 +188,7 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 Result registration;
                 if (value.TryGetProperty("url", out var urlEl) && urlEl.ValueKind == JsonValueKind.String)
                 {
-                    // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}}
+                    // Remote form: {"url": "...", "transport": "http"|"sse", "headers": {...}, "auth": {...}}
                     string? transport =
                         value.TryGetProperty("transport", out var transportEl) && transportEl.ValueKind == JsonValueKind.String
                             ? transportEl.GetString()
@@ -181,7 +203,8 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                                 headers[h.Name] = h.Value.GetString()!;
                     }
 
-                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers);
+                    McpOAuthConfig? oauth = McpOAuthConfig.Parse(value);
+                    registration = Register(name, urlEl.GetString() ?? string.Empty, transport ?? "http", headers, oauth);
                 }
                 else
                 {
@@ -253,6 +276,17 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
     }
 
     public IReadOnlyList<string> GetServerNames() => _servers.Keys.ToArray();
+
+    /// <summary>
+    ///     Remote coordinates for a registered remote server (used by
+    ///     <c>harbor mcp login</c> to run OAuth without opening a transport).
+    /// </summary>
+    public Result<McpRemoteRegistration> GetRemoteRegistration(string server)
+    {
+        if (!_servers.TryGetValue(server, out var entry) || !entry.IsRemote)
+            return Result.Failure<McpRemoteRegistration>($"MCP server '{server}' is not a registered remote server.");
+        return Result.Success(entry.RemoteRegistration);
+    }
 
     /// <inheritdoc />
     public IReadOnlyList<McpServerInstructions> GetInstructions()
@@ -391,15 +425,18 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
     private sealed class ServerEntry : IAsyncDisposable
     {
+        private readonly string _name;
         private readonly McpServerStartInfo? _startInfo;
         private readonly McpRemoteEndpoint? _remote;
         private readonly object _transportGate = new();
         private McpProcessClient? _process;
         private IMcpRemoteTransport? _transport;
+        private McpOAuthHandler? _oauth;
         private volatile string? _instructions;
 
-        public ServerEntry(McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
+        public ServerEntry(string name, McpServerStartInfo? startInfo, McpRemoteEndpoint? remote)
         {
+            _name = name;
             _startInfo = startInfo;
             _remote = remote;
         }
@@ -408,12 +445,20 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         public string? Instructions => _instructions;
 
+        public McpRemoteRegistration RemoteRegistration => new(
+            _name,
+            _remote!.Url,
+            _remote.Transport,
+            _remote.Headers,
+            _remote.OAuth);
+
         /// <summary>
         ///     Lazily create the remote transport (first writer wins under the gate);
         ///     the instance is cached so streamable-HTTP session ids survive across calls.
-        ///     OAuth placeholder: the full OAuth2 authorization-code flow is deferred —
-        ///     until then hosts may export the <c>HARBOR_MCP_OAUTH_TOKEN</c> environment
-        ///     variable, which is attached as a Bearer token by the transports.
+        ///     OAuth: entries with an <c>auth</c> config get a per-server
+        ///     <see cref="McpOAuthHandler" /> (token cache + refresh + login hint);
+        ///     otherwise the legacy <c>HARBOR_MCP_OAUTH_TOKEN</c> environment
+        ///     variable is attached as a Bearer token by the transports.
         /// </summary>
         public IMcpRemoteTransport? GetTransport(ILogger? logger)
         {
@@ -430,12 +475,25 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
                 }
 
                 Uri endpoint = new(_remote.Url, UriKind.Absolute);
-                Func<string?> oauthTokenProvider = static () => Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN");
+                Func<CancellationToken, Task<string?>> oauthTokenProvider = _remote.OAuth is not null
+                    ? (ct => OAuthFor(_remote, logger).TryGetAccessTokenAsync(ct))
+                    : (_ => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_MCP_OAUTH_TOKEN")));
                 _transport = string.Equals(_remote.Transport, "sse", StringComparison.OrdinalIgnoreCase)
                     ? new McpSseTransport(endpoint, _remote.Headers, oauthTokenProvider, logger)
                     : new McpHttpTransport(endpoint, _remote.Headers, oauthTokenProvider, logger);
                 return _transport;
             }
+        }
+
+        private McpOAuthHandler OAuthFor(McpRemoteEndpoint remote, ILogger? logger)
+        {
+            if (_oauth is null)
+            {
+                Uri endpoint = new(remote.Url, UriKind.Absolute);
+                _oauth = new McpOAuthHandler(_name, endpoint, remote.OAuth!, logger: logger);
+            }
+
+            return _oauth;
         }
 
         public void SetInstructions(string? instructions) => _instructions = instructions;

@@ -89,11 +89,10 @@ public class AccessibilityTests
         var white = new RgbColor(255, 255, 255);
         var black = new RgbColor(0, 0, 0);
 
-        const double Epsilon = 1e-9;
-        if (Math.Abs(Accessibility.ContrastRatio(white, black) - 21.0) > Epsilon ||
-            Math.Abs(Accessibility.ContrastRatio(black, black) - 1.0) > Epsilon ||
-            Math.Abs(Accessibility.RelativeLuminance(white) - 1.0) > Epsilon ||
-            Math.Abs(Accessibility.RelativeLuminance(black) - 0.0) > Epsilon)
+        if (Math.Abs(Accessibility.ContrastRatio(white, black) - 21.0) > 1e-9 ||
+            Math.Abs(Accessibility.ContrastRatio(black, black) - 1.0) > 1e-9 ||
+            Math.Abs(Accessibility.RelativeLuminance(white) - 1.0) > 1e-9 ||
+            Math.Abs(Accessibility.RelativeLuminance(black) - 0.0) > 1e-9)
         {
             throw new InvalidOperationException("WCAG math regression");
         }

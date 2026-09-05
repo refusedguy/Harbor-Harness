@@ -25,7 +25,46 @@ namespace Harbor.Tui.CellForge;
 [TuiRenderer(Backend = "cellforge")]
 public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 {
-    public CellForgeTuiRenderer(ILogger<CellForgeTuiRenderer> logger) : base(logger)
+    /// <summary>Input placeholder while the agent is idle and waiting for a prompt.</summary>
+    internal const string IdlePlaceholder = "Type your message...";
+
+    /// <summary>Input placeholder while the agent is running a prompt.</summary>
+    internal const string BusyPlaceholder = "Agent is running… (Esc to stop)";
+
+    /// <summary>
+    /// CF-D-002: host-provided <see cref="ChatScreen"/> so
+    /// <see cref="ProjectStateIntoWidgets"/> can feed projected state into
+    /// <see cref="Widgets.StatusPanel.ProjectedState"/>. Null (default) means
+    /// the renderer is running in a context without a layout tree
+    /// (e.g. event-driven non-interactive path) — projected state is skipped.
+    /// </summary>
+    public ChatScreen? Screen { get; set; }
+
+    private readonly UiStore _store;
+    private readonly CellForgePanelRegistry _panels = new();
+    private readonly StatusBarViewModel _statusVm;
+    private readonly ChatHistoryViewModel _chatVm;
+    private readonly InputViewModel _inputVm;
+    private readonly ComposerController _composer = new();
+    private readonly QuickSwitchSlots _quickSwitchSlots = new();
+    private bool _syncingInput;
+
+    /// <summary>
+    /// CF-E-002 wiring (TOP-1 #27): renderer-owned panel registry holding the 7
+    /// cell-native builtin providers (see <see cref="RegisterBuiltinPanels"/>).
+    /// Registration order is significant — Alt+1..9 hotkey slots follow it.
+    /// All visibility / focus / size state lives in <see cref="UiState"/> (seeded
+    /// via <see cref="CellForgePanelRegistry.EnsureSeeded"/> in
+    /// <see cref="InitializeAsync"/>); the registry itself is registration-only.
+    /// </summary>
+    public CellForgePanelRegistry Panels { get; }
+
+    public CellForgeTuiRenderer(
+        ILogger<CellForgeTuiRenderer> logger,
+        StatusBarViewModel? statusVm = null,
+        ChatHistoryViewModel? chatVm = null,
+        InputViewModel? inputVm = null)
+        : base(logger)
     {
         Context = new CellForgeRenderContext();
     }
@@ -43,18 +82,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
 
     public override ITuiRenderContext Context { get; }
 
-    protected override bool ShouldRenderPlacement(TuiViewPlacement placement, AgentEvent @event)
-    {
-        // Same contract as AnsiTuiRenderer: chat history and the input prompt
-        // are handled by the live streaming feed; only status bar and diff
-        // overlay render through the builtin views.
-        if (placement is TuiViewPlacement.ChatHistory or TuiViewPlacement.Input)
-        {
-            return false;
-        }
+    /// <summary>Panel providers owned by this renderer (CF-E-002 wiring).</summary>
+    public CellForgePanelRegistry Panels => _panels;
 
-        return base.ShouldRenderPlacement(placement, @event);
-    }
+    /// <summary>TEA store backing this renderer (CF-E-002 wiring).</summary>
+    public UiStore Store => _store;
+
+    // CF-F-001: intentionally no ShouldRenderPlacement override — the base filter
+    // already paints the ChatHistory/Input placements, and both builtin views write
+    // only through ITuiRenderContext (CellForgeRenderContext/AnsiWriter), so no
+    // CellForge fallback painter is needed.
 
     public override Task<Result> InitializeAsync(CancellationToken ct = default)
     {
@@ -67,6 +104,28 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         {
             return Task.FromResult(Result.Failure(ex.Message));
         }
+    }
+
+    /// <summary>
+    ///     Register the cell-native builtins in Spectre Alt+1..9 slot order
+    ///     (CF-E-002). Idempotent: re-registration replaces by id, and
+    ///     <see cref="CellForgePanelRegistry.EnsureSeeded"/> preserves
+    ///     already-known panel state.
+    /// </summary>
+    private void RegisterBuiltinPanels()
+    {
+        _panels.Register(new CellForgeHelpPanel());
+        _panels.Register(new CellForgeTodoListPanel());
+        _panels.Register(new CellForgeDiffPreviewPanel());
+        _panels.Register(new CellForgeFileTreePanel());
+        _panels.Register(new CellForgeTokenBreakdownPanel());
+        _panels.Register(new CellForgeDiagnosticsPanel());
+        _panels.Register(new CellForgeLogsPanel());
+    }
+
+    private void OnStoreChanged(object? sender, UiStateChangedEventArgs e)
+    {
+        ProjectStateIntoWidgets(e.State);
     }
 
     public override Task RenderAsync(AgentEvent @event, CancellationToken ct = default)

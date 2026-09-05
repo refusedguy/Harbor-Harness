@@ -57,7 +57,8 @@ public sealed class LspDiagnosticsChangedEventArgs(string filePath) : EventArgs
 /// <remarks>
 ///     Server processes are external binaries located on PATH
 ///     (typescript-language-server, pyright/pylsp, gopls, rust-analyzer,
-///     csharp-ls). Every operation degrades gracefully when a binary is
+///     csharp-ls, clangd, jdtls, vscode-html/css/json-language-server,
+///     lua-language-server). Every operation degrades gracefully when a binary is
 ///     missing: it logs once and returns an empty result — the agent loop and
 ///     the editor must never fail because an LSP binary is absent.
 /// </remarks>
