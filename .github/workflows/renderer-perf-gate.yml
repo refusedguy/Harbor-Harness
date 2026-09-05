@@ -24,15 +24,27 @@ on:
     branches: [dev, master]
   workflow_dispatch:
 
+permissions: {}
+
 # Superseded runs on the same PR/branch are noise — cancel them.
 concurrency:
   group: renderer-perf-gate-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+
 jobs:
   perf-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     env:
       HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
       # Flip to 1 (on a self-hosted perf runner) to enforce the 5% rule:
@@ -50,14 +62,16 @@ jobs:
           cache-dependency-path: "Directory.Packages.props"
 
       - name: Build
-        run: dotnet build tests/Harbor.Tui.PerfTests -c Release
+        run: dotnet build tests/Harbor.Tui.PerfTests -c Release -p:ContinuousIntegrationBuild=true
 
       # Tests run as plain executables, not via `dotnet test` (its MTP bridge
       # discovers zero tests in this repo — see ci.yml header). Per-test
       # output (including the [perf] metric lines) comes from
       # --output Detailed instead.
       - name: Run renderer performance gate
-        run: dotnet run --project tests/Harbor.Tui.PerfTests -c Release --no-build -- --output Detailed
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run --project tests/Harbor.Tui.PerfTests -c Release --no-build -- --output Detailed
 
       - name: Enforce relative 5% regression rule (strict mode only)
         if: env.HARBOR_PERF_BASELINE_STRICT == '1'
@@ -96,3 +110,5 @@ jobs:
         with:
           name: renderer-perf-report
           path: renderer-perf-report.txt
+          if-no-files-found: warn
+          retention-days: 7

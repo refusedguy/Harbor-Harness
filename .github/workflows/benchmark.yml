@@ -20,6 +20,8 @@ on:
       - ".github/workflows/benchmark.yml"
   workflow_dispatch:
 
+permissions: {}
+
 concurrency:
   group: benchmark-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -28,11 +30,17 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
 
 jobs:
   bench:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,15 +56,19 @@ jobs:
       # Fresh Release build so BDN's optimizations validator sees optimized
       # dependency assemblies for every benchmark.
       - name: Build benchmarks (Release)
-        run: dotnet build tests/Harbor.Benchmarks -c Release
+        run: dotnet build tests/Harbor.Benchmarks -c Release -p:ContinuousIntegrationBuild=true
 
       - name: Bench PermissionRuleset
         working-directory: tests/Harbor.Benchmarks
-        run: dotnet run -c Release --no-build -- --filter '*PermissionRuleset*' --job Short
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*PermissionRuleset*' --job Short
 
       - name: Bench Provider/Tool registries
         working-directory: tests/Harbor.Benchmarks
-        run: dotnet run -c Release --no-build -- --filter '*Registry*' --job Short
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*Registry*' --job Short
 
       - name: Publish results to job summary
         if: always()
@@ -68,6 +80,13 @@ jobs:
             cat "$f" >> "$GITHUB_STEP_SUMMARY"
             echo >> "$GITHUB_STEP_SUMMARY"
           done
+
+      - name: Post Benchmark Comment to PR
+        if: github.event_name == 'pull_request' && always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: benchmark-results
+          path: tests/Harbor.Benchmarks/BenchmarkDotNet.Artifacts/results/*-report-github.md
 
       - name: Upload BDN artifacts
         if: always()
