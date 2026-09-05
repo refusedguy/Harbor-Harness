@@ -40,6 +40,7 @@ env:
   DOTNET_GENERATE_ASPNET_CERTIFICATE: false
   NUGET_CERT_REVOCATION_MODE: offline
   MSBuildEnableWorkloadResolver: false
+  DOTNET_gcServer: 1
 
 jobs:
   changes:
@@ -105,7 +106,7 @@ jobs:
             dotnet build Harbor.slnx -c Release --warnaserror -p:ContinuousIntegrationBuild=true
           else
             echo "Lenient build for ${{ github.ref }} (dev/PR)"
-            dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
+            dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false
           fi
 
       - name: Smoke — CLI binary runs
@@ -125,9 +126,12 @@ jobs:
         with:
           name: solution-binaries
           path: |
-            apps/Harbor.App.Cli/bin/Release/
-            src/**/bin/Release/
-            tests/**/bin/Release/
+            apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll
+            apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli
+            src/**/bin/Release/net10.0/*.dll
+            src/**/bin/Release/net10.0/*.json
+            tests/**/bin/Release/net10.0/*.dll
+            tests/**/bin/Release/net10.0/*.json
             **/obj/project.assets.json
             **/obj/project.nuget.cache
             !**/*.pdb
@@ -257,7 +261,7 @@ jobs:
 
       - name: Publish Test Results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Test Results (${{ matrix.shard }})
           path: "TestResults/**/*.trx"
@@ -299,7 +303,7 @@ jobs:
           cache-dependency-path: "Directory.Packages.props"
 
       - name: Build for ${{ matrix.os }} (local, no Linux artifact)
-        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true
+        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false
 
       - name: Test critical suites on ${{ matrix.os }}
         timeout-minutes: 15
