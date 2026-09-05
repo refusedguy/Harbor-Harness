@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+
 namespace Harbor.Tools.Builtin.Tests;
+
 public class ReadToolTests
 {
     [Test]
@@ -27,7 +27,7 @@ public class ReadToolTests
     {
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         var args = JsonDocument.Parse("""{"path": "/nonexistent/file.txt"}""").RootElement;
-        var ctx = CreateContext();
+        var ctx = TestAgents.CreateContext();
 
         var result = await tool.ExecuteAsync(args, ctx);
 
@@ -36,221 +36,99 @@ public class ReadToolTests
     }
 
     [Test]
-    public async Task ExecuteAsync_ReadsFileContent()
+    [Arguments("Hello, World!", "Hello, World!")]
+    [Arguments("line1\nline2\nline3", "[0001];[0002];[0003]")]
+    public async Task ExecuteAsync_ReadsFileContent(string fileContent, string expectedSubstrings)
     {
         string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "Hello, World!");
+        await File.WriteAllTextAsync(tempFile, fileContent);
 
         try
         {
             var tool = new ReadTool(NullLogger<ReadTool>.Instance);
             var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = CreateContext();
+            var ctx = TestAgents.CreateContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
             await Assert.That(result.IsError).IsFalse();
-            await Assert.That(result.Output).Contains("Hello, World!");
+            foreach (var substring in expectedSubstrings.Split(';'))
+                await Assert.That(result.Output).Contains(substring);
         }
         finally
         {
             File.Delete(tempFile);
         }
     }
-
-    [Test]
-    public async Task ExecuteAsync_AddsLineNumbers()
-    {
-        string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "line1\nline2\nline3");
-
-        try
-        {
-            var tool = new ReadTool(NullLogger<ReadTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.Output).Contains("[0001]");
-            await Assert.That(result.Output).Contains("[0002]");
-            await Assert.That(result.Output).Contains("[0003]");
-        }
-        finally
-        {
-            File.Delete(tempFile);
-        }
-    }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 
 public class WriteToolTests
 {
     [Test]
-    public async Task ExecuteAsync_CreatesNewFile()
-    {
-        string tempFile = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}.txt");
-        try
-        {
-            var tool = new WriteTool(NullLogger<WriteTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"content\": \"test content\"}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.IsError).IsFalse();
-            await Assert.That(File.Exists(tempFile)).IsTrue();
-            await Assert.That(await File.ReadAllTextAsync(tempFile)).IsEqualTo("test content");
-        }
-        finally
-        {
-            if (File.Exists(tempFile)) File.Delete(tempFile);
-        }
-    }
-
-    [Test]
-    public async Task ExecuteAsync_CreatesParentDirectories()
+    [Arguments("test content", "file.txt")]
+    [Arguments("nested", "sub/dir/file.txt")]
+    public async Task ExecuteAsync_WritesContent(string content, string relativePath)
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
-        string tempFile = Path.Combine(tempDir, "sub", "dir", "file.txt");
+        string tempFile = Path.Combine(tempDir, relativePath);
         try
         {
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"content\": \"nested\"}}").RootElement;
-            var ctx = CreateContext();
+            var escapedPath = tempFile.Replace("\\", "\\\\");
+            var args = JsonDocument.Parse($"{{\"path\": \"{escapedPath}\", \"content\": \"{content}\"}}").RootElement;
+            var ctx = TestAgents.CreateContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(File.Exists(tempFile)).IsTrue();
+            await Assert.That(await File.ReadAllTextAsync(tempFile)).IsEqualTo(content);
         }
         finally
         {
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 
 public class EditToolTests
 {
     [Test]
-    public async Task ExecuteAsync_ReplacesString()
+    [Arguments("Hello, World!", "World", "Harbor", false, false, "Hello, Harbor!", "")]
+    [Arguments("ababab", "a", "x", true, false, "xbxbxb", "")]
+    [Arguments("Hello", "notthere", "x", false, true, "Hello", "not found")]
+    [Arguments("ababab", "a", "x", false, true, "ababab", "")]
+    public async Task ExecuteAsync_EditsFile(
+        string content,
+        string oldString,
+        string newString,
+        bool replaceAll,
+        bool expectError,
+        string expectedFileContent,
+        string expectedOutputContains)
     {
         string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "Hello, World!");
+        await File.WriteAllTextAsync(tempFile, content);
         try
         {
             var tool = new EditTool(NullLogger<EditTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"World\", \"newString\": \"Harbor\"}}").RootElement;
-            var ctx = CreateContext();
+            var escapedPath = tempFile.Replace("\\", "\\\\");
+            var replaceAllJson = replaceAll ? ", \"replaceAll\": true" : "";
+            var args = JsonDocument.Parse($"{{\"path\": \"{escapedPath}\", \"oldString\": \"{oldString}\", \"newString\": \"{newString}\" {replaceAllJson}}}").RootElement;
+            var ctx = TestAgents.CreateContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
-            await Assert.That(result.IsError).IsFalse();
-            await Assert.That(await File.ReadAllTextAsync(tempFile)).IsEqualTo("Hello, Harbor!");
+            await Assert.That(result.IsError).IsEqualTo(expectError);
+            await Assert.That(await File.ReadAllTextAsync(tempFile)).IsEqualTo(expectedFileContent);
+            if (!string.IsNullOrEmpty(expectedOutputContains))
+                await Assert.That(result.Output).Contains(expectedOutputContains);
         }
         finally
         {
             File.Delete(tempFile);
         }
     }
-
-    [Test]
-    public async Task ExecuteAsync_NotFound_ReturnsError()
-    {
-        string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "Hello");
-        try
-        {
-            var tool = new EditTool(NullLogger<EditTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"notthere\", \"newString\": \"x\"}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.IsError).IsTrue();
-            await Assert.That(result.Output).Contains("not found");
-        }
-        finally
-        {
-            File.Delete(tempFile);
-        }
-    }
-
-    [Test]
-    public async Task ExecuteAsync_MultipleOccurrences_WithoutReplaceAll_ReturnsError()
-    {
-        string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "ababab");
-        try
-        {
-            var tool = new EditTool(NullLogger<EditTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"a\", \"newString\": \"x\"}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.IsError).IsTrue();
-        }
-        finally
-        {
-            File.Delete(tempFile);
-        }
-    }
-
-    [Test]
-    public async Task ExecuteAsync_ReplaceAll_ReplacesAllOccurrences()
-    {
-        string tempFile = Path.GetTempFileName();
-        await File.WriteAllTextAsync(tempFile, "ababab");
-        try
-        {
-            var tool = new EditTool(NullLogger<EditTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"path\": \"{tempFile.Replace("\\", "\\\\")}\", \"oldString\": \"a\", \"newString\": \"x\", \"replaceAll\": true}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.IsError).IsFalse();
-            await Assert.That(await File.ReadAllTextAsync(tempFile)).IsEqualTo("xbxbxb");
-        }
-        finally
-        {
-            File.Delete(tempFile);
-        }
-    }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 
 public class GlobToolTests
@@ -268,7 +146,7 @@ public class GlobToolTests
         {
             var tool = new GlobTool(NullLogger<GlobTool>.Instance);
             var args = JsonDocument.Parse($"{{\"pattern\": \"*.cs\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = CreateContext();
+            var ctx = TestAgents.CreateContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
@@ -282,119 +160,56 @@ public class GlobToolTests
             Directory.Delete(tempDir, true);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 
 public class GrepToolTests
 {
     [Test]
-    public async Task ExecuteAsync_FindsMatches()
+    [Arguments("foo\nbar\nbaz;another foo here", "foo", "file0.txt;file1.txt;foo")]
+    [Arguments("foo", "xyz", "No matches")]
+    public async Task ExecuteAsync_Grep(string fileContents, string pattern, string expectedSubstrings)
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
-        await File.WriteAllTextAsync(Path.Combine(tempDir, "a.txt"), "foo\nbar\nbaz");
-        await File.WriteAllTextAsync(Path.Combine(tempDir, "b.txt"), "another foo here");
+        var contents = fileContents.Split(';');
+        for (int i = 0; i < contents.Length; i++)
+            await File.WriteAllTextAsync(Path.Combine(tempDir, $"file{i}.txt"), contents[i]);
 
         try
         {
             var tool = new GrepTool(NullLogger<GrepTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"pattern\": \"foo\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = CreateContext();
+            var escapedPath = tempDir.Replace("\\", "\\\\");
+            var args = JsonDocument.Parse($"{{\"pattern\": \"{pattern}\", \"path\": \"{escapedPath}\"}}").RootElement;
+            var ctx = TestAgents.CreateContext();
 
             var result = await tool.ExecuteAsync(args, ctx);
 
             await Assert.That(result.IsError).IsFalse();
-            await Assert.That(result.Output).Contains("foo");
-            await Assert.That(result.Output).Contains("a.txt");
-            await Assert.That(result.Output).Contains("b.txt");
+            foreach (var substring in expectedSubstrings.Split(';'))
+                await Assert.That(result.Output).Contains(substring);
         }
         finally
         {
             Directory.Delete(tempDir, true);
         }
     }
-
-    [Test]
-    public async Task ExecuteAsync_NoMatches_ReturnsEmpty()
-    {
-        string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-grep-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDir);
-        await File.WriteAllTextAsync(Path.Combine(tempDir, "a.txt"), "foo");
-
-        try
-        {
-            var tool = new GrepTool(NullLogger<GrepTool>.Instance);
-            var args = JsonDocument.Parse($"{{\"pattern\": \"xyz\", \"path\": \"{tempDir.Replace("\\", "\\\\")}\"}}").RootElement;
-            var ctx = CreateContext();
-
-            var result = await tool.ExecuteAsync(args, ctx);
-
-            await Assert.That(result.IsError).IsFalse();
-            await Assert.That(result.Output).Contains("No matches");
-        }
-        finally
-        {
-            Directory.Delete(tempDir, true);
-        }
-    }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }
 
 public class BashToolTests
 {
     [Test]
-    public async Task ExecuteAsync_Echo_ReturnsOutput()
+    [Arguments("echo hello", false, "hello")]
+    [Arguments("exit 1", true, "")]
+    public async Task ExecuteAsync_Command(string command, bool expectError, string expectedOutputContains)
     {
         var tool = new BashTool(NullLogger<BashTool>.Instance);
-        var args = JsonDocument.Parse("""{"command": "echo hello"}""").RootElement;
-        var ctx = CreateContext();
+        var args = JsonDocument.Parse($"{{\"command\": \"{command}\"}}").RootElement;
+        var ctx = TestAgents.CreateContext();
 
         var result = await tool.ExecuteAsync(args, ctx);
 
-        await Assert.That(result.IsError).IsFalse();
-        await Assert.That(result.Output).Contains("hello");
+        await Assert.That(result.IsError).IsEqualTo(expectError);
+        if (!string.IsNullOrEmpty(expectedOutputContains))
+            await Assert.That(result.Output).Contains(expectedOutputContains);
     }
-
-    [Test]
-    public async Task ExecuteAsync_ExitCode_NonZero_ReturnsError()
-    {
-        var tool = new BashTool(NullLogger<BashTool>.Instance);
-        var args = JsonDocument.Parse("""{"command": "exit 1"}""").RootElement;
-        var ctx = CreateContext();
-
-        var result = await tool.ExecuteAsync(args, ctx);
-
-        await Assert.That(result.IsError).IsTrue();
-    }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        null!);
 }

@@ -107,7 +107,6 @@ public sealed class ChatViewTests : ComponentTestBase
         var inputText = UI(() => input!.Text);
         await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
 
-        await Task.Delay(200).ConfigureAwait(false);
         var path = await CaptureAsync("chat-message-sent").ConfigureAwait(false);
     }
 
@@ -171,7 +170,6 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsStreaming = false;
             chat.StatusMessage = "Agent is running…";
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -204,7 +202,6 @@ public sealed class ChatViewTests : ComponentTestBase
         var send = Driver.FindButtonByText("Send ▶");
         await Driver.TypeAsync(input!, "Message that will be cleared").ConfigureAwait(false);
         await Driver.ClickAsync(send!).ConfigureAwait(false);
-        await Task.Delay(150).ConfigureAwait(false);
 
         var had = await Driver.WaitForTextAsync("Message that will be cleared", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -212,7 +209,6 @@ public sealed class ChatViewTests : ComponentTestBase
 
         // Now clear via Ctrl+L equivalent.
         UI(() => Vm.Chat.ClearCommand.Execute(null));
-        await Task.Delay(200).ConfigureAwait(false);
 
         var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -243,7 +239,6 @@ public sealed class ChatViewTests : ComponentTestBase
         var eventBus = Driver.Host.Services.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
         await eventBus.PublishAsync(new Harbor.Abstractions.Events.AgentErrorEvent(
             "Something went wrong: provider returned 503 Service Unavailable")).ConfigureAwait(false);
-        await Task.Delay(200).ConfigureAwait(false);
 
         var hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -269,7 +264,6 @@ public sealed class ChatViewTests : ComponentTestBase
             chat.IsAgentRunning = true;
             chat.IsStreaming = false;
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);

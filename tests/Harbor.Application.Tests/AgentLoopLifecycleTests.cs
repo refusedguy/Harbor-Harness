@@ -221,7 +221,7 @@ public class DefaultAgentConcurrencyTests
     public async Task PromptAsync_SecondCallWhileFirstIsInFlight_ReturnsFailure()
     {
         var session = Session.Create("/tmp/harbor-agentloop-lifecycle-tests", "code", "test", "test-model");
-        var store = new FakeSessionStore(session);
+        var store = new Harbor.Application.Tests.Fakes.FakeSessionStore(session);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         store.GateNextAppend(gate);
         var fakeLoop = new FakeAgentLoop();

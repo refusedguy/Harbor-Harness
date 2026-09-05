@@ -5,7 +5,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Tui.SpectreTui;
 using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tui.Tests;
 /// <summary>

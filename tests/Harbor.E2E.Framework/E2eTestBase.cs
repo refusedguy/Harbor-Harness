@@ -23,6 +23,7 @@ namespace Harbor.E2E.Framework;
 ///         On Windows the same effect is achieved via <c>USERPROFILE</c>.
 ///     </para>
 /// </remarks>
+[ParallelLimiter<MockServerLimit>]
 public abstract class E2eTestBase
 {
     /// <summary>
