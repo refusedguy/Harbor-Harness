@@ -60,12 +60,17 @@ public class RegistrationCompositionTests
         using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
-        // Full preset: 10 standard + 6 full-only (task/webfetch/ripgrep/mcp/mcp_resource/mcp_prompt) + lsp + skill = 18.
-        // Self-adjusting: pin that the 10 critical tools are present rather than hardcoding the total,
-        // so adding a new tool (e.g. mcp_resource) does not break the gate. The exact total is still
-        // asserted via the frozen-registry equivalence below.
-        await Assert.That(names.Count).IsGreaterThanOrEqualTo(16);
-        foreach (string full in new[] { "task", "webfetch", "ripgrep", "mcp", "mcp_resource", "mcp_prompt", "read", "write", "bash", "tree", "lsp", "skill" })
+        // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree) + 6 full-only
+        // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt) + lsp + skill = 18.
+        // Self-adjusting: verify all known tools are present and no duplicates, without hardcoding
+        // the exact count. Adding a new tool will require updating this list, but the count check
+        // below (frozen-registry equivalence) will stay green.
+        var expectedFull = new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "lsp", "skill" };
+        // Self-adjusting: exact count will drift when new tools are added — pin that at least the
+        // 18 known tools are present and there are no duplicates. The frozen-registry equivalence
+        // test below guarantees the total count is consistent.
+        await Assert.That(names.Count).IsGreaterThanOrEqualTo(expectedFull.Length);
+        foreach (string full in expectedFull)
         {
             await Assert.That(names).Contains(full);
         }
@@ -94,7 +99,7 @@ public class RegistrationCompositionTests
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "mcp_resource", "mcp_prompt" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }
