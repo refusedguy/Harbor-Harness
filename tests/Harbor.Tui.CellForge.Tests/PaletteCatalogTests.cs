@@ -22,15 +22,15 @@ public class PaletteCatalogTests
 
     private static readonly (string Title, string Id)[] ExpectedBuiltin =
     [
-        ("Open Session", "open-session"),
+        ("Open Session", "sessionsFlyout"),
         ("New Session", "new-session"),
         ("Branch Session", "branch-session"),
         ("Toggle Theme", "toggle-theme"),
         ("Open Code Editor", "open-code-editor"),
-        ("Open Diff View", "open-diff-view"),
-        ("Open Token Usage", "open-token-usage"),
-        ("Open Settings", "open-settings"),
-        ("Open Provider Browser", "open-provider-browser"),
+        ("Open Diff View", "diff"),
+        ("Open Token Usage", "tokenUsage"),
+        ("Open Settings", "settings"),
+        ("Open Provider Browser", "providerBrowser"),
         ("Quit", "quit"),
     ];
 
