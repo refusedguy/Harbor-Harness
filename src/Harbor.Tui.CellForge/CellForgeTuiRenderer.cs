@@ -455,13 +455,13 @@ public sealed class CellForgeRenderContext : ITuiRenderContext
 
     public void EnterAlternateScreen()
     {
-        _writer.Raw("\x1B[?1049h");
+        _writer.Raw("\x1B[?1049h\x1B[?1000h\x1B[?1002h\x1B[?1006h");
         Flush();
     }
 
     public void ExitAlternateScreen()
     {
-        _writer.Raw("\x1B[?1049l");
+        _writer.Raw("\x1B[?1006l\x1B[?1002l\x1B[?1000l\x1B[?25h\x1B[?1049l");
         Flush();
     }
 

@@ -8,6 +8,16 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <summary>One actionable entry of the command palette.</summary>
 public sealed record CommandItem(string Id, string Title, string Detail = "", string Shortcut = "", string Group = "");
 
+/// <summary>Navigation frame for hierarchical drill-down palettes.</summary>
+public sealed record PaletteFrame(
+    string Title,
+    string Breadcrumb,
+    IReadOnlyList<CommandItem> Items,
+    Action<CommandItem>? OnCommit = null,
+    bool IsInput = false,
+    string InputPlaceholder = "",
+    Action<string>? OnInputSubmit = null);
+
 /// <summary>
 /// Command palette overlay (ctrl+p pattern): fuzzy-filtered command list
 /// with keyboard navigation and suggested defaults. The view is UI-only —
@@ -25,6 +35,7 @@ public sealed class CommandPaletteView
 {
     private const int PageRows = 5;
 
+    private readonly Stack<PaletteFrame> _frames = new();
     private IReadOnlyList<CommandItem> _commands = [];
     private List<CommandItem> _results = [];
     private List<(bool IsHeader, string Text)> _flatView = new();
@@ -43,6 +54,15 @@ public sealed class CommandPaletteView
 
     public string Query => _query;
 
+    /// <summary>Current breadcrumb from the active frame (empty for root).</summary>
+    public string CurrentBreadcrumb => _frames.Count > 0 ? _frames.Peek().Breadcrumb : string.Empty;
+
+    /// <summary>Last submitted input value (consumed by the host after an input frame submit).</summary>
+    public string LastInputValue { get; set; } = string.Empty;
+
+    /// <summary>Raised after a drill-down frame is popped (Escape / Backspace on empty).</summary>
+    public event EventHandler? FramePopped;
+
     /// <summary>Current filtered+ranked result set (all suggestions when the query is empty).</summary>
     public IReadOnlyList<CommandItem> Results => _results;
 
@@ -52,16 +72,13 @@ public sealed class CommandPaletteView
     public void Show(IReadOnlyList<CommandItem> commands)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        _commands = commands;
-        _query = string.Empty;
-        _selected = 0;
-        _offset = 0;
-        Refilter();
-        Visible = true;
+        _frames.Clear();
+        PushFrame(new PaletteFrame("Commands", "", commands, null));
     }
 
     public void Hide()
     {
+        _frames.Clear();
         Visible = false;
         _results = [];
         _flatView = new();
@@ -69,6 +86,38 @@ public sealed class CommandPaletteView
         _query = string.Empty;
         _selected = 0;
         _offset = 0;
+    }
+
+    public void PushFrame(PaletteFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        _frames.Push(frame);
+        _commands = frame.Items;
+        _query = string.Empty;
+        _selected = 0;
+        _offset = 0;
+        LastInputValue = string.Empty;
+        Visible = true;
+        Refilter();
+    }
+
+    public bool PopFrame()
+    {
+        if (_frames.Count > 1)
+        {
+            _frames.Pop();
+            var prev = _frames.Peek();
+            _commands = prev.Items;
+            _query = string.Empty;
+            _selected = 0;
+            _offset = 0;
+            Refilter();
+            FramePopped?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+
+        Hide();
+        return false;
     }
 
     /// <summary>
@@ -85,16 +134,38 @@ public sealed class CommandPaletteView
         switch (key.Key)
         {
             case KeyCode.Escape:
-                Hide();
+                PopFrame();
                 return true;
 
             case KeyCode.Enter:
+                if (_frames.Count > 0 && _frames.Peek().IsInput)
+                {
+                    var val = _query.Trim();
+                    Hide();
+                    _frames.Peek().OnInputSubmit?.Invoke(val);
+                    LastInputValue = val;
+                    return true;
+                }
+
                 if (_selectableIndices.Count > 0)
                 {
                     int resultIndex = Math.Min(_selected, _selectableIndices.Count - 1);
                     var chosen = _results[resultIndex];
-                    Hide();
-                    OnCommit?.Invoke(chosen);
+                    int frameDepthBefore = _frames.Count;
+
+                    if (_frames.Count > 0 && _frames.Peek().OnCommit is { } frameCommit)
+                    {
+                        frameCommit.Invoke(chosen);
+                    }
+                    else if (OnCommit is not null)
+                    {
+                        OnCommit.Invoke(chosen);
+                    }
+
+                    if (_frames.Count <= frameDepthBefore)
+                    {
+                        Hide();
+                    }
                 }
 
                 return true;
@@ -121,6 +192,10 @@ public sealed class CommandPaletteView
                     _query = _query[..^1];
                     Refilter();
                 }
+                else if (_frames.Count > 1)
+                {
+                    PopFrame();
+                }
 
                 return true;
 
@@ -143,6 +218,17 @@ public sealed class CommandPaletteView
     private void Refilter()
     {
         _results = FuzzyMatcher.Filter(_query, _commands, static c => c.Title + " " + c.Detail);
+
+        if (_query.Length == 0)
+        {
+            _results.Sort((a, b) =>
+            {
+                int gc = string.Compare(a.Group, b.Group, StringComparison.Ordinal);
+                if (gc != 0) return gc;
+                return string.Compare(a.Title, b.Title, StringComparison.Ordinal);
+            });
+        }
+
         _flatView = new List<(bool, string)>(_results.Count + 8);
         _selectableIndices = new List<int>(_results.Count);
 
@@ -199,7 +285,33 @@ public sealed class CommandPaletteView
         int innerW = rect.Width - 2;
 
         var queryStyle = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
-        var queryText = "> " + _query;
+        string queryText;
+        if (_frames.Count > 0 && _frames.Peek().IsInput)
+        {
+            var frame = _frames.Peek();
+            if (_query.Length > 0)
+            {
+                queryText = "> " + _query;
+            }
+            else if (!string.IsNullOrEmpty(frame.InputPlaceholder))
+            {
+                queryText = "> " + frame.InputPlaceholder;
+                queryStyle = ChatPalette.Dim;
+            }
+            else
+            {
+                queryText = "> ";
+            }
+        }
+        else if (!string.IsNullOrEmpty(CurrentBreadcrumb))
+        {
+            queryText = "> [" + CurrentBreadcrumb + "] " + _query;
+        }
+        else
+        {
+            queryText = "> " + _query;
+        }
+
         buffer.SetText(rect.X + 1, rect.Y + 1, queryText.AsSpan(0, Math.Min(queryText.Length, innerW)), queryStyle);
 
         int listTop = rect.Y + 2;
@@ -245,7 +357,11 @@ public sealed class CommandPaletteView
             buffer.SetText(rect.X + 1, rect.Bottom - 2, more.AsSpan(0, Math.Min(more.Length, innerW)), detailStyle);
         }
 
-        const string hints = "↑↓ move · enter run · esc close";
+        string hints = _frames.Count > 0 && _frames.Peek().IsInput
+            ? "enter submit · esc back"
+            : _frames.Count > 1
+                ? "↑↓ move · enter run · esc back · ⌫ back"
+                : "↑↓ move · enter run · esc close";
         if (innerW > hints.Length)
         {
             int hintX = (rect.X + 1 + innerW) - hints.Length;
@@ -386,6 +502,11 @@ public static class CommandPaletteCatalog
         new("/theme", "Toggle between dark and light theme", []),
         new("/editor", "Open the code editor", []),
         new("/diff", "Open the diff viewer", []),
+        new("/new", "Create a new session", ["new-session"]),
+        new("/model", "Switch the active LLM model", []),
+        new("/agent", "Switch the active agent", []),
+        new("/config", "Open the configuration editor", []),
+        new("/setup", "Run the setup wizard", []),
     ];
 
     private static readonly BuiltinDef[] BuiltinDefs =

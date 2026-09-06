@@ -44,11 +44,7 @@ public sealed class ChatScreenBridge : IDisposable
     private readonly StringBuilder _thinkingIncoming = new();
     private long _nowMs;
 
-    /// <summary>How many history messages the timeline already shows. The
-    /// agent republishes the FULL history snapshot on every run
-    /// (AgentLoop → AgentStartEvent.Messages), so replays must skip the
-    /// already-rendered prefix or turn 2+ would duplicate every block.</summary>
-    private int _replayedMessages;
+    private readonly HashSet<string> _displayedMessageIds = new();
 
     /// <summary>AgentErrorEvent seen since the last AgentStart — decides
     /// whether AgentEnd flags the run as errored or succeeded (mascot moods).</summary>
@@ -89,13 +85,6 @@ public sealed class ChatScreenBridge : IDisposable
         {
         }
     }
-
-    /// <summary>
-    ///     The REPL echoed the submitted prompt as a <see cref="UserBlock"/>
-    ///     before <c>PromptAsync</c> ran. Marks that message as already shown
-    ///     so the next <c>AgentStart</c> replay skips it instead of doubling it.
-    /// </summary>
-    public void NotifyLocalUserMessage() => _replayedMessages++;
 
     /// <summary>Monotonic clock injection point (frame pipeline calls each tick).</summary>
     public void Tick(long nowMs)
@@ -226,15 +215,47 @@ public sealed class ChatScreenBridge : IDisposable
 
     internal void ReplayHistory(IReadOnlyList<AgentMessage> messages)
     {
-        // Skip the prefix the screen already shows (locally echoed prompts +
-        // earlier replays); append only the genuinely new tail.
-        for (int i = Math.Min(_replayedMessages, messages.Count); i < messages.Count; i++)
+        bool lastBlockIsMatchingUser = false;
+        if (_panel.Timeline.Count > 0 && messages.Count > 0 && messages[^1] is UserMessage lastUm)
         {
-            AppendHistoryMessage(messages[i]);
+            var last = _panel.Timeline.BlockAt(_panel.Timeline.Count - 1);
+            lastBlockIsMatchingUser = IsUserBlockMatching(last, lastUm.Content);
         }
 
-        _replayedMessages = Math.Max(_replayedMessages, messages.Count);
+        for (int i = 0; i < messages.Count; i++)
+        {
+            var message = messages[i];
+            if (message.Id is not null && _displayedMessageIds.Contains(message.Id))
+                continue;
+
+            bool isLastLocallyEchoedUser = i == messages.Count - 1
+                && message is UserMessage
+                && lastBlockIsMatchingUser;
+
+            if (isLastLocallyEchoedUser)
+            {
+                if (message.Id is not null)
+                    _displayedMessageIds.Add(message.Id);
+                continue;
+            }
+
+            AppendHistoryMessage(message);
+            if (message.Id is not null)
+                _displayedMessageIds.Add(message.Id);
+        }
     }
+
+    private static bool IsUserBlockMatching(IChatBlock block, string expectedContent)
+    {
+        if (block is not UserBlock ub) return false;
+        ReadOnlySpan<char> s1 = ub.RawText().AsSpan().Trim();
+        if (s1.StartsWith("›")) s1 = s1[1..].TrimStart();
+        ReadOnlySpan<char> s2 = expectedContent.AsSpan().Trim();
+        if (s2.StartsWith("›")) s2 = s2[1..].TrimStart();
+        return s1.SequenceEqual(s2);
+    }
+
+    public void ResetMessageTracking() => _displayedMessageIds.Clear();
 
     private void AppendHistoryMessage(AgentMessage message)
     {

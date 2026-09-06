@@ -25,6 +25,7 @@ public sealed class VirtualizedChatTimeline
     private bool _broadDamage;
     private long _lastScrollY = -1;
     private int _lastWidth = -1;
+    private int _lastViewportH = -1;
     private bool _dirtyGeometry = true;
     private bool _entranceFx;
     private bool _smoothScroll;
@@ -193,8 +194,12 @@ public sealed class VirtualizedChatTimeline
             FollowTail = false;
         }
 
+        long target = ScrollY + lines;
+        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
+        target = Math.Clamp(target, 0, maxScroll);
+
         long fromVisual = _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
-        SetScrollY(ScrollY + lines);
+        SetScrollY(target);
         BeginScrollAnimation(fromVisual);
     }
 
@@ -326,7 +331,8 @@ public sealed class VirtualizedChatTimeline
 
     private void SetScrollY(long y)
     {
-        ScrollY = Math.Max(0, y);
+        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
+        ScrollY = Math.Clamp(y, 0, maxScroll);
         if (!_scrollAnimating)
         {
             _visualScrollY = ScrollY;
@@ -391,6 +397,8 @@ public sealed class VirtualizedChatTimeline
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         ArgumentOutOfRangeException.ThrowIfNegative(viewportH);
 
+        _lastViewportH = viewportH;
+
         if (_lastWidth != width && _cache.Count > 0)
         {
             _broadDamage = true;
@@ -400,6 +408,16 @@ public sealed class VirtualizedChatTimeline
         if (FollowTail)
         {
             ScrollY = TotalHeightAfter(viewportH);
+        }
+        else
+        {
+            long maxScroll = TotalHeightAfter(viewportH);
+            if (ScrollY > maxScroll)
+            {
+                ScrollY = maxScroll;
+                _visualScrollY = maxScroll;
+                _scrollAnimating = false;
+            }
         }
 
         var outcome = _cache.PrepareLayout(width, viewportH, ScrollY);

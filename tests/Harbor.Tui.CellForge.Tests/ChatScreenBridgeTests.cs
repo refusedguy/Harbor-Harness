@@ -144,7 +144,6 @@ public class ChatScreenBridgeTests
 
         // REPL echoed the submitted prompt before PromptAsync ran.
         panel.Timeline.Append(new UserBlock("hi"));
-        bridge.NotifyLocalUserMessage();
 
         // The run republishes the full snapshot INCLUDING the echoed message.
         await bus.PublishAsync(new AgentStartEvent("s1", [
