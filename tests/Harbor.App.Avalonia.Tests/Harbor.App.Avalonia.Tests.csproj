@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\apps\Harbor.App.Avalonia\Harbor.App.Avalonia.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
