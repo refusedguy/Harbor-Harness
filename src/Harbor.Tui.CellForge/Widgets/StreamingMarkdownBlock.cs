@@ -62,9 +62,10 @@ public sealed class StreamingMarkdownBlock : IChatBlock
     {
         EnsureRendered(ctx.Rect.Width);
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < _renderer.LineCount && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < rows && (skip + i) < _renderer.LineCount; i++)
         {
-            AssistantMarkdownBlock.PaintLine(ctx.Buffer, ctx.Rect.X, ctx.Rect.Y + i, _renderer.LineAt(i));
+            AssistantMarkdownBlock.PaintLine(ctx.Buffer, ctx.Rect.X, ctx.Rect.Y + i, _renderer.LineAt(skip + i));
         }
     }
 

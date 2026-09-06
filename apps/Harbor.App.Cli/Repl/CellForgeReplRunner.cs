@@ -11,6 +11,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Commands;
 using Harbor.Application.Configuration;
 using Harbor.DesignSystem;
+using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;
@@ -1112,24 +1113,31 @@ internal sealed class CellForgeReplRunner(
         _paletteActionStack.Push(_paletteAction);
         _paletteAction = async item =>
         {
+            string providerId = !string.IsNullOrEmpty(item.Group) ? item.Group : sessionModel.ProviderId;
+            string modelId = item.Id;
+            string canonicalModel = $"{providerId}/{modelId}";
+
             var configStore = services.GetRequiredService<IConfigStore>();
             var result = await configStore.UpdateAsync(c =>
             {
-                c.Model = item.Id;
-                if (item.Id.Contains('/'))
-                    c.Provider = item.Id.Split('/')[0];
+                c.Provider = providerId;
+                c.Model = canonicalModel;
                 return c;
             }, ct).ConfigureAwait(false);
 
             if (result.IsSuccess)
             {
-                bridge.AppendSystemLine($"✓ Model switched to {item.Id}");
-                _status.Model = item.Id;
-                if (screen.Sidebar is { } sb) sb.State = sb.State with { Model = item.Id };
+                bridge.AppendSystemLine($"✓ Model switched to {canonicalModel}");
+                _status.Model = modelId;
+                if (screen.Sidebar is { } sb) sb.State = sb.State with { Model = canonicalModel };
+
                 var agentDef = services.GetRequiredService<IAgentRegistry>()
                     .GetAgent(AgentName.Create(sessionModel.Agent));
                 if (agentDef.IsSuccess)
-                    agent.Initialize(sessionModel, agentDef.Value);
+                {
+                    sessionModel = sessionModel with { ProviderId = providerId, Model = modelId };
+                    agent.Initialize(sessionModel, agentDef.Value.WithModel(modelId, providerId));
+                }
             }
             else
             {
@@ -1186,6 +1194,104 @@ internal sealed class CellForgeReplRunner(
         _wake.Writer.TryWrite(null);
     }
 
+    private async Task OpenTreePaletteAsync(CancellationToken ct)
+    {
+        var store = services.GetService<ISessionStore>();
+        if (store is null)
+        {
+            bridge.AppendSystemLine("⇄ переключение недоступно: хост без хранилища сессий");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        var result = await store.ListAsync().ConfigureAwait(false);
+        if (result.IsFailure)
+        {
+            bridge.AppendSystemLine($"! {result.Error}");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        var lines = SessionTreeRunner.RenderForest(result.Value, sessionModel.Id);
+        var sessionsById = result.Value.ToDictionary(s => s.Id);
+
+        var treeItems = new List<CommandItem>();
+        for (int i = 0; i < lines.Count; i++)
+        {
+            string line = lines[i];
+            string sid = string.Empty;
+            foreach (var s in result.Value)
+            {
+                if (line.Contains(s.Id, StringComparison.Ordinal))
+                {
+                    sid = s.Id;
+                    break;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(sid))
+            {
+                treeItems.Add(new CommandItem(sid, line, $"Select to inspect / switch / fork", string.Empty, "Session Tree"));
+            }
+            else
+            {
+                treeItems.Add(new CommandItem($"info_{i}", line, string.Empty, string.Empty, "Session Tree"));
+            }
+        }
+
+        _paletteActionStack.Push(_paletteAction);
+        _paletteAction = async selectedSessionItem =>
+        {
+            if (selectedSessionItem.Id.StartsWith("info_") || !sessionsById.TryGetValue(selectedSessionItem.Id, out var targetSession))
+            {
+                return;
+            }
+
+            var nodeActions = new List<CommandItem>
+            {
+                new("switch", "Switch to this session", $"Activate session {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", string.Empty, "Actions"),
+                new("fork", "Fork new branch from this session", "Create a branch copying history", string.Empty, "Actions")
+            };
+
+            _paletteActionStack.Push(_paletteAction);
+            _paletteAction = async actionItem =>
+            {
+                if (actionItem.Id == "switch")
+                {
+                    await SwitchToSessionAsync(targetSession.Id, ct).ConfigureAwait(false);
+                }
+                else if (actionItem.Id == "fork")
+                {
+                    var messages = await store.GetMessagesAsync(targetSession.Id, ct).ConfigureAwait(false);
+                    if (messages.IsSuccess && messages.Value.Count > 0)
+                    {
+                        var lastMsgId = messages.Value[^1].Id;
+                        var forkRunner = new SessionForkRunner(store);
+                        var forked = await forkRunner.ForkAsync(targetSession.Id, lastMsgId, ct).ConfigureAwait(false);
+                        if (forked.IsSuccess)
+                        {
+                            await SwitchToSessionAsync(forked.Value.ForkId, ct).ConfigureAwait(false);
+                            bridge.AppendSystemLine($"✓ Forked branch {forked.Value.ForkId[..Math.Min(8, forked.Value.ForkId.Length)]} ({forked.Value.Copied} messages copied)");
+                        }
+                    }
+                    else
+                    {
+                        bridge.AppendSystemLine("⚠ Cannot fork an empty session.");
+                    }
+                }
+                _palette.Hide();
+                _wake.Writer.TryWrite(null);
+            };
+
+            _palette.OnCommit = item => _paletteCommitted = item;
+            _palette.PushFrame(new PaletteFrame($"Session {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", $"tree / {targetSession.Id[..Math.Min(8, targetSession.Id.Length)]}", nodeActions, _palette.OnCommit));
+        };
+
+        _palette.OnCommit = item => _paletteCommitted = item;
+        _palette.PushFrame(new PaletteFrame("Session Tree", "sessions / tree", treeItems, _palette.OnCommit));
+        _wake.Writer.TryWrite(null);
+    }
+
     private async Task OpenSessionsPaletteAsync(CancellationToken ct)
     {
         var store = services.GetService<ISessionStore>();
@@ -1232,21 +1338,7 @@ internal sealed class CellForgeReplRunner(
             }
             else if (item.Id == "tree")
             {
-                var built = await SessionTreeRunner.BuildAsync(store, sessionModel.Id).ConfigureAwait(false);
-                if (built.IsFailure)
-                {
-                    bridge.AppendSystemLine($"Cannot list sessions: {built.Error}");
-                }
-                else if (built.Value.Count == 0)
-                {
-                    bridge.AppendSystemLine("No sessions.");
-                }
-                else
-                {
-                    foreach (var line in built.Value)
-                        bridge.AppendSystemLine(line);
-                }
-                _palette.Hide();
+                await OpenTreePaletteAsync(ct).ConfigureAwait(false);
             }
             else if (item.Id == "new")
             {
@@ -1480,6 +1572,142 @@ internal sealed class CellForgeReplRunner(
         _wake.Writer.TryWrite(null);
     }
 
+    private async Task OpenRendererPaletteAsync(CancellationToken ct)
+    {
+        var pipeline = services.GetService<IRendererPipeline>();
+        if (pipeline is null)
+        {
+            bridge.AppendSystemLine("⇄ renderer swap недоступен: хост без IRendererPipeline");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        var items = pipeline.AvailableBackends
+            .Select(id => new CommandItem(
+                id,
+                id,
+                id == pipeline.CurrentBackendId ? "Currently active" : string.Empty,
+                string.Empty,
+                "Renderer"))
+            .ToList();
+
+        _paletteActionStack.Push(_paletteAction);
+        _paletteAction = async item =>
+        {
+            bool swapped = await pipeline.SwapRendererAsync(item.Id, ct).ConfigureAwait(false);
+            if (swapped)
+            {
+                bridge.AppendSystemLine($"✓ Renderer swapped to {item.Id}");
+            }
+            else
+            {
+                bridge.AppendSystemLine($"✗ Failed to swap renderer to {item.Id}");
+            }
+            _palette.Hide();
+            _wake.Writer.TryWrite(null);
+        };
+
+        _palette.OnCommit = item => _paletteCommitted = item;
+        _palette.PushFrame(new PaletteFrame("Select Renderer", "renderer", items, _palette.OnCommit));
+        _wake.Writer.TryWrite(null);
+    }
+
+    private async Task OpenTuiPaletteAsync(CancellationToken ct)
+    {
+        var configStore = services.GetRequiredService<IConfigStore>();
+        var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
+        if (configResult.IsFailure)
+        {
+            bridge.AppendSystemLine($"! {configResult.Error}");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        var current = configResult.Value.Tui;
+        var backends = new[] { "cellforge", "plain", "ansi", "spectre", "fullscreen" };
+        var items = backends
+            .Select(id => new CommandItem(
+                id,
+                id,
+                id == current ? "Currently active" : string.Empty,
+                string.Empty,
+                "TUI"))
+            .ToList();
+
+        _paletteActionStack.Push(_paletteAction);
+        _paletteAction = async item =>
+        {
+            var result = await configStore.UpdateAsync(c =>
+            {
+                c.Tui = item.Id;
+                return c;
+            }, ct).ConfigureAwait(false);
+
+            if (result.IsSuccess)
+            {
+                bridge.AppendSystemLine($"✓ TUI set to {item.Id} (applies on restart or via /renderer)");
+            }
+            else
+            {
+                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
+            }
+            _palette.Hide();
+            _wake.Writer.TryWrite(null);
+        };
+
+        _palette.OnCommit = item => _paletteCommitted = item;
+        _palette.PushFrame(new PaletteFrame("Select TUI", "tui", items, _palette.OnCommit));
+        _wake.Writer.TryWrite(null);
+    }
+
+    private async Task OpenStoragePaletteAsync(CancellationToken ct)
+    {
+        var configStore = services.GetRequiredService<IConfigStore>();
+        var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
+        if (configResult.IsFailure)
+        {
+            bridge.AppendSystemLine($"! {configResult.Error}");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        var current = configResult.Value.Storage;
+        var backends = new[] { "jsonl", "sqlite", "memory" };
+        var items = backends
+            .Select(id => new CommandItem(
+                id,
+                id,
+                id == current ? "Currently active" : string.Empty,
+                string.Empty,
+                "Storage"))
+            .ToList();
+
+        _paletteActionStack.Push(_paletteAction);
+        _paletteAction = async item =>
+        {
+            var result = await configStore.UpdateAsync(c =>
+            {
+                c.Storage = item.Id;
+                return c;
+            }, ct).ConfigureAwait(false);
+
+            if (result.IsSuccess)
+            {
+                bridge.AppendSystemLine($"✓ Storage set to {item.Id}");
+            }
+            else
+            {
+                bridge.AppendSystemLine($"✗ Failed: {result.Error}");
+            }
+            _palette.Hide();
+            _wake.Writer.TryWrite(null);
+        };
+
+        _palette.OnCommit = item => _paletteCommitted = item;
+        _palette.PushFrame(new PaletteFrame("Select Storage", "storage", items, _palette.OnCommit));
+        _wake.Writer.TryWrite(null);
+    }
+
     private async Task StartNewSessionAsync(CancellationToken ct)
     {
         if (agent.State.IsRunning)
@@ -1623,6 +1851,10 @@ internal sealed class CellForgeReplRunner(
                 await OpenSessionsPaletteAsync(ct).ConfigureAwait(false);
                 return;
 
+            case "tree":
+                await OpenTreePaletteAsync(ct).ConfigureAwait(false);
+                return;
+
             case "auth":
             case "key":
                 await OpenAuthPaletteAsync(ct).ConfigureAwait(false);
@@ -1631,6 +1863,18 @@ internal sealed class CellForgeReplRunner(
             case "config":
             case "cfg":
                 await OpenConfigPaletteAsync(ct).ConfigureAwait(false);
+                return;
+
+            case "renderer":
+                await OpenRendererPaletteAsync(ct).ConfigureAwait(false);
+                return;
+
+            case "tui":
+                await OpenTuiPaletteAsync(ct).ConfigureAwait(false);
+                return;
+
+            case "storage":
+                await OpenStoragePaletteAsync(ct).ConfigureAwait(false);
                 return;
 
             case "new":
@@ -1682,6 +1926,13 @@ internal sealed class CellForgeReplRunner(
 
     private async Task SubmitAsync(CancellationToken ct)
     {
+        if (agent.State.IsRunning || _promptInFlight)
+        {
+            bridge.AppendSystemLine("⚠ Agent is busy — wait for completion or press Esc / Ctrl+C to abort.");
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
         string text = _composer.Buffer.TakeText().Trim();
         if (text.Length == 0)
         {
@@ -1715,6 +1966,10 @@ internal sealed class CellForgeReplRunner(
                     await OpenSessionsPaletteAsync(ct).ConfigureAwait(false);
                     return;
 
+                case "tree":
+                    await OpenTreePaletteAsync(ct).ConfigureAwait(false);
+                    return;
+
                 case "new":
                 case "new-session":
                     await StartNewSessionAsync(ct).ConfigureAwait(false);
@@ -1726,6 +1981,18 @@ internal sealed class CellForgeReplRunner(
 
                 case "config":
                     await OpenConfigPaletteAsync(ct).ConfigureAwait(false);
+                    return;
+
+                case "renderer":
+                    await OpenRendererPaletteAsync(ct).ConfigureAwait(false);
+                    return;
+
+                case "tui":
+                    await OpenTuiPaletteAsync(ct).ConfigureAwait(false);
+                    return;
+
+                case "storage":
+                    await OpenStoragePaletteAsync(ct).ConfigureAwait(false);
                     return;
 
                 case "providers":

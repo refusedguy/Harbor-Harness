@@ -214,15 +214,41 @@ public sealed class ModelCommand : ISlashCommand
             return Result.Success();
         }
 
-        // Set model
-        string model = string.Join(' ', args);
+        string rawInput = string.Join(' ', args).Trim();
+        var registeredProviders = _providers.GetRegisteredProviderIds();
+
+        string resolvedProviderId;
+        string modelId;
+
+        int firstSlash = rawInput.IndexOf('/');
+        if (firstSlash > 0)
+        {
+            string candidateProvider = rawInput[..firstSlash];
+            if (registeredProviders.Any(p => p.Value.Equals(candidateProvider, StringComparison.OrdinalIgnoreCase)))
+            {
+                resolvedProviderId = candidateProvider;
+                modelId = rawInput[(firstSlash + 1)..];
+            }
+            else
+            {
+                var loadResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
+                resolvedProviderId = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+                modelId = rawInput;
+            }
+        }
+        else
+        {
+            var loadResult = await _configStore.LoadAsync(ct).ConfigureAwait(false);
+            resolvedProviderId = loadResult.IsSuccess ? loadResult.Value.EffectiveProvider : IdentityConfig.FallbackProvider;
+            modelId = rawInput;
+        }
+
+        string canonicalModel = $"{resolvedProviderId}/{modelId}";
+
         var updateResult = await _configStore.UpdateAsync(c =>
         {
-            c.Model = model;
-            if (model.Contains('/'))
-            {
-                c.Provider = model.Split('/')[0];
-            }
+            c.Provider = resolvedProviderId;
+            c.Model = canonicalModel;
             return c;
         }, ct).ConfigureAwait(false);
 
@@ -232,9 +258,8 @@ public sealed class ModelCommand : ISlashCommand
             return updateResult;
         }
 
-        _writer($"✓ Switched to model: {model}");
-
-        var rebindResult = await RebindActiveSessionAsync(model).ConfigureAwait(false);
+        _writer($"✓ Switched to model: {canonicalModel}");
+        var rebindResult = await RebindActiveSessionAsync(canonicalModel).ConfigureAwait(false);
         return rebindResult;
     }
 
@@ -252,15 +277,15 @@ public sealed class ModelCommand : ISlashCommand
             return Result.Success();
         }
 
-        // Split "provider/model" the same way config resolution does; a bare
-        // model id keeps the currently-configured provider.
-        string[] parts = model.Split('/', 2);
+        var registeredProviders = _providers.GetRegisteredProviderIds();
         string providerId;
         string modelId;
-        if (parts.Length > 1)
+
+        int firstSlash = model.IndexOf('/');
+        if (firstSlash > 0 && registeredProviders.Any(p => p.Value.Equals(model[..firstSlash], StringComparison.OrdinalIgnoreCase)))
         {
-            providerId = parts[0];
-            modelId = parts[1];
+            providerId = model[..firstSlash];
+            modelId = model[(firstSlash + 1)..];
         }
         else
         {

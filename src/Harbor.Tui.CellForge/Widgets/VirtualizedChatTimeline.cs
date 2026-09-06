@@ -531,7 +531,7 @@ public sealed class VirtualizedChatTimeline
                 }
             }
 
-            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick);
+            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows);
             block.Paint(ctx);
 
             // Narrow (per-widget) damage bookkeeping: entrance fades and
@@ -680,9 +680,10 @@ public sealed class StreamingThinkingBlock : IChatBlock
         EnsureWrapped(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < _lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < _lines.Length && (skip + i) < _lines.Length && i < rows; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _lines[i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _lines[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
         }
     }
 
@@ -724,9 +725,10 @@ public sealed class ThinkingBlock : IChatBlock
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < lines.Length && (skip + i) < lines.Length && i < rows; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
         }
     }
 
