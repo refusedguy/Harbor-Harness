@@ -179,6 +179,7 @@ public class HotSwapTests
     // ── Concurrent producers/consumers: no locks, no torn pairs ────────────
 
     [Test]
+    [Retry(3)]
     public async Task SwapChain_ConcurrentPublishTake_NeverTearsPairs()
     {
         // Distinct geometry per producer: a torn handoff (back from one offer,

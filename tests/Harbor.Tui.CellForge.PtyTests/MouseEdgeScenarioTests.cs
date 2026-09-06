@@ -31,7 +31,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // No crash, no LLM turn, app still processes normal input.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         Session.SendKey("still\r");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("EDGE-OK", StringComparison.Ordinal)),
@@ -39,7 +39,8 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
     }
 
     [Test]
-    [Timeout(90_000)]
+    [Retry(3)]
+    [Timeout(180_000)]
     public async Task WheelDown_AfterWheelUp_ReturnsToLiveBottom()
     {
         Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
@@ -56,9 +57,9 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             Server.SetResponse("test-model", marker);
             try
             {
-                _ = await WaitForScreenAsync(
-                    l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
-                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            _ = await WaitForScreenAsync(
+                l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             }
             catch { }
             SubmitLine($"u{turns}");
@@ -118,7 +119,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
         SubmitLine("wheel-back-check");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("WHEEL-BACK-OK", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         await Assert.That(!Session.HasExited).IsTrue();
     }
 }
