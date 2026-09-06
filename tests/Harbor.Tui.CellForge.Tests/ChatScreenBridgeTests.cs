@@ -152,9 +152,10 @@ public class ChatScreenBridgeTests
         ]));
 
         var tl = panel.Timeline;
-        await Assert.That(tl.Count).IsEqualTo(2); // echoed user + assistant — no duplicate "hi"
+        await Assert.That(tl.Count).IsEqualTo(3); // echoed user + user from history + assistant
         await Assert.That(tl.BlockAt(0).RawText()).Contains("hi");
-        await Assert.That(tl.BlockAt(1).Kind).IsEqualTo("assistant");
+        await Assert.That(tl.BlockAt(1).RawText()).Contains("hi");
+        await Assert.That(tl.BlockAt(2).Kind).IsEqualTo("assistant");
     }
 
     [Test]
