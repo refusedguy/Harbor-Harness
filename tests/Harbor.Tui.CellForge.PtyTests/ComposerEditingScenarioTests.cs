@@ -118,7 +118,7 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // No crash, no stray output; a normal submit still works.
         Session.SendKey("after-empty-enters\r");

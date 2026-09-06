@@ -30,7 +30,7 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("AA", StringComparison.Ordinal)) &&
                  l.Any(x => x.Contains("BB", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         string[] lines = NormalizedLines();
         int aa = Array.FindIndex(lines, x => x.Contains("AA", StringComparison.Ordinal));
         int bb = Array.FindIndex(lines, x => x.Contains("BB", StringComparison.Ordinal));
@@ -75,7 +75,7 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // App alive, nothing executed, composer still accepts input.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         Session.SendKey("alive\r");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),

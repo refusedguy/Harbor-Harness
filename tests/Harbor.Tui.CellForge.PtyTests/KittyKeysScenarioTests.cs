@@ -29,7 +29,7 @@ public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // THE assertion: newline inserted, nothing submitted yet.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Composer shows both lines in order (AA above BB).
         string[] lines = NormalizedLines();

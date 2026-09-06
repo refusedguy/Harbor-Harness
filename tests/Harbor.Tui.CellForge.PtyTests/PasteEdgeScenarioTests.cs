@@ -31,7 +31,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Nothing executed while pasting: zero LLM requests.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Both payload fragments visible in the composer area.
         string[] lines = NormalizedLines();
@@ -80,7 +80,7 @@ public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Nothing executed while pasting.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
 
         // Submit → the FULL 2.5 KB reaches the model byte-exact.
         Session.SendKey("\r");
