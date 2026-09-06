@@ -9,6 +9,7 @@
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Core/Harbor.Core.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
+    <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

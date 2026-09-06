@@ -22,7 +22,9 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
         await Session.ResizeAsync(100, 12).ConfigureAwait(false);
-        await Task.Delay(900).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         string[] lines = NormalizedLines();
         // Grid should respect new width, height check is flaky due to 8-panel layout and buffered rows
@@ -38,7 +40,9 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
 
         // Restore: grow back to 30 rows without losing the app.
         await Session.ResizeAsync(100, 30).ConfigureAwait(false);
-        await Task.Delay(600).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Length <= 30).IsTrue();
     }
 
@@ -54,7 +58,9 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
         // Rows-starved extreme: 100×8 (emulator geometry — the AnsiTerminalBuffer
         // is created at launch size, so resizes stay within 100 cols).
         await Session.ResizeAsync(100, 8).ConfigureAwait(false);
-        await Task.Delay(900).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         string[] starved = NormalizedLines();
         await Assert.That(starved.All(x => x.Length <= 110)).IsTrue().Because($"screen:\n{ScreenText}");
@@ -62,7 +68,9 @@ public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
 
         // Opposite extreme: 20 cols × 50 rows.
         await Session.ResizeAsync(20, 50).ConfigureAwait(false);
-        await Task.Delay(1200).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         string[] narrow = NormalizedLines();
         await Assert.That(narrow.All(x => x.Length <= 30)).IsTrue().Because($"narrow widths: {string.Join(",", narrow.Select(x=>x.Length))}, screen:\n{ScreenText}");

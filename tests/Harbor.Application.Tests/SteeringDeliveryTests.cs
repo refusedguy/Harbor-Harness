@@ -33,14 +33,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class SteeringDeliveryTests
 {
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Steering harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
     /// <summary>Tool whose execution enqueues steering messages — simulates a steer arriving while the run is busy.</summary>
     private sealed class SteeringTool(TestSessionContext session, params string[] steeredTexts) : ITool
     {
@@ -128,7 +120,7 @@ public class SteeringDeliveryTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var agent = AllowAllAgent();
+        var agent = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -147,7 +139,7 @@ public class SteeringDeliveryTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         // The steered message must be part of the SECOND request of THIS run.
-        string secondRequestText = RenderRequestText(client.Requests[1]);
+        string secondRequestText = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(secondRequestText).Contains("use --verbose next time");
         // …and it must be persisted AFTER the tool results (provider adjacency preserved).
         int toolResultIndex = IndexOfMessage<ToolResultMessage>(session.Messages);
@@ -174,7 +166,7 @@ public class SteeringDeliveryTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var agent = AllowAllAgent();
+        var agent = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -215,7 +207,7 @@ public class SteeringDeliveryTests
                 new StepFinishEvent(0, "tool_use", new Usage(4, 2))
             }
         ]);
-        var agent = AllowAllAgent();
+        var agent = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -249,7 +241,7 @@ public class SteeringDeliveryTests
         var releaseRun = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var blockingLoop = new BlockingDrainingAgentLoop(releaseRun.Task);
 
-        var agent = AllowAllAgent();
+        var agent = TestAgents.AllowAll();
         var subject = new DefaultAgent(store, blockingLoop, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
         subject.Initialize(session, agent);
 
@@ -269,26 +261,6 @@ public class SteeringDeliveryTests
         await Assert.That(blockingLoop.SteeredTexts.Count).IsEqualTo(1);
     }
 
-    /// <summary>Concatenate every text block of every message in a request for substring assertions.</summary>
-    private static string RenderRequestText(LlmRequest request)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
-        {
-            if (message is LlmUserMessage user)
-            {
-                foreach (LlmContentBlock block in user.Content)
-                {
-                    if (block is LlmTextBlock text)
-                    {
-                        sb.Append(text.Text);
-                    }
-                }
-            }
-        }
-
-        return sb.ToString();
-    }
 
     private static int IndexOfMessage<T>(IReadOnlyList<AgentMessage> messages) where T : AgentMessage
     {

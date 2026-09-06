@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\tui\Harbor.Tui.TerminalGui\Harbor.Tui.TerminalGui.csproj"/>
     <ProjectReference Include="..\..\tui\Harbor.Tui.SpectreTui\Harbor.Tui.SpectreTui.csproj"/>
     <ProjectReference Include="..\..\tui\Harbor.Tui.RazorConsole\Harbor.Tui.RazorConsole.csproj"/>
+    <ProjectReference Include="..\..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj" />
   </ItemGroup>
 
   <ItemGroup>

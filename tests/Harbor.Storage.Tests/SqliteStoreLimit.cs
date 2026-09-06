@@ -1,4 +1,4 @@
-using TUnit.Core;
+using TUnit.Core.Interfaces;
 
 namespace Harbor.Storage.Tests;
 

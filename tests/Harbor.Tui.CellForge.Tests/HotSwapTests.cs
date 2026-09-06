@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// no torn frames. Theme swaps publish a new palette catalog mid-stream while
 /// the pinned frame snapshot keeps every painted cell on one coherent palette.
 /// </summary>
-[NotInParallel]
+[NotInParallel("pty")]
 public class HotSwapTests
 {
     [After(Test)]

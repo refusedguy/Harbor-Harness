@@ -29,7 +29,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="ComponentTestBase.CaptureOnboardingWindowAsync"/>.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class OnboardingTests : ComponentTestBase
 {
     [Before(HookType.Test)]

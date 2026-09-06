@@ -15,3 +15,4 @@ global using System.Threading;
 global using System.Threading.Tasks;
 global using TUnit.Core;
 global using TUnit.Core.Enums;
+global using TUnit.Core.Interfaces;

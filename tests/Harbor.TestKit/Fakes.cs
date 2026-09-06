@@ -137,14 +137,29 @@ public sealed class FakeProviderRegistry(ILlmClient client) : IProviderRegistry
     public Result Unregister(ProviderId providerId) => Result.Failure("FakeProviderRegistry does not support unregister.");
 }
 
-/// <summary>In-memory session store with an optional pre-seeded session.</summary>
+/// <summary>In-memory session store with optional pre-seeded session and gate support for concurrency tests.</summary>
 public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 {
     private readonly List<AgentMessage> _messages = [];
     private readonly object _lock = new();
+    private TaskCompletionSource? _gatedAppend;
+    private int _appends;
+
+    public int Appends => Volatile.Read(ref _appends);
+
+    public string? LastCreatedDirectory { get; private set; }
+
+    public void GateNextAppend(TaskCompletionSource gate)
+    {
+        lock (_lock)
+        {
+            _gatedAppend = gate;
+        }
+    }
 
     public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
     {
+        LastCreatedDirectory = directory;
         Session created = session ?? Session.Create(directory, agentName, providerId, modelId);
         return Task.FromResult(Result.Success(created));
     }
@@ -165,8 +180,21 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        lock (_lock) { _messages.Add(message); }
-        return Task.FromResult(Result.Success());
+        Interlocked.Increment(ref _appends);
+        TaskCompletionSource? gate;
+        lock (_lock)
+        {
+            gate = _gatedAppend;
+            _gatedAppend = null;
+        }
+
+        if (gate is null)
+        {
+            lock (_lock) { _messages.Add(message); }
+            return Task.FromResult(Result.Success());
+        }
+
+        return AwaitGateThenAppend(gate, message);
     }
 
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
@@ -191,30 +219,55 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(0));
+
+    private async Task<Result> AwaitGateThenAppend(TaskCompletionSource gate, AgentMessage message)
+    {
+        await gate.Task.ConfigureAwait(false);
+        lock (_lock)
+        {
+            _messages.Add(message);
+        }
+
+        return Result.Success();
+    }
 }
 
-/// <summary>Event bus that records all published events for assertions.</summary>
+/// <summary>Event bus that records all published events and forwards to subscribers — merged canonical for bridge & assertion tests.</summary>
 public sealed class FakeEventBus : IEventBus
 {
-    private static readonly IDisposable NoopSubscription = new NoopDisposable();
+    private readonly object _lock = new();
+    private readonly List<Func<AgentEvent, CancellationToken, ValueTask>> _handlers = [];
     public List<AgentEvent> Events { get; } = [];
 
-    public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
+    public async Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
     {
-        Events.Add(@event);
-        return Task.CompletedTask;
+        lock (_lock) { Events.Add(@event); }
+        List<Func<AgentEvent, CancellationToken, ValueTask>> snapshot;
+        lock (_lock) { snapshot = [.. _handlers]; }
+        foreach (var handler in snapshot)
+        {
+            await handler(@event, ct).ConfigureAwait(false);
+        }
     }
 
-    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler) => NoopSubscription;
+    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> handler)
+    {
+        lock (_lock) { _handlers.Add(handler); }
+        return new Disposer(() =>
+        {
+            lock (_lock) { _handlers.Remove(handler); }
+        });
+    }
 
     public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, ValueTask> handler) where TEvent : AgentEvent
-        => NoopSubscription;
+        => Subscribe((e, ct) => e is TEvent typed ? handler(typed, ct) : ValueTask.CompletedTask);
 
     public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => [];
 
-    private sealed class NoopDisposable : IDisposable
+    private sealed class Disposer(Action dispose) : IDisposable
     {
-        public void Dispose() { }
+        private readonly Action _dispose = dispose;
+        public void Dispose() => _dispose();
     }
 }
 

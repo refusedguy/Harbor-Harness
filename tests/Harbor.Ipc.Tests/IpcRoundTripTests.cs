@@ -3,6 +3,7 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -29,7 +30,8 @@ namespace Harbor.Ipc.Tests;
 ///         parallel without colliding on the same socket file.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("ipc")]
+[ParallelLimiter<MockServerLimit>]
     public class IpcRoundTripTests
 {
     /// <summary>

@@ -16,7 +16,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="MainViewModel.AddToast"/> and captures a screenshot.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class ToastTests : ComponentTestBase
 {
     [Before(HookType.Test)]

@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// no-op. Tests restore HarborDark and run serialized — the palette is global
 /// static state shared with every other painter in this assembly.
 /// </summary>
-[NotInParallel]
+[NotInParallel("pty")]
 public class ThemeSwitchTests
 {
     [After(Test)]

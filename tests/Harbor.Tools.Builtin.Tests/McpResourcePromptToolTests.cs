@@ -25,23 +25,29 @@ public class McpResourcePromptToolTests
     }
 
     [Test]
-    public async Task ResourceTool_ValidateArguments_MissingUri_ReturnsFailure()
+    [Arguments("""{"server":"db"}""", false, "uri")]
+    [Arguments("""{"server":"db","uri":"file:///a.md"}""", true, null)]
+    public async Task ResourceTool_ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = new McpResourceTool(ScriptedMcpRegistry.Fail("unused"), NullLogger<McpResourceTool>.Instance);
-        var args = JsonDocument.Parse("""{"server":"db"}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("uri");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]
-    public async Task PromptTool_ValidateArguments_BadArguments_ReturnsFailure()
+    [Arguments("""{"server":"s","name":"p","arguments":"nope"}""", false, "arguments")]
+    [Arguments("""{"server":"s","name":"p","arguments":{}}""", true, null)]
+    public async Task PromptTool_ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = new McpPromptTool(ScriptedMcpRegistry.Fail("unused"), NullLogger<McpPromptTool>.Instance);
-        var args = JsonDocument.Parse("""{"server":"s","name":"p","arguments":"nope"}""").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("arguments");
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

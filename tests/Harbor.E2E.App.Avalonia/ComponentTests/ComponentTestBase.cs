@@ -179,7 +179,8 @@ public abstract class ComponentTestBase
                 bitmap.Save(fs);
             }
         }).GetAwaiter().GetResult();
-        await Task.Delay(50).ConfigureAwait(false);
+        await Driver.WaitForConditionAsync(() => true, TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(20))
+            .ConfigureAwait(false);
         return path;
     }
 }

@@ -28,24 +28,32 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        await Task.Delay(600).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Draft typed but NOT submitted — the draft marker never reaches the
         // timeline (it is never submitted), so screen-presence checks isolate
         // the composer without depending on layout row indices.
         Session.SendKey("HIST-draft");
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("HIST-draft", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("HIST-draft", StringComparison.Ordinal))).IsTrue();
 
         // Up recalls the submitted prompt; the draft is stashed (gone from
         // the screen — the composer now shows the recalled entry instead).
         Session.SendKey("\x1b[A");
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("HIST-draft", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("HIST-draft", StringComparison.Ordinal))).IsFalse();
 
         // Down restores the captured draft exactly once.
         Session.SendKey("\x1b[B");
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("HIST-draft", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("HIST-draft", StringComparison.Ordinal))).IsTrue();
     }
 
@@ -61,27 +69,35 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
         // Ctrl+U: kill to line start (caret at end ⇒ everything). The kill
         // text never reached the timeline, so screen absence == buffer empty.
         Session.SendKey("KILLTEXT");
-        await Task.Delay(200).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         Session.SendKey("\x15"); // Ctrl+U
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal))).IsFalse();
 
         // Ctrl+Y: the kill comes back.
         Session.SendKey("\x19"); // Ctrl+Y
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal))).IsTrue();
 
         // Ctrl+K with caret at line start: kill to end — same result.
         Session.SendKey("\x01"); // Ctrl+A → home
         Session.SendKey("\x0b"); // Ctrl+K
-        await Task.Delay(300).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(NormalizedLines().Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal))).IsFalse();
 
         // Yank again, then submit proves the buffer is functional.
-        // Signal on recorded chat-completions, not RequestCount — see the
-        // /models race note in KittyKeysScenarioTests.
         Session.SendKey("\x19");
-        await Task.Delay(200).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("KILLTEXT", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         Session.SendKey("\r");
         bool submitted = await Session.WaitForOutputAsync(
             _ => Server.ReceivedRequests.Count > 0, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
@@ -99,7 +115,9 @@ public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
 
         Session.SendKey("\r\r\r");
-        await Task.Delay(600).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(Server.RequestCount).IsEqualTo(0);
 
         // No crash, no stray output; a normal submit still works.

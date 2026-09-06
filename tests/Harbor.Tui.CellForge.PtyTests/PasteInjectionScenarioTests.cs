@@ -25,14 +25,13 @@ public sealed class PasteInjectionScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("/danger say hi", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
-
-        // Verbatim text, never dispatched as a command, no agent turn.
         await Assert.That(Server.RequestCount).IsEqualTo(0);
 
         // Clear the composer (14 chars), then the idle Ctrl+C×2 quit gesture.
         Session.SendKey(new string('\x7f', 14));
-        await Task.Delay(200).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("/danger say hi", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         SendCtrlC();
         // Throws TimeoutException (test failure) if the hint never lands.

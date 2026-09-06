@@ -26,9 +26,12 @@ public abstract class CellForgePtyScenarioBase
     private int _consumedRaw;
     private CancellationTokenSource? _pumpCts;
 
-    protected MockLlmServer Server { get; private set; } = null!;
+    [ClassDataSource<MockServerFixture>(Shared = SharedType.PerTestSession)]
+    public required MockServerFixture Fixture { get; init; }
 
-    protected string TempHome { get; private set; } = string.Empty;
+    protected MockLlmServer Server => Fixture.Server;
+
+    protected string TempHome => Fixture.TempHome;
 
     protected PtySession Session { get; private set; } = null!;
 
@@ -43,43 +46,6 @@ public abstract class CellForgePtyScenarioBase
     public async Task SetUpScenarioAsync()
     {
         PtySession.RequireUnix();
-
-        Server = new MockLlmServer();
-        await Server.StartAsync().ConfigureAwait(false);
-
-        TempHome = Path.Combine(Path.GetTempPath(), "harbor-pty-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(TempHome);
-        string harborDir = Path.Combine(TempHome, ".harbor");
-        string providersDir = Path.Combine(harborDir, "providers");
-        Directory.CreateDirectory(providersDir);
-
-        // Mock provider pointing at this test's in-process mock server.
-        string mockConfig = $$"""
-                              {
-                                "id": "mock",
-                                "displayName": "Mock LLM (PTY E2E)",
-                                "description": "In-process mock for CE-5 PTY scenarios.",
-                                "baseUrl": "{{Server.BaseUri}}",
-                                "apiType": "openai-compatible",
-                                "authType": "bearer",
-                                "authEnvVar": "MOCK_API_KEY",
-                                "models": [
-                                  { "id": "test-model", "providerId": "mock", "displayName": "Mock Test Model", "contextWindow": 128000, "maxOutputTokens": 4096, "supportsReasoning": false, "supportsVision": false, "supportsToolUse": true, "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 }, "promptTemplate": "openai" }
-                                ]
-                              }
-                              """;
-        await File.WriteAllTextAsync(Path.Combine(providersDir, "mock.json"), mockConfig).ConfigureAwait(false);
-
-        // Onboarding complete → REPL starts directly in consoleex mode.
-        string harborConfig = """
-                              {
-                                "provider": "mock",
-                                "model": "mock/test-model",
-                                "agent": "code",
-                                "onboarded": true
-                              }
-                              """;
-        await File.WriteAllTextAsync(Path.Combine(harborDir, "config.json"), harborConfig).ConfigureAwait(false);
     }
 
     [After(Test)]
@@ -94,30 +60,6 @@ public abstract class CellForgePtyScenarioBase
         if (Session is not null)
         {
             await Session.DisposeAsync().ConfigureAwait(false);
-        }
-
-        try
-        {
-            if (Server is not null)
-            {
-                await Server.StopAsync().ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            /* teardown must not throw */
-        }
-
-        try
-        {
-            if (!string.IsNullOrEmpty(TempHome) && Directory.Exists(TempHome))
-            {
-                Directory.Delete(TempHome, true);
-            }
-        }
-        catch
-        {
-            /* best-effort */
         }
     }
 

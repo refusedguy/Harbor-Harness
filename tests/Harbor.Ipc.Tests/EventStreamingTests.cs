@@ -7,6 +7,7 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -36,7 +37,8 @@ internal sealed class SkipUnlessIpcEventStreamEnabledAttribute : SkipAttribute
 ///     </list>
 /// </summary>
 [SkipUnlessIpcEventStreamEnabled]
-[NotInParallel]
+[NotInParallel("ipc")]
+[ParallelLimiter<MockServerLimit>]
 public class EventStreamingTests
 {
     /// <summary>

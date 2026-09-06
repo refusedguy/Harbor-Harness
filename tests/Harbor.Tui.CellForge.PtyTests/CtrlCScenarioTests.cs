@@ -53,8 +53,10 @@ public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
         int exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
         if (exit == -1)
         {
-            // Retry hint window — slow runners may have missed the first gesture
-            await Task.Delay(200).ConfigureAwait(false);
+            // Retry hint window — wait for the exit hint to appear before retrying
+            _ = await WaitForScreenAsync(
+                l => l.Any(x => x.Contains("^C — ещё раз для выхода", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             SendCtrlC();
             exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         }
