@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Application.Permissions;
 using Harbor.Application.Sessions;
 using Harbor.Tools.Builtin;
@@ -22,7 +23,7 @@ namespace Harbor.Application.Tests;
 ///     REAL agent ruleset decides, and a REAL <see cref="BashTool" /> either
 ///     runs the command or is refused — proven by filesystem side effects.
 /// </summary>
-[NotInParallel]
+[NotInParallel("filesystem")]
 public class BashDenyEndToEndTests
 {
     private static AgentDefinition AgentWith(params PermissionRule[] extra)

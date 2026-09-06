@@ -32,7 +32,7 @@ internal static class TestPaths
 
 /// <summary>Wire-level flow over a real out-of-process fake server (python3).</summary>
 [SkipUnlessPython3]
-[NotInParallel]
+[NotInParallel("lsp")]
 public class LspServerSessionIntegrationTests
 {
     private const string FakeServerScript = """

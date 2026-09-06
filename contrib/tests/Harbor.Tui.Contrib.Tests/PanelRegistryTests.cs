@@ -5,7 +5,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Tui.SpectreTui;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 namespace Harbor.Tui.Tests;
 /// <summary>
 ///     Tests for the Harbor panel system: <see cref="PanelRegistry" /> (thread-safe

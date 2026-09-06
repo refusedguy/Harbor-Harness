@@ -16,7 +16,7 @@ namespace Harbor.Hosting.Tests;
 ///     are frozen BEFORE they are published into the container (the resolved
 ///     snapshot already contains every tool registered during composition).
 /// </summary>
-[NotInParallel]
+[NotInParallel("hosting")]
 public class RegistrationCompositionTests
 {
     // ── helpers ──────────────────────────────────────────────────────────

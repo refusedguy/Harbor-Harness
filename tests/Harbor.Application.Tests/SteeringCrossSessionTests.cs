@@ -6,14 +6,14 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Providers;
-using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
@@ -24,14 +24,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class SteeringCrossSessionTests
 {
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "cross-session steering harness",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
     private static UserMessage SteerFor(string sessionId, string content) => new(
         Guid.NewGuid().ToString("N"),
         sessionId,
@@ -58,7 +50,7 @@ public class SteeringCrossSessionTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var agentDef = AllowAllAgent();
+        var agentDef = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agentDef);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -102,7 +94,7 @@ public class SteeringCrossSessionTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var agentDef = AllowAllAgent();
+        var agentDef = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agentDef);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -140,7 +132,7 @@ public class SteeringCrossSessionTests
         var store = new MultiSessionStore(sessionA, sessionB);
         var client = new ScriptedLlmClient(
             [[new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
-        var agents = new FakeAgentRegistry(AllowAllAgent());
+        var agents = new FakeAgentRegistry(TestAgents.AllowAll());
         var realLoop = new AgentLoop(
             new FakeProviderRegistry(client),
             new FakeToolRegistry(),
@@ -156,14 +148,14 @@ public class SteeringCrossSessionTests
         var agent = new DefaultAgent(store, realLoop, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
         try
         {
-            agent.Initialize(sessionA, AllowAllAgent());
+            agent.Initialize(sessionA, TestAgents.AllowAll());
             // Authored for A while A is NOT running → stranded in the channel
             // (F1's check-then-act window; Steer never throws).
             agent.Steer(SteerFor(sessionA.Id, "stale for A"));
 
             // Switch away (drops foreign/stale entries) and back to A.
-            agent.Initialize(sessionB, AllowAllAgent());
-            agent.Initialize(sessionA, AllowAllAgent());
+            agent.Initialize(sessionB, TestAgents.AllowAll());
+            agent.Initialize(sessionA, TestAgents.AllowAll());
 
             var run = await agent.PromptAsync("go");
 

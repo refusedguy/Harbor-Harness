@@ -36,8 +36,9 @@ public sealed class ResizeMidStreamScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("DONE", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(20)).ConfigureAwait(false);
-
-        await Task.Delay(800).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("DONE", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         string[] settled = NormalizedLines();
 
         // No line exceeds the new width; the streamed payload survived intact.

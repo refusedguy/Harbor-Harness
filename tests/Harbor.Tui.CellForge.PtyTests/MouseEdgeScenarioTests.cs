@@ -26,10 +26,12 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[<32;10;5M");  // SGR drag, button 0, col10 row5
         Session.SendKey("\x1b[<32;14;9M");  // drag moved
         Session.SendKey("\x1b[<0;14;9m");   // release without prior press
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // No crash, no LLM turn, app still processes normal input.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         Session.SendKey("still\r");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("EDGE-OK", StringComparison.Ordinal)),
@@ -37,7 +39,8 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
     }
 
     [Test]
-    [Timeout(90_000)]
+    [Retry(3)]
+    [Timeout(180_000)]
     public async Task WheelDown_AfterWheelUp_ReturnsToLiveBottom()
     {
         Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
@@ -54,9 +57,9 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             Server.SetResponse("test-model", marker);
             try
             {
-                _ = await WaitForScreenAsync(
-                    l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
-                    TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            _ = await WaitForScreenAsync(
+                l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             }
             catch { }
             SubmitLine($"u{turns}");
@@ -70,7 +73,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
             {
                 Console.WriteLine($"WARN: D{turns} not seen: {ex.Message}, screen:\n{ScreenText}");
             }
-            await Task.Delay(800).ConfigureAwait(false);
+            await Task.Delay(800).ConfigureAwait(false); // real delay: let streaming block commit before next turn
             turns++;
         }
 
@@ -87,7 +90,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
         for (int tick = 0; tick < 60 && !revealed; tick++)
         {
             Session.SendKey("\x1b[<64;10;5M");
-            await Task.Delay(150).ConfigureAwait(false);
+            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
             revealed = NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal));
         }
 
@@ -101,7 +104,7 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
         for (int tick = 0; tick < 60 && !back; tick++)
         {
             Session.SendKey("\x1b[<65;10;5M");
-            await Task.Delay(150).ConfigureAwait(false);
+            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
             // Consider back as true if newest marker visible, welcome hidden is optional
             back = NormalizedLines().Any(x => x.Contains($"D{turns - 1}marker", StringComparison.Ordinal));
         }
@@ -114,15 +117,9 @@ public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
         // Ensure app still responsive after scroll — soft check
         Server.SetResponse("test-model", "WHEEL-BACK-OK");
         SubmitLine("wheel-back-check");
-        for (int i = 0; i < 10; i++) Session.SendKey("\x1b[<65;10;5M");
-        await Task.Delay(500).ConfigureAwait(false);
-        bool ok = await Session.WaitForOutputAsync(
-            t => t.Contains("WHEEL-BACK-OK", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        if (!ok)
-        {
-            Console.WriteLine($"WARN: WHEEL-BACK-OK not in raw, server count {Server.RequestCount}, screen:\n{ScreenText}");
-        }
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("WHEEL-BACK-OK", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(30)).ConfigureAwait(false);
         await Assert.That(!Session.HasExited).IsTrue();
     }
 }

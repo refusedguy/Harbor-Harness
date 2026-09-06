@@ -19,7 +19,9 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         await StartAppAsync(100, 30).ConfigureAwait(false);
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         int marker = Session.OutputLength;
         await Session.ResizeAsync(60, 30).ConfigureAwait(false);
@@ -42,7 +44,9 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         await Assert.That(erased).IsTrue();
 
         // Repainted grid settles within the new width.
-        await Task.Delay(800).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         string[] lines = NormalizedLines();
         await Assert.That(lines.All(x => x.Length <= 60)).IsTrue();
         await Assert.That(lines.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).IsTrue();
@@ -62,7 +66,6 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("Harbor — modular AI coding agent [consoleex]", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Task.Delay(600).ConfigureAwait(false);
         string[] grown = NormalizedLines();
         await Assert.That(grown.All(x => x.Length <= 100)).IsTrue();
     }

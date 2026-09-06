@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
+    <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <!-- TUnit is auto-included via tests/Directory.Build.props (IsTestProject=true). -->

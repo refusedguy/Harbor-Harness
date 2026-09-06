@@ -16,7 +16,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="MainViewModel.AddToast"/> and captures a screenshot.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class ToastTests : ComponentTestBase
 {
     [Before(HookType.Test)]
@@ -33,7 +33,6 @@ public sealed class ToastTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.AddToast(new ToastNotification("Info: connection established.", ToastKind.Info)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasMsg = await Driver.WaitForTextAsync("Info: connection established.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -53,7 +52,6 @@ public sealed class ToastTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.AddToast(new ToastNotification("Success: file saved.", ToastKind.Success)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasMsg = await Driver.WaitForTextAsync("Success: file saved.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -73,7 +71,6 @@ public sealed class ToastTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.AddToast(new ToastNotification("Warning: rate limit approaching.", ToastKind.Warning)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasMsg = await Driver.WaitForTextAsync("Warning: rate limit approaching.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -93,7 +90,6 @@ public sealed class ToastTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.AddToast(new ToastNotification("Error: provider returned 503.", ToastKind.Error)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasMsg = await Driver.WaitForTextAsync("Error: provider returned 503.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -119,7 +115,6 @@ public sealed class ToastTests : ComponentTestBase
             Vm.AddToast(new ToastNotification("Second toast body", ToastKind.Success));
             Vm.AddToast(new ToastNotification("Third toast body", ToastKind.Warning));
         });
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasFirst = await Driver.WaitForTextAsync("First toast body", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -132,7 +127,7 @@ public sealed class ToastTests : ComponentTestBase
         var path = await CaptureAsync("toast-multiple-stacked").ConfigureAwait(false);
 
         // Wait for auto-dismiss so the next test starts clean.
-        await Task.Delay(5_000).ConfigureAwait(false);
+        await Driver.WaitForTextAbsentAsync("First toast body", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -146,14 +141,13 @@ public sealed class ToastTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.AddToast(new ToastNotification("Auto-dismiss test", ToastKind.Info)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasToastBefore = await Driver.WaitForTextAsync("Auto-dismiss test", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
         await Assert.That(hasToastBefore).IsTrue();
 
-        // Wait for auto-dismiss (4s) + buffer.
-        await Task.Delay(5_000).ConfigureAwait(false);
+        // Wait for auto-dismiss (4s) — poll until the toast is actually gone.
+        await Driver.WaitForTextAbsentAsync("Auto-dismiss test", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
 
         var stillThere = Driver.GetAllVisibleText().Contains("Auto-dismiss test", StringComparison.Ordinal);
         await Assert.That(stillThere).IsFalse();
@@ -176,7 +170,6 @@ public sealed class ToastTests : ComponentTestBase
             "This is a deliberately long toast message that should wrap across multiple lines because the toast card has a MaxWidth=380 constraint. " +
             "The wrapping should preserve word boundaries and not overflow the card's horizontal bounds.",
             ToastKind.Info)));
-        await Task.Delay(300).ConfigureAwait(false);
 
         var hasMsg = await Driver.WaitForTextAsync("deliberately long toast", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -185,6 +178,6 @@ public sealed class ToastTests : ComponentTestBase
         var path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
 
         // Wait for auto-dismiss.
-        await Task.Delay(5_000).ConfigureAwait(false);
+        await Driver.WaitForTextAbsentAsync("deliberately long toast", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
     }
 }

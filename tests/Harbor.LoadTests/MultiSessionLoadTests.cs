@@ -20,6 +20,7 @@ namespace Harbor.LoadTests;
 ///     time dilation — the harness never sleeps on real time, so the suite
 ///     passes on a 4-core machine in well under a minute.
 /// </summary>
+[ParallelLimiter<MockServerLimit>]
 public sealed class MultiSessionLoadTests
 {
     private const int Sessions = 10;

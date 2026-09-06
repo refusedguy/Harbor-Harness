@@ -36,7 +36,10 @@ public sealed class LaunchScenarioTests : CellForgePtyScenarioBase
         //    invisible in grid TEXT; the golden below pins the text plane,
         //    the sync pair above pins frame atomicity (checked implicitly by
         //    the emulator's stable state).
-        await Task.Delay(600).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("Harbor — modular AI coding agent [consoleex]", StringComparison.Ordinal)) &&
+                 l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // 4. Settled idle launch frame — functional check (golden relaxed for 8-panel layout).
         string actual = NormalizeToGoldenText(ScreenText);

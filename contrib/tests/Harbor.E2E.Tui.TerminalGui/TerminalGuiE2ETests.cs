@@ -8,48 +8,43 @@ namespace Harbor.E2E.Tui.TerminalGui;
 ///     and does not work with PTY (unlike Spectre.Tui which uses RunAsync).
 /// </summary>
 [Category("E2E")]
-[NotInParallel]
-public class TerminalGuiE2ETests : E2eTestBase
+[NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
+public class TerminalGuiE2ETests : TuiE2eTestBase
 {
-    private const string CliProjectPath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
-    private const string TuiName = "terminal-gui";
+    protected override string TuiName => "terminal-gui";
 
     /// <summary>
-    ///     Sentinel string that appears in the renderer's footer/header
-    ///     immediately after boot. Used as a stable "TUI is up" signal —
-    ///     more reliable than brand text which varies by configured provider.
+    ///     Terminal.Gui boots slowly because it has to start Xvfb + xterm before
+    ///     the CLI child even begins painting. 30s is the budget observed on
+    ///     cold-cache CI runners; PTY-only renderers default to 20s.
     /// </summary>
-    private const string BootSentinel = "test-model";
-    private static readonly TimeSpan BootTimeout = TimeSpan.FromSeconds(30);
+    protected override TimeSpan BootTimeout => TimeSpan.FromSeconds(30);
 
-    private static async Task<bool> WaitBootAsync(TuiDriver driver)
-    {
-        bool saw = await driver.WaitForTextAsync(BootSentinel, BootTimeout).ConfigureAwait(false);
-        if (!saw)
-        {
-            Console.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen.");
-            if (driver is not null)
-            {
-                string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
-                string head = screen.Length > 600 ? screen[..600] : screen;
-                Console.WriteLine($"Screen (first 600 chars):\n{head}");
-            }
-        }
-        return saw;
-    }
+    /// <summary>
+    ///     Terminal.Gui v2 requires Xvfb + xterm, so the driver must be created
+    ///     with a screenshot directory. Screenshots land in a fixed tmp path
+    ///     shared across all tests in this class.
+    /// </summary>
+    protected override string? DefaultScreenshotDir => "/tmp/terminal-gui-screenshots";
+
+    /// <summary>
+    ///     Terminal.Gui uses Xvfb + xterm, not raw PTY, so the standard
+    ///     <see cref="E2eTestBase.EnsurePtyAvailable" /> guard is irrelevant.
+    /// </summary>
+    protected override bool RequiresPty => false;
 
     /// <summary>The renderer boots and shows the welcome banner.</summary>
     [Test]
     [Category("E2E")]
     public async Task Start_ShowsWelcomeBanner()
     {
-        await using var driver = new TuiDriver(CliProjectPath, TuiName, "/tmp/terminal-gui-screenshots");
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
 
-        bool saw = await WaitBootAsync(driver).ConfigureAwait(false);
+        bool saw = await WaitForBootAsync(driver).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
+        await ExitTuiAsync(driver);
         int exit = await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
         await Assert.That(exit).IsEqualTo(0);
     }
@@ -59,16 +54,14 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task SlashHelp_IsDispatched()
     {
-        await using var driver = new TuiDriver(CliProjectPath, TuiName, "/tmp/terminal-gui-screenshots");
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/help\r").ConfigureAwait(false);
         bool saw = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(saw).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>Ctrl-C aborts the running TUI.</summary>
@@ -76,9 +69,8 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlC_AbortsTui()
     {
-        await using var driver = new TuiDriver(CliProjectPath, TuiName, "/tmp/terminal-gui-screenshots");
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.C, ConsoleModifiers.Control).ConfigureAwait(false);
         await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
@@ -95,12 +87,11 @@ public class TerminalGuiE2ETests : E2eTestBase
     {
         string screenshotDir = "/tmp/terminal-gui-screenshots";
         Directory.CreateDirectory(screenshotDir);
-        await using var driver = new TuiDriver(CliProjectPath, TuiName, screenshotDir);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync(screenshotDir);
 
         try
         {
-            bool booted = await WaitBootAsync(driver).ConfigureAwait(false);
+            bool booted = await WaitForBootAsync(driver).ConfigureAwait(false);
             await Assert.That(booted).IsTrue();
             string boot = Path.Combine(screenshotDir, "01-boot.png");
             await driver.CapturePngAsync(boot).ConfigureAwait(false);
@@ -140,17 +131,15 @@ public class TerminalGuiE2ETests : E2eTestBase
     {
         Server.SetResponse("test-model", "Hello from the mock LLM!");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello world\r").ConfigureAwait(false);
 
         bool sawResponse = await driver.WaitForTextAsync("Hello from the mock LLM!", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawResponse).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -161,21 +150,17 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ToolCall_RendersToolCard()
     {
-        EnsurePtyAvailable();
-
         Server.SetToolCallResponse("test-model", "read", new { path = "/test.txt" });
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("read the file\r").ConfigureAwait(false);
 
         bool sawTool = await driver.WaitForTextAsync("read", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawTool).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -186,21 +171,17 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ErrorState_ShowsError()
     {
-        EnsurePtyAvailable();
-
         Server.SetErrorResponse("test-model", "mock LLM error: rate limit exceeded");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("trigger an error\r").ConfigureAwait(false);
 
         bool sawError = await driver.WaitForTextAsync("rate limit", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawError).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -211,21 +192,17 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Compaction_ShowsCompactionStatus()
     {
-        EnsurePtyAvailable();
-
         Server.SetResponse("test-model", string.Concat(Enumerable.Repeat("word ", 500)));
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
         bool sawStatus = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawStatus).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -236,21 +213,17 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AgentRunning_ShowsRunningBanner()
     {
-        EnsurePtyAvailable();
-
         Server.SetResponse("test-model", "Agent is responding.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
 
         bool sawRunning = await driver.WaitForTextAsync("running", TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         await Assert.That(sawRunning).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -265,19 +238,15 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task F12_TogglesLogsPanel()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
         bool sawLogs = await driver.WaitForTextAsync("Logs", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawLogs).IsTrue();
 
         await driver.SendKeyAsync(ConsoleKey.F12).ConfigureAwait(false);
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -288,18 +257,14 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Alt1_TogglesPanel()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.D1, ConsoleModifiers.Alt).ConfigureAwait(false);
         bool sawPanel = await driver.WaitForTextAsync("panel", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawPanel).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -310,11 +275,8 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task CtrlTab_CyclesPanelFocus()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendKeyAsync(ConsoleKey.Tab, ConsoleModifiers.Control).ConfigureAwait(false);
         // Short debounce between rapid key presses — no observable state change expected.
@@ -323,8 +285,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         bool sawCycle = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawCycle).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -335,14 +296,11 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task ScrollUp_ScrollsHistory()
     {
-        EnsurePtyAvailable();
-
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for scroll.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("hello\r").ConfigureAwait(false);
         // Poll for the mock response instead of a fixed delay — proves the agent
@@ -353,8 +311,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         bool sawScroll = await driver.WaitForTextAsync("test-model", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawScroll).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -365,14 +322,11 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task AltUp_NavigatesInputHistory()
     {
-        EnsurePtyAvailable();
-
         // Configure a mock response so we can poll for the round-trip completion.
         Server.SetResponse("test-model", "Mock reply for history.");
 
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("first prompt\r").ConfigureAwait(false);
         // Poll for the mock response instead of a fixed delay — proves the agent
@@ -383,8 +337,7 @@ public class TerminalGuiE2ETests : E2eTestBase
         bool sawHistory = await driver.WaitForTextAsync("first prompt", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawHistory).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 
     /// <summary>
@@ -395,18 +348,14 @@ public class TerminalGuiE2ETests : E2eTestBase
     [Category("E2E")]
     public async Task Tab_AutocompleteSlashCommand()
     {
-        EnsurePtyAvailable();
-
-        await using var driver = new TuiDriver(CliProjectPath, TuiName);
-        await driver.StartAsync([], this.GetEnv()).ConfigureAwait(false);
-        await WaitBootAsync(driver).ConfigureAwait(false);
+        await using var driver = await StartTuiAsync();
+        await WaitForBootAsync(driver).ConfigureAwait(false);
 
         await driver.SendInputAsync("/hel").ConfigureAwait(false);
         await driver.SendKeyAsync(ConsoleKey.Tab).ConfigureAwait(false);
         bool sawAutocomplete = await driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(sawAutocomplete).IsTrue();
 
-        await driver.SendInputAsync("/exit\r").ConfigureAwait(false);
-        await driver.WaitForExitAsync(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+        await ExitTuiAsync(driver);
     }
 }

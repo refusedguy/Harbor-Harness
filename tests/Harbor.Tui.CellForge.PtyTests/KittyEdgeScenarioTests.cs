@@ -26,8 +26,11 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[13;5u"); // Alt+Enter (alt bit = 4) → newline
         Session.SendKey("BB");
 
-        await Task.Delay(400).ConfigureAwait(false);
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("AA", StringComparison.Ordinal)) &&
+                 l.Any(x => x.Contains("BB", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         string[] lines = NormalizedLines();
         int aa = Array.FindIndex(lines, x => x.Contains("AA", StringComparison.Ordinal));
         int bb = Array.FindIndex(lines, x => x.Contains("BB", StringComparison.Ordinal));
@@ -41,7 +44,9 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
         // [^1] index below (ArgumentOutOfRangeException on an empty snapshot).
         int before = Server.ReceivedRequests.Count;
         Session.SendKey("\x1b[13;3u");
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("AA", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(before);
 
         // Plain Enter submits the accumulated draft as one message.
@@ -65,10 +70,12 @@ public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[999u");
         Session.SendKey("\x1b[<u");
         Session.SendKey("\x1bOZ");
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // App alive, nothing executed, composer still accepts input.
-        await Assert.That(Server.RequestCount).IsEqualTo(0);
+        await Assert.That(Server.ReceivedRequests.Count).IsEqualTo(0);
         Session.SendKey("alive\r");
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),

@@ -6,13 +6,13 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents.Pipeline;
-using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Harbor.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions.Extensions;
 
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 namespace Harbor.Application.Tests;
 
 /// <summary>

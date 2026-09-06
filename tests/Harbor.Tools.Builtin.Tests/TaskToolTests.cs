@@ -59,49 +59,18 @@ public class TaskToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingAgent_ReturnsFailure()
+    [Arguments("""{"prompt":"hi"}""", false, "agent")]
+    [Arguments("""{"agent":"explore"}""", false, "prompt")]
+    [Arguments("""{"agent":123,"prompt":"hi"}""", false, null)]
+    [Arguments("""{"agent":"explore","prompt":"look around"}""", true, null)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess, string? expectedErrorSubstring = null)
     {
         var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
-        var args = JsonDocument.Parse("""{"prompt":"hi"}""").RootElement;
-
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("agent");
-    }
-
-    [Test]
-    public async Task ValidateArguments_MissingPrompt_ReturnsFailure()
-    {
-        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
-        var args = JsonDocument.Parse("""{"agent":"explore"}""").RootElement;
-
-        var result = tool.ValidateArguments(args);
-
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("prompt");
-    }
-
-    [Test]
-    public async Task ValidateArguments_AgentNotString_ReturnsFailure()
-    {
-        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
-        var args = JsonDocument.Parse("""{"agent":123,"prompt":"hi"}""").RootElement;
-
-        var result = tool.ValidateArguments(args);
-
-        await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task ValidateArguments_BothPresent_ReturnsSuccess()
-    {
-        var tool = new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance);
-        var args = Args(("agent", "explore"), ("prompt", "look around"));
-
-        var result = tool.ValidateArguments(args);
-
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
+        if (expectedErrorSubstring is not null)
+            await Assert.That(result.Error).Contains(expectedErrorSubstring);
     }
 
     [Test]

@@ -19,7 +19,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         real values.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class StatusBarTests : ComponentTestBase
 {
     [Before(HookType.Test)]
@@ -36,7 +36,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.StatusText = "idle");
-        await Task.Delay(200).ConfigureAwait(false);
 
         var hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -60,7 +59,6 @@ public sealed class StatusBarTests : ComponentTestBase
             Vm.StatusText = "running";
             Vm.IsRunning = true;
         });
-        await Task.Delay(200).ConfigureAwait(false);
 
         var hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -90,7 +88,6 @@ public sealed class StatusBarTests : ComponentTestBase
             Vm.ProviderLabel = "ollama";
             Vm.ModelLabel = "qwen2.5-coder:7b";
         });
-        await Task.Delay(200).ConfigureAwait(false);
 
         var hasModel = await Driver.WaitForTextAsync("qwen2.5-coder:7b", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -145,7 +142,6 @@ public sealed class StatusBarTests : ComponentTestBase
         await Driver.ResetStateAsync().ConfigureAwait(false);
 
         UI(() => Vm.CostUsd = 0.0234m);
-        await Task.Delay(200).ConfigureAwait(false);
 
         var hasCost = await Driver.WaitForTextAsync("$0.0234", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
@@ -176,7 +172,6 @@ public sealed class StatusBarTests : ComponentTestBase
             Vm.CostUsd = 0.1234m;
             Vm.ActiveSessionCount = 3;
         });
-        await Task.Delay(250).ConfigureAwait(false);
 
         var hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);

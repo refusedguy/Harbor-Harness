@@ -103,7 +103,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             {
                 Console.WriteLine($"WARN: marker {marker} not seen after 15s: {ex.Message}, screen:\n{ScreenText}");
             }
-            await Task.Delay(800).ConfigureAwait(false);
+            await Task.Delay(800).ConfigureAwait(false); // real delay: let streaming block commit before next turn
             turns++;
         }
 
@@ -125,7 +125,7 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         for (int tick = 0; tick < 50 && !revealed; tick++)
         {
             Session.SendKey(WheelUpSeq);
-            await Task.Delay(150).ConfigureAwait(false);
+            await Task.Delay(150).ConfigureAwait(false); // wheel tick: real timing
             revealed = NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal));
         }
 

@@ -37,7 +37,7 @@ namespace Harbor.App.Avalonia.Tests;
 ///     inflates the XAML which exercises all resource lookups, style selectors,
 ///     and DataTemplate inflation paths.
 /// </remarks>
-[NotInParallel]
+[NotInParallel("avalonia-headless")]
 public class ViewInflationTests
 {
     [Test]

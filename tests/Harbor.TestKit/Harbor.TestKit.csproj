@@ -5,16 +5,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <OutputType>Library</OutputType>
+    <NoWarn>$(NoWarn);TUnitAssertions0005</NoWarn>
     <!-- Shared fixture library: referenced by test projects, never shipped. -->
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <ProjectReference Include="../../src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="CSharpFunctionalExtensions" />
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="TUnit.Assertions" />
+    <PackageReference Include="TUnit.Mocks" />
   </ItemGroup>
 
 </Project>

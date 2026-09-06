@@ -4,6 +4,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -13,7 +14,8 @@ namespace Harbor.Ipc.Tests;
 ///     closes the connection; unauthenticated requests get the structured
 ///     PSK_REQUIRED error; and a second listener cannot steal the port.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
+[ParallelLimiter<MockServerLimit>]
 public class TcpPskTests
 {
     private const string Key = "dGVzdC1wc2sta2V5LTEyMzQ1Njc4OTA=";

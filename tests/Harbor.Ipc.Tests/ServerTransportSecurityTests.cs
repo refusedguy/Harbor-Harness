@@ -3,6 +3,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -12,7 +13,8 @@ namespace Harbor.Ipc.Tests;
 ///     file must be reclaimed, the socket file must be owner-only (0600),
 ///     and repeated accept failures must back off instead of spinning hot.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
+[ParallelLimiter<MockServerLimit>]
 public class ServerTransportSecurityTests
 {
     [Test]

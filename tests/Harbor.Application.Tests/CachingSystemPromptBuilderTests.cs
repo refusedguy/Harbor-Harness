@@ -8,6 +8,10 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
+using FakeTokenTracker = Harbor.TestKit.FakeTokenTracker;
+using FakeCompactionService = Harbor.TestKit.FakeCompactionService;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
@@ -27,14 +31,6 @@ public class CachingSystemPromptBuilderTests
     private static readonly ModelInfo TestModel =
         new("test-model", "test", "Test Model", 200_000, 4096, false, false, true, Pricing.Unknown, "openai");
 
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Prompt-cache harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
     private static ToolDescriptor Tool(string name, string schemaJson) => new(
         ToolName.Create(name),
         name,
@@ -45,7 +41,7 @@ public class CachingSystemPromptBuilderTests
         Array.Empty<string>());
 
     private static SystemPromptContext Context(params ToolDescriptor[] tools) => new(
-        AllowAllAgent(),
+        TestAgents.AllowAll(),
         TestModel,
         tools,
         Array.Empty<ContextFile>(),
@@ -91,7 +87,7 @@ public class CachingSystemPromptBuilderTests
         var caching = new CachingSystemPromptBuilder(inner);
 
         _ = await caching.BuildAsync(Context());
-        var otherAgent = AllowAllAgent() with { Model = "other-model" };
+        var otherAgent = TestAgents.AllowAll() with { Model = "other-model" };
         var otherContext = new SystemPromptContext(
             otherAgent,
             TestModel with { Id = "other-model" },
@@ -123,7 +119,7 @@ public class CachingSystemPromptBuilderTests
             }
         ]);
         var inner = new CountingPromptBuilder();
-        var agent = AllowAllAgent();
+        var agent = TestAgents.AllowAll();
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -137,7 +133,7 @@ public class CachingSystemPromptBuilderTests
             new PermissionService(agents, NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
-        var session = new Fakes.TestSessionContext(
+        var session = new TestSessionContext(
             Session.Create("/tmp/harbor-prompt-cache-loop-tests", "code", "test", "test-model"));
 
         var result = await loop.RunAsync(session, agent);

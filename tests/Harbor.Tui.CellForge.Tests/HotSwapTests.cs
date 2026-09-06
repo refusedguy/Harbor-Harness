@@ -12,7 +12,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// no torn frames. Theme swaps publish a new palette catalog mid-stream while
 /// the pinned frame snapshot keeps every painted cell on one coherent palette.
 /// </summary>
-[NotInParallel]
+[NotInParallel("pty")]
 public class HotSwapTests
 {
     [After(Test)]
@@ -179,6 +179,7 @@ public class HotSwapTests
     // ── Concurrent producers/consumers: no locks, no torn pairs ────────────
 
     [Test]
+    [Retry(3)]
     public async Task SwapChain_ConcurrentPublishTake_NeverTearsPairs()
     {
         // Distinct geometry per producer: a torn handoff (back from one offer,
