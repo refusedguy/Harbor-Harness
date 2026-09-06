@@ -26,7 +26,7 @@ public abstract class CellForgePtyScenarioBase
     private int _consumedRaw;
     private CancellationTokenSource? _pumpCts;
 
-    [ClassDataSource<MockServerFixture>(Shared = SharedType.PerTestSession)]
+    [ClassDataSource<MockServerFixture>(Shared = SharedType.None)]
     public required MockServerFixture Fixture { get; init; }
 
     protected MockLlmServer Server => Fixture.Server;

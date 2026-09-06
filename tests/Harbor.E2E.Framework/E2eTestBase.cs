@@ -26,7 +26,7 @@ namespace Harbor.E2E.Framework;
 [ParallelLimiter<MockServerLimit>]
 public abstract class E2eTestBase
 {
-    [ClassDataSource<MockServerFixture>(Shared = SharedType.PerTestSession)]
+    [ClassDataSource<MockServerFixture>(Shared = SharedType.None)]
     public required MockServerFixture Fixture { get; init; }
 
     /// <summary>
