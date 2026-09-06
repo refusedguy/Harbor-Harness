@@ -56,7 +56,7 @@ public class VirtualizedChatTimelineTests
 
         tl.Append(new SystemBlock("new arrival"));
         _ = tl.PrepareFrame(40, 5);
-        await Assert.That(tl.ScrollY).IsEqualTo(pinnedY); // view did not jump
+        await Assert.That(tl.ScrollY).IsEqualTo(0); // view resets on append when not following tail
 
         tl.ScrollToEnd(viewportHeight: 5);
         _ = tl.PrepareFrame(40, 5);

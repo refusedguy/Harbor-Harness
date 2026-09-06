@@ -92,15 +92,17 @@ public sealed class UserBlock : IChatBlock
 
         int y = ctx.Rect.Y;
         int rows = ctx.Rect.Bottom - y;
+        int skip = ctx.SkipRows;
         var lines = _text.GetLines(bodyWidth);
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        for (int i = 0; i < rows && (skip + i) < lines.Length; i++)
         {
-            if (i == 0)
+            int lineIdx = skip + i;
+            if (lineIdx == 0)
             {
-                buffer.SetText(ctx.Rect.X, y, Prefix, ChatPalette.UserPrefix);
+                buffer.SetText(ctx.Rect.X, y + i, Prefix, ChatPalette.UserPrefix);
             }
 
-            buffer.SetText(ctx.Rect.X + Prefix.Length, y + i, lines.Span[i], ChatPalette.UserText);
+            buffer.SetText(ctx.Rect.X + Prefix.Length, y + i, lines.Span[lineIdx], ChatPalette.UserText);
         }
     }
 
@@ -132,9 +134,10 @@ public sealed class SystemBlock : IChatBlock
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < rows && (skip + i) < lines.Length; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[i], ChatPalette.System);
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], ChatPalette.System);
         }
     }
 

@@ -24,11 +24,12 @@ public readonly record struct BlockMeasure(int MinLines, int MaxLines, bool IsEx
 /// </summary>
 public readonly struct BlockPaintContext
 {
-    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick)
+    public BlockPaintContext(ScreenBuffer buffer, Rect rect, long tick, int skipRows = 0)
     {
         Buffer = buffer;
         Rect = rect;
         Tick = tick;
+        SkipRows = Math.Max(0, skipRows);
     }
 
     public ScreenBuffer Buffer { get; }
@@ -38,6 +39,9 @@ public readonly struct BlockPaintContext
 
     /// <summary>Monotonic frame tick from the render pipeline — no timers.</summary>
     public long Tick { get; }
+
+    /// <summary>Rows to skip from the top of the block before painting (partial scroll).</summary>
+    public int SkipRows { get; }
 }
 
 /// <summary>

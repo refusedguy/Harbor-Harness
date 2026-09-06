@@ -399,4 +399,18 @@ public sealed class TimelineLayoutCache
 
         Array.Resize(ref _virtual, cap);
     }
+
+    public void Clear()
+    {
+        _count = 0;
+        Array.Clear(_blocks, 0, _blocks.Length);
+        Array.Clear(_slots, 0, _slots.Length);
+        _virtual[0] = 0;
+        _width = -1;
+        _unmeasuredFrom = 0;
+        _dirtyFrom = int.MaxValue;
+        _anchorBlock = null;
+        _anchorRow = 0;
+        _anchorY = 0;
+    }
 }

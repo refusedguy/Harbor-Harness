@@ -25,6 +25,7 @@ public sealed class VirtualizedChatTimeline
     private bool _broadDamage;
     private long _lastScrollY = -1;
     private int _lastWidth = -1;
+    private int _lastViewportH = -1;
     private bool _dirtyGeometry = true;
     private bool _entranceFx;
     private bool _smoothScroll;
@@ -182,6 +183,20 @@ public sealed class VirtualizedChatTimeline
         _broadDamage = true;
     }
 
+    public void Clear()
+    {
+        _cache.Clear();
+        _entranceStarts.Clear();
+        _budgetUsed = 0;
+        _dirtyGeometry = true;
+        _broadDamage = true;
+        ScrollY = 0;
+        FollowTail = true;
+        _visualScrollY = 0;
+        _scrollAnimating = false;
+        _lastScrollY = -1;
+    }
+
     public void ScrollUp(int lines) => ScrollBy(-lines);
 
     public void ScrollDown(int lines) => ScrollBy(lines);
@@ -193,9 +208,18 @@ public sealed class VirtualizedChatTimeline
             FollowTail = false;
         }
 
+        long target = ScrollY + lines;
+        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
+        target = Math.Clamp(target, 0, maxScroll);
+
         long fromVisual = _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
-        SetScrollY(ScrollY + lines);
+        SetScrollY(target);
         BeginScrollAnimation(fromVisual);
+
+        if (lines > 0 && target >= maxScroll)
+        {
+            FollowTail = true;
+        }
     }
 
     public void PageUp(int viewportHeight) => ScrollBy(-Math.Max(1, viewportHeight - 1));
@@ -326,7 +350,8 @@ public sealed class VirtualizedChatTimeline
 
     private void SetScrollY(long y)
     {
-        ScrollY = Math.Max(0, y);
+        long maxScroll = _lastViewportH > 0 ? TotalHeightAfter(_lastViewportH) : Math.Max(0, TotalHeight);
+        ScrollY = Math.Clamp(y, 0, maxScroll);
         if (!_scrollAnimating)
         {
             _visualScrollY = ScrollY;
@@ -391,6 +416,8 @@ public sealed class VirtualizedChatTimeline
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         ArgumentOutOfRangeException.ThrowIfNegative(viewportH);
 
+        _lastViewportH = viewportH;
+
         if (_lastWidth != width && _cache.Count > 0)
         {
             _broadDamage = true;
@@ -400,6 +427,16 @@ public sealed class VirtualizedChatTimeline
         if (FollowTail)
         {
             ScrollY = TotalHeightAfter(viewportH);
+        }
+        else
+        {
+            long maxScroll = TotalHeightAfter(viewportH);
+            if (ScrollY > maxScroll)
+            {
+                ScrollY = maxScroll;
+                _visualScrollY = maxScroll;
+                _scrollAnimating = false;
+            }
         }
 
         var outcome = _cache.PrepareLayout(width, viewportH, ScrollY);
@@ -513,7 +550,7 @@ public sealed class VirtualizedChatTimeline
                 }
             }
 
-            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick);
+            var ctx = new BlockPaintContext(buffer, new Rect(rect.X, paintY, rect.Width, Math.Max(1, paintH)), CurrentTick, skipRows);
             block.Paint(ctx);
 
             // Narrow (per-widget) damage bookkeeping: entrance fades and
@@ -662,9 +699,10 @@ public sealed class StreamingThinkingBlock : IChatBlock
         EnsureWrapped(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < _lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < _lines.Length && (skip + i) < _lines.Length && i < rows; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _lines[i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, _lines[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
         }
     }
 
@@ -706,9 +744,10 @@ public sealed class ThinkingBlock : IChatBlock
         var buffer = ctx.Buffer;
         var lines = _text.GetLines(Math.Max(1, ctx.Rect.Width));
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < lines.Length && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < lines.Length && (skip + i) < lines.Length && i < rows; i++)
         {
-            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
+            buffer.SetText(ctx.Rect.X, ctx.Rect.Y + i, lines.Span[skip + i], new CellStyle(attrs: StyleAttr.Dim | StyleAttr.Italic));
         }
     }
 

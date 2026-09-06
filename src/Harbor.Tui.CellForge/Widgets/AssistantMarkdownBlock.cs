@@ -37,15 +37,17 @@ public sealed class AssistantMarkdownBlock : IChatBlock
         EnsureRendered(ctx.Rect.Width);
         var buffer = ctx.Buffer;
         int rows = ctx.Rect.Height;
-        for (int i = 0; i < _lines.Count && i < rows; i++)
+        int skip = ctx.SkipRows;
+        for (int i = 0; i < rows && (skip + i) < _lines.Count; i++)
         {
-            if (_code is not null && _code.TryGetValue(i, out var codeSpans))
+            int lineIdx = skip + i;
+            if (_code is not null && _code.TryGetValue(lineIdx, out var codeSpans))
             {
                 PaintCodeSpans(buffer, ctx.Rect.X, ctx.Rect.Y + i, codeSpans);
             }
             else
             {
-                PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[i]);
+                PaintLine(buffer, ctx.Rect.X, ctx.Rect.Y + i, _lines[lineIdx]);
             }
         }
     }
