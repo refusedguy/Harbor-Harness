@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <OutputType>Library</OutputType>
     <NoWarn>$(NoWarn);TUnitAssertions0005</NoWarn>
     <!-- Shared fixture library: referenced by test projects, never shipped. -->
   </PropertyGroup>
@@ -18,6 +20,8 @@
 
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions" />
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="TUnit.Assertions" />
     <PackageReference Include="TUnit.Mocks" />
   </ItemGroup>
 

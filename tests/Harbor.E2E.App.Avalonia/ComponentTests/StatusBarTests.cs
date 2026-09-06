@@ -19,7 +19,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         real values.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class StatusBarTests : ComponentTestBase
 {
     [Before(HookType.Test)]

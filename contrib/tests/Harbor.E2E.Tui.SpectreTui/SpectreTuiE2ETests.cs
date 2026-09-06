@@ -37,7 +37,8 @@ namespace Harbor.E2E.Tui.SpectreTui;
 ///     </para>
 /// </remarks>
 [Category("E2E")]
-[NotInParallel]
+[NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
 public class SpectreTuiE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "spectre-tui";

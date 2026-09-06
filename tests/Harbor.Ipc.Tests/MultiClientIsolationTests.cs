@@ -9,6 +9,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.E2E.Framework;
 
 namespace Harbor.Ipc.Tests;
 
@@ -18,7 +19,8 @@ namespace Harbor.Ipc.Tests;
 ///     owned session are addressed to the owner only, and disconnecting the
 ///     owner releases the lease so broadcast resumes.
 /// </summary>
-[NotInParallel]
+[NotInParallel("ipc")]
+[ParallelLimiter<MockServerLimit>]
 public class MultiClientIsolationTests
 {
     private static AgentDefinition Definition() => new(

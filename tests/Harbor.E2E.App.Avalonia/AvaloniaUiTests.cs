@@ -51,7 +51,7 @@ namespace Harbor.E2E.App.Avalonia;
 ///         process-wide Avalonia <see cref="Application" /> singleton.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class AvaloniaUiTests
 {
     /// <summary>
@@ -625,9 +625,12 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("10-toast-shown").ConfigureAwait(false);
 
-        // Auto-dismiss fires after 4s — wait 5s to be safe, then verify
-        // the toast text is gone from the visual tree.
-        await Task.Delay(5_000).ConfigureAwait(false);
+        // Auto-dismiss fires after 4s — poll deterministically until the
+        // toast disappears instead of a fixed 5s delay.
+        await Driver.WaitForConditionAsync(
+            () => !Driver.GetAllVisibleText().Contains("Hello toast", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(6),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Driver.ScreenshotAsync("11-toast-dismissed").ConfigureAwait(false);
 
         bool stillThere = Driver.GetAllVisibleText().Contains("Hello toast", StringComparison.Ordinal);
@@ -819,8 +822,11 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("18-multiple-toasts").ConfigureAwait(false);
 
-        // Wait for auto-dismiss so the next test starts clean.
-        await Task.Delay(5_000).ConfigureAwait(false);
+        // Wait for auto-dismiss deterministically so the next test starts clean.
+        await Driver.WaitForConditionAsync(
+            () => !Driver.GetAllVisibleText().Contains("First toast body", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(6),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
     }
 
     /// <summary>

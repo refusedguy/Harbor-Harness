@@ -14,12 +14,15 @@ public class ReadToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingPath_ReturnsFailure()
+    [Arguments("{}", false)]
+    [Arguments("""{"path": "/nonexistent/file.txt"}""", true)]
+    [Arguments("""{"path": "/tmp/some-file.txt"}""", true)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess)
     {
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
     }
 
     [Test]

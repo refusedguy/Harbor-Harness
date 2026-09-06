@@ -29,7 +29,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         another test's side effects.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class ChatViewTests : ComponentTestBase
 {
     [Before(HookType.Test)]

@@ -11,7 +11,6 @@ using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using TUnit.Core;
 
@@ -260,8 +259,12 @@ public class AvaloniaWorkspaceCommandsTests
 
         commands.StopAgent();
 
-        await Task.Delay(50);
+        bool aborted = await WaitForConditionAsync(
+            () => agentRunner.AbortSource.IsCancellationRequested,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
 
+        await Assert.That(aborted).IsTrue();
         await Assert.That(agentRunner.AbortSource.IsCancellationRequested).IsTrue();
         await Assert.That(toasts.LastMessage).Contains("Abort requested");
     }
@@ -280,5 +283,21 @@ public class AvaloniaWorkspaceCommandsTests
 
         await Assert.That(chat.Lines).IsEmpty();
         await Assert.That(chat.ToolCalls).IsEmpty();
+    }
+
+    private static async Task<bool> WaitForConditionAsync(Func<bool> condition, TimeSpan timeout, TimeSpan pollInterval)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            if (condition())
+            {
+                return true;
+            }
+
+            await Task.Delay(pollInterval).ConfigureAwait(false);
+        }
+
+        return condition();
     }
 }

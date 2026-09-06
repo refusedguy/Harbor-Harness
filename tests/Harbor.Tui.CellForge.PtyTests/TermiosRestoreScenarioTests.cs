@@ -24,7 +24,9 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
 
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal))).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("привет", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Graceful exit — use Ctrl+C gesture (more reliable than /exit palette)
         SendCtrlC();

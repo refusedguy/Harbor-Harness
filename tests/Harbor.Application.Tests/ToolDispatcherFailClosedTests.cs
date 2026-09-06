@@ -36,10 +36,16 @@ public class ToolDispatcherFailClosedTests
         "test",
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
 
-    private static (AgentLoop Loop, ScriptedLlmClient Client, CountingTool Tool) CreateLoop(
-        AgentDefinition agent,
-        IAgentRegistry permissionRegistry)
+
+    private static TestSessionContext NewSession() => new(
+        Session.Create("/tmp/harbor-fail-closed-tests", "code", "test", "test-model"));
+
+    [Test]
+    public async Task RunAsync_PermissionSubsystemFailure_ToolNeverExecutes()
     {
+        AgentDefinition agent = CodeAgent();
+        // Empty registry → CheckAsync returns Failure for every call.
+        var permissionRegistry = new FakeAgentRegistry();
         var tool = new CountingTool();
         var client = new ScriptedLlmClient(
         [
@@ -55,8 +61,6 @@ public class ToolDispatcherFailClosedTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        // NOTE: the loop registry contains the agent; the PERMISSION registry is
-        // passed separately so tests can simulate an unregistered/diverged agent.
         var agents = new FakeAgentRegistry(agent);
         var loop = new AgentLoop(
             new FakeProviderRegistry(client),
@@ -70,26 +74,13 @@ public class ToolDispatcherFailClosedTests
             new PermissionService(permissionRegistry, NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
-        return (loop, client, tool);
-    }
-
-    private static TestSessionContext NewSession() => new(
-        Session.Create("/tmp/harbor-fail-closed-tests", "code", "test", "test-model"));
-
-    [Test]
-    public async Task RunAsync_PermissionSubsystemFailure_ToolNeverExecutes()
-    {
-        AgentDefinition agent = CodeAgent();
-        // Empty registry → CheckAsync returns Failure for every call.
-        (AgentLoop loop, ScriptedLlmClient client, CountingTool tool) =
-            CreateLoop(agent, new FakeAgentRegistry());
 
         var session = NewSession();
         var result = await loop.RunAsync(session, agent);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(tool.Executions).IsEqualTo(0);
-        string nextRequestText = RenderText(client.Requests[1]);
+        string nextRequestText = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(nextRequestText).Contains("Permission check failed");
     }
 
@@ -98,36 +89,39 @@ public class ToolDispatcherFailClosedTests
     {
         // Control: a healthy permission subsystem with an Allow rule keeps working.
         AgentDefinition agent = CodeAgent();
-        (AgentLoop loop, _, CountingTool tool) =
-            CreateLoop(agent, new FakeAgentRegistry(agent));
+        var tool = new CountingTool();
+        var client = new ScriptedLlmClient(
+        [
+            new LlmEvent[]
+            {
+                new ToolCallStartEvent("call-1", "counter"),
+                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
+                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+            },
+            new LlmEvent[]
+            {
+                new TextDeltaEvent("t", "after tool"),
+                new StepFinishEvent(1, "stop", new Usage(1, 1))
+            }
+        ]);
+        var agents = new FakeAgentRegistry(agent);
+        var loop = new AgentLoop(
+            new FakeProviderRegistry(client),
+            new FakeToolRegistry(tool),
+            agents,
+            new StubSystemPromptBuilder(),
+            new FakeCompactionService(),
+            new FakeTokenTracker(),
+            new RetryPolicy(),
+            new FakeEventBus(),
+            new PermissionService(new FakeAgentRegistry(agent), NullLogger<PermissionService>.Instance),
+            new MessageConverter(),
+            NullLogger<AgentLoop>.Instance);
 
         var session = NewSession();
         var result = await loop.RunAsync(session, agent);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(tool.Executions).IsEqualTo(1);
-    }
-
-    private static string RenderText(LlmRequest request)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
-        {
-            if (message is LlmUserMessage user)
-            {
-                foreach (LlmContentBlock block in user.Content)
-                {
-                    if (block is LlmTextBlock text)
-                    {
-                        sb.Append(text.Text);
-                    }
-                }
-            }
-            else if (message is LlmToolResultMessage toolResult)
-            {
-                sb.Append(toolResult.Output);
-            }
-        }
-        return sb.ToString();
     }
 }

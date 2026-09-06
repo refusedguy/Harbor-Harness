@@ -6,7 +6,8 @@ namespace Harbor.E2E.Tui.RazorConsole;
 ///     (<c>HARBOR_TUI=razor</c>).
 /// </summary>
 [Category("E2E")]
-[NotInParallel]
+[NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
 public class RazorConsoleE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "razor";

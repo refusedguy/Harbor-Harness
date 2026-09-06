@@ -27,7 +27,7 @@ namespace Harbor.App.Avalonia.Tests;
 ///     test that ensures <c>Render</c> doesn't throw on edge-case inputs
 ///     (empty, single point, all-equal).
 /// </remarks>
-[NotInParallel]
+[NotInParallel("avalonia-headless")]
 public class KillerFeatureTests
 {
     // ── Sparkline ────────────────────────────────────────────────────

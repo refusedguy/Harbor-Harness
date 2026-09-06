@@ -20,7 +20,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="MainViewModel.IsSettingsOpen"/> = true on the UI thread.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class SettingsTests : ComponentTestBase
 {
     [Before(HookType.Test)]
@@ -116,15 +116,16 @@ public sealed class SettingsTests : ComponentTestBase
         var configPath = Path.Combine(configDir, "config.json");
 
         string configText = string.Empty;
-        for (int i = 0; i < 20; i++)
-        {
-            configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
-            if (configText.Contains("test-model-save", StringComparison.Ordinal))
+        bool saved = await Driver.WaitForConditionAsync(
+            () =>
             {
-                break;
-            }
-            await Task.Delay(150).ConfigureAwait(false);
-        }
+                configText = File.ReadAllText(configPath);
+                return configText.Contains("test-model-save", StringComparison.Ordinal);
+            },
+            TimeSpan.FromSeconds(3),
+            TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
+        _ = saved;
+        configText = await File.ReadAllTextAsync(configPath).ConfigureAwait(false);
         await Assert.That(configText).Contains("light");
         await Assert.That(configText).Contains("test-model-save");
 

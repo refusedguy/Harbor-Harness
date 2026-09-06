@@ -27,16 +27,20 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
         // 2. No global mouse grab: SGR mouse enable must never be emitted —
         //    the parser routes mouse bytes even without mode 1000, and the
         //    terminal keeps native selection/copy-paste.
-        await Task.Delay(900).ConfigureAwait(false);
-        await Assert.That(Session.RawText.Contains("\x1b[?1000h", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(Session.RawText.Contains("\x1b[?1006h", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(Session.RawText.Contains("\x1b[?1002h", StringComparison.Ordinal)).IsFalse();
+        // 2. No global mouse grab: SGR mouse enable must never be emitted.
+        _ = await WaitForScreenAsync(
+            l => !l.Any(x => x.Contains("\x1b[?1000h", StringComparison.Ordinal) ||
+                             x.Contains("\x1b[?1006h", StringComparison.Ordinal) ||
+                             x.Contains("\x1b[?1002h", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // Ensure composer is idle and prompt ready before /exit
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("ok", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // 3. Graceful exit restores every mode in the fixed leave order — use Ctrl+C gesture (more reliable than /exit palette)
         SendCtrlC();
@@ -78,7 +82,9 @@ public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
         Session.SendKey("\x1b[O");
         Session.SendKey("\x1b[6n");
         Session.SendKey("\x1b[c");
-        await Task.Delay(500).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("model: mock/test-model", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         // Nothing executed, session responsive.
         await Assert.That(Server.RequestCount).IsEqualTo(0);

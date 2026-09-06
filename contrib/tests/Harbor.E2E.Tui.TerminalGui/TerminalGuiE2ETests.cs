@@ -8,7 +8,8 @@ namespace Harbor.E2E.Tui.TerminalGui;
 ///     and does not work with PTY (unlike Spectre.Tui which uses RunAsync).
 /// </summary>
 [Category("E2E")]
-[NotInParallel]
+[NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
 public class TerminalGuiE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "terminal-gui";

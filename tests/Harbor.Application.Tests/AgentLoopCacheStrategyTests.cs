@@ -26,29 +26,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class AgentLoopCacheStrategyTests
 {
-    private static AgentDefinition AllowAllAgent() => new(
-        AgentName.Create("code"),
-        "Code",
-        "Cache-strategy harness agent",
-        "test-model",
-        "test",
-        new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
-
-    private static AgentLoop CreateLoop(ScriptedLlmClient client) => new(
-        new FakeProviderRegistry(client),
-        new FakeToolRegistry(),
-        new FakeAgentRegistry(AllowAllAgent()),
-        new StubSystemPromptBuilder(),
-        new FakeCompactionService(),
-        new FakeTokenTracker(),
-        new RetryPolicy(),
-        new FakeEventBus(),
-        new PermissionService(
-            new FakeAgentRegistry(AllowAllAgent()),
-            NullLogger<PermissionService>.Instance),
-        new MessageConverter(),
-        NullLogger<AgentLoop>.Instance);
-
     [Test]
     public async Task RunAsync_TwoTurnRunWithSameTools_RequestsCarryEphemeralCacheStrategy()
     {
@@ -66,11 +43,26 @@ public class AgentLoopCacheStrategyTests
                 new StepFinishEvent(1, "stop", new Usage(1, 1))
             }
         ]);
-        var loop = CreateLoop(client);
+        var agent = TestAgents.AllowAll();
+        var agents = new FakeAgentRegistry(agent);
+        var loop = new AgentLoop(
+            new FakeProviderRegistry(client),
+            new FakeToolRegistry(),
+            agents,
+            new StubSystemPromptBuilder(),
+            new FakeCompactionService(),
+            new FakeTokenTracker(),
+            new RetryPolicy(),
+            new FakeEventBus(),
+            new PermissionService(
+                new FakeAgentRegistry(agent),
+                NullLogger<PermissionService>.Instance),
+            new MessageConverter(),
+            NullLogger<AgentLoop>.Instance);
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
 
-        var result = await loop.RunAsync(session, AllowAllAgent());
+        var result = await loop.RunAsync(session, agent);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(client.Requests.Count).IsEqualTo(2);

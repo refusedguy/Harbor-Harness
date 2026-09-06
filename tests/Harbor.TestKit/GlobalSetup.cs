@@ -1,4 +1,5 @@
-using TUnit;
+using TUnit.Core;
+using TUnit.Core.Enums;
 using TUnit.Mocks;
 
 namespace Harbor.TestKit;

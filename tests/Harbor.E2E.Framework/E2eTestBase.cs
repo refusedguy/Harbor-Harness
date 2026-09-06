@@ -23,99 +23,24 @@ namespace Harbor.E2E.Framework;
 ///         On Windows the same effect is achieved via <c>USERPROFILE</c>.
 ///     </para>
 /// </remarks>
+[ParallelLimiter<MockServerLimit>]
 public abstract class E2eTestBase
 {
-    /// <summary>
-    ///     The in-process mock LLM server. Started before each test method;
-    ///     stopped after. <see cref="MockLlmServer.BaseUri" /> is non-null
-    ///     inside a test body.
-    /// </summary>
-    protected MockLlmServer Server { get; private set; } = null!;
+    [ClassDataSource<MockServerFixture>(Shared = SharedType.PerTestSession)]
+    public required MockServerFixture Fixture { get; init; }
 
     /// <summary>
-    ///     Path to the per-test temporary <c>$HOME</c>. Deleted in teardown.
+    ///     The in-process mock LLM server. Shared once per test session via
+    ///     <see cref="MockServerFixture" />; <see cref="MockLlmServer.BaseUri" />
+    ///     is non-null inside a test body.
     /// </summary>
-    protected string TempHome { get; private set; } = string.Empty;
+    protected MockLlmServer Server => Fixture.Server;
 
     /// <summary>
-    ///     Per-test setup: start <see cref="Server" />, allocate
-    ///     <see cref="TempHome" />, install <c>providers/mock.json</c> so the
-    ///     Harbor CLI can resolve a provider whose BaseUrl points at
-    ///     <see cref="Server" />.
+    ///     Path to the shared temporary <c>$HOME</c>. Created once per test
+    ///     session; deleted when the fixture is disposed.
     /// </summary>
-    [Before(Test)]
-    public async Task SetupAsync()
-    {
-        Server = new MockLlmServer();
-        await Server.StartAsync().ConfigureAwait(false);
-
-        TempHome = Path.Combine(Path.GetTempPath(), "harbor-e2e-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(TempHome);
-
-        Environment.SetEnvironmentVariable("HOME", TempHome);
-        Environment.SetEnvironmentVariable("USERPROFILE", TempHome);
-
-        // Drop a mock provider config into ~/.harbor/providers/mock.json so the
-        // OpenAI-compatible client resolves "mock" → MockLlmServer.BaseUri.
-        string harborDir = Path.Combine(TempHome, ".harbor");
-        Directory.CreateDirectory(harborDir);
-        string providersDir = Path.Combine(harborDir, "providers");
-        Directory.CreateDirectory(providersDir);
-        string mockConfigPath = Path.Combine(providersDir, "mock.json");
-        string mockConfig = $$"""
-                              {
-                                "id": "mock",
-                                "displayName": "Mock LLM (E2E)",
-                                "description": "In-process mock for E2E tests.",
-                                "baseUrl": "{{Server.BaseUri}}",
-                                "apiType": "openai-compatible",
-                                "authType": "bearer",
-                                "authEnvVar": "MOCK_API_KEY",
-                                "models": [
-                                  { "id": "test-model", "providerId": "mock", "displayName": "Mock Test Model", "contextWindow": 128000, "maxOutputTokens": 4096, "supportsReasoning": false, "supportsVision": false, "supportsToolUse": true, "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 }, "promptTemplate": "openai" }
-                                ]
-                              }
-                              """;
-        await File.WriteAllTextAsync(mockConfigPath, mockConfig).ConfigureAwait(false);
-
-        // Mark onboarding complete so the CLI doesn't launch the wizard.
-        // HarborConfig.json is consumed by HarborConfig + JsonConfigStore.
-        string harborConfigPath = Path.Combine(harborDir, "config.json");
-        string harborConfig = """
-                              {
-                                "provider": "mock",
-                                "model": "mock/test-model",
-                                "agent": "code",
-                                "onboarded": true
-                              }
-                              """;
-        await File.WriteAllTextAsync(harborConfigPath, harborConfig).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    ///     Per-test teardown: stop the server, delete <see cref="TempHome" />.
-    /// </summary>
-    [After(Test)]
-    public async Task TeardownAsync()
-    {
-        try
-        {
-            if (Server is not null)
-                await Server.StopAsync().ConfigureAwait(false);
-        }
-        catch
-        { /* swallow — teardown must not throw */
-        }
-
-        try
-        {
-            if (!string.IsNullOrEmpty(TempHome) && Directory.Exists(TempHome))
-                Directory.Delete(TempHome, true);
-        }
-        catch
-        { /* swallow — temp dir cleanup is best-effort */
-        }
-    }
+    protected string TempHome => Fixture.TempHome;
 
     /// <summary>
     ///     Build the standard env-var dict that points a Harbor app at the

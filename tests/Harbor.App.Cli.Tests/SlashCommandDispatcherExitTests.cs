@@ -12,6 +12,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -139,18 +140,6 @@ public class SlashCommandDispatcherExitTests
         {
             public void Dispose() { }
         }
-    }
-
-    private sealed class FakeAgentRegistry : IAgentRegistry
-    {
-        public IReadOnlyList<AgentDefinition> GetAllAgents() => Array.Empty<AgentDefinition>();
-
-        public Result<AgentDefinition> GetAgent(AgentName name) =>
-            Result.Failure<AgentDefinition>($"No agents registered in tests: {name.Value}");
-
-        public Result Register(AgentDefinition agent) => Result.Failure("Registration is not supported in tests.");
-
-        public Result Unregister(AgentName name) => Result.Failure("Unregistration is not supported in tests.");
     }
 
     private sealed class FakeProviderRegistry : IProviderRegistry

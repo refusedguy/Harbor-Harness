@@ -17,7 +17,7 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         <see cref="MainViewModel.IsCommandPaletteOpen"/> = true on the UI thread.
 ///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("e2e-framework")]
 public sealed class CommandPaletteTests : ComponentTestBase
 {
     [Before(HookType.Test)]

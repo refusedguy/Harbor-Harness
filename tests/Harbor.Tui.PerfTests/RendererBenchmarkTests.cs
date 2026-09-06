@@ -20,7 +20,7 @@ using TUnit.Assertions.Extensions;
 ///             (see .github/workflows/renderer-perf-gate.yml).</description></item>
 ///     </list>
 /// </summary>
-[NotInParallel]
+[NotInParallel("perf")]
 public class RendererBenchmarkTests
 {
     public static readonly string BaselineStrictEnv = "HARBOR_PERF_BASELINE_STRICT";

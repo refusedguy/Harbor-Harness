@@ -13,6 +13,7 @@ using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="AgentLoop" /> using a mock <see cref="ILlmClient" /> that yields
@@ -75,10 +76,10 @@ public class AgentLoopTests
         return (loop, providers, tools, agents, bus);
     }
 
-    private static TestSessionContext CreateSession(params AgentMessage[] messages)
+    private static Harbor.TestKit.TestSessionContext CreateSession(params AgentMessage[] messages)
     {
         var session = Session.Create("/tmp", "code", "test", "test-model");
-        return new TestSessionContext(session, messages);
+        return new Harbor.TestKit.TestSessionContext(session, messages);
     }
 
     /// <summary>
@@ -104,7 +105,7 @@ public class AgentLoopTests
     ///     Session pre-seeded with <paramref name="seedCount" /> user messages of
     ///     ~850 estimated tokens each (3000 chars / 4 + per-message overhead).
     /// </summary>
-    private static TestSessionContext CreateSeededSession(int seedCount)
+    private static Harbor.TestKit.TestSessionContext CreateSeededSession(int seedCount)
     {
         var session = Session.Create("/tmp", "code", "test", "test-model");
         var messages = new List<AgentMessage>(seedCount);
@@ -119,7 +120,7 @@ public class AgentLoopTests
                 "test-model"));
         }
 
-        return new TestSessionContext(session, messages);
+        return new Harbor.TestKit.TestSessionContext(session, messages);
     }
 
     private static void ConfigureAggressiveCompaction(CompactionService svc)
@@ -263,6 +264,7 @@ public class AgentLoopTests
     public async Task RunAsync_CompactionTriggers_RequestUsesShortenedView_AndTailIsPreserved()
     {
         var client = new ScriptedLlmClient(
+            ScriptedLlmClient.CompactableModel,
             new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
             new LlmEvent[] { new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(5, 5)) });
 
@@ -314,6 +316,7 @@ public class AgentLoopTests
         // Call order: (1) summarizer at turn-1 start, (2) turn-1 stream ending
         // in a tool call, (3) turn-2 stream ending the run.
         var client = new ScriptedLlmClient(
+            ScriptedLlmClient.CompactableModel,
             new LlmEvent[] { new TextDeltaEvent("s", "summary text"), new StepFinishEvent(0, "stop", new Usage(0, 10)) },
             new LlmEvent[]
             {
@@ -367,7 +370,7 @@ public class AgentLoopTests
             foreach (var e in _events)
             {
                 yield return e;
-                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+                await Task.Yield();
             }
         }
 
@@ -375,93 +378,4 @@ public class AgentLoopTests
             => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel }));
     }
 
-    /// <summary>
-    ///     A scripted <see cref="ILlmClient" /> that replays a DIFFERENT event
-    ///     sequence per <see cref="StreamAsync" /> call (compaction summarizer,
-    ///     turn 1, turn 2, …); the last sequence repeats if more calls arrive.
-    ///     Records every request's message count so tests can assert exactly
-    ///     how much history each call carried.
-    /// </summary>
-    private sealed class ScriptedLlmClient(params LlmEvent[][] calls) : ILlmClient
-    {
-        private int _callIndex;
-
-        public List<int> RequestSizes { get; } = [];
-
-        public int StreamCalls => _callIndex;
-
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            RequestSizes.Add(request.Messages.Count);
-            var events = calls[Math.Min(_callIndex, calls.Length - 1)];
-            _callIndex++;
-            foreach (var e in events)
-            {
-                yield return e;
-                await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            }
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { CompactibleModel }));
-    }
-
-    /// <summary>
-    ///     Minimal <see cref="ISessionContext" /> for tests — keeps an in-memory message list
-    ///     and discards stats updates. The agent loop only reads <see cref="Messages" /> and
-    ///     calls <see cref="AppendMessageAsync" /> / <see cref="UpdateStatsAsync" />.
-    /// </summary>
-    private sealed class TestSessionContext : ISessionContext
-    {
-        private readonly List<AgentMessage> _messages;
-
-        public TestSessionContext(Session session, IReadOnlyList<AgentMessage> messages)
-        {
-            Session = session;
-            _messages = new List<AgentMessage>(messages);
-            SteeringQueue = Channel.CreateUnbounded<AgentMessage>();
-        }
-
-        public Session Session { get; }
-        public IReadOnlyList<AgentMessage> Messages => _messages;
-        public Channel<AgentMessage> SteeringQueue { get; }
-
-        public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default)
-        {
-            _messages.Add(message);
-            return Task.CompletedTask;
-        }
-
-        public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default) => Task.CompletedTask;
-    }
-
-    /// <summary>
-    ///     Session context wrapper that captures every <see cref="UpdateStatsAsync" /> call
-    ///     so tests can assert the usage flowed through.
-    /// </summary>
-    private sealed class CapturingStatsSession : ISessionContext
-    {
-        private readonly List<Usage> _captured;
-        private readonly TestSessionContext _inner;
-
-        public CapturingStatsSession(Session session, IReadOnlyList<AgentMessage> messages, List<Usage> captured)
-        {
-            _captured = captured;
-            _inner = new TestSessionContext(session, messages);
-        }
-
-        public Session Session => _inner.Session;
-        public IReadOnlyList<AgentMessage> Messages => _inner.Messages;
-        public Channel<AgentMessage> SteeringQueue => _inner.SteeringQueue;
-        public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default) => _inner.AppendMessageAsync(message, ct);
-        public Task UpdateStatsAsync(Usage usage, CancellationToken ct = default)
-        {
-            _captured.Add(usage);
-            return Task.CompletedTask;
-        }
-    }
 }

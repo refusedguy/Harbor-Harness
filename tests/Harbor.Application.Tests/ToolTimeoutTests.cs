@@ -63,8 +63,11 @@ public class ToolTimeoutTests
         MaxSteps: 10,
         ToolTimeoutSeconds: timeoutSeconds);
 
-    private static (AgentLoop Loop, ScriptedLlmClient Client) CreateLoop(AgentDefinition agent)
+
+    [Test]
+    public async Task RunAsync_HangingTool_TimesOutAndLoopContinues()
     {
+        var agent = Agent(timeoutSeconds: 1);
         var client = new ScriptedLlmClient(
         [
             new LlmEvent[]
@@ -92,14 +95,6 @@ public class ToolTimeoutTests
             new PermissionService(agents, NullLogger<PermissionService>.Instance),
             new MessageConverter(),
             NullLogger<AgentLoop>.Instance);
-        return (loop, client);
-    }
-
-    [Test]
-    public async Task RunAsync_HangingTool_TimesOutAndLoopContinues()
-    {
-        var agent = Agent(timeoutSeconds: 1);
-        var (loop, client) = CreateLoop(agent);
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-tool-timeout-tests", "code", "test", "test-model"));
 
@@ -110,7 +105,7 @@ public class ToolTimeoutTests
         await Assert.That(result.IsSuccess).IsTrue();
 
         // Turn 2 request carries the timeout error result for the hanging call.
-        string secondRequestText = RenderText(client.Requests[1]);
+        string secondRequestText = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(secondRequestText).Contains("timed out after 1s");
 
         // The run recovered: final assistant text streamed after the failure.
@@ -156,28 +151,5 @@ public class ToolTimeoutTests
         var result = await loop.RunAsync(session, agent);
 
         await Assert.That(result.IsSuccess).IsTrue();
-    }
-
-    private static string RenderText(LlmRequest request)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (LlmMessage message in request.Messages)
-        {
-            if (message is LlmUserMessage user)
-            {
-                foreach (LlmContentBlock block in user.Content)
-                {
-                    if (block is LlmTextBlock text)
-                    {
-                        sb.Append(text.Text);
-                    }
-                }
-            }
-            else if (message is LlmToolResultMessage toolResult)
-            {
-                sb.Append(toolResult.Output);
-            }
-        }
-        return sb.ToString();
     }
 }

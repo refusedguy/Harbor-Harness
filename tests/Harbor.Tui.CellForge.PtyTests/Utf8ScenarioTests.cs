@@ -27,16 +27,22 @@ public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
         // Byte-level send split mid-codepoint (the 🚀 emoji is 4 UTF-8 bytes).
         byte[] bytes = System.Text.Encoding.UTF8.GetBytes(MixedText + "\r");
         Session.Write(bytes[..7]);
-        await Task.Delay(20).ConfigureAwait(false);
+        await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("привет", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         Session.Write(bytes[7..13]);
-        await Task.Delay(20).ConfigureAwait(false);
+        await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("привет", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
         Session.Write(bytes[13..]);
 
         // The user block renders the mixed-width text on the grid.
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("привет", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-        await Task.Delay(400).ConfigureAwait(false);
+        _ = await WaitForScreenAsync(
+            l => l.Any(x => x.Contains("你好", StringComparison.Ordinal) || x.Contains("🚀", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         string[] lines = NormalizedLines();
         await Assert.That(lines.Any(x => x.Contains("你好", StringComparison.Ordinal))).IsTrue();

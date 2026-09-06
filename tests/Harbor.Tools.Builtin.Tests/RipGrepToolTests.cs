@@ -61,12 +61,14 @@ public class RipGrepToolTests
     }
 
     [Test]
-    public async Task ValidateArguments_MissingPattern_ReturnsFailure()
+    [Arguments("{}", false)]
+    [Arguments("""{"pattern":"foo"}""", true)]
+    public async Task ValidateArguments_Theory(string json, bool expectSuccess)
     {
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
-        var args = JsonDocument.Parse("{}").RootElement;
+        var args = JsonDocument.Parse(json).RootElement;
         var result = tool.ValidateArguments(args);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.IsSuccess).IsEqualTo(expectSuccess);
     }
 
     [Test]

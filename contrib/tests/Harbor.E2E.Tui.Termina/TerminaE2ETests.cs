@@ -8,7 +8,8 @@ namespace Harbor.E2E.Tui.Termina;
 ///     platform matrix.
 /// </summary>
 [Category("E2E")]
-[NotInParallel]
+[NotInParallel("pty")]
+[ParallelLimiter<MockServerLimit>]
 public class TerminaE2ETests : TuiE2eTestBase
 {
     protected override string TuiName => "termina";

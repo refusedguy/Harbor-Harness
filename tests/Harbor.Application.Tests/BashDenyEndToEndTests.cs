@@ -23,7 +23,7 @@ namespace Harbor.Application.Tests;
 ///     REAL agent ruleset decides, and a REAL <see cref="BashTool" /> either
 ///     runs the command or is refused — proven by filesystem side effects.
 /// </summary>
-[NotInParallel]
+[NotInParallel("filesystem")]
 public class BashDenyEndToEndTests
 {
     private static AgentDefinition AgentWith(params PermissionRule[] extra)
