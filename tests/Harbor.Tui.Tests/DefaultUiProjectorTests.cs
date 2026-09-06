@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 
 namespace Harbor.Tui.Tests;

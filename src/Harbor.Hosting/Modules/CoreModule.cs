@@ -35,6 +35,7 @@ internal static class CoreModule
                     .CreateLogger<Harbor.Application.Providers.ProviderHealthCheck>()));
         services.AddSingleton<ITokenTracker, TokenTracker>();
         services.AddSingleton<ISystemPromptBuilder>(sp => new SystemPromptBuilder(sp.GetRequiredService<ILogger<SystemPromptBuilder>>()));
+        services.AddSingleton<ISkillProvider, SkillProvider>();
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         // ROP-C П.5: the loop depends on the IToolDispatcher seam; the concrete

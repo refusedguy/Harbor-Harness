@@ -118,10 +118,13 @@ public sealed record PermissionRuleset
         new("ripgrep", "*", PermissionAction.Allow),
         new("notebook", "*", PermissionAction.Allow),
         new("mcp", "*", PermissionAction.Ask),
+        new("read_mcp_resource", "*", PermissionAction.Ask),
+        new("mcp_prompt", "*", PermissionAction.Ask),
         new("lsp", "*", PermissionAction.Allow),
         new("patch", "src/*", PermissionAction.Allow),
         new("patch", "*", PermissionAction.Ask),
-        new("task", "*", PermissionAction.Allow)
+        new("task", "*", PermissionAction.Allow),
+        new("skill", "*", PermissionAction.Allow)
     });
 
     /// <summary>

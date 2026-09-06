@@ -3,8 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Markdown;
+using Harbor.Ui.Framework.State;
 
 namespace Harbor.Tui.CellForge.Streaming;
 
@@ -38,6 +40,8 @@ public sealed class ChatScreenBridge : IDisposable
     private readonly StringBuilder _incoming = new();
     private readonly StringBuilder _streamSource = new();
     private StreamingMarkdownBlock? _stream;
+    private StreamingThinkingBlock? _thinkStream;
+    private readonly StringBuilder _thinkingIncoming = new();
     private long _nowMs;
 
     /// <summary>How many history messages the timeline already shows. The
@@ -146,6 +150,15 @@ public sealed class ChatScreenBridge : IDisposable
                 {
                     case TextDeltaEvent delta:
                         Incoming(delta.Delta);
+                        break;
+                    case ThinkingStartEvent _:
+                        StartThinkingStream();
+                        break;
+                    case ThinkingDeltaEvent delta:
+                        IncomingThinking(delta.Delta);
+                        break;
+                    case ThinkingEndEvent _:
+                        FinishThinkingStream();
                         break;
                     case ToolCallStartEvent callStart:
                         EnsureCard(callStart.Id, callStart.ToolName, argsSummary: null);
@@ -307,6 +320,68 @@ public sealed class ChatScreenBridge : IDisposable
         }
     }
 
+    private void StartThinkingStream()
+    {
+        _thinkingIncoming.Clear();
+        _thinkStream = new StreamingThinkingBlock();
+        _panel.Timeline.Append(_thinkStream);
+    }
+
+    private void IncomingThinking(string delta)
+    {
+        if (_thinkStream is null)
+        {
+            StartThinkingStream();
+        }
+
+        _thinkingIncoming.Append(delta);
+        var rest = _thinkingIncoming.ToString();
+        _thinkingIncoming.Clear();
+
+        int consumed = 0;
+        while (true)
+        {
+            int nl = rest.IndexOf('\n', consumed);
+            if (nl < 0)
+            {
+                break;
+            }
+
+            var segment = rest.Substring(consumed, nl - consumed + 1);
+            _thinkStream!.Append(segment);
+            consumed = nl + 1;
+        }
+
+        if (consumed < rest.Length)
+        {
+            _thinkingIncoming.Append(rest.AsSpan(consumed));
+        }
+
+        _panel.Timeline.MarkLastDirty();
+    }
+
+    private void FinishThinkingStream()
+    {
+        if (_thinkStream is null)
+        {
+            return;
+        }
+
+        if (_thinkingIncoming.Length > 0)
+        {
+            _thinkStream.Append(_thinkingIncoming.ToString());
+            _thinkingIncoming.Clear();
+        }
+
+        var text = _thinkStream.RawText();
+        if (!string.IsNullOrEmpty(text))
+        {
+            _panel.Timeline.Replace(_thinkStream, new ThinkingBlock(text));
+        }
+
+        _thinkStream = null;
+    }
+
     /// <summary>Commits the finished assistant message over the stream slot.</summary>
     private void FinishStream()
     {
@@ -322,6 +397,11 @@ public sealed class ChatScreenBridge : IDisposable
             _panel.Timeline.Replace(_stream, new AssistantMarkdownBlock(_streamSource.ToString()));
         }
 
+        if (_thinkStream is not null)
+        {
+            FinishThinkingStream();
+        }
+
         _stream = null;
         _pending.Clear();
     }
@@ -333,6 +413,12 @@ public sealed class ChatScreenBridge : IDisposable
         {
             PushToStream(_incoming.ToString());
             _incoming.Clear();
+        }
+
+        if (_thinkingIncoming.Length > 0 && _thinkStream is not null)
+        {
+            _thinkStream.Append(_thinkingIncoming.ToString());
+            _thinkingIncoming.Clear();
         }
 
         while (_pending.Count > 0)
@@ -599,4 +685,18 @@ public sealed class ChatScreenBridge : IDisposable
     }
 
     public void Dispose() => Subscription.Dispose();
+
+    public void RouteDiffNavigation(DiffPreviewViewModel diffVm, ChatAction action)
+    {
+        if (diffVm is null) return;
+        switch (action)
+        {
+            case ChatAction.ScrollDownLine:
+                diffVm.NextDiffCommand.Execute(null);
+                break;
+            case ChatAction.ScrollUpLine:
+                diffVm.PreviousDiffCommand.Execute(null);
+                break;
+        }
+    }
 }

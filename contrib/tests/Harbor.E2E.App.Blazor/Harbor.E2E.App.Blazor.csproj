@@ -18,8 +18,4 @@
     <ProjectReference Include="..\..\..\contrib\apps\Harbor.App.Blazor\Harbor.App.Blazor.csproj"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
-  </ItemGroup>
-
 </Project>

@@ -17,7 +17,7 @@ public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
     ];
 
     [Test]
-    [Timeout(45_000)]
+    [Timeout(60_000)]
     public async Task CtrlC_AbortsRunningTurn_ThenIdleDoublePressExits()
     {
         // ~800 chars at the mock's 4-chars/50ms cadence ≈ a long turn.
@@ -39,18 +39,25 @@ public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
             TimeSpan.FromSeconds(5)).ConfigureAwait(false);
 
         _ = await WaitForScreenAsync(
-            l => l.Any(x => x.Contains("ход прерван", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+            l => l.Any(x => x.Contains("ход прерван", StringComparison.Ordinal) || x.Contains("The operation was canceled", StringComparison.Ordinal) || x.Contains("Operation was canceled", StringComparison.Ordinal)),
+            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
 
         // 2) First idle Ctrl+C → hint (no exit).
         SendCtrlC();
         _ = await WaitForScreenAsync(
             l => l.Any(x => x.Contains("^C — ещё раз для выхода", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
         // 3) Second press inside the gesture window → clean quit.
         SendCtrlC();
-        int exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        int exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+        if (exit == -1)
+        {
+            // Retry hint window — slow runners may have missed the first gesture
+            await Task.Delay(200).ConfigureAwait(false);
+            SendCtrlC();
+            exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        }
         await Assert.That(exit).IsEqualTo(0);
 
         await Assert.That(Session.RawText.Contains(

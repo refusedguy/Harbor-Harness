@@ -67,7 +67,19 @@ internal static class ToolsCatalog
         mcpConfigPaths.Add(Path.Combine(projectRoot, ".harbor", "mcp.json"));
 
         foreach (var entry in mcpLoader.Load(mcpConfigPaths.ToArray()))
-            mcpRegistry.Register(entry.Name, entry.StartInfo);
+        {
+            if (entry.Remote is not null)
+            {
+                var remote = entry.Remote;
+                var registered = mcpRegistry.Register(entry.Name, remote.Url, remote.Transport, remote.Headers, remote.OAuth);
+                if (registered.IsFailure)
+                    ctx.Logger.LogWarning("Skipping MCP server '{Name}': {Error}", entry.Name, registered.Error);
+            }
+            else if (entry.StartInfo is not null)
+            {
+                mcpRegistry.Register(entry.Name, entry.StartInfo);
+            }
+        }
         return mcpRegistry;
     }
 
@@ -88,6 +100,7 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new GlobTool(lf.CreateLogger<GlobTool>()));
         tb.AddTool(lf => new GrepTool(lf.CreateLogger<GrepTool>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
+        tb.AddTool(lf => new SkillTool(lf.CreateLogger<SkillTool>()));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner));
@@ -107,6 +120,8 @@ internal static class ToolsCatalog
         if (full)
         {
             tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));
+            tb.AddTool(lf => new McpResourceTool(mcpRegistry, lf.CreateLogger<McpResourceTool>()));
+            tb.AddTool(lf => new McpPromptTool(mcpRegistry, lf.CreateLogger<McpPromptTool>()));
         }
 
         registry.Freeze();

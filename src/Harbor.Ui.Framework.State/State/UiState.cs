@@ -1,34 +1,10 @@
 // UiState is deprecated, use AppState. Kept for backward compatibility during migration.
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
-/// <summary>
-///     Semantic role of a rendered transcript line. Shared by every renderer so
-///     colour/prefix logic stays consistent across frameworks.
-/// </summary>
-public enum ChatRole : byte
-{
-    User,
-    Assistant,
-    Thinking,
-    Tool,
-    ToolResult,
-    System,
-    Error
-}
-
-/// <summary>
-///     One immutable rendered transcript line. Uses a <see cref="string" /> (not a
-///     mutable builder) so the history is append-only and allocation-free to read.
-/// </summary>
-/// <param name="Role">Semantic origin of the line.</param>
-/// <param name="Text">Already-escaped, display-ready text.</param>
-/// <param name="ToolCallId">Stable tool-call identifier; null for non-tool lines.</param>
-/// <param name="MessageId">Stable message identifier from the agent event; null for lines not tied to a specific message (e.g. tool calls, system notices).</param>
-/// <param name="TimestampUtc">UTC timestamp when the message was received. Defaults to <see cref="DateTime.MinValue" /> when unknown.</param>
-public readonly record struct ChatLine(ChatRole Role, string Text, string? ToolCallId = null, string? MessageId = null, DateTime TimestampUtc = default);
 
 /// <summary>
 ///     Currently-streaming assistant message. Mutable deltas are folded into

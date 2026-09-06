@@ -12,7 +12,7 @@
 git clone https://github.com/harbor-sh/harbor
 cd harbor
 dotnet build
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 ## Project structure
@@ -41,26 +41,28 @@ find . -type d \( -name bin -o -name obj \) -not -path '*/node_modules/*' -exec 
 
 ## Test commands
 
-> **Known limitation:** whole-solution `dotnet test` over `Harbor.slnx` breaks under
-> the MTP host. Always run **per project**: `dotnet test tests/<Project> -c Release --no-build`.
+> **Known limitation:** `dotnet test` discovers ZERO tests in this repo (the
+> `dotnet test` → MTP bridge exits 5 with a silent discovery error — verified
+> per project on SDK 10.0.302). Always run test projects **as plain
+> executables, one at a time**: `dotnet run --project tests/<Project> -c Release --no-build`.
 
 ```bash
 # Build everything first (tests use --no-build)
 dotnet build
 
 # Run a specific test project (known-good pattern)
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
-dotnet test tests/Harbor.Plugins.Runtime.Tests -c Release --no-build
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
+dotnet run --project tests/Harbor.Plugins.Runtime.Tests -c Release --no-build -- --minimum-expected-tests 1
 
-# Run one test class — TUnit uses --treenode-filter, not --filter
-dotnet test tests/Harbor.Abstractions.Tests -c Release --no-build \
+# Run one test class — TUnit uses --treenode-filter, not --filter (forwarded after --)
+dotnet run --project tests/Harbor.Abstractions.Tests -c Release --no-build -- \
   --treenode-filter "/*/*/IdentifiersTests/*"
 
 # Detailed output
-dotnet test tests/Harbor.Core.Tests -c Release --no-build --logger "console;verbosity=detailed"
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --output Detailed
 
 # Enforce layer-dep rules (architecture tests)
-dotnet test tests/Harbor.Architecture.Tests -c Release --no-build
+dotnet run --project tests/Harbor.Architecture.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
 Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 with Microsoft Testing Platform v2.3.2. Test files are in `tests/<Project>.Tests/`.
@@ -144,7 +146,7 @@ export HARBOR_MODEL=openrouter/anthropic/claude-3.5-sonnet
 3. Add a rule to `PermissionRuleset.Default`
    (`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`).
 4. Add tests in `tests/Harbor.Tools.Builtin.Tests/YourToolTests.cs`.
-5. `dotnet build && dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build`.
+5. `dotnet build && dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build`.
 
 See [TOOLS_CATALOG.md §5](./TOOLS_CATALOG.md#5-building-your-own-tool--webfetchtool-walkthrough) for the full walkthrough.
 
@@ -301,7 +303,7 @@ $ dotnet build
 #### Step 5: Run tests
 
 ```bash
-$ dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build \
+$ dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
     --treenode-filter "/*/*/TimeToolTests/*"
 
 Passed: 2
@@ -327,8 +329,8 @@ The current UTC time is 2026-07-16T14:23:45.1234567Z.
 # 0 warnings, 0 errors
 dotnet build -c Release
 
-# Affected test projects pass (per-project; whole-slnx test runs break under MTP)
-dotnet test tests/Harbor.Tools.Builtin.Tests -c Release --no-build
+# Affected test projects pass (per-project executables; `dotnet test` discovers zero tests here)
+dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- --minimum-expected-tests 1
 
 # Code review checklist (see CLAUDE.md §Code review checklist)
 # - [ ] CancellationToken threaded through
@@ -354,9 +356,9 @@ git commit -m "feat: add 'time' builtin tool returning current UTC time"
 #### Step 1: Reproduce in isolation
 
 ```bash
-$ dotnet test tests/Harbor.Core.Tests -c Release --no-build \
+$ dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- \
     --treenode-filter "/*/*/EventBusTests/Publish_DeadSubscriber_Removed" \
-    --logger "console;verbosity=detailed"
+    --output Detailed
 
 Starting test execution, please wait...
 TUnit ... Publish_DeadSubscriber_Removed FAILED.
@@ -484,7 +486,7 @@ bus.Subscribe(async (e, ct) => { /* healthy */ await Task.CompletedTask; });
 Re-run:
 
 ```bash
-$ dotnet test tests/Harbor.Core.Tests -c Release --no-build \
+$ dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- \
     --treenode-filter "/*/*/EventBusTests/Publish_DeadSubscriber_Removed"
 Passed: 1  Failed: 0
 ```
@@ -898,7 +900,7 @@ Check if `GetScrollback_ReturnsRecentEvents` is hanging — it's skipped by defa
 1. Fork the repo.
 2. Create a branch: `git checkout -b feature/my-feature`.
 3. Make changes following [CLAUDE.md](../CLAUDE.md) conventions.
-4. `dotnet build && dotnet test` — must pass with 0 warnings.
+4. `dotnet build` and per-project test runs (`dotnet run --project tests/<Project> -c Release --no-build`) — must pass with 0 errors.
 5. Commit with conventional commits: `feat: add X`, `fix: Y`, `docs: Z`.
 6. Open a PR.
 

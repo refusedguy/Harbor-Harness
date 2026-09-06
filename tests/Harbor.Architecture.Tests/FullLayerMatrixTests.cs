@@ -219,12 +219,21 @@ public class FullLayerMatrixTests
         // DesignSystem supplies the HDS v1 token catalog for ChatPalette;
         // Desktop.Animations supplies the motion tokens (PanelFx); the
         // projection edge is RgbColor's AssemblyRef via that same bridge.
+        // TOP-1 #27 (CF-A-001 follow-up): Services/ViewModels/Sessions (sibling
+        // Presentation modules: toasts/dialogs/overlays, shared VMs, session
+        // orchestration) + Ui.Framework.Abstractions (Domain contracts) are the
+        // panel-integration surface for epic B-K; Presentation->Presentation and
+        // Presentation->Domain edges satisfy MatrixTable_RespectsLayerRules.
         ["Harbor.Tui.CellForge"] = new(Layer.Presentation,
             [
                 "Harbor.Abstractions", "Harbor.Terminal.Abstractions",
                 "Harbor.Ui.Framework.State",
                 "Harbor.Ui.Framework.Projection",
                 "Harbor.Ui.Framework.Rendering",
+                "Harbor.Ui.Framework.Services",
+                "Harbor.Ui.Framework.ViewModels",
+                "Harbor.Ui.Framework.Sessions",
+                "Harbor.Ui.Framework.Abstractions",
                 "Harbor.DesignSystem", "Harbor.Desktop.Animations",
             ]),
 

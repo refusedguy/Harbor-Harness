@@ -7,9 +7,21 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// The controller decides WHEN to recall (first-line/last-line gates); this
 /// class owns only the walk state, so both single-line and multi-line
 /// composers share identical semantics.
+///
+/// CF-B-005: this rail is also the walk owner for the store path — Up/Down
+/// arrive as <c>InputMsg.HistoryUp/Down</c> (see ComposerController) and are
+/// mapped onto this walk, so the in-flight draft survives the round-trip.
 /// </summary>
 public sealed class PromptHistory
 {
+    /// <summary>
+    /// MRU cap: mirrors <c>RecentItemsService</c> (<c>maxItems: 50</c>).
+    /// In-memory only — no file persist (see TODO below).
+    /// </summary>
+    public const int DefaultCapacity = 50;
+
+    // TODO(CF-B-005): file persist like RecentItemsService (~/.harbor/recent.json).
+    // Currently the rail is per-session in-memory only; nothing is written to disk.
     private readonly int _capacity;
     private readonly List<string> _entries = [];
 
@@ -19,13 +31,16 @@ public sealed class PromptHistory
     /// <summary>Draft captured on the first Up stroke, restored by the final Down.</summary>
     private string? _savedDraft;
 
-    public PromptHistory(int capacity = 100)
+    public PromptHistory(int capacity = DefaultCapacity)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
         _capacity = capacity;
     }
 
     public int Count => _entries.Count;
+
+    /// <summary>Whether a recall walk is in flight (an Up without the final Down yet).</summary>
+    public bool IsWalking => _index != -1;
 
     /// <summary>
     /// Record a submitted prompt: whitespace trimmed, empties dropped,
@@ -48,6 +63,13 @@ public sealed class PromptHistory
             _entries.RemoveAt(0);
         }
     }
+
+    /// <summary>
+    ///     Submit choke point for the composer (CF-B-005): records a submitted
+    ///     prompt into history. Currently delegates to <see cref="Push" />;
+    ///     the future store-wiring hook lives here, not at call sites.
+    /// </summary>
+    public void PushSubmitted(string entry) => Push(entry);
 
     /// <summary>
     /// Step one entry back from the current position. On the first call the

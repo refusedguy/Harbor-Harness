@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Panels;
 namespace Harbor.Ui.Framework.State;
 /// <summary>

@@ -21,4 +21,4 @@ model: kilocode/hy3:free | ввод — текст, /help — команды, Ct
                                                                                 
                                                                                 
                                                                                 
-mock/mock-model 12↑ 5↓ $0.0001                                                  
+mock/mock/mock-model ○ idle agent code live                                     

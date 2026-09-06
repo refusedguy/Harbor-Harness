@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
+using Avalonia.Input;
+using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using Harbor.App.Avalonia.ViewModels;
@@ -33,7 +35,6 @@ public partial class CodeEditorView : UserControl
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        // Unsubscribe from old VM.
         if (Vm is { } oldVm)
         {
             oldVm.PropertyChanged -= OnVmPropertyChanged;
@@ -84,7 +85,6 @@ public partial class CodeEditorView : UserControl
         try
         {
             Editor.Document.Text = tab.Content;
-            // Look up the syntax-highlighting definition by name.
             var def = HighlightingManager.Instance.GetDefinition(tab.SyntaxName);
             Editor.SyntaxHighlighting = def;
         }
@@ -104,6 +104,81 @@ public partial class CodeEditorView : UserControl
         if (Vm?.ActiveTab is { } tab)
         {
             tab.Content = Editor.Document.Text;
+        }
+    }
+
+    private void Editor_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Meta) && e.Key == Key.K)
+        {
+            e.Handled = true;
+            ShowInlineEditOverlay();
+            return;
+        }
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.K)
+        {
+            e.Handled = true;
+            ShowInlineEditOverlay();
+        }
+    }
+
+    private void ShowInlineEditOverlay()
+    {
+        if (Vm is null || Editor.Document is null) return;
+
+        var selection = Editor.TextArea.Selection;
+        if (selection.IsEmpty) return;
+
+        var selectedText = selection.GetText();
+        var selectedSegment = selection.SurroundingSegment;
+        int start = selectedSegment.Offset;
+        int end = selectedSegment.EndOffset;
+
+        if (string.IsNullOrEmpty(selectedText) || start == end) return;
+
+        double caretTop = GetCaretPixelTop();
+        if (caretTop < 0) caretTop = 0;
+
+        Vm.OpenInlineEdit(selectedText, start, end, caretTop);
+
+        _ = global::Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (InlineEditOverlay is null || Vm is null) return;
+
+            Canvas.SetLeft(InlineEditOverlay, 0);
+            Canvas.SetTop(InlineEditOverlay, Math.Max(0, caretTop - 110));
+        });
+    }
+
+    private double GetCaretPixelTop()
+    {
+        try
+        {
+            var textView = Editor.TextArea.TextView;
+            var caret = Editor.TextArea.Caret.CalculateCaretRectangle();
+            return caret.Top;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private void InlineEditPrompt_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+            if (Vm?.AcceptInlineEditCommand.CanExecute(null) == true)
+            {
+                Vm.AcceptInlineEditCommand.Execute(null);
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            Vm?.RejectInlineEditCommand.Execute(null);
         }
     }
 }

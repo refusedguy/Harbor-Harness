@@ -35,15 +35,11 @@
 
   <ItemGroup>
     <!--
-      TUnit is auto-included by the .NET 10 SDK when <IsTestProject>true</IsTestProject>
-      is set in tests/Directory.Build.props (so we don't list it explicitly here —
-      adding it would cause NU1504 DuplicatePackageReference).
-      Microsoft.NET.Test.Sdk is the test host adapter — required for `dotnet test`
-      to discover and run the TUnit engine. Microsoft.Extensions.* are duplicated
-      from Harbor.App.Cli's transitive graph so the tests don't break if the app
-      project drops a reference later (defense-in-depth for the DI surface).
+      TUnit is auto-included via Directory.Build.targets when <IsTestProject>true</IsTestProject>
+      (IsTestProject comes from tests/Directory.Build.props + Directory.Build.targets for *.Tests).
+      Microsoft.Extensions.* are duplicated from Harbor.App.Cli's transitive graph so the tests
+      don't break if the app project drops a reference later (defense-in-depth for the DI surface).
     -->
-    <PackageReference Include="Microsoft.NET.Test.Sdk"/>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
     <PackageReference Include="Microsoft.Extensions.Hosting"/>
   </ItemGroup>

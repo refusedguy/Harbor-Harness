@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading.Channels;
+using System.Linq;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
@@ -12,6 +13,7 @@ using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.Projection;
+using Harbor.Ui.Framework.State;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Ui.Framework.Rendering;
@@ -81,6 +83,14 @@ internal sealed class CellForgeReplRunner(
     private readonly VimComposerMode _vim = new();
     private readonly QuickSwitchSlots _quickSwitch = new();
     private readonly SelectionEngine _selection = new();
+    private SlashCommandDispatcher? _slashDispatcher;
+
+    private SlashCommandDispatcher GetDispatcher()
+    {
+        _slashDispatcher ??= new SlashCommandDispatcher(
+            services.GetRequiredService<ILogger<SlashCommandDispatcher>>());
+        return _slashDispatcher;
+    }
     private ThemeFileWatcher? _themeWatcher;
 
     /// <summary>Token-usage source (null when the host has no tracker —
@@ -422,6 +432,32 @@ internal sealed class CellForgeReplRunner(
         ApplySidebarResizePolicy(cols);
         screen.Tree.Solve(cols, rows);
 
+        // CF-D-002: feed projected state from the view-model snapshot so
+        // StatusPanel renders through StatusProjector (glyphs, scroll segment,
+        // token/cost formatting) instead of the legacy BuildSegments path.
+        string statusText = _status.Mode.ToString().ToLowerInvariant();
+        screen.Status.ProjectedRetry = _status.Retry;
+        long tokensIn = 0;
+        long tokensOut = 0;
+        decimal costUsd = 0m;
+        if (_tokens?.GetStats() is { } stats)
+        {
+            tokensIn = stats.TotalInputTokens;
+            tokensOut = stats.TotalOutputTokens;
+        }
+
+        screen.Status.ProjectedState = new UiState
+        {
+            Status = statusText,
+            Model = _status.Model,
+            Provider = sessionModel.ProviderId,
+            AgentName = sessionModel.Agent,
+            Cost = new CostSnapshot(tokensIn, tokensOut, costUsd),
+            ScrollOffset = 0,
+            ViewportLines = rows,
+            TotalLines = Math.Max(rows, screen.Timeline.Timeline.Count)
+        };
+
         // Spring resize (P1.6): while a layout spring is in flight the rects
         // move every frame — self-wake keeps frames flowing until it settles.
         if (screen.Tree.IsAnimating)
@@ -609,6 +645,30 @@ internal sealed class CellForgeReplRunner(
 
     // ── Input routing ──────────────────────────────────────────────────────
 
+    /// <summary>
+    ///     Returns <see langword="true" /> when <paramref name="col" /> /
+    ///     <paramref name="row" /> falls inside the sidebar's model section.
+    ///     Used by the mouse handler to open the model picker on click.
+    /// </summary>
+    private bool TryHandleSidebarModelClick(int col, int row)
+    {
+        if (screen.Sidebar is null || screenSession.CurrentCols < SideBarLayout.AutoShowMinWidth)
+        {
+            return false;
+        }
+
+        int sidebarX = screenSession.CurrentCols - SideBarLayout.DefaultWidth;
+        if (col < sidebarX || col >= screenSession.CurrentCols)
+        {
+            return false;
+        }
+
+        // MODEL section is the second section in the sidebar paint order,
+        // typically at visual rows 3-5 inside the sidebar rect (0-indexed).
+        // This is an approximate hit-box — good enough for a click target.
+        return row is >= 3 and <= 6;
+    }
+
     private async Task HandleInputAsync(InputEvent evt, CancellationToken ct)
     {
         // Any user input can mutate composer, palette, scroll or selection —
@@ -673,6 +733,11 @@ internal sealed class CellForgeReplRunner(
                 {
                     _wake.Writer.TryWrite(null);
                 }
+                else if (evt.Mouse.Button == MouseButton.Left
+                         && TryHandleSidebarModelClick(evt.Mouse.Column, evt.Mouse.Row))
+                {
+                    _wake.Writer.TryWrite(null);
+                }
 
                 break;
 
@@ -729,6 +794,18 @@ internal sealed class CellForgeReplRunner(
                 await ExecutePaletteCommandAsync(committed, ct).ConfigureAwait(false);
             }
 
+            _wake.Writer.TryWrite(null);
+            return;
+        }
+
+        // Slash shortcut: typing '/' on an empty composer opens the command
+        // palette directly, skipping manual entry.
+        if (key.Key == KeyCode.Char
+            && key.Modifiers is KeyModifiers.None or KeyModifiers.Shift
+            && (char)key.Character.Value == '/'
+            && _composer.Buffer.IsEmpty)
+        {
+            OpenSlashPalette();
             _wake.Writer.TryWrite(null);
             return;
         }
@@ -829,6 +906,24 @@ internal sealed class CellForgeReplRunner(
         ]);
     }
 
+    /// <summary>Opens the palette pre-populated with every registered slash command.</summary>
+    private void OpenSlashPalette()
+    {
+        _palette.OnCommit = item => _paletteCommitted = item;
+        var commands = GetDispatcher().GetRegisteredCommands();
+        var items = commands.Select(cmd => new CommandItem(
+            Id: cmd.Name,
+            Title: cmd.Name,
+            Detail: cmd.Description,
+            Shortcut: cmd.Usage,
+            Group: cmd.Name is "help" or "exit" or "quit" ? "General"
+                : cmd.Name is "setup" or "auth" ? "Config"
+                : cmd.Name is "model" or "agent" or "tui" or "renderer" or "storage" ? "Runtime"
+                : "Other"
+        )).ToArray();
+        _palette.Show(items);
+    }
+
     /// <summary>Routes palette/leader ids that are NOT slash commands.</summary>
     private bool TryRunLocalCommand(string id)
     {
@@ -868,6 +963,8 @@ internal sealed class CellForgeReplRunner(
         _leader.Bind('v', () => { ToggleVimMode(); _wake.Writer.TryWrite(null); });
         _leader.Bind('h', () => _leaderSlash = "help");
         _leader.Bind('s', () => _leaderSlash = "sessions");
+        _leader.Bind('m', () => _leaderSlash = "model");
+        _leader.Bind('a', () => _leaderSlash = "agent");
         foreach (char d in "123456789")
         {
             _leader.Bind(d, () => _quickSwitchChord = d);
@@ -1066,7 +1163,13 @@ internal sealed class CellForgeReplRunner(
             var result = await agent.PromptAsync(text, ct).ConfigureAwait(false);
             if (result.IsFailure)
             {
-                bridge.AppendSystemLine("! " + result.Error);
+                // Abort path surfaces as Result failure "The operation was canceled"
+                // rather than OCE — normalize to the same user-facing line.
+                if (result.Error.Contains("canceled", StringComparison.OrdinalIgnoreCase)
+                    || result.Error.Contains("cancelled", StringComparison.OrdinalIgnoreCase))
+                    bridge.AppendSystemLine("ход прерван");
+                else
+                    bridge.AppendSystemLine("! " + result.Error);
             }
         }
         catch (OperationCanceledException)

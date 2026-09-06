@@ -2,7 +2,7 @@
 
 > This file is read by Claude Code (and other AI agents) when working on this codebase. It encodes the project's conventions, patterns, and gotchas.
 >
-> **Project state (branch dev):** two `.slnx` solutions (`Harbor.slnx` main, `Harbor.Samples.slnx`); tests run per-project (`dotnet test tests/<Project> -c Release --no-build`) because whole-solution test runs break under the Microsoft.Testing.Platform host. Known/flaky failures (Avalonia-12 headless "Stack empty", Linux IPC pipe timing, occasional ChatView flake) are tracked in [docs/ROADMAP.md](./docs/ROADMAP.md). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card.
+> **Project state (branch dev):** two `.slnx` solutions (`Harbor.slnx` main, `Harbor.Samples.slnx`); tests run per-project as plain executables (`dotnet run --project tests/<Project> -c Release --no-build`) because `dotnet test` discovers zero tests under the Microsoft.Testing.Platform bridge in this repo. Known/flaky failures (Avalonia-12 headless "Stack empty", Linux IPC pipe timing, occasional ChatView flake) are tracked in [docs/ROADMAP.md](./docs/ROADMAP.md). See [docs/PROJECT_STATUS.md](./docs/PROJECT_STATUS.md) for the quick-reference card.
 
 ## Companion documents
 
@@ -133,7 +133,7 @@ keeps `Harbor.Tui.Abstractions` in the Domain layer — it never needs to refere
 2. **Identify the layer** of the project you want to reference.
 3. **Check the matrix** in [ARCHITECTURE_LAYERS.md §2](./docs/ARCHITECTURE_LAYERS.md#2-allowed-and-forbidden-project-references).
    If the cell is ❌, you have a layering violation — fix the design first.
-4. **Run `dotnet test tests/Harbor.Architecture.Tests/`** — if your reference is
+4. **Run `dotnet run --project tests/Harbor.Architecture.Tests/`** — if your reference is
    forbidden, the test for that project will fail with a clear list of violations.
 5. **Update `Harbor.Architecture.Tests`** if the new project creates a new sub-category.
 
@@ -717,10 +717,10 @@ will delegate the REPL to it instead of running the default line-buffered loop.
 # Build everything
 dotnet build
 
-# Run a specific test project — tests MUST be run per project.
-# Whole-solution dotnet test breaks under the Microsoft.Testing.Platform host.
-# TUnit uses --treenode-filter, NOT --filter.
-dotnet test tests/Harbor.Core.Tests -c Release --no-build
+# Run a specific test project — tests MUST be run per project, as plain
+# executables (`dotnet test` discovers zero tests in this repo — broken MTP
+# bridge). TUnit uses --treenode-filter (forwarded after --), NOT --filter.
+dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 
 # Run the CLI
 dotnet run --project apps/Harbor.App.Cli -- help

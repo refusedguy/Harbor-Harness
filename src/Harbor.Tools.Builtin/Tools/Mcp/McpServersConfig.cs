@@ -22,6 +22,21 @@ public sealed class McpServerConfig
 
     [JsonPropertyName("disabled")]
     public bool? Disabled { get; set; }
+
+    /// <summary>Remote endpoint URL (Harbor extension; alternatively spawn via command).</summary>
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    /// <summary>Remote transport: "http" (default) or "sse" (Harbor extension).</summary>
+    [JsonPropertyName("transport")]
+    public string? Transport { get; set; }
+
+    /// <summary>Extra headers for remote endpoints (Harbor extension).</summary>
+    [JsonPropertyName("headers")]
+    public Dictionary<string, string>? Headers { get; set; }
+
+    /// <summary>OAuth2 settings for remote endpoints (Harbor extension; parsed manually).</summary>
+    public McpOAuthConfig? OAuth { get; set; }
 }
 
 /// <summary>

@@ -31,6 +31,17 @@ public sealed record ShellInfrastructure(
     IMessenger Messenger,
     ShellStatus ShellStatus);
 
+public class FileTreeNode
+{
+    public string Name { get; set; } = string.Empty;
+    public string FullPath { get; set; } = string.Empty;
+    public bool IsDirectory { get; set; }
+    public bool IsExpanded { get; set; }
+    public ObservableCollection<FileTreeNode> Children { get; } = new();
+    public string IconPath { get; set; } = string.Empty;
+    public string? GitStatus { get; set; }
+}
+
 public sealed partial class MainViewModel : StoreSubscriberViewModel
 {
     private static readonly Dictionary<string, string> OverlayIdToFlagProperty = new()
@@ -54,6 +65,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     private readonly IToastService _toasts;
     private readonly AvaloniaContentHost _contentHost;
     private readonly IMessenger _messenger;
+    private readonly ILogger _logger;
     private bool _disposed;
     private DateTime? _runningStartTime;
     private decimal _displayCost;
@@ -138,6 +150,12 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
     [ObservableProperty]
     private bool _isSidebarVisible = true;
+
+    [ObservableProperty]
+    private ObservableCollection<FileTreeNode> _fileTree = new();
+
+    [ObservableProperty]
+    private string _projectRootPath = string.Empty;
 
     private string _rightDrawerTab = "None";
 
@@ -226,6 +244,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         _costAnimator = shell.CostAnimator;
         _commandPalette = commandPalette;
         _messenger = shell.Messenger;
+        _logger = shell.Logger;
 
         _overlayController.Register(OverlayIds.Palette, v => IsCommandPaletteOpen = v);
         _overlayController.Register(OverlayIds.Settings, v => IsSettingsOpen = v);
@@ -264,6 +283,9 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         Settings.Picker = _contentHost.ProviderModelPicker;
 
         _toasts.Show("Harbor ready — press Ctrl+P for the command palette.", ToastKind.Info);
+
+        ProjectRootPath = Environment.CurrentDirectory;
+        _ = RefreshFileTreeAsync();
     }
 
     public ChatViewModel Chat => _contentHost.Chat;
@@ -363,10 +385,10 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     }
 
     [RelayCommand]
-    private void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
+    public void ToggleSidebar() => IsSidebarVisible = !IsSidebarVisible;
 
     [RelayCommand]
-    private void ToggleTheme() => _theme.Toggle();
+    public void ToggleTheme() => _theme.Toggle();
 
     [RelayCommand]
     private void OpenCommandPalette()
@@ -413,7 +435,7 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     }
 
     [RelayCommand]
-    private void SwitchView(string view)
+    public void SwitchView(string view)
     {
         ActiveView = view;
         // A2 (sprint 4.5): the sessions board reads the session store on
@@ -462,6 +484,99 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         if (duration.TotalMinutes >= 1)
             return $"{duration.Minutes}m {duration.Seconds}s";
         return $"{duration.Seconds}s";
+    }
+
+    [RelayCommand]
+    public async Task RefreshFileTreeAsync()
+    {
+        var nodes = new List<FileTreeNode>();
+
+        await Task.Run(() =>
+        {
+            try
+            {
+                var root = new FileTreeNode
+                {
+                    Name = new DirectoryInfo(ProjectRootPath).Name,
+                    FullPath = ProjectRootPath,
+                    IsDirectory = true,
+                    IsExpanded = true,
+                    IconPath = "folder"
+                };
+
+                LoadDirectory(root, ProjectRootPath, 0);
+                nodes.Add(root);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to scan project root: {Path}", ProjectRootPath);
+            }
+        });
+
+        FileTree.Clear();
+        foreach (var node in nodes)
+        {
+            FileTree.Add(node);
+        }
+    }
+
+    private void LoadDirectory(FileTreeNode parent, string path, int depth)
+    {
+        if (depth > 3) return;
+
+        try
+        {
+            foreach (var dir in Directory.GetDirectories(path).OrderBy(d => d))
+            {
+                var dirName = Path.GetFileName(dir);
+                if (IsIgnoredDirectory(dirName)) continue;
+
+                var dirNode = new FileTreeNode
+                {
+                    Name = dirName,
+                    FullPath = dir,
+                    IsDirectory = true,
+                    IconPath = "folder",
+                    IsExpanded = depth < 1
+                };
+
+                parent.Children.Add(dirNode);
+                LoadDirectory(dirNode, dir, depth + 1);
+            }
+
+            foreach (var file in Directory.GetFiles(path).OrderBy(f => f))
+            {
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                parent.Children.Add(new FileTreeNode
+                {
+                    Name = Path.GetFileName(file),
+                    FullPath = file,
+                    IsDirectory = false,
+                    IconPath = ext switch
+                    {
+                        ".cs" => "file-code",
+                        ".axaml" => "file-code",
+                        ".json" => "file-code",
+                        ".md" => "file-code",
+                        ".csproj" => "file-code",
+                        ".sln" or ".slnx" => "file-code",
+                        ".xml" or ".yaml" or ".yml" => "file-code",
+                        _ => "file"
+                    }
+                });
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best-effort file-tree scan: unreadable files/directories are skipped.
+            Logger.LogDebug(ex, "Skipping unreadable file-tree entry under: {Path}", path);
+        }
+    }
+
+    private static bool IsIgnoredDirectory(string name)
+    {
+        return name.StartsWith('.')
+            || name is "bin" or "obj" or "node_modules" or ".git" or "packages";
     }
 
     public override void Dispose()

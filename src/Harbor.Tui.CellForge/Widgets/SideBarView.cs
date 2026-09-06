@@ -1,5 +1,9 @@
 using System.Text;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Rendering;
+using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.ViewModels;
 
 namespace Harbor.Tui.CellForge.Widgets;
 
@@ -16,8 +20,8 @@ public sealed record McpServerStatus(string Name, McpServerState State);
 
 /// <summary>
 /// Immutable sidebar snapshot — session info, token counter, model, modified
-/// files, LSP/MCP health. The host refreshes the instance; the sidebar itself
-/// holds no state (pure paint function).
+/// files, LSP/MCP health, and the full session list. The host refreshes the
+/// instance; the sidebar itself holds no state (pure paint function).
 /// </summary>
 public sealed record SideBarState(
     string? SessionTitle = null,
@@ -29,7 +33,9 @@ public sealed record SideBarState(
     IReadOnlyList<string>? ModifiedFiles = null,
     int LspErrors = 0,
     int LspWarnings = 0,
-    IReadOnlyList<McpServerStatus>? McpServers = null)
+    IReadOnlyList<McpServerStatus>? McpServers = null,
+    SessionId? ActiveSessionId = null,
+    IReadOnlyList<SessionInfo>? Sessions = null)
 {
     /// <summary>Static «nothing to show» snapshot.</summary>
     public static readonly SideBarState Empty = new();
@@ -60,7 +66,7 @@ public static class SideBarView
     private const char ServerError = '●';
 
     /// <summary>Paints the sidebar into <paramref name="rect" />. Tiny rects are skipped.</summary>
-    public static void Paint(ScreenBuffer buffer, Rect rect, SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots = null)
+    public static void Paint(ScreenBuffer buffer, Rect rect, SideBarState state, IReadOnlyList<SideBarSlot>? extraSlots = null, IReadOnlyList<SessionRowViewModel>? sessions = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         if (rect.Width < 12 || rect.Height < 6 || rect.X >= buffer.Cols || rect.Y >= buffer.Rows)
@@ -169,6 +175,44 @@ public static class SideBarView
             }
         }
 
+        // ── Sessions ────────────────────────────────────────────────────────────
+        if (sessions is { Count: > 0 })
+        {
+            y = Section(buffer, rect, labelX, y, "SESSIONS", headingStyle);
+            int sessionRows = Math.Min(sessions.Count, Math.Max(0, rect.Bottom - 2 - y));
+            for (int i = 0; i < sessionRows; i++)
+            {
+                var session = sessions[i];
+                string marker = session.IsActive ? "▸" : " ";
+                string display = marker + " " + session.Title;
+                var rowStyle = session.IsActive ? valueStyle : labelStyle;
+                y = ValueLine(buffer, rect, labelX, y, innerW, display.AsSpan(), rowStyle);
+                if (y < rect.Bottom - 1 && !string.IsNullOrEmpty(session.MetaLine))
+                {
+                    y = ValueLine(buffer, rect, labelX + 2, y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);
+                }
+            }
+        }
+        else if (state.Sessions is { Count: > 0 })
+        {
+            y = Section(buffer, rect, labelX, y, "SESSIONS", headingStyle);
+            int sessionRows = Math.Min(state.Sessions.Count, Math.Max(0, rect.Bottom - 2 - y));
+            for (int i = 0; i < sessionRows; i++)
+            {
+                var session = state.Sessions[i];
+                bool isActive = session.SessionId == state.ActiveSessionId;
+                string marker = isActive ? "▸" : " ";
+                string display = marker + " " + session.Title;
+                var rowStyle = isActive ? valueStyle : labelStyle;
+                y = ValueLine(buffer, rect, labelX, y, innerW, display.AsSpan(), rowStyle);
+            }
+
+            if (state.ActiveSessionId is null)
+            {
+                y = ValueLine(buffer, rect, labelX, y, innerW, "(no active session)".AsSpan(), labelStyle);
+            }
+        }
+
         // ── Plugin slots ───────────────────────────────────────────────────
         if (extraSlots is not null)
         {
@@ -197,6 +241,40 @@ public static class SideBarView
     /// <summary>42-column sidebar area docked to the right edge above the status row.</summary>
     public static Rect Area(int terminalWidth, int terminalHeight) =>
         new(terminalWidth - SideBarLayout.DefaultWidth, 0, SideBarLayout.DefaultWidth, Math.Max(0, terminalHeight - 1));
+
+    /// <summary>
+    ///     Projects <see cref="UiState"/> session data into a <see cref="SideBarState"/>.
+    ///     The active session's chrome (title, id, model, tokens, cost) populates the
+    ///     top-level sidebar fields; the full session list is attached for the
+    ///     sessions section rendered by <see cref="Paint"/>.
+    /// </summary>
+    public static SideBarState ProjectFromStore(UiState state)
+    {
+        SessionInfo? active = default;
+        foreach (var s in state.Sessions)
+        {
+            if (s.SessionId == state.ActiveSessionId)
+            {
+                active = s;
+                break;
+            }
+        }
+
+        var sessions = state.Sessions.Length == 0 ? null : state.Sessions.ToArray();
+        return new SideBarState(
+            SessionTitle: active?.Title,
+            SessionId: active?.SessionId?.Value,
+            Model: string.IsNullOrEmpty(state.Model) ? null : state.Model,
+            TokensIn: state.Cost.TokensIn,
+            TokensOut: state.Cost.TokensOut,
+            CostUsd: (double)state.Cost.CostUsd,
+            ModifiedFiles: null,
+            LspErrors: 0,
+            LspWarnings: 0,
+            McpServers: null,
+            ActiveSessionId: state.ActiveSessionId,
+            Sessions: sessions);
+    }
 
     /// <summary>Compact token figure: 999 → «999», 12 345 → «12.3k», 1 234 567 → «1.2M».</summary>
     public static string FormatTokens(long tokens) => tokens switch

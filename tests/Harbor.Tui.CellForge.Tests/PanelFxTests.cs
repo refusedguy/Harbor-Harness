@@ -1,3 +1,4 @@
+using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Assertions;
@@ -80,5 +81,32 @@ public class PanelFxTests
 
         await Assert.That(faded.Fg).IsEqualTo(ChatPalette.Panel);
         await Assert.That(faded.Attrs == StyleAttr.Bold).IsTrue(); // attributes ride through the fade
+    }
+
+    [Test]
+    public async Task BlendRegion_WideChar_PreservesStyleAcrossLeadAndTail()
+    {
+        ChatPalette.PinFrame();
+        try
+        {
+            var buffer = new ScreenBuffer(20, 5);
+            var accentStyle = new CellStyle(ChatPalette.Accent);
+
+            buffer.SetRune(5, 0, new Rune('語'), accentStyle);
+
+            var expectedFg = PanelFx.WithAlpha(accentStyle, 0.5).Fg;
+
+            PanelFx.BlendRegion(buffer, new Rect(4, 0, 4, 1), 0.5);
+
+            var leadFg = buffer.Get(5, 0).Style.Fg;
+            var tailFg = buffer.Get(6, 0).Style.Fg;
+
+            await Assert.That(leadFg).IsEqualTo(expectedFg);
+            await Assert.That(tailFg).IsEqualTo(leadFg);
+        }
+        finally
+        {
+            ChatPalette.UnpinFrame();
+        }
     }
 }

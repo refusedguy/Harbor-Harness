@@ -10,6 +10,7 @@ using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using TUnit.Core;
 

@@ -124,9 +124,10 @@ public static class Program
             new DaemonCommand(Console.Out, Console.Error),
             new StatusCommand(Console.Out, Console.Error),
             new PluginsCommand(Console.Out, Console.Error),
+            new SkillsCommand(Console.Out, Console.Error),
             new DemoCommand(Console.Out, Console.Error),
         };
-        if (await SlashCommandDispatcher.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
+        if (await SlashCommandDispatcherStatic.TryHandleAsync(command, args.Skip(1).ToArray(), cliCommands).ConfigureAwait(false) is int exitCode)
             return exitCode;
 
         return command switch
@@ -138,6 +139,7 @@ public static class Program
             "providers" => await RunListProvidersAsync(),
             "models" => await RunListModelsAsync(args.Skip(1).FirstOrDefault()),
             "sessions" => await RunSessionsAsync(args.Skip(1).ToArray()),
+            "mcp" => await McpLoginRunner.RunAsync(Console.Out, Console.Error, args.Skip(1).ToArray()),
             "tui" => PrintTuiOptions(),
             "storage" => PrintStorageOptions(),
             "setup" => await RunSetupAsync(),
@@ -587,6 +589,14 @@ public static class Program
         return 0;
     }
 
+    private static async Task<int> RunTreeSessionsAsync()
+    {
+        _logger.LogInformation("Showing session branch tree");
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        return await SessionTreeRunner.RunAsync(Console.Out, Console.Error, store).ConfigureAwait(false);
+    }
+
     /// <summary>
     ///     `harbor sessions` family: list (default), rename, export, import.
     ///     Rename persists a new title via ISessionStore.UpdateAsync; export/import
@@ -610,17 +620,20 @@ public static class Program
                 return await RunSearchSessionsAsync(args.Skip(1).ToArray());
             case "revert":
                 return await RunRevertSessionAsync(args.Skip(1).ToArray());
+            case "tree":
+                return await RunTreeSessionsAsync();
             case "fork":
                 return await RunForkSessionAsync(args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search|revert|fork]
+                                        Usage: harbor sessions [list|rename|export|import|search|revert|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
+                                          sessions tree                   show fork/branch lineage as an indented tree
                                           sessions fork <id> <message-id>            branch a NEW session copying messages up to and including the given one
                                         """);
                 return 2;
@@ -859,7 +872,7 @@ public static class Program
     {
         Console.WriteLine("""
                           Harbor — modular AI coding agent.
-                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|tui|storage|logs|help|version] [--script <path>]
+                          Usage: harbor [ask <prompt>|run task agent=<name> <prompt>|demo|setup|auth|config|providers|models|sessions|mcp|tui|storage|logs|help|version] [--script <path>]
 
                           demo [--scene hero|markdown|approval|all] [--tui ansi|plain]
                                             Scripted demo with an in-process mock LLM — no API keys.

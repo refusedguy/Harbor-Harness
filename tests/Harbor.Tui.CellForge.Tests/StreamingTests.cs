@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 

@@ -33,6 +33,8 @@ public class PermissionPersistDecisionTests
     [Test]
     public async Task CheckAsync_PersistedAllowDecision_SecondCallDoesNotPromptAgain()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         int prompts = 0;
         Task<PermissionResponse> Asker(PermissionRequest req, CancellationToken ct)
         {

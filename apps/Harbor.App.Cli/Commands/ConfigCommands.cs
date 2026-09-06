@@ -19,6 +19,7 @@ public sealed class SetupCommand(OnboardingWizard wizard, Func<string, Task<stri
     public string Description => "Run setup wizard (provider, API key, model)";
     public string Usage => "/setup";
     public IReadOnlyList<string> Aliases => Array.Empty<string>();
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -45,6 +46,7 @@ public sealed class AuthCommand : ISlashCommand
     public string Description => "Manage API keys (set, list, reset)";
     public string Usage => "/auth set <provider> <key> | /auth list | /auth reset <provider>";
     public IReadOnlyList<string> Aliases => new[] { "key", "api-key" };
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -157,6 +159,7 @@ public sealed class ModelCommand : ISlashCommand
     public string Description => "Switch LLM model";
     public string Usage => "/model <provider/model> | /model list [provider]";
     public IReadOnlyList<string> Aliases => new[] { "m" };
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -300,6 +303,7 @@ public sealed class AgentCommand : ISlashCommand
     public string Description => "Switch agent (mode): code, plan, explore";
     public string Usage => "/agent <name>";
     public IReadOnlyList<string> Aliases => new[] { "mode", "a" };
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -347,6 +351,7 @@ public sealed class ConfigCommand : ISlashCommand
     public string Description => "Show or edit configuration";
     public string Usage => "/config | /config set <key> <value>";
     public IReadOnlyList<string> Aliases => Array.Empty<string>();
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {
@@ -459,6 +464,7 @@ public sealed class PermissionsCommand : ISlashCommand
     public string Description => "View and edit permission overrides";
     public string Usage => "/permissions | /permissions <tool> <pattern> <allow|deny|ask> | /permissions clear";
     public IReadOnlyList<string> Aliases => Array.Empty<string>();
+    public IReadOnlyList<string>? ArgSuggestions => null;
 
     public async Task<Result> ExecuteAsync(IReadOnlyList<string> args, ICommandContext context, CancellationToken ct = default)
     {

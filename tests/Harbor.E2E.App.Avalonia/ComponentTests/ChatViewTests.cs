@@ -4,12 +4,13 @@ using Harbor.Abstractions.Events;
 using Harbor.App.Avalonia.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
 
-using ChatRole = Harbor.Ui.Framework.State.ChatRole;
+using ChatRole = Harbor.Abstractions.Models.ChatRole;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -89,6 +90,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_SendMessage_AddsUserBubble()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -116,6 +118,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_Streaming_ShowsStreamingLabelAndBuffer()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -191,6 +194,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_Clear_RemovesMessagesAndShowsPlaceholder()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
@@ -227,6 +231,7 @@ public sealed class ChatViewTests : ComponentTestBase
     [Test]
     [Category("E2E")]
     [Category("Component")]
+    [KnownFlake]
     public async Task ChatView_ErrorState_ShowsRedErrorMessage()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);

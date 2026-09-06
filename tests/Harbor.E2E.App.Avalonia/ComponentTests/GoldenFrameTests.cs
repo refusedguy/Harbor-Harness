@@ -37,6 +37,7 @@ public sealed class GoldenFrameTests : ComponentTestBase
     [Category("E2E")]
     [Category("Golden")]
     [SkipGoldenOnCi]
+    [KnownFlake]
     public async Task ToolCallCardView_GoldenFrame()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);

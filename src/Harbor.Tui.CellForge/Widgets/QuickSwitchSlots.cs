@@ -1,3 +1,8 @@
+using System.Collections.Generic;
+using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
+using Harbor.Ui.Framework.ViewModels;
+
 namespace Harbor.Tui.CellForge.Widgets;
 
 /// <summary>
@@ -72,9 +77,58 @@ public sealed class QuickSwitchSlots
     }
 
     /// <summary>
-    /// Resolves a leader chord digit ('1'..'9') to the bound session id —
-    /// null when the slot is empty or the chord is out of range.
+    ///     Resolves a leader chord digit ('1'..'9') to the bound session id —
+    ///     null when the slot is empty or the chord is out of range.
     /// </summary>
     public string? Resolve(char chord) =>
         chord is >= '1' and <= '9' ? _slots[chord - '1'] : null;
+
+    /// <summary>
+    ///     Resolves the bound session ids to <see cref="SessionRowViewModel" />
+    ///     rows from the provided session list. Empty slots are skipped; the
+    ///     returned list preserves slot order (1 → 9).
+    /// </summary>
+    public List<SessionRowViewModel> ResolveRows(IReadOnlyList<SessionRowViewModel> all)
+    {
+        var result = new List<SessionRowViewModel>(Count);
+        for (int i = 0; i < Count; i++)
+        {
+            var id = _slots[i];
+            if (string.IsNullOrEmpty(id)) continue;
+            for (int j = 0; j < all.Count; j++)
+            {
+                if (all[j].Id == id)
+                {
+                    result.Add(all[j]);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    ///     Rebuilds slot bindings from the store's session list. Slot 0 is pinned
+    ///     to the active session (when present); slots 1..8 are filled
+    ///     most-recent-first from the remaining sessions, up to 8 entries.
+    /// </summary>
+    public void SyncFromStore(UiState state)
+    {
+        Array.Clear(_slots, 0, Count);
+
+        if (state.ActiveSessionId is { } activeId)
+        {
+            _slots[0] = activeId.Value;
+        }
+
+        int slot = 1;
+        for (int i = state.Sessions.Length - 1; i >= 0 && slot < Count; i--)
+        {
+            var sid = state.Sessions[i].SessionId;
+            if (sid != state.ActiveSessionId)
+            {
+                _slots[slot++] = sid.Value;
+            }
+        }
+    }
 }

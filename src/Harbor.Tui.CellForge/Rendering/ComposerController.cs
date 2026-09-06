@@ -1,5 +1,7 @@
 using System.Text;
 using Harbor.Tui.CellForge.Input;
+using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Rendering;
 
@@ -27,6 +29,16 @@ public enum ComposerAction : byte
 /// Up from the first line walks back, Down from the last line forward),
 /// kill/yank chords (Ctrl+K/U/W + Ctrl+Y), Ctrl+C semantics, everything else
 /// ignored.
+///
+/// CF-B-005 history-through-store contract: Up/Down recall is a store
+/// transition — the keys map to <see cref="InputMsg.HistoryUp"/> /
+/// <see cref="InputMsg.HistoryDown"/> (see <c>InputModel.cs</c>) and are
+/// applied to the <see cref="PromptHistory"/> walk, so the in-flight draft is
+/// saved on the first Up and restored exactly once by the final Down
+/// (readline semantics owned by <see cref="PromptHistory"/>). Text and cursor
+/// stay store-owned: the sync mirrors
+/// <c>CellForgeTuiRenderer.SyncInputFromState</c> read-only (text change pins
+/// the caret to the end of the text); the renderer itself is untouched.
 /// </summary>
 public sealed class ComposerController
 {
@@ -34,6 +46,16 @@ public sealed class ComposerController
 
     /// <summary>Readline-style submitted-prompt history owned by the composer.</summary>
     public PromptHistory History { get; } = new();
+
+    /// <summary>Whether a history-recall walk is in flight (Up without the final Down yet).</summary>
+    public bool IsRecalling => History.IsWalking;
+
+    /// <summary>
+    /// Records a store-submitted line into the MRU rail (CF-B-005 choke point
+    /// for the submit path: trims, drops empties, collapses consecutive dupes,
+    /// evicts the oldest past <see cref="PromptHistory.DefaultCapacity"/>).
+    /// </summary>
+    public void PushSubmitted(string entry) => History.Push(entry);
 
     /// <summary>Routes one decoded key event. Pure state machine over the buffer.</summary>
     public ComposerAction HandleKey(in KeyEvent key)
@@ -59,7 +81,7 @@ public sealed class ComposerController
                     return ComposerAction.Edited;
                 }
 
-                History.Push(Buffer.SnapshotText());
+                History.PushSubmitted(Buffer.SnapshotText());
                 return ComposerAction.Submitted;
 
             // Plain text never arrives with Alt set: legacy terminals encode
@@ -181,8 +203,11 @@ public sealed class ComposerController
                 return ComposerAction.Edited;
 
             case KeyCode.Up when (mods & (KeyModifiers.Shift | KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) == 0:
+                // CF-B-005: history recall is a store transition — Up arrives as
+                // InputMsg.HistoryUp (UiStore → InputMsg.Update). The in-flight
+                // draft is saved on this first Up; PromptHistory owns the walk.
                 // First logical line + available history ⇒ recall instead of caret movement.
-                if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && History.TryRecallPrevious(Buffer.SnapshotText(), out var previous))
+                if (Buffer.LineIndexOf(Buffer.Cursor) == 0 && TryRecallViaStore(new InputMsg.HistoryUp(), Buffer.SnapshotText(), out var previous))
                 {
                     Recall(previous);
                     return ComposerAction.Edited;
@@ -192,7 +217,10 @@ public sealed class ComposerController
                 return ComposerAction.Edited;
 
             case KeyCode.Down when (mods & (KeyModifiers.Shift | KeyModifiers.Ctrl | KeyModifiers.Alt | KeyModifiers.Meta)) == 0:
-                if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && History.TryRecallNext(out var next))
+                // CF-B-005: Down arrives as InputMsg.HistoryDown; the final step
+                // restores the saved draft exactly once (readline), then the
+                // walk ends and Down is plain caret movement again.
+                if (Buffer.LineIndexOf(Buffer.Cursor) == Buffer.LineCount - 1 && TryRecallViaStore(new InputMsg.HistoryDown(), Buffer.SnapshotText(), out var next))
                 {
                     Recall(next);
                     return ComposerAction.Edited;
@@ -225,5 +253,33 @@ public sealed class ComposerController
     {
         Buffer.Clear();
         _ = Buffer.InsertText(text);
+        // Cursor-from-store contract (CF-B-005): mirrors
+        // CellForgeTuiRenderer.SyncInputFromState read-only — a text change
+        // pins the caret to the end of the text, and the composer follows via
+        // MoveTo. End-of-text keeps composer and store caret coherent; the
+        // renderer itself is untouched.
+        _ = Buffer.MoveTo(Buffer.Length);
+    }
+
+    /// <summary>
+    /// Store-message entry point for history recall (CF-B-005): maps
+    /// <see cref="InputMsg.HistoryUp"/> / <see cref="InputMsg.HistoryDown"/>
+    /// onto the <see cref="PromptHistory"/> walk. HistoryUp captures
+    /// <paramref name="draft"/> on the first step; the final HistoryDown
+    /// restores it exactly once. Returns false at the walk boundaries (caller
+    /// falls back to caret movement) and for any other message.
+    /// </summary>
+    private bool TryRecallViaStore(InputMsg message, string draft, out string entry)
+    {
+        switch (message)
+        {
+            case InputMsg.HistoryUp:
+                return History.TryRecallPrevious(draft, out entry);
+            case InputMsg.HistoryDown:
+                return History.TryRecallNext(out entry);
+            default:
+                entry = string.Empty;
+                return false;
+        }
     }
 }

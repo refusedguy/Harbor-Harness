@@ -11,6 +11,7 @@ namespace Harbor.Tools.Builtin.Tests;
 ///     Skip unless running on Linux: these tests execute real <c>/bin/bash</c>
 ///     processes and (for the orphan check) scan <c>/proc</c>.
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
 internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
 {
     public SkipWhenNotLinuxAttribute() : base(

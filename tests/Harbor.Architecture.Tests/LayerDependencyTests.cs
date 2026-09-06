@@ -13,6 +13,7 @@ using Harbor.Storage.Sqlite;
 using Harbor.Tools.Builtin;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Harbor.Terminal.Abstractions.Renderers;
 using FacadeMarker = Harbor.Core.FacadeMarker;
 // AgentLoop — now lives in Harbor.Application.dll, kept in Harbor.Application.Agents namespace for backward compat

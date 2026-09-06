@@ -12,7 +12,7 @@ namespace Harbor.Tools.Builtin;
 ///     Agent-facing surface over the builtin language servers (see
 ///     <see cref="ILspService" />): published diagnostics, go-to-definition,
 ///     and find-references for supported files (TypeScript, Python, Go, Rust,
-///     C#). Read-only — never mutates anything, so it is permission-allowed
+///     C#, C/C++, Java, HTML, CSS, JSON, Lua). Read-only — never mutates anything, so it is permission-allowed
 ///     like <c>read</c>/<c>grep</c>.
 /// </summary>
 /// <remarks>
@@ -43,7 +43,7 @@ public sealed class LspTool : ITool
 
     /// <inheritdoc />
     public string Description =>
-        "Language-server intelligence for TypeScript, Python, Go, Rust and C# files. " +
+        "Language-server intelligence for TypeScript, Python, Go, Rust, C#, C/C++, Java, HTML, CSS, JSON and Lua files. " +
         "Actions: 'diagnostics' (errors/warnings for a file), 'definition' (go-to-definition), " +
         "'references' (find all usages). Lines are 1-based (matching read tool output), columns 0-based. " +
         "A file should be opened (read) first so the language server sees its content.";

@@ -177,12 +177,15 @@ public sealed class FakeLspServer : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // Normal shutdown when the test cancels the pipe.
         }
         catch (IOException)
         {
+            // Peer closed the pipe while we were writing.
         }
         catch (JsonException)
         {
+            // Client sent malformed content; loop ends.
         }
     }
 

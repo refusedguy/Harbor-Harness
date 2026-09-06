@@ -1,4 +1,5 @@
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Tui.RazorConsole.Handlers;
 /// <summary>

@@ -7,6 +7,7 @@ using Harbor.Tui.Termina.Views;
 using Harbor.Tui.TerminalGui;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using StatusBarView = Harbor.Tui.TerminalGui.Views.StatusBarView;

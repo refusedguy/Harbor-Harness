@@ -1,30 +1,40 @@
 namespace Harbor.Tui.CellForge.Widgets;
 
+using Harbor.Abstractions.Contracts;
+
 /// <summary>Mascot mood — the host derives it from agent state (SpinnerStrip rhythm, approval gate, …).</summary>
 public enum MascotMood : byte
 {
     /// <summary>Calm blink — agent idle.</summary>
+    [MoodFrame("AmbientMascot.IdleFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsLoaf")]
     Idle = 0,
 
     /// <summary>Bounce — agent working.</summary>
+    [MoodFrame("AmbientMascot.WorkingFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsKnead")]
     Working = 1,
 
     /// <summary>Wide eyes — awaiting approval.</summary>
+    [MoodFrame("AmbientMascot.AwaitingFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsReach")]
     Awaiting = 2,
 
     /// <summary>Sleep — session untouched for a long while.</summary>
+    [MoodFrame("AmbientMascot.SleepingFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsLoaf")]
     Sleeping = 3,
 
     /// <summary>Brow sway — the LLM is streaming text (mascot-brand T1).</summary>
+    [MoodFrame("AmbientMascot.ThinkingFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsLoaf")]
     Thinking = 4,
 
     /// <summary>Tail flick — a tool is executing.</summary>
+    [MoodFrame("AmbientMascot.ToolCallFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsKnead")]
     ToolCall = 5,
 
     /// <summary>Flat X stare — the last run failed.</summary>
+    [MoodFrame("AmbientMascot.ErrorFrames", PanelEars = "AmbientMascot.EarsFlat", PanelPaws = "AmbientMascot.PawsLoaf")]
     Error = 6,
 
     /// <summary>Purr whisker wiggle — the last run finished clean.</summary>
+    [MoodFrame("AmbientMascot.SuccessFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsWag")]
     Success = 7,
 }
 
@@ -63,18 +73,8 @@ public static class AmbientMascot
     /// <summary>Sleeping advances once per this many ticks (slow breath).</summary>
     public const int SleepPeriod = 8;
 
-    /// <summary>Frame bank for a mood — static arrays, never copied.</summary>
-    public static string[] FramesOf(MascotMood mood) => mood switch
-    {
-        MascotMood.Working => WorkingFrames,
-        MascotMood.Awaiting => AwaitingFrames,
-        MascotMood.Sleeping => SleepingFrames,
-        MascotMood.Thinking => ThinkingFrames,
-        MascotMood.ToolCall => ToolCallFrames,
-        MascotMood.Error => ErrorFrames,
-        MascotMood.Success => SuccessFrames,
-        _ => IdleFrames,
-    };
+    /// <summary>Frame bank for a mood — static arrays, never copied. Generated dispatch table.</summary>
+    public static string[] FramesOf(MascotMood mood) => MascotMoodFrameDispatch.FramesOf(mood);
 
     /// <summary>
     /// Index into the mood's frame bank for the given monotonic tick — the
@@ -107,24 +107,18 @@ public static class AmbientMascot
     /// <summary>Minimum panel width — the 8-cell art plus one pad column.</summary>
     public const int PanelMinWidth = 9;
 
-    private static readonly string[] EarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
-    private static readonly string[] EarsFlat = [" \\___/  ", " \\___/  ", " \\___/  ", " \\___/  "];
-    private static readonly string[] PawsLoaf = [" (____) ", " (____) ", " (____) ", " (____) "];
-    private static readonly string[] PawsKnead = [" d  b   ", "  d  b  ", " d  b   ", "  d  b  "];
-    private static readonly string[] PawsReach = [" \\    / ", " (____) ", " \\    / ", " (____) "];
-    private static readonly string[] PawsWag = ["   /|   ", "  \\|    ", "   /|   ", "  \\|    "];
+    public static readonly string[] EarsUp = [" /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  ", " /\\_/\\  "];
+    public static readonly string[] EarsFlat = [" \\___/  ", " \\___/  ", " \\___/  ", " \\___/  "];
+    public static readonly string[] PawsLoaf = [" (____) ", " (____) ", " (____) ", " (____) "];
+    public static readonly string[] PawsKnead = [" d  b   ", "  d  b  ", " d  b   ", "  d  b  "];
+    public static readonly string[] PawsReach = [" \\    / ", " (____) ", " \\    / ", " (____) "];
+    public static readonly string[] PawsWag = ["   /|   ", "  \\|    ", "   /|   ", "  \\|    "];
 
-    /// <summary>Ear row for the mood — flat when the cat sulks.</summary>
-    public static string[] PanelEars(MascotMood mood) => mood == MascotMood.Error ? EarsFlat : EarsUp;
+    /// <summary>Ear row for the mood — flat when the cat sulks. Generated dispatch table.</summary>
+    public static string[] PanelEars(MascotMood mood) => MascotMoodFrameDispatch.PanelEarsOf(mood);
 
-    /// <summary>Paw row for the mood — loaf / knead / reach / tail-wag.</summary>
-    public static string[] PanelPaws(MascotMood mood) => mood switch
-    {
-        MascotMood.Working or MascotMood.ToolCall => PawsKnead,
-        MascotMood.Awaiting => PawsReach,
-        MascotMood.Success => PawsWag,
-        _ => PawsLoaf,
-    };
+    /// <summary>Paw row for the mood — loaf / knead / reach / tail-wag. Generated dispatch table.</summary>
+    public static string[] PanelPaws(MascotMood mood) => MascotMoodFrameDispatch.PanelPawsOf(mood);
 
     // ── Event reactions (mascot-brand T3) ──────────────────────────────────
     // Short overlay sequences: the reaction overrides the mood frames for a

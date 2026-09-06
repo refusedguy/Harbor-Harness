@@ -48,6 +48,9 @@ public static class ChatPalette
             ToolOkStyle = new CellStyle(_success);
             ToolErrorStyle = new CellStyle(_error);
             ToolBodyStyle = new CellStyle(_text);
+            ToolPillRunningStyle = new CellStyle(_warning);
+            ToolPillOkStyle = new CellStyle(_success);
+            ToolPillErrorStyle = new CellStyle(_error);
             DimStyle = new CellStyle(attrs: StyleAttr.Dim);
         }
 
@@ -58,7 +61,8 @@ public static class ChatPalette
 
         // Semantic cell styles (HDS v1 §1.3/§4.2 role map)
         public readonly CellStyle UserPrefixStyle, UserTextStyle, SystemStyle, ToolNameStyle, ToolArgsStyle;
-        public readonly CellStyle ToolRunningStyle, ToolOkStyle, ToolErrorStyle, ToolBodyStyle, DimStyle;
+        public readonly CellStyle ToolRunningStyle, ToolOkStyle, ToolErrorStyle, ToolBodyStyle;
+        public readonly CellStyle ToolPillRunningStyle, ToolPillOkStyle, ToolPillErrorStyle, DimStyle;
     }
 
     private static readonly Catalog _initialCatalog = BuildInitial();
@@ -155,6 +159,27 @@ public static class ChatPalette
 
     /// <summary>Tool output body — primary text tone.</summary>
     public static CellStyle ToolBody => C.ToolBodyStyle;
+
+    /// <summary>Tool status pill — running (<c>"running"</c>) — warning
+    /// yellow. Cell-side projection of
+    /// <c>StatusMappers.ToolCallStatusToBrushKey(Running)</c>
+    /// (<c>MochaYellow</c>); same color as <see cref="ToolRunning"/>
+    /// (glyph style), separate member so the pill can diverge.</summary>
+    public static CellStyle ToolPillRunning => C.ToolPillRunningStyle;
+
+    /// <summary>Tool status pill — success (<c>"ok"</c>) — success green.
+    /// Cell-side projection of
+    /// <c>StatusMappers.ToolCallStatusToBrushKey(Success)</c>
+    /// (<c>MochaGreen</c>); same color as <see cref="ToolOk"/>
+    /// (glyph style), separate member so the pill can diverge.</summary>
+    public static CellStyle ToolPillOk => C.ToolPillOkStyle;
+
+    /// <summary>Tool status pill — error (<c>"err"</c>) — error red.
+    /// Cell-side projection of
+    /// <c>StatusMappers.ToolCallStatusToBrushKey(Error)</c>
+    /// (<c>MochaRed</c>); same color as <see cref="ToolError"/>
+    /// (glyph style), separate member so the pill can diverge.</summary>
+    public static CellStyle ToolPillError => C.ToolPillErrorStyle;
 
     /// <summary>Gutters, hints, secondary metadata — SGR dim (terminal-level
     /// muted rendering; keeps goldens stable across truecolor capability).</summary>

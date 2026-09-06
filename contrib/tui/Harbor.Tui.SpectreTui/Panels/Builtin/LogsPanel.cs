@@ -2,6 +2,7 @@ using Harbor.Tui.SpectreTui.View;
 using Harbor.Ui.Framework.Diagnostics;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
+using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using Spectre.Tui;
 namespace Harbor.Tui.SpectreTui.Panels.Builtin;

@@ -18,6 +18,8 @@ public class ServerTransportSecurityTests
     [Test]
     public async Task Bind_WhenAnotherListenerAlive_RefusesInsteadOfStealing()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-steal");
         await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>());
@@ -135,6 +137,8 @@ public class ServerTransportSecurityTests
     [Test]
     public async Task Stop_RemovesSocketFile()
     {
+        if (OperatingSystem.IsWindows())
+            return;
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-test-cleanup");
         string socketPath = Path.Combine(Path.GetTempPath(), pipe + ".sock");

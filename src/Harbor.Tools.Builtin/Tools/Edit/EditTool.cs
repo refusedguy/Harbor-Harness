@@ -1,4 +1,6 @@
 using System.Text;
+using Harbor.Abstractions.Lsp;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
 
@@ -217,9 +219,47 @@ public sealed class EditTool : ITool
         if (diff.Length > 0)
             msg.Append("\n\n").Append(diff);
 
+        msg.Append(await DiagnosticsNoteAsync(context, path, content, cancellationToken).ConfigureAwait(false));
+
         return ToolResult.Success(
             msg.ToString(),
             new { path, changes = totalReplacements, steps = editSteps });
+    }
+
+    /// <summary>
+    ///     LSP-aware edit: push the new content to the language server and
+    ///     summarize fresh diagnostics. Best-effort — LSP must never break an
+    ///     edit. Returns "" when no service, unsupported file, or no diagnostics.
+    /// </summary>
+    private async Task<string> DiagnosticsNoteAsync(
+        ToolContext context, string path, string content, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (context.Services?.GetService<ILspService>() is not { } lsp)
+                return string.Empty;
+            if (!lsp.SupportsFile(path))
+                return string.Empty;
+            await lsp.NotifyChangeAsync(path, content, cancellationToken).ConfigureAwait(false);
+            var diagnostics = await lsp.GetDiagnosticsAsync(path, cancellationToken).ConfigureAwait(false);
+            if (diagnostics.Count == 0)
+                return string.Empty;
+
+            int errors = 0;
+            int warnings = 0;
+            foreach (var d in diagnostics)
+            {
+                if (d.Severity == LspSeverity.Error) errors++;
+                else if (d.Severity == LspSeverity.Warning) warnings++;
+            }
+
+            return $"\n\nLSP: {diagnostics.Count} diagnostic(s) ({errors} error(s), {warnings} warning(s)) — use the lsp tool for details.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "LSP diagnostics note failed for {Path}", path);
+            return string.Empty;
+        }
     }
 
     private static EditResult ApplyEdit(string content, string oldStr, string newStr, bool replaceAll)
