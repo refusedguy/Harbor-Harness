@@ -141,4 +141,13 @@ public sealed class SelectionEngine
             }
         }
     }
+
+    /// <summary>Drops the active selection without copying. Call on any state
+    /// change (new message, provider switch, palette commit, click outside the
+    /// feed) so a stale Reverse highlight never survives a frame.</summary>
+    public void Clear()
+    {
+        _anchor = null;
+        _extent = null;
+    }
 }

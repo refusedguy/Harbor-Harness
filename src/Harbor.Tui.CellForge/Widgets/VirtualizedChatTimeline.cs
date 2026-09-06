@@ -183,6 +183,20 @@ public sealed class VirtualizedChatTimeline
         _broadDamage = true;
     }
 
+    public void Clear()
+    {
+        _cache.Clear();
+        _entranceStarts.Clear();
+        _budgetUsed = 0;
+        _dirtyGeometry = true;
+        _broadDamage = true;
+        ScrollY = 0;
+        FollowTail = true;
+        _visualScrollY = 0;
+        _scrollAnimating = false;
+        _lastScrollY = -1;
+    }
+
     public void ScrollUp(int lines) => ScrollBy(-lines);
 
     public void ScrollDown(int lines) => ScrollBy(lines);
@@ -201,6 +215,11 @@ public sealed class VirtualizedChatTimeline
         long fromVisual = _scrollAnimating ? (long)Math.Round(_visualScrollY) : ScrollY;
         SetScrollY(target);
         BeginScrollAnimation(fromVisual);
+
+        if (lines > 0 && target >= maxScroll)
+        {
+            FollowTail = true;
+        }
     }
 
     public void PageUp(int viewportHeight) => ScrollBy(-Math.Max(1, viewportHeight - 1));

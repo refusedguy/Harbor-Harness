@@ -336,6 +336,7 @@ internal sealed class CellForgeReplRunner(
             while (_events.Reader.TryRead(out var agentEvt))
             {
                 ObserveRetrySignal(agentEvt);
+                _selection.Clear();
                 await bridge.AcceptAsync(agentEvt, ct).ConfigureAwait(false);
             }
 
@@ -747,17 +748,21 @@ internal sealed class CellForgeReplRunner(
                 // selection (P6.4) — a plain click selects nothing on release.
                 if (bridge.TryRouteApprovalClick(evt.Mouse))
                 {
-                    // claimed by the approval gate
+                    _selection.Clear();
                 }
-                else if (evt.Mouse.Type == MouseEventType.Press
-                         && _selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
+                else if (_selection.OnPress(evt.Mouse.Column, evt.Mouse.Row, evt.Mouse.Button))
                 {
                     _wake.Writer.TryWrite(null);
                 }
                 else if (evt.Mouse.Button == MouseButton.Left
                          && TryHandleSidebarModelClick(evt.Mouse.Column, evt.Mouse.Row))
                 {
+                    _selection.Clear();
                     await OpenModelPaletteAsync(ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    _selection.Clear();
                 }
 
                 break;
@@ -1130,6 +1135,7 @@ internal sealed class CellForgeReplRunner(
                 bridge.AppendSystemLine($"✓ Model switched to {canonicalModel}");
                 _status.Model = modelId;
                 if (screen.Sidebar is { } sb) sb.State = sb.State with { Model = canonicalModel };
+                _selection.Clear();
 
                 var agentDef = services.GetRequiredService<IAgentRegistry>()
                     .GetAgent(AgentName.Create(sessionModel.Agent));
@@ -1177,6 +1183,7 @@ internal sealed class CellForgeReplRunner(
             if (result.IsSuccess)
             {
                 bridge.AppendSystemLine($"✓ Switched to agent: {item.Id}");
+                _selection.Clear();
                 var agentDef = registry.GetAgent(AgentName.Create(item.Id));
                 if (agentDef.IsSuccess)
                     agent.Initialize(sessionModel, agentDef.Value);
@@ -1750,7 +1757,10 @@ internal sealed class CellForgeReplRunner(
         agent.Initialize(newSession.Value, agentDef.Value);
         sessionModel = newSession.Value;
         bridge.ResetMessageTracking();
-        screen.Timeline.Timeline.ReplaceLast(new SystemBlock("Fresh session started."));
+        _timeline.Clear();
+        _selection.Clear();
+        _composer.Buffer.Clear();
+        _timeline.ScrollToEnd(Math.Max(1, _timelineViewportH));
         if (screen.Sidebar is { } sb)
         {
             sb.State = sb.State with
